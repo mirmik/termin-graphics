@@ -198,6 +198,8 @@ void test_list_widget_virtualizes_large_models_and_reconciles_selection() {
         "Item " + std::to_string(index),
         index % 2 == 0 ? "Even" : "Odd",
         true,
+        0,
+        index == 0 ? "folder" : "",
     });
   }
   model->set_items(std::move(items));
@@ -228,6 +230,7 @@ void test_list_widget_virtualizes_large_models_and_reconciles_selection() {
   document.paint_roots(context);
   assert(count_commands(draw_list, TC_UI_DRAW_TEXT) <= 10);
   assert(count_commands(draw_list, TC_UI_DRAW_TEXT) >= 6);
+  assert(count_commands(draw_list, TC_UI_DRAW_FILL_ROUNDED_RECT) >= 2);
   tc_ui_paint_context_destroy(context);
   tc_ui_draw_list_destroy(draw_list);
 

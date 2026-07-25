@@ -42,6 +42,9 @@ tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_
 NativeWidget* native_widget_body(tc_widget* widget);
 void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect);
 void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
+tc_ui_color semantic_file_icon_color(std::string_view icon);
+void draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect,
+                             std::string_view icon, tc_ui_color tint);
 tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding);
 float primary_size(tc_ui_size size, Orientation orientation);
 float cross_size(tc_ui_size size, Orientation orientation);

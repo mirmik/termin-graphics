@@ -529,6 +529,10 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_prop_ro("handle", [](const FileDialogOverlayRef& self) {
             return WidgetHandle{self.widget.handle};
         })
+        .def_prop_rw("title", [](const FileDialogOverlayRef& self) { return self.get().title(); },
+                     [](const FileDialogOverlayRef& self, std::string title) {
+                         self.get().set_title(std::move(title));
+                     })
         .def_prop_ro("model", [](const FileDialogOverlayRef& self) ->
                      termin::gui_native::FileDialogModel& { return self.get().model(); },
                      nb::rv_policy::reference_internal)

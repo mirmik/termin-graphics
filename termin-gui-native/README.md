@@ -238,10 +238,12 @@ The current foundation includes:
 - `FileDialogModel` provides deterministic open-file, save-file and
   open-directory semantics over an injected filesystem provider, including
   parsed glob filters, directory-first sorting, history and directory creation.
-  `FileDialogOverlay` composes that model on `Dialog` and vetoes invalid accept
-  actions without dismissing the modal. `FileDialogService` is the explicit
-  host boundary for platform-native pickers; it never selects the overlay as a
-  hidden fallback;
+  `FileDialogOverlay` composes that model on `Dialog` as a two-pane browser with
+  common places, back/forward/up navigation, an editable path, directory
+  creation, semantic file icons, metadata and file-type filters. It vetoes
+  invalid accept actions without dismissing the modal. `FileDialogService` is
+  the explicit host boundary for platform-native pickers; it never selects the
+  overlay as a hidden fallback;
 - `ColorPickerModel` owns validated HSV/alpha state independently of UI.
   `ColorPicker` provides SV, hue and optional alpha interaction with pointer
   capture, old/new previews and reusable RGBA CPU surfaces. GPU texture IDs and

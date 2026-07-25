@@ -71,7 +71,9 @@ bool glob_matches(std::string_view text, std::string_view pattern) {
 }
 
 int64_t modified_seconds(const fs::file_time_type& time) {
-    return std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count();
+    const auto system_time = std::chrono::time_point_cast<std::chrono::seconds>(
+        time - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
+    return system_time.time_since_epoch().count();
 }
 
 } // namespace
@@ -459,6 +461,37 @@ bool FileDialogModel::create_directory(std::string_view name) {
         return false;
     }
     return refresh();
+}
+
+bool FileDialogModel::create_unique_directory(std::string_view base_name) {
+    if (!detail::valid_utf8(base_name) || base_name.empty() ||
+        make_path(base_name).is_absolute() || make_path(base_name).has_parent_path()) {
+        set_error("directory name must be a single path component");
+        return false;
+    }
+    if (current_directory_.empty()) {
+        set_error("no directory is open");
+        return false;
+    }
+
+    for (size_t suffix = 1; suffix <= 10000; ++suffix) {
+        const std::string name =
+            suffix == 1 ? std::string(base_name)
+                        : std::string(base_name) + " " + std::to_string(suffix);
+        const std::string path = path_string(make_path(current_directory_) / make_path(name));
+        std::string error;
+        if (file_system_->create_directory(path, error))
+            return navigate(path);
+
+        FileDialogEntry existing;
+        std::string inspect_error;
+        if (!file_system_->inspect(path, existing, inspect_error)) {
+            set_error(error.empty() ? "failed to create directory" : std::move(error));
+            return false;
+        }
+    }
+    set_error("could not choose a unique directory name");
+    return false;
 }
 
 void FileDialogModel::set_error(std::string error) {

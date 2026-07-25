@@ -95,6 +95,7 @@ class FileDialogModel {
     void set_file_name(std::string file_name);
     FileDialogConfirmResult confirm() const;
     bool create_directory(std::string_view name);
+    bool create_unique_directory(std::string_view base_name = "New Folder");
 
   private:
     bool navigate_normalized(std::string normalized, bool push_history);

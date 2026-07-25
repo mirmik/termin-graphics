@@ -32,7 +32,11 @@ std::string elide_text(tc_ui_document_handle document, std::string_view text, fl
     return std::string(text.substr(0, end)) + std::string(ellipsis);
 }
 
-tc_ui_color file_icon_color(std::string_view icon) {
+} // namespace
+
+namespace detail {
+
+tc_ui_color semantic_file_icon_color(std::string_view icon) {
     if (icon == "folder") return tc_ui_color{0.80f, 0.67f, 0.24f, 1.0f};
     if (icon == "image") return tc_ui_color{0.31f, 0.73f, 0.47f, 1.0f};
     if (icon == "audio") return tc_ui_color{0.69f, 0.39f, 0.80f, 1.0f};
@@ -49,7 +53,7 @@ void draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect,
                              std::string_view icon, tc_ui_color tint) {
     if (icon.empty() || rect.width <= 0.0f || rect.height <= 0.0f)
         return;
-    tc_ui_color color = file_icon_color(icon);
+    tc_ui_color color = semantic_file_icon_color(icon);
     color.a *= tint.a;
     if (icon == "folder") {
         const float tab_height = rect.height * 0.27f;
@@ -85,7 +89,7 @@ void draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect,
     }
 }
 
-} // namespace
+} // namespace detail
 
 FileGridWidget::FileGridWidget(std::shared_ptr<CollectionModel> model)
     : NativeWidget("FileGridWidget"),

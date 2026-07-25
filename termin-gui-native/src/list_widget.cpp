@@ -210,23 +210,40 @@ void ListWidget::paint(tc_ui_document_handle document, tc_ui_paint_context* cont
             }
             tc_ui_color foreground = style.foreground;
             if (!item.enabled) foreground.a *= 0.45f;
+            float text_x = row.x + item_padding_;
+            if (item.texture_id != 0 || !item.icon.empty()) {
+                const float icon_extent = std::min(20.0f, row.height - 10.0f);
+                const tc_ui_rect icon_rect {
+                    text_x, row.y + (row.height - icon_extent) * 0.5f,
+                    icon_extent, icon_extent
+                };
+                if (item.texture_id != 0) {
+                    tc_ui_painter_draw_texture(
+                        context, item.texture_id, icon_rect, foreground,
+                        TC_UI_TEXTURE_SAMPLING_LINEAR, false
+                    );
+                } else {
+                    draw_semantic_file_icon(context, icon_rect, item.icon, foreground);
+                }
+                text_x += icon_extent + 9.0f;
+            }
             if (item.subtitle.empty()) {
                 tc_ui_painter_draw_text(
                     context, item.text.c_str(),
-                    tc_ui_point {row.x + item_padding_, row.y + row.height * 0.66f},
+                    tc_ui_point {text_x, row.y + row.height * 0.66f},
                     style.font_size, foreground
                 );
             } else {
                 tc_ui_painter_draw_text(
                     context, item.text.c_str(),
-                    tc_ui_point {row.x + item_padding_, row.y + style.font_size + 3.0f},
+                    tc_ui_point {text_x, row.y + style.font_size + 3.0f},
                     style.font_size, foreground
                 );
                 tc_ui_color subtitle = foreground;
                 subtitle.a *= 0.65f;
                 tc_ui_painter_draw_text(
                     context, item.subtitle.c_str(),
-                    tc_ui_point {row.x + item_padding_, row.y + row.height - 5.0f},
+                    tc_ui_point {text_x, row.y + row.height - 5.0f},
                     std::max(9.0f, style.font_size - 2.0f), subtitle
                 );
             }

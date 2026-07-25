@@ -558,6 +558,8 @@ def test_native_file_dialog_model_and_overlay_contract(tmp_path: Path):
 
     document = tc_ui_document_create()
     dialog = document.create_file_dialog(FileDialogMode.OpenFile)
+    dialog.title = "Choose text"
+    assert dialog.title == "Choose text"
     dialog.set_initial_directory(str(tmp_path))
     dialog.set_filters([FileDialogFilter("Text", ["*.txt"])])
     results = []

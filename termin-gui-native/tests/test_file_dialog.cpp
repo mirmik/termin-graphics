@@ -195,6 +195,12 @@ void test_modes_creation_and_failed_navigation_are_transactional() {
     assert(entry_index(save, "created") != SIZE_MAX);
     assert(!save.create_directory("created"));
     assert(!save.error().empty());
+    assert(save.create_unique_directory());
+    assert(save.current_directory() == "/root/New Folder");
+    assert(save.can_go_back());
+    assert(save.go_back());
+    assert(save.create_unique_directory());
+    assert(save.current_directory() == "/root/New Folder 2");
 
     FileDialogModel directory(FileDialogMode::OpenDirectory, file_system);
     assert(directory.navigate("/root"));
