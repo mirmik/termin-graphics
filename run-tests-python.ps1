@@ -6,6 +6,7 @@
 # Usage:
 #   .\run-tests-python.ps1
 #   .\run-tests-python.ps1 --full
+#   .\run-tests-python.ps1 --jobs 4
 #   .\run-tests-python.ps1 termin-app/tests/test_project_file_watcher.py -q
 # Selected pytest-target runs skip the repo-wide Python lint suite.
 
@@ -14,23 +15,37 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PytestTargets = New-Object System.Collections.Generic.List[string]
 $Full = $false
+$PytestJobs = if ($env:TERMIN_PYTEST_JOBS) { $env:TERMIN_PYTEST_JOBS } else { "1" }
 
 function Show-Help {
     Write-Host "Usage: .\run-tests-python.ps1 [pytest-target ...]"
     Write-Host ""
     Write-Host "  (no flags)  Use SDK Python + checkout overlay and run working tests"
     Write-Host "  --full      Include pytest tests marked full"
+    Write-Host "  --jobs N    Run up to N manifest-selected pytest suites concurrently"
     Write-Host "  pytest-target"
     Write-Host "              Run only selected pytest target(s), e.g. termin-app/tests/test_game_mode_model.py"
     Write-Host "              Selected runs skip the repo-wide Python lint suite."
 }
 
-foreach ($arg in $args) {
+$index = 0
+while ($index -lt $args.Count) {
+    $arg = $args[$index]
+    $index += 1
     if ($arg -eq "--no-venv") {
         Write-Error "--no-venv is no longer supported; run .\setup-sdk-python-env.ps1 first."
         exit 1
     } elseif ($arg -eq "--full") {
         $Full = $true
+    } elseif ($arg -eq "--jobs") {
+        if ($index -ge $args.Count) {
+            Write-Error "--jobs requires a positive integer."
+            exit 1
+        }
+        $PytestJobs = $args[$index]
+        $index += 1
+    } elseif ($arg.StartsWith("--jobs=")) {
+        $PytestJobs = $arg.Substring("--jobs=".Length)
     } elseif ($arg -eq "--help" -or $arg -eq "-h") {
         Show-Help
         exit 0
@@ -40,6 +55,15 @@ foreach ($arg in $args) {
     } else {
         $PytestTargets.Add($arg)
     }
+}
+
+$parsedPytestJobs = 0
+if (
+    -not [int]::TryParse($PytestJobs, [ref]$parsedPytestJobs) -or
+    $parsedPytestJobs -lt 1
+) {
+    Write-Error "--jobs must be a positive integer, got: $PytestJobs"
+    exit 1
 }
 
 if (-not $env:TERMIN_SDK) {
@@ -63,12 +87,21 @@ if ($env:TERMIN_SDK) {
 
 $PythonBin = if ($env:PYTHON_BIN) { $env:PYTHON_BIN } else { Join-Path $env:TERMIN_SDK "bin\termin_python.exe" }
 $OverlayManifest = if ($env:TERMIN_PYTHON_OVERLAY) { $env:TERMIN_PYTHON_OVERLAY } else { Join-Path $ScriptDir "build\python-envs\test\overlay.json" }
+$BuildToolsRoot = Join-Path $ScriptDir "termin-build-tools"
+$ToolsRequirements = Join-Path $ScriptDir "build-system\python-test-requirements.txt"
 if (-not (Test-Path $PythonBin -PathType Leaf)) {
     throw "SDK Python launcher is missing: $PythonBin"
 }
 if (-not (Test-Path $OverlayManifest -PathType Leaf)) {
     throw "Python test overlay is missing: $OverlayManifest. Run .\setup-sdk-python-env.ps1 first."
 }
+$EnvironmentRoot = Split-Path -Parent $OverlayManifest
+$EnvironmentBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())"
+& $PythonBin -c $EnvironmentBootstrap $BuildToolsRoot `
+    validate `
+    --environment-root $EnvironmentRoot `
+    --requirements $ToolsRequirements
+if ($LASTEXITCODE -ne 0) { throw "Python test environment validation failed" }
 $PythonPrefixArgs = @("--termin-overlay", $OverlayManifest)
 Write-Host "Python: $PythonBin"
 Write-Host "Overlay: $OverlayManifest"
@@ -175,6 +208,7 @@ if ($PytestTargets.Count -gt 0) {
     & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
         --repo-root $ScriptDir run $TestProfile `
         --platform windows --executor pytest --python $PythonBin `
+        --pytest-jobs $parsedPytestJobs `
         --python-arg=--termin-overlay --python-arg=$OverlayManifest
     if ($LASTEXITCODE -ne 0) {
         $Failures.Add("manifest Python suites")

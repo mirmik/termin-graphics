@@ -21,7 +21,6 @@ $SdkPython = Join-Path $SdkRoot "bin\termin_python.exe"
 $EnvRoot = if ($env:TERMIN_TEST_ENV) { $env:TERMIN_TEST_ENV } else { Join-Path $ScriptDir "build\python-envs\test" }
 $ToolsSite = Join-Path $EnvRoot "site-packages"
 $ToolsRequirements = Join-Path $ScriptDir "build-system\python-test-requirements.txt"
-$ToolsStamp = Join-Path $EnvRoot "python-test-requirements.txt"
 $OverlayManifest = Join-Path $EnvRoot "overlay.json"
 $BuildToolsRoot = Join-Path $ScriptDir "termin-build-tools"
 $PythonBuildEnv = if ($env:TERMIN_PYTHON_BUILD_ENV) {
@@ -42,27 +41,18 @@ if (-not (Test-Path $SdkPython -PathType Leaf)) {
 if (-not (Test-Path $TestToolsPython -PathType Leaf)) {
     throw "Pinned SDK Python build frontend is missing: $TestToolsPython. Run .\build-sdk.ps1 --no-wheels first."
 }
-if ($Force -and (Test-Path $ToolsSite)) {
-    Remove-Item -Recurse -Force $ToolsSite
+$EnvironmentBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())"
+$PrepareArgs = @(
+    "prepare",
+    "--environment-root", $EnvRoot,
+    "--requirements", $ToolsRequirements,
+    "--installer-python", $TestToolsPython
+)
+if ($Force) {
+    $PrepareArgs += "--force"
 }
-New-Item -ItemType Directory -Force -Path $ToolsSite | Out-Null
-
-$ToolsCurrent = (Test-Path (Join-Path $ToolsSite "ruff")) -and `
-    (Test-Path $ToolsStamp) -and `
-    ((Get-FileHash $ToolsRequirements).Hash -eq (Get-FileHash $ToolsStamp).Hash)
-if ($Force -or -not $ToolsCurrent) {
-    Write-Host "Installing test-only tools into: $ToolsSite"
-    & $TestToolsPython -I -m pip install `
-        --no-deps `
-        --ignore-installed `
-        --upgrade `
-        --target $ToolsSite `
-        -r $ToolsRequirements
-    if ($LASTEXITCODE -ne 0) { throw "test tool installation failed" }
-    Copy-Item -Force $ToolsRequirements $ToolsStamp
-} else {
-    Write-Host "Test-only tools are up to date: $ToolsSite"
-}
+& $SdkPython -c $EnvironmentBootstrap $BuildToolsRoot @PrepareArgs
+if ($LASTEXITCODE -ne 0) { throw "Python test environment preparation failed" }
 
 Write-Host "Generating checkout overlay: $OverlayManifest"
 $OverlayBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_overlay import main; raise SystemExit(main())"

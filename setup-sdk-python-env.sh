@@ -7,7 +7,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_ROOT="${TERMIN_TEST_ENV:-$SCRIPT_DIR/build/python-envs/test}"
 TOOLS_SITE="$ENV_ROOT/site-packages"
 TOOLS_REQUIREMENTS="$SCRIPT_DIR/build-system/python-test-requirements.txt"
-TOOLS_STAMP="$ENV_ROOT/python-test-requirements.txt"
 OVERLAY_MANIFEST="$ENV_ROOT/overlay.json"
 SDK_ROOT="${TERMIN_SDK:-$SCRIPT_DIR/sdk}"
 SDK_PYTHON="$SDK_ROOT/bin/termin_python"
@@ -40,24 +39,18 @@ if [[ ! -x "$TEST_TOOLS_PYTHON" ]]; then
     exit 1
 fi
 
+ENVIRONMENT_BOOTSTRAP='import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_test_environment import main; raise SystemExit(main())'
+PREPARE_ARGS=(
+    prepare
+    --environment-root "$ENV_ROOT"
+    --requirements "$TOOLS_REQUIREMENTS"
+    --installer-python "$TEST_TOOLS_PYTHON"
+)
 if [[ $FORCE -eq 1 ]]; then
-    rm -rf "$TOOLS_SITE"
+    PREPARE_ARGS+=(--force)
 fi
-mkdir -p "$TOOLS_SITE"
-
-if [[ $FORCE -eq 1 || ! -d "$TOOLS_SITE/ruff" || ! -f "$TOOLS_STAMP" ]] \
-    || ! cmp -s "$TOOLS_REQUIREMENTS" "$TOOLS_STAMP"; then
-    echo "Installing test-only tools into: $TOOLS_SITE"
-    "$TEST_TOOLS_PYTHON" -I -m pip install \
-        --no-deps \
-        --ignore-installed \
-        --upgrade \
-        --target "$TOOLS_SITE" \
-        -r "$TOOLS_REQUIREMENTS"
-    cp "$TOOLS_REQUIREMENTS" "$TOOLS_STAMP"
-else
-    echo "Test-only tools are up to date: $TOOLS_SITE"
-fi
+"$SDK_PYTHON" -c "$ENVIRONMENT_BOOTSTRAP" "$BUILD_TOOLS_ROOT" \
+    "${PREPARE_ARGS[@]}"
 
 echo "Generating checkout overlay: $OVERLAY_MANIFEST"
 OVERLAY_BOOTSTRAP='import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_overlay import main; raise SystemExit(main())'
