@@ -4,6 +4,7 @@
 #include <render/tc_pipeline_template_registry.h>
 #include <tc_pipeline_registry.h>
 #include <tcbase/tc_log.h>
+#include <tcbase/tc_pool.h>
 #ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
 #include "tc_pipeline_test_hooks.h"
 #endif
@@ -16,17 +17,10 @@
 #define PIPELINE_INITIAL_POOL_CAPACITY 16
 #define PIPELINE_INITIAL_PASS_CAPACITY 8
 
-typedef struct {
-    uint32_t* generations;
-    bool* alive;
-    tc_pipeline* pipelines;
-    uint32_t* free_stack;
-    size_t free_count;
-    size_t capacity;
-    size_t count;
-} PipelinePool;
+static tc_pool g_pipeline_pool;
+static bool g_pipeline_pool_initialized = false;
 
-static PipelinePool* g_pipeline_pool = NULL;
+#define PIPELINES ((tc_pipeline*)g_pipeline_pool.data)
 #ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
 static size_t g_pipeline_storage_allocations_before_failure = SIZE_MAX;
 
@@ -51,14 +45,15 @@ static bool pipeline_storage_allocation_should_fail(void) {
     return false;
 }
 
-static void* pipeline_storage_malloc(size_t size) {
+static void* pipeline_storage_allocate(size_t size, void* user_data) {
+    (void)user_data;
     if (pipeline_storage_allocation_should_fail()) return NULL;
     return malloc(size);
 }
 
-static void* pipeline_storage_calloc(size_t count, size_t size) {
-    if (pipeline_storage_allocation_should_fail()) return NULL;
-    return calloc(count, size);
+static void pipeline_storage_deallocate(void* ptr, void* user_data) {
+    (void)user_data;
+    free(ptr);
 }
 
 static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
@@ -140,111 +135,48 @@ void tc_pipeline_registry_shutdown(void) {
 }
 
 void tc_pipeline_pool_init(void) {
-    if (g_pipeline_pool) {
+    if (g_pipeline_pool_initialized) {
         tc_log_warn("[tc_pipeline_pool] already initialized");
         return;
     }
-
-    PipelinePool* pool = (PipelinePool*)pipeline_storage_calloc(1, sizeof(PipelinePool));
-    if (!pool) {
-        tc_log_error("[tc_pipeline_pool] allocation failed");
-        return;
-    }
-
-    size_t cap = PIPELINE_INITIAL_POOL_CAPACITY;
-    pool->generations = (uint32_t*)pipeline_storage_calloc(cap, sizeof(uint32_t));
-    pool->alive = (bool*)pipeline_storage_calloc(cap, sizeof(bool));
-    pool->pipelines = (tc_pipeline*)pipeline_storage_calloc(cap, sizeof(tc_pipeline));
-    pool->free_stack = (uint32_t*)pipeline_storage_malloc(cap * sizeof(uint32_t));
-    if (!pool->generations || !pool->alive || !pool->pipelines || !pool->free_stack) {
+    const tc_pool_config config = {
+        .max_capacity = MAX_PIPELINE_POOL_SIZE,
+        .initial_generation = 0u,
+        .allocate_low_indices_first = true,
+        .name = "tc_pipeline_pool",
+        .allocate = pipeline_storage_allocate,
+        .deallocate = pipeline_storage_deallocate,
+    };
+    if (!tc_pool_init_ex(
+            &g_pipeline_pool,
+            sizeof(tc_pipeline),
+            PIPELINE_INITIAL_POOL_CAPACITY,
+            &config)) {
         tc_log_error("[tc_pipeline_pool] storage allocation failed");
-        free(pool->generations);
-        free(pool->alive);
-        free(pool->pipelines);
-        free(pool->free_stack);
-        free(pool);
         return;
     }
-    for (size_t i = 0; i < cap; i++) {
-        pool->free_stack[i] = (uint32_t)(cap - 1 - i);
-    }
-    pool->free_count = cap;
-    pool->capacity = cap;
-    pool->count = 0;
-
-    g_pipeline_pool = pool;
+    g_pipeline_pool_initialized = true;
 }
 
 void tc_pipeline_pool_shutdown(void) {
-    if (!g_pipeline_pool) {
+    if (!g_pipeline_pool_initialized) {
         return;
     }
 
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            destroy_pipeline_slot(&g_pipeline_pool->pipelines[i]);
+    for (uint32_t i = 0; i < g_pipeline_pool.capacity; ++i) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            destroy_pipeline_slot(&PIPELINES[i]);
         }
     }
 
-    free(g_pipeline_pool->generations);
-    free(g_pipeline_pool->alive);
-    free(g_pipeline_pool->pipelines);
-    free(g_pipeline_pool->free_stack);
-    free(g_pipeline_pool);
-    g_pipeline_pool = NULL;
-
-}
-
-static bool pipeline_pool_grow(void) {
-    size_t old_cap = g_pipeline_pool->capacity;
-    size_t new_cap = old_cap * 2;
-    if (new_cap > MAX_PIPELINE_POOL_SIZE) new_cap = MAX_PIPELINE_POOL_SIZE;
-    if (new_cap <= old_cap) {
-        tc_log_error("[tc_pipeline_pool] max capacity reached");
-        return false;
-    }
-
-    uint32_t* generations = (uint32_t*)pipeline_storage_calloc(new_cap, sizeof(uint32_t));
-    bool* alive = (bool*)pipeline_storage_calloc(new_cap, sizeof(bool));
-    tc_pipeline* pipelines = (tc_pipeline*)pipeline_storage_calloc(new_cap, sizeof(tc_pipeline));
-    uint32_t* free_stack = (uint32_t*)pipeline_storage_malloc(new_cap * sizeof(uint32_t));
-    if (!generations || !alive || !pipelines || !free_stack) {
-        tc_log_error("[tc_pipeline_pool] grow allocation failed");
-        free(generations);
-        free(alive);
-        free(pipelines);
-        free(free_stack);
-        return false;
-    }
-
-    memcpy(generations, g_pipeline_pool->generations, old_cap * sizeof(uint32_t));
-    memcpy(alive, g_pipeline_pool->alive, old_cap * sizeof(bool));
-    memcpy(pipelines, g_pipeline_pool->pipelines, old_cap * sizeof(tc_pipeline));
-    memcpy(free_stack, g_pipeline_pool->free_stack,
-           g_pipeline_pool->free_count * sizeof(uint32_t));
-
-    size_t free_count = g_pipeline_pool->free_count;
-    for (size_t i = old_cap; i < new_cap; i++) {
-        free_stack[free_count++] = (uint32_t)(new_cap - 1 - (i - old_cap));
-    }
-
-    free(g_pipeline_pool->generations);
-    free(g_pipeline_pool->alive);
-    free(g_pipeline_pool->pipelines);
-    free(g_pipeline_pool->free_stack);
-    g_pipeline_pool->generations = generations;
-    g_pipeline_pool->alive = alive;
-    g_pipeline_pool->pipelines = pipelines;
-    g_pipeline_pool->free_stack = free_stack;
-    g_pipeline_pool->free_count = free_count;
-    g_pipeline_pool->capacity = new_cap;
-    return true;
+    tc_pool_free(&g_pipeline_pool);
+    g_pipeline_pool_initialized = false;
 }
 
 static inline bool pipeline_handle_alive(tc_pipeline_handle h) {
-    if (!g_pipeline_pool) return false;
-    if (h.index >= g_pipeline_pool->capacity) return false;
-    return g_pipeline_pool->alive[h.index] && g_pipeline_pool->generations[h.index] == h.generation;
+    const tc_handle pool_handle = {h.index, h.generation};
+    return g_pipeline_pool_initialized &&
+        tc_pool_is_valid(&g_pipeline_pool, pool_handle);
 }
 
 bool tc_pipeline_pool_alive(tc_pipeline_handle h) {
@@ -255,25 +187,20 @@ static tc_pipeline_handle pipeline_pool_alloc_with_template(
     const char* name,
     tc_pipeline_template_handle template_handle
 ) {
-    if (!g_pipeline_pool) {
+    if (!g_pipeline_pool_initialized) {
         tc_pipeline_pool_init();
-        if (!g_pipeline_pool) {
+        if (!g_pipeline_pool_initialized) {
             tc_log_error("[tc_pipeline_pool] unavailable after initialization failure");
             return TC_PIPELINE_HANDLE_INVALID;
         }
     }
-    if (g_pipeline_pool->free_count == 0) {
-        if (!pipeline_pool_grow()) {
-            tc_log_error("[tc_pipeline_pool] no free slots");
-            return TC_PIPELINE_HANDLE_INVALID;
-        }
+    tc_handle pool_handle = tc_pool_alloc(&g_pipeline_pool);
+    if (tc_handle_is_invalid(pool_handle)) {
+        tc_log_error("[tc_pipeline_pool] no free slots");
+        return TC_PIPELINE_HANDLE_INVALID;
     }
 
-    uint32_t idx = g_pipeline_pool->free_stack[--g_pipeline_pool->free_count];
-    uint32_t gen = g_pipeline_pool->generations[idx];
-
-    g_pipeline_pool->alive[idx] = true;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
+    tc_pipeline* p = &PIPELINES[pool_handle.index];
     p->name = name ? tc_pipeline_strdup(name) : tc_pipeline_strdup("default");
     p->pipeline_template = template_handle;
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
@@ -287,9 +214,10 @@ static tc_pipeline_handle pipeline_pool_alloc_with_template(
     p->render_cache_destructor = NULL;
     p->dirty = true;
 
-    g_pipeline_pool->count++;
-
-    tc_pipeline_handle h = { idx, gen };
+    tc_pipeline_handle h = {
+        pool_handle.index,
+        pool_handle.generation,
+    };
     return h;
 }
 
@@ -315,15 +243,12 @@ tc_pipeline_handle tc_pipeline_create(const char* name) {
 void tc_pipeline_pool_free(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return;
 
-    uint32_t idx = h.index;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[idx];
+    tc_pipeline* p = &PIPELINES[h.index];
 
     destroy_pipeline_slot(p);
 
-    g_pipeline_pool->alive[idx] = false;
-    g_pipeline_pool->generations[idx]++;
-    g_pipeline_pool->free_stack[g_pipeline_pool->free_count++] = idx;
-    g_pipeline_pool->count--;
+    const tc_handle pool_handle = {h.index, h.generation};
+    tc_pool_free_slot(&g_pipeline_pool, pool_handle);
 }
 
 void tc_pipeline_destroy(tc_pipeline_handle h) {
@@ -331,14 +256,14 @@ void tc_pipeline_destroy(tc_pipeline_handle h) {
 }
 
 size_t tc_pipeline_pool_count(void) {
-    return g_pipeline_pool ? g_pipeline_pool->count : 0;
+    return g_pipeline_pool_initialized ? tc_pool_count(&g_pipeline_pool) : 0u;
 }
 
 void tc_pipeline_pool_foreach(tc_pipeline_pool_iter_fn callback, void* user_data) {
-    if (!g_pipeline_pool || !callback) return;
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool->generations[i] };
+    if (!g_pipeline_pool_initialized || !callback) return;
+    for (uint32_t i = 0; i < g_pipeline_pool.capacity; ++i) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            tc_pipeline_handle h = {i, g_pipeline_pool.generations[i]};
             if (!callback(h, user_data)) {
                 break;
             }
@@ -348,32 +273,32 @@ void tc_pipeline_pool_foreach(tc_pipeline_pool_iter_fn callback, void* user_data
 
 tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return NULL;
-    return &g_pipeline_pool->pipelines[h.index];
+    return &PIPELINES[h.index];
 }
 
 tc_pipeline_template_handle tc_pipeline_get_template(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return tc_pipeline_template_handle_invalid();
-    return g_pipeline_pool->pipelines[h.index].pipeline_template;
+    return PIPELINES[h.index].pipeline_template;
 }
 
 const char* tc_pipeline_get_name(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return NULL;
-    return g_pipeline_pool->pipelines[h.index].name;
+    return PIPELINES[h.index].name;
 }
 
 void tc_pipeline_set_name(tc_pipeline_handle h, const char* name) {
     if (!pipeline_handle_alive(h)) return;
-    tc_pipeline_strset(&g_pipeline_pool->pipelines[h.index].name, name);
+    tc_pipeline_strset(&PIPELINES[h.index].name, name);
 }
 
 void* tc_pipeline_get_render_cache(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return NULL;
-    return g_pipeline_pool->pipelines[h.index].render_cache;
+    return PIPELINES[h.index].render_cache;
 }
 
 void tc_pipeline_set_render_cache(tc_pipeline_handle h, void* cache, void (*destructor)(void*)) {
     if (!pipeline_handle_alive(h)) return;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
     if (p->render_cache && p->render_cache_destructor) {
         p->render_cache_destructor(p->render_cache);
     }
@@ -413,7 +338,7 @@ bool tc_pipeline_adopt_pass(
         tc_log_error("[tc_pipeline] pass adoption requires a live pipeline, pass and deleter");
         return false;
     }
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
 
     if (tc_pipeline_handle_valid(pass->owner_pipeline)) {
         if (tc_pipeline_handle_eq(pass->owner_pipeline, h)) {
@@ -450,7 +375,7 @@ bool tc_pipeline_adopt_pass_before(
         tc_log_error("[tc_pipeline] cannot adopt a pass that already belongs to a pipeline");
         return false;
     }
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
 
     size_t insert_idx = 0;
     if (before) {
@@ -499,7 +424,7 @@ bool tc_pipeline_move_pass_before(
     tc_pass* before
 ) {
     if (!pipeline_handle_alive(h) || !pass) return false;
-    tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* pipeline = &PIPELINES[h.index];
     size_t source = pipeline->pass_count;
     for (size_t i = 0; i < pipeline->pass_count; ++i) {
         if (pipeline->passes[i] == pass) {
@@ -554,7 +479,7 @@ bool tc_pipeline_move_pass_before(
 
 void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
     if (!pipeline_handle_alive(h) || !pass) return;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
 
     size_t idx = p->pass_count;
     for (size_t i = 0; i < p->pass_count; i++) {
@@ -577,7 +502,7 @@ void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
 
 size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name) {
     if (!pipeline_handle_alive(h) || !name) return 0;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
     size_t removed_count = 0;
 
     for (size_t i = p->pass_count; i > 0; i--) {
@@ -604,7 +529,7 @@ size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name)
 
 tc_pass* tc_pipeline_get_pass(tc_pipeline_handle h, const char* name) {
     if (!pipeline_handle_alive(h) || !name) return NULL;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
     for (size_t i = 0; i < p->pass_count; i++) {
         tc_pass* pass = p->passes[i];
         if (pass && pass->pass_name && strcmp(pass->pass_name, name) == 0) {
@@ -616,7 +541,7 @@ tc_pass* tc_pipeline_get_pass(tc_pipeline_handle h, const char* name) {
 
 tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index) {
     if (!pipeline_handle_alive(h)) return NULL;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
     if (index >= p->pass_count) return NULL;
     return p->passes[index];
 }
@@ -654,7 +579,7 @@ bool tc_pipeline_exchange_pass_at_checked(
         !replacement_deleter || !expected_deleter) {
         return false;
     }
-    tc_pipeline* pipeline = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* pipeline = &PIPELINES[h.index];
     if (index >= pipeline->pass_count || pipeline->passes[index] != expected ||
         expected == replacement) {
         return false;
@@ -678,12 +603,12 @@ bool tc_pipeline_exchange_pass_at_checked(
 
 size_t tc_pipeline_pass_count(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return 0;
-    return g_pipeline_pool->pipelines[h.index].pass_count;
+    return PIPELINES[h.index].pass_count;
 }
 
 void tc_pipeline_foreach(tc_pipeline_handle h, tc_pipeline_pass_iter_fn callback, void* user_data) {
     if (!pipeline_handle_alive(h) || !callback) return;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
     for (size_t i = 0; i < p->pass_count; i++) {
         if (!callback(h, p->passes[i], i, user_data)) {
             break;
@@ -703,12 +628,12 @@ size_t tc_pipeline_registry_count(void) {
 }
 
 tc_pipeline_handle tc_pipeline_registry_get_at(size_t index) {
-    if (!g_pipeline_pool) return TC_PIPELINE_HANDLE_INVALID;
+    if (!g_pipeline_pool_initialized) return TC_PIPELINE_HANDLE_INVALID;
     size_t current = 0;
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
+    for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             if (current == index) {
-                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool->generations[i] };
+                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
                 return h;
             }
             current++;
@@ -718,12 +643,12 @@ tc_pipeline_handle tc_pipeline_registry_get_at(size_t index) {
 }
 
 tc_pipeline_handle tc_pipeline_registry_find_by_name(const char* name) {
-    if (!name || !g_pipeline_pool) return TC_PIPELINE_HANDLE_INVALID;
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            tc_pipeline* p = &g_pipeline_pool->pipelines[i];
+    if (!name || !g_pipeline_pool_initialized) return TC_PIPELINE_HANDLE_INVALID;
+    for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            tc_pipeline* p = &PIPELINES[i];
             if (p->name && strcmp(p->name, name) == 0) {
-                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool->generations[i] };
+                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
                 return h;
             }
         }
@@ -742,10 +667,10 @@ tc_pipeline_info* tc_pipeline_registry_get_all_info(size_t* count) {
     if (!infos) return NULL;
 
     size_t idx = 0;
-    for (size_t i = 0; i < g_pipeline_pool->capacity && idx < pipeline_count; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            tc_pipeline* p = &g_pipeline_pool->pipelines[i];
-            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool->generations[i] };
+    for (size_t i = 0; i < g_pipeline_pool.capacity && idx < pipeline_count; i++) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            tc_pipeline* p = &PIPELINES[i];
+            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
             infos[idx].handle = h;
             infos[idx].name = p->name;
             infos[idx].pass_count = p->pass_count;
@@ -760,12 +685,12 @@ tc_pipeline_info* tc_pipeline_registry_get_all_info(size_t* count) {
 tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
     if (!count) return NULL;
     *count = 0;
-    if (!g_pipeline_pool) return NULL;
+    if (!g_pipeline_pool_initialized) return NULL;
 
     size_t total_passes = 0;
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            total_passes += g_pipeline_pool->pipelines[i].pass_count;
+    for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            total_passes += PIPELINES[i].pass_count;
         }
     }
     if (total_passes == 0) return NULL;
@@ -774,10 +699,10 @@ tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
     if (!infos) return NULL;
 
     size_t idx = 0;
-    for (size_t i = 0; i < g_pipeline_pool->capacity; i++) {
-        if (g_pipeline_pool->alive[i]) {
-            tc_pipeline* p = &g_pipeline_pool->pipelines[i];
-            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool->generations[i] };
+    for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
+        if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
+            tc_pipeline* p = &PIPELINES[i];
+            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
             for (size_t j = 0; j < p->pass_count; j++) {
                 tc_pass* pass = p->passes[j];
                 if (pass) {
@@ -802,22 +727,22 @@ tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
 
 bool tc_pipeline_is_dirty(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return true;
-    return g_pipeline_pool->pipelines[h.index].dirty;
+    return PIPELINES[h.index].dirty;
 }
 
 void tc_pipeline_mark_dirty(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return;
-    g_pipeline_pool->pipelines[h.index].dirty = true;
+    PIPELINES[h.index].dirty = true;
 }
 
 void tc_pipeline_clear_dirty(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return;
-    g_pipeline_pool->pipelines[h.index].dirty = false;
+    PIPELINES[h.index].dirty = false;
 }
 
 tc_frame_graph* tc_pipeline_get_frame_graph(tc_pipeline_handle h) {
     if (!pipeline_handle_alive(h)) return NULL;
-    tc_pipeline* p = &g_pipeline_pool->pipelines[h.index];
+    tc_pipeline* p = &PIPELINES[h.index];
 
     if (!p->dirty && p->cached_frame_graph) {
         return (tc_frame_graph*)p->cached_frame_graph;

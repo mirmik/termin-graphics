@@ -45,6 +45,29 @@ GUARD_C_TEST(test_render_target_rejects_invalid_dimensions_without_mutation) {
     return 0;
 }
 
+GUARD_C_TEST(test_render_target_pool_grows_and_rejects_stale_handle) {
+    tc_render_target_handle targets[9];
+    for (size_t i = 0; i < 9; ++i) {
+        targets[i] = tc_render_target_new("pool-growth");
+        GUARD_C_REQUIRE(tc_render_target_alive(targets[i]));
+    }
+    GUARD_C_CHECK_EQ_UINT(9, tc_render_target_pool_count());
+
+    const tc_render_target_handle stale = targets[0];
+    tc_render_target_free(stale);
+    GUARD_C_CHECK(!tc_render_target_alive(stale));
+    targets[0] = tc_render_target_new("pool-reuse");
+    GUARD_C_REQUIRE(tc_render_target_alive(targets[0]));
+    GUARD_C_CHECK_EQ_UINT(stale.index, targets[0].index);
+    GUARD_C_CHECK(stale.generation != targets[0].generation);
+
+    for (size_t i = 0; i < 9; ++i) {
+        tc_render_target_free(targets[i]);
+    }
+    GUARD_C_CHECK_EQ_UINT(0, tc_render_target_pool_count());
+    return 0;
+}
+
 static bool init_test_component(tc_component* component, const char* type_name) {
     if (!tc_component_registry_has(type_name)) {
         tc_runtime_type_descriptor* descriptor = tc_runtime_type_descriptor_create(
@@ -216,6 +239,7 @@ GUARD_C_TEST(test_render_target_resolves_xr_origin_and_rejects_stale_scene) {
 int main(int argc, char** argv) {
     GUARD_C_BEGIN_ARGS(argc, argv);
     GUARD_C_RUN(test_render_target_rejects_invalid_dimensions_without_mutation);
+    GUARD_C_RUN(test_render_target_pool_grows_and_rejects_stale_handle);
     GUARD_C_RUN(test_render_target_resolves_camera_replacement_from_entity_handle);
     GUARD_C_RUN(test_render_target_resolves_camera_from_scene_less_pool);
     GUARD_C_RUN(test_render_target_rejects_camera_from_another_scene);

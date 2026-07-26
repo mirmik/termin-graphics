@@ -188,7 +188,7 @@ TEST_CASE("Pipeline shutdown destroys every live slot through the normal teardow
 
 TEST_CASE("Pipeline pool initialization is atomic across allocation failures") {
     tc_pipeline_pool_shutdown();
-    for (size_t successful_allocations = 0; successful_allocations < 5;
+    for (size_t successful_allocations = 0; successful_allocations < 4;
          ++successful_allocations) {
         tc_pipeline_test_fail_storage_allocation_after(successful_allocations);
         const tc_pipeline_handle failed = tc_pipeline_create("must-not-publish");

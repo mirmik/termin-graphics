@@ -191,6 +191,14 @@
       "reason": "Runs the installed editor through Xvfb and Mesa llvmpipe, verifies MCP project/scene access, and requests clean shutdown."
     },
     {
+      "id": "editor-mcp-offscreen-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-editor-mcp-offscreen"],
+      "platforms": ["linux"],
+      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands, Vulkan offscreen PNG readback, and deterministic cleanup."
+    },
+    {
       "id": "relocated-sdk-acceptance",
       "module": "termin-build-tools",
       "executor": "process-smoke",
