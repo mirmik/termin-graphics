@@ -114,6 +114,11 @@ void bind_box_layout_api(nb::class_<Ref, Bases...>& cls) {
 } // namespace
 
 void bind_gui_native_widgets(nb::module_& m) {
+    nb::enum_<termin::gui_native::ScrollBarPolicy>(m, "ScrollBarPolicy")
+        .value("Auto", termin::gui_native::ScrollBarPolicy::Auto)
+        .value("Always", termin::gui_native::ScrollBarPolicy::Always)
+        .value("Hidden", termin::gui_native::ScrollBarPolicy::Hidden);
+
     nb::class_<WidgetRef>(m, "WidgetRef")
         .def_prop_ro("handle", [](const WidgetRef& self) { return WidgetHandle{self.handle}; })
         .def_prop_ro("alive", &WidgetRef::alive)
@@ -971,6 +976,26 @@ void bind_gui_native_widgets(nb::module_& m) {
             [](const ScrollAreaRef &self) {
               return self.get().vertical_scroll_enabled();
             })
+        .def_prop_ro(
+            "horizontal_scrollbar_policy",
+            [](const ScrollAreaRef &self) {
+              return self.get().horizontal_scrollbar_policy();
+            })
+        .def_prop_ro(
+            "vertical_scrollbar_policy",
+            [](const ScrollAreaRef &self) {
+              return self.get().vertical_scrollbar_policy();
+            })
+        .def_prop_ro(
+            "horizontal_scrollbar_visible",
+            [](const ScrollAreaRef &self) {
+              return self.get().horizontal_scrollbar_visible();
+            })
+        .def_prop_ro(
+            "vertical_scrollbar_visible",
+            [](const ScrollAreaRef &self) {
+              return self.get().vertical_scrollbar_visible();
+            })
         .def(
             "set_scroll_axes",
             [](const ScrollAreaRef &self, bool horizontal, bool vertical) {
@@ -979,8 +1004,58 @@ void bind_gui_native_widgets(nb::module_& m) {
             },
             nb::arg("horizontal"), nb::arg("vertical"))
         .def(
+            "set_scrollbar_policy",
+            [](const ScrollAreaRef &self,
+               termin::gui_native::ScrollBarPolicy horizontal,
+               termin::gui_native::ScrollBarPolicy vertical) {
+              self.get().set_scrollbar_policy(horizontal, vertical);
+            },
+            nb::arg("horizontal"), nb::arg("vertical"))
+        .def(
+            "ensure_visible",
+            [](const ScrollAreaRef &self, const WidgetRef &descendant) {
+              if (self.widget.state != descendant.state) {
+                throw std::invalid_argument(
+                    "ScrollArea descendant belongs to another document");
+              }
+              const bool changed = self.get().ensure_visible(descendant.handle);
+              self.widget.throw_pending_exception();
+              return changed;
+            },
+            nb::arg("descendant"))
+        .def(
+            "connect_changed",
+            [](const ScrollAreaRef &self, nb::object callback) {
+              auto state = self.widget.state;
+              return self.get().changed().connect(
+                  [state, callback = std::move(callback)](
+                      termin::gui_native::ScrollArea&, float x, float y) {
+                    try {
+                      nb::gil_scoped_acquire gil;
+                      callback(x, y);
+                    } catch (...) {
+                      if (state && !state->pending_exception) {
+                        state->pending_exception = std::current_exception();
+                      }
+                      tc_log_error(
+                          "[termin-gui-native/python] ScrollArea changed callback failed");
+                    }
+                  });
+            },
+            nb::arg("callback"))
+        .def(
+            "disconnect_changed",
+            [](const ScrollAreaRef &self, size_t connection) {
+              return self.get().changed().disconnect(connection);
+            },
+            nb::arg("connection"))
+        .def(
             "set_content",
             [](const ScrollAreaRef &self, const WidgetRef &content) {
+              if (self.widget.state != content.state) {
+                throw std::invalid_argument(
+                    "ScrollArea content belongs to another document");
+              }
               self.get().set_content(content.handle);
               self.widget.throw_pending_exception();
             },

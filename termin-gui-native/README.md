@@ -198,6 +198,10 @@ The current foundation includes:
 - `Slider` supports arbitrary finite ranges and optional step quantization.
   `SliderEdit` materializes a canonical `Slider` + `SpinBox` child pair on its
   first document layout and keeps programmatic and interactive values in sync;
+- `ScrollArea` keeps programmatic scroll geometry coherent immediately,
+  chains wheel input at axis boundaries, reveals focused descendants, exposes
+  keyboard line/page navigation and observable offsets, and supports
+  `Auto`/`Always`/`Hidden` overlay scrollbar policies with captured thumb drag;
 - `ComboBox` uses one document-owned, reusable overlay widget with outside
   dismissal, keyboard selection and wheel scrolling. The first native pass
   omits the legacy draggable scrollbar thumb while preserving selection and

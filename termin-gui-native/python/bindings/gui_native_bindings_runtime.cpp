@@ -623,6 +623,7 @@ const tc_widget_vtable PythonWidget::VTABLE{
     &PythonWidget::key_event,
     &PythonWidget::text_event,
     &PythonWidget::focus_event,
+    nullptr,
     &PythonWidget::overlay_dismissed,
     &PythonWidget::on_destroy,
 };

@@ -19,6 +19,8 @@ int main() {
   test_scroll_area_lays_out_content_with_clip_and_scroll();
   test_scroll_area_can_fit_content_to_disabled_scroll_axis();
   test_scroll_area_wheel_clamps_and_recursive_destroy_content();
+  test_scroll_area_programmatic_keyboard_thumb_and_focus_contract();
+  test_nested_scroll_area_bubbles_wheel_at_inner_boundary();
   test_tab_view_switches_selected_page_and_clips_paint();
   test_tab_view_recursive_destroy_pages();
   test_tab_view_page_mutation_and_selection_signal();

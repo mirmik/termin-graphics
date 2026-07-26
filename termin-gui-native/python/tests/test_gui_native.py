@@ -38,6 +38,7 @@ from termin.gui_native import (
     RichTextModel,
     RichTextSegment,
     RichTextStyle,
+    ScrollBarPolicy,
     Size,
     StyleField,
     StyleOverride,
@@ -1439,6 +1440,17 @@ def test_native_basic_input_and_media_widget_factories():
     assert scroll.scroll_x == pytest.approx(0.0)
     scroll.scroll_y = 48.0
     assert scroll.scroll_y == pytest.approx(48.0)
+    assert scroll.vertical_scrollbar_visible
+    changes = []
+    connection = scroll.connect_changed(lambda x, y: changes.append((x, y)))
+    scroll.scroll_y = 96.0
+    assert changes == [(pytest.approx(0.0), pytest.approx(96.0))]
+    assert scroll_content.widget.bounds.y == pytest.approx(-96.0)
+    assert scroll.disconnect_changed(connection)
+    scroll.set_scrollbar_policy(ScrollBarPolicy.Hidden, ScrollBarPolicy.Always)
+    assert not scroll.horizontal_scrollbar_visible
+    assert scroll.vertical_scrollbar_visible
+    scroll.ensure_visible(scroll_content.widget)
 
     spin = document.create_spin_box(2.0)
     spin_changes = []

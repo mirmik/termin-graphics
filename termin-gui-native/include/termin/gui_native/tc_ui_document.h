@@ -468,6 +468,11 @@ typedef struct tc_widget_vtable {
         tc_ui_document_handle document,
         bool focused
     );
+    void (*descendant_focused)(
+        tc_widget* widget,
+        tc_ui_document_handle document,
+        tc_widget_handle descendant
+    );
     void (*overlay_dismissed)(
         tc_widget* widget,
         tc_ui_document_handle document,

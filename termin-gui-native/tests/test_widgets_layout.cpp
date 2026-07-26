@@ -385,7 +385,7 @@ void test_scroll_area_lays_out_content_with_clip_and_scroll() {
   document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 60.0f});
   assert(near(scroll.scroll_y(), 40.0f));
   assert(near(content.bounds().y, -40.0f));
-  assert(tc_widget_handle_eq(document.hit_test(10.0f, 50.0f), bottom.handle()));
+  assert(tc_widget_handle_eq(document.hit_test(10.0f, 45.0f), bottom.handle()));
 
   tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
   tc_ui_paint_context *paint_context = tc_ui_paint_context_create(draw_list);
@@ -393,11 +393,17 @@ void test_scroll_area_lays_out_content_with_clip_and_scroll() {
 
   assert(tc_ui_draw_list_command_count(draw_list) >= 4);
   const tc_ui_draw_command *first = tc_ui_draw_list_command_at(draw_list, 0);
-  const tc_ui_draw_command *last = tc_ui_draw_list_command_at(
-      draw_list, tc_ui_draw_list_command_count(draw_list) - 1);
   assert(first && first->type == TC_UI_DRAW_PUSH_CLIP);
   assert(near(first->rect.width, 100.0f));
-  assert(last && last->type == TC_UI_DRAW_POP_CLIP);
+  bool found_pop_clip = false;
+  for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list);
+       ++index) {
+    const tc_ui_draw_command *command =
+        tc_ui_draw_list_command_at(draw_list, index);
+    found_pop_clip =
+        found_pop_clip || (command && command->type == TC_UI_DRAW_POP_CLIP);
+  }
+  assert(found_pop_clip);
 
   tc_ui_paint_context_destroy(paint_context);
   tc_ui_draw_list_destroy(draw_list);
@@ -453,11 +459,126 @@ void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
   wheel.wheel_y = 10.0f;
   assert(document.dispatch_pointer_event(wheel) == TC_UI_EVENT_HANDLED);
   assert(near(scroll.scroll_y(), 0.0f));
+  assert(document.dispatch_pointer_event(wheel) == TC_UI_EVENT_IGNORED);
 
   assert(tc_ui_document_live_widget_count(document.get()) == 3);
   assert(
       tc_ui_document_destroy_widget_recursive(document.get(), scroll.handle()));
   assert(tc_ui_document_live_widget_count(document.get()) == 0);
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_scroll_area_programmatic_keyboard_thumb_and_focus_contract() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &scroll = ui.make_root<ScrollArea>("scroll");
+  auto &content = ui.make<VStack>("content");
+  auto &top = ui.make<Panel>("top");
+  auto &bottom = ui.make<Button>("bottom");
+  content.add_fixed_child(top, 80.0f);
+  content.add_fixed_child(bottom, 30.0f);
+  content.set_preferred_size(tc_ui_size{120.0f, 180.0f});
+  scroll.set_content(content);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 60.0f});
+
+  int change_count = 0;
+  float observed_y = -1.0f;
+  scroll.changed().connect(
+      [&](ScrollArea &, float, float y) {
+        ++change_count;
+        observed_y = y;
+      });
+
+  scroll.set_scroll(12.0f, 40.0f);
+  assert(near(content.bounds().x, -12.0f));
+  assert(near(content.bounds().y, -40.0f));
+  assert(change_count == 1);
+  assert(near(observed_y, 40.0f));
+
+  scroll.set_scrollbar_policy(ScrollBarPolicy::Hidden, ScrollBarPolicy::Always);
+  assert(!scroll.horizontal_scrollbar_visible());
+  assert(scroll.vertical_scrollbar_visible());
+  scroll.set_scrollbar_policy(ScrollBarPolicy::Auto, ScrollBarPolicy::Auto);
+  assert(scroll.horizontal_scrollbar_visible());
+  assert(scroll.vertical_scrollbar_visible());
+
+  assert(document.set_focus(scroll));
+  tc_ui_key_event key{};
+  key.type = TC_UI_KEY_DOWN;
+  key.key = TC_UI_KEY_END;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(near(scroll.scroll_y(), 120.0f));
+  assert(near(content.bounds().y, -120.0f));
+  key.key = TC_UI_KEY_DOWN_ARROW;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_IGNORED);
+  key.key = TC_UI_KEY_HOME;
+  assert(document.dispatch_key_event(key) == TC_UI_EVENT_HANDLED);
+  assert(near(scroll.scroll_y(), 0.0f));
+
+  scroll.set_scroll_axes(false, true);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 60.0f});
+  tc_ui_pointer_event pointer{};
+  pointer.type = TC_UI_POINTER_DOWN;
+  pointer.button = tcbase::mouse_button_value(tcbase::MouseButton::LEFT);
+  pointer.x = 92.0f;
+  pointer.y = 5.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_eq(document.pointer_capture(), scroll.handle()));
+  pointer.type = TC_UI_POINTER_MOVE;
+  pointer.y = 50.0f;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(near(scroll.scroll_y(), 120.0f));
+  assert(near(content.bounds().y, -120.0f));
+  pointer.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+
+  scroll.set_scroll(0.0f, 0.0f);
+  assert(document.set_focus(bottom));
+  assert(scroll.scroll_y() > 0.0f);
+  assert(bottom.bounds().y + bottom.bounds().height <=
+         scroll.bounds().y + scroll.bounds().height + 0.001f);
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 300.0f});
+  assert(near(scroll.scroll_y(), 0.0f));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_nested_scroll_area_bubbles_wheel_at_inner_boundary() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &outer = ui.make_root<ScrollArea>("outer");
+  auto &outer_content = ui.make<VStack>("outer-content");
+  auto &inner = ui.make<ScrollArea>("inner");
+  auto &inner_content = ui.make<Panel>("inner-content");
+  auto &tail = ui.make<Panel>("tail");
+  inner_content.set_preferred_size(tc_ui_size{100.0f, 200.0f});
+  inner.set_content(inner_content);
+  inner.set_scroll_axes(false, true);
+  outer_content.add_fixed_child(inner, 100.0f);
+  outer_content.add_fixed_child(tail, 300.0f);
+  outer_content.set_preferred_size(tc_ui_size{100.0f, 400.0f});
+  outer.set_content(outer_content);
+  outer.set_scroll_axes(false, true);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
+
+  inner.set_scroll(0.0f, 100.0f);
+  assert(near(inner.scroll_y(), 100.0f));
+  tc_ui_pointer_event wheel{};
+  wheel.type = TC_UI_POINTER_WHEEL;
+  wheel.x = 10.0f;
+  wheel.y = 10.0f;
+  wheel.wheel_y = -1.0f;
+  assert(document.dispatch_pointer_event(wheel) == TC_UI_EVENT_HANDLED);
+  assert(near(inner.scroll_y(), 100.0f));
+  assert(near(outer.scroll_y(), 48.0f));
+  assert(near(outer_content.bounds().y, -48.0f));
 
   tc_ui_document_destroy(document_handle);
 }

@@ -12,6 +12,7 @@ const tc_widget_vtable NativeWidget::VTABLE {
     &NativeWidget::dispatch_key_event,
     &NativeWidget::dispatch_text_event,
     &NativeWidget::dispatch_focus_event,
+    &NativeWidget::dispatch_descendant_focused,
     &NativeWidget::dispatch_overlay_dismissed,
     &NativeWidget::dispatch_on_destroy,
 };
@@ -75,6 +76,8 @@ tc_ui_event_result NativeWidget::text_event(tc_ui_document_handle, const tc_ui_t
 }
 
 void NativeWidget::focus_event(tc_ui_document_handle, bool) {}
+
+void NativeWidget::descendant_focused(tc_ui_document_handle, tc_widget_handle) {}
 
 void NativeWidget::overlay_dismissed(tc_ui_document_handle, tc_ui_overlay_dismiss_reason) {}
 
@@ -152,6 +155,17 @@ void NativeWidget::dispatch_focus_event(
     auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
     if (self) {
         self->focus_event(document, focused);
+    }
+}
+
+void NativeWidget::dispatch_descendant_focused(
+    tc_widget* widget,
+    tc_ui_document_handle document,
+    tc_widget_handle descendant
+) {
+    auto* self = static_cast<NativeWidget*>(widget ? widget->body : nullptr);
+    if (self) {
+        self->descendant_focused(document, descendant);
     }
 }
 

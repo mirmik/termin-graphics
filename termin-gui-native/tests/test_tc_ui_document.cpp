@@ -74,6 +74,7 @@ static const tc_widget_vtable TEST_WIDGET_VTABLE {
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
     test_widget_on_destroy,
 };
 
@@ -213,6 +214,7 @@ static const tc_widget_vtable ROUTE_WIDGET_VTABLE {
     route_widget_key_event,
     nullptr,
     route_widget_focus_event,
+    nullptr,
     route_widget_overlay_dismissed,
     nullptr,
 };
@@ -334,6 +336,7 @@ static const tc_widget_vtable OVERLAY_LAYOUT_PROBE_VTABLE {
     nullptr,
     nullptr,
     overlay_layout_probe_hit_test,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,

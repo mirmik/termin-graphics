@@ -29,6 +29,10 @@ public:
     virtual tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event);
     virtual tc_ui_event_result text_event(tc_ui_document_handle document, const tc_ui_text_event* event);
     virtual void focus_event(tc_ui_document_handle document, bool focused);
+    virtual void descendant_focused(
+        tc_ui_document_handle document,
+        tc_widget_handle descendant
+    );
     virtual void overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason);
     virtual void on_destroy(tc_ui_document_handle document);
 private:
@@ -40,6 +44,11 @@ private:
     static tc_ui_event_result dispatch_key_event(tc_widget* widget, tc_ui_document_handle document, const tc_ui_key_event* event);
     static tc_ui_event_result dispatch_text_event(tc_widget* widget, tc_ui_document_handle document, const tc_ui_text_event* event);
     static void dispatch_focus_event(tc_widget* widget, tc_ui_document_handle document, bool focused);
+    static void dispatch_descendant_focused(
+        tc_widget* widget,
+        tc_ui_document_handle document,
+        tc_widget_handle descendant
+    );
     static void dispatch_overlay_dismissed(tc_widget* widget, tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason);
     static void dispatch_on_destroy(tc_widget* widget, tc_ui_document_handle document);
 };

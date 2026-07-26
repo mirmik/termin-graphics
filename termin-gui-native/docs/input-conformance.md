@@ -16,6 +16,7 @@ buttons are ignored unless a control explicitly documents a different gesture.
 | `SpinBox` | Tab | left buttons or selection drag | arrows step; text editing keys while editing |
 | `TabView` | Tab | left header selection | Left/Right and Page Up/Down wrap; Home/End select first/last |
 | `ColorPicker` | Tab | left surface drag | Left/Right adjust hue, Up/Down value, Page Up/Down saturation, Home/End value bounds |
+| `ScrollArea` | Tab or focused descendant | wheel chains at clamped boundaries; left scrollbar thumb drag | arrows scroll by line; Page Up/Down by viewport; Home/End select the primary-axis bounds |
 
 Collection and editor views define their own documented navigation model, but
 must still use left-button filtering for primary selection/activation and the

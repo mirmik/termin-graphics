@@ -15,6 +15,8 @@ void test_splitter_recursive_destroy_children();
 void test_scroll_area_lays_out_content_with_clip_and_scroll();
 void test_scroll_area_can_fit_content_to_disabled_scroll_axis();
 void test_scroll_area_wheel_clamps_and_recursive_destroy_content();
+void test_scroll_area_programmatic_keyboard_thumb_and_focus_contract();
+void test_nested_scroll_area_bubbles_wheel_at_inner_boundary();
 void test_tab_view_switches_selected_page_and_clips_paint();
 void test_tab_view_recursive_destroy_pages();
 void test_tab_view_page_mutation_and_selection_signal();

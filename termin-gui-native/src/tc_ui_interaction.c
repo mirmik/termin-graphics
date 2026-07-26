@@ -784,6 +784,9 @@ tc_ui_rect tc_ui_document_layout_rect(tc_ui_document_handle document_handle) {
 
 bool tc_ui_internal_change_focus(tc_ui_document* document, tc_widget_handle next) {
     tc_widget_handle previous;
+    tc_widget_handle* route = NULL;
+    size_t route_count = 0;
+    size_t route_index;
     if (!document || tc_ui_internal_same_handle(document->focused_widget, next)) {
         return document != NULL;
     }
@@ -794,6 +797,25 @@ bool tc_ui_internal_change_focus(tc_ui_document* document, tc_widget_handle next
     }
     if (!tc_widget_handle_is_invalid(next) && tc_ui_internal_same_handle(document->focused_widget, next)) {
         dispatch_focus_event_to_widget(document, next, true);
+    }
+    if (!tc_widget_handle_is_invalid(next) &&
+        tc_ui_internal_same_handle(document->focused_widget, next) &&
+        snapshot_route(document, next, &route, &route_count)) {
+        for (route_index = 1; route_index < route_count; ++route_index) {
+            tc_widget* ancestor;
+            if (!tc_ui_internal_same_handle(document->focused_widget, next)) {
+                break;
+            }
+            ancestor = tc_ui_document_resolve_widget(document->handle, route[route_index]);
+            if (ancestor && ancestor->vtable && ancestor->vtable->descendant_focused) {
+                ancestor->vtable->descendant_focused(
+                    ancestor,
+                    document->handle,
+                    next
+                );
+            }
+        }
+        free(route);
     }
     return true;
 }

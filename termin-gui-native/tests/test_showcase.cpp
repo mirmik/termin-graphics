@@ -128,7 +128,7 @@ void test_showcase_builds_stable_headless_snapshot() {
   tc_ui_paint_context *paint_context = tc_ui_paint_context_create(draw_list);
   document.paint(paint_context);
 
-  require_equal(tc_ui_draw_list_command_count(draw_list), 224,
+  require_equal(tc_ui_draw_list_command_count(draw_list), 229,
                 "showcase total commands");
   require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 33,
                 "showcase fill commands");
