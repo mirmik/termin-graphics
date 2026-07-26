@@ -1,7 +1,12 @@
+#include <cmath>
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -12,6 +17,8 @@
 
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/graphics_host.hpp>
+#include <tgfx2/i_render_device.hpp>
+#include <tgfx2/shader_artifact_resolver.hpp>
 
 namespace {
 
@@ -24,6 +31,15 @@ tgfx::BackendType isolated_backend() {
     }
     return tgfx::BackendType::Null;
 }
+
+struct ScopedShaderArtifacts {
+    std::filesystem::path root;
+
+    ~ScopedShaderArtifacts() {
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+    }
+};
 
 class BorrowedTestWindow final : public termin::BackendWindow {
   public:
@@ -82,9 +98,29 @@ class BorrowedTestWindow final : public termin::BackendWindow {
 int main() {
     try {
         const tgfx::BackendType backend = isolated_backend();
-        if (backend == tgfx::BackendType::Null) return 77;
+        if (backend == tgfx::BackendType::Null) {
+            std::printf(
+                "window adapter test skipped: no Vulkan or D3D11 backend compiled\n");
+            return 77;
+        }
 
         auto graphics = tgfx::GraphicsHost::create_isolated(backend);
+        const char* shader_compiler = std::getenv("TERMIN_SHADERC");
+        if (!shader_compiler || shader_compiler[0] == '\0') {
+            std::fprintf(stderr, "window adapter test requires TERMIN_SHADERC\n");
+            return 1;
+        }
+        const auto unique =
+            std::chrono::steady_clock::now().time_since_epoch().count();
+        const ScopedShaderArtifacts shader_artifacts {
+            std::filesystem::temp_directory_path() /
+            ("termin-gui-native-window-adapter-" + std::to_string(unique))
+        };
+        graphics->configure_shader_artifacts(termin::ShaderArtifactResolver(
+            shader_artifacts.root.string(),
+            (shader_artifacts.root / "cache").string(),
+            shader_compiler,
+            true));
         const tc_ui_document_handle document_handle = tc_ui_document_create();
         termin::gui_native::TcDocument document(document_handle);
         BorrowedTestWindow window(*graphics, backend);
@@ -212,6 +248,45 @@ int main() {
                 "adapter did not execute renderer extensions before presentation\n");
             return 1;
         }
+        graphics->device().wait_idle();
+        std::vector<float> pixels(
+            static_cast<size_t>(framebuffer_size.first) *
+            static_cast<size_t>(framebuffer_size.second) * 4u);
+        if (!graphics->device().read_texture_rgba_float(
+                window.last_presented, pixels.data())) {
+            std::fprintf(
+                stderr,
+                "window adapter %s composition readback failed\n",
+                tgfx::backend_name(backend));
+            return 1;
+        }
+        size_t non_background_pixels = 0;
+        size_t text_pixels = 0;
+        for (size_t index = 0; index < pixels.size(); index += 4) {
+            const bool differs_from_clear =
+                std::fabs(pixels[index] - config.clear_color[0]) > 0.03f ||
+                std::fabs(pixels[index + 1] - config.clear_color[1]) > 0.03f ||
+                std::fabs(pixels[index + 2] - config.clear_color[2]) > 0.03f;
+            non_background_pixels += differs_from_clear;
+            text_pixels += pixels[index] > 0.45f ||
+                pixels[index + 1] > 0.45f ||
+                pixels[index + 2] > 0.45f;
+        }
+        if (non_background_pixels < 1000 || text_pixels < 8) {
+            std::fprintf(
+                stderr,
+                "window adapter %s composition lost control/text batches: "
+                "non_background=%zu text=%zu\n",
+                tgfx::backend_name(backend),
+                non_background_pixels,
+                text_pixels);
+            return 1;
+        }
+        std::printf(
+            "window adapter exercised %s: non_background=%zu text=%zu\n",
+            tgfx::backend_name(backend),
+            non_background_pixels,
+            text_pixels);
 
         termin::WindowEvent pointer_away;
         pointer_away.type = termin::WindowEventType::PointerMoved;
@@ -229,7 +304,7 @@ int main() {
         graphics->close();
         return 0;
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "window adapter test skipped: %s\n", error.what());
-        return 77;
+        std::fprintf(stderr, "window adapter test failed: %s\n", error.what());
+        return 1;
     }
 }

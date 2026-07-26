@@ -282,13 +282,23 @@ int main(int argc, char** argv) {
         if (!tgfx::backend_is_compiled(backend))
             continue;
         ++tested_backends;
+        std::printf(
+            "UI renderer pixel smoke exercising backend: %s\n",
+            tgfx::backend_name(backend));
         if (run_smoke(argc > 0 ? argv[0] : nullptr, backend) != 0) {
             result = 1;
             break;
         }
+        std::printf(
+            "UI renderer pixel smoke validated control, text, clip and sampling "
+            "pixels on backend: %s\n",
+            tgfx::backend_name(backend));
     }
     if (tested_backends == 0) {
-        std::printf("No headless UI renderer backend compiled; desktop OpenGL smoke is separate\n");
+        std::printf(
+            "UI renderer pixel smoke skipped: no Vulkan or D3D11 backend compiled; "
+            "desktop OpenGL smoke is separate\n");
+        result = 77;
     }
     tc_shader_shutdown();
     return result;

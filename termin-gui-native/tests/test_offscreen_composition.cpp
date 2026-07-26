@@ -29,7 +29,11 @@ tgfx::BackendType offscreen_backend() {
 int main() {
     try {
         const tgfx::BackendType backend = offscreen_backend();
-        if (backend == tgfx::BackendType::Null) return 77;
+        if (backend == tgfx::BackendType::Null) {
+            std::printf(
+                "offscreen composition test skipped: no Vulkan or D3D11 backend compiled\n");
+            return 77;
+        }
 
         termin::gui_native::OffscreenGuiCompositionConfig config;
         config.width = 64;
@@ -143,6 +147,6 @@ int main() {
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "offscreen composition test failed: %s\n", error.what());
-        return 77;
+        return 1;
     }
 }

@@ -367,13 +367,17 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     )
     target_link_libraries(termin_gui_native_window_adapter_test
         PRIVATE termin_gui_native_window_adapter)
+    if(TARGET termin_shaderc)
+        add_dependencies(termin_gui_native_window_adapter_test termin_shaderc)
+    endif()
     target_compile_definitions(termin_gui_native_window_adapter_test
         PRIVATE
             TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
     )
     set_tests_properties(termin_gui_native_window_adapter_test PROPERTIES
         TIMEOUT 15
-        SKIP_RETURN_CODE 77)
+        SKIP_RETURN_CODE 77
+        ENVIRONMENT "TERMIN_SHADERC=${_termin_gui_native_offscreen_test_shaderc}")
     endif()
     termin_gui_native_add_test(termin_gui_native_offscreen_composition_test
         tests/test_offscreen_composition.cpp
@@ -395,6 +399,8 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
     )
+    set_tests_properties(termin_gui_native_renderer_pixel_smoke PROPERTIES
+        SKIP_RETURN_CODE 77)
     if(TARGET termin_shaderc)
         add_dependencies(termin_gui_native_renderer_pixel_smoke termin_shaderc)
         set_property(TEST termin_gui_native_renderer_pixel_smoke PROPERTY
