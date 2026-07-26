@@ -309,6 +309,7 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_widgets_test
         tests/test_widgets.cpp
         tests/test_widgets_layout.cpp
+        tests/test_widgets_input.cpp
         tests/test_widgets_collections.cpp
     )
     termin_gui_native_add_test(termin_gui_native_showcase_test
