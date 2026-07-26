@@ -882,6 +882,65 @@ void test_destroy_clears_hover_and_pointer_capture() {
   tc_ui_document_destroy(document_handle);
 }
 
+void test_remove_child_clears_subtree_focus_and_preserves_reuse() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
+  auto &container =
+      ui.make<BoxLayout>(Orientation::Horizontal, "container");
+  auto &focusable = ui.make<FocusProbe>();
+  container.add_preferred_child(focusable);
+  root.add_stretch_child(container);
+
+  assert(document.set_focus(focusable));
+  assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+  assert(root.remove_child(container));
+  assert(tc_widget_handle_is_invalid(document.focused_widget()));
+  assert(container.parent_widget() == nullptr);
+  assert(tc_ui_document_is_alive(document.get(), container.handle()));
+  assert(tc_ui_document_is_alive(document.get(), focusable.handle()));
+
+  assert(root.append_child(container));
+  assert(document.set_focus(focusable));
+  assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_detach_clears_pointer_interaction_state_only_inside_subtree() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
+  auto &probe = ui.make<CapturingProbe>();
+  auto &outside = ui.make<FocusProbe>();
+  root.add_stretch_child(probe);
+  root.add_preferred_child(outside);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 160.0f, 40.0f});
+
+  tc_ui_pointer_event event{};
+  event.type = TC_UI_POINTER_DOWN;
+  event.x = 10.0f;
+  event.y = 10.0f;
+  assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_eq(document.hovered_widget(), probe.handle()));
+  assert(tc_widget_handle_eq(document.pointer_capture(), probe.handle()));
+  assert(tc_widget_handle_eq(document.pressed_widget(), probe.handle()));
+  assert(document.set_focus(outside));
+
+  assert(probe.detach());
+  assert(tc_widget_handle_is_invalid(document.hovered_widget()));
+  assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+  assert(tc_widget_handle_is_invalid(document.pressed_widget()));
+  assert(tc_widget_handle_eq(document.focused_widget(), outside.handle()));
+  assert(tc_ui_document_is_alive(document.get(), probe.handle()));
+
+  tc_ui_document_destroy(document_handle);
+}
+
 void test_focus_and_key_text_dispatch_follow_focused_widget() {
   tc_ui_document_handle document_handle = tc_ui_document_create();
   TcDocument document(document_handle);

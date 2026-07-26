@@ -433,6 +433,7 @@ bool tc_ui_internal_detach_widget(tc_widget* widget) {
     if (!widget || !widget->parent) {
         return false;
     }
+    tc_ui_internal_invalidate_subtree_interaction_state(widget);
     index = tc_ui_internal_find_child_index(widget->parent, widget);
     if (index == SIZE_MAX) {
         tc_log_error("[termin-gui-native] widget parent link is not mirrored by its parent child list");

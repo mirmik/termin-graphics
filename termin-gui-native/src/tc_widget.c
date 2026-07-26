@@ -467,7 +467,9 @@ bool tc_widget_remove_child(tc_widget* parent, tc_widget* child) {
         tc_log_error("[termin-gui-native] cannot remove inconsistent child link");
         return false;
     }
-    tc_ui_internal_remove_child_at(parent, index);
+    if (!tc_ui_internal_detach_widget(child)) {
+        return false;
+    }
     tc_widget_mark_dirty(parent, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     mark_style_subtree_dirty(child);
     tc_ui_document* document = tc_ui_internal_resolve_document(parent->document);
