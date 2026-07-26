@@ -2,6 +2,10 @@
 
 Native UI document implementation under active `termin-gui` migration.
 
+The maintained public C++/Python widget and signal inventory is
+[`docs/python-widget-parity.md`](docs/python-widget-parity.md). Python factories
+return typed wrappers; common widget state is available through `.widget`.
+
 Declarative native documents use the deliberately limited, versioned
 [`uiscript: 1` dialect](docs/uiscript-v1.md). The loader validates into a
 toolkit-neutral description before materializing into a `tc_ui_document`; it does

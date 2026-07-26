@@ -148,7 +148,22 @@ void bind_gui_native_collection_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const ListWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_context_menu_requested",
+           [](const ListWidgetRef &self, size_t connection) {
+             return self.get().context_menu_requested().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_activated",
+           [](const ListWidgetRef &self, size_t connection) {
+             return self.get().activated().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<FileGridWidgetRef>(m, "FileGridWidget")
       .def_prop_ro("widget",
@@ -391,7 +406,32 @@ void bind_gui_native_collection_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const FileGridWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_activated",
+           [](const FileGridWidgetRef &self, size_t connection) {
+             return self.get().activated().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_delete_requested",
+           [](const FileGridWidgetRef &self, size_t connection) {
+             return self.get().delete_requested().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_context_menu_requested",
+           [](const FileGridWidgetRef &self, size_t connection) {
+             return self.get().context_menu_requested().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_drag_requested",
+           [](const FileGridWidgetRef &self, size_t connection) {
+             return self.get().drag_requested().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<termin::gui_native::TreeNode>(m, "TreeNode")
       .def_prop_ro(
@@ -743,7 +783,42 @@ void bind_gui_native_collection_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_expansion_changed",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().expansion_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_activated",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().activated().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_toggle_activated",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().toggle_activated().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_delete_requested",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().delete_requested().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_context_menu_requested",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().context_menu_requested().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_drop_requested",
+           [](const TreeWidgetRef &self, size_t connection) {
+             return self.get().drop_requested().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<termin::gui_native::TreeTableRowData>(m, "TreeTableRowData")
       .def(nb::init<>())
@@ -1110,7 +1185,65 @@ void bind_gui_native_collection_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const TreeTableWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_expansion_changed",
+           [](const TreeTableWidgetRef &self, size_t connection) {
+             return self.get().expansion_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("connect_header_clicked",
+           [](const TreeTableWidgetRef &self, nb::object callback) {
+             auto state = self.widget.state;
+             return self.get().header_clicked().connect(
+                 [state, callback = std::move(callback)](
+                     termin::gui_native::TreeTableWidget &, size_t index,
+                     const termin::gui_native::TableColumn &column) {
+                   try {
+                     nb::gil_scoped_acquire gil;
+                     callback(index, column);
+                   } catch (...) {
+                     if (state && !state->pending_exception)
+                       state->pending_exception = std::current_exception();
+                     tc_log_error("[termin-gui-native/python] TreeTableWidget "
+                                  "header callback failed");
+                   }
+                 });
+           },
+           nb::arg("callback"))
+      .def("disconnect_header_clicked",
+           [](const TreeTableWidgetRef &self, size_t connection) {
+             return self.get().header_clicked().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("connect_column_resized",
+           [](const TreeTableWidgetRef &self, nb::object callback) {
+             auto state = self.widget.state;
+             return self.get().column_resized().connect(
+                 [state, callback = std::move(callback)](
+                     termin::gui_native::TreeTableWidget &, size_t index,
+                     float width) {
+                   try {
+                     nb::gil_scoped_acquire gil;
+                     callback(index, width);
+                   } catch (...) {
+                     if (state && !state->pending_exception)
+                       state->pending_exception = std::current_exception();
+                     tc_log_error("[termin-gui-native/python] TreeTableWidget "
+                                  "resize callback failed");
+                   }
+                 });
+           },
+           nb::arg("callback"))
+      .def("disconnect_column_resized",
+           [](const TreeTableWidgetRef &self, size_t connection) {
+             return self.get().column_resized().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<TableWidgetRef>(m, "TableWidget")
       .def_prop_ro("widget",
@@ -1311,5 +1444,30 @@ void bind_gui_native_collection_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const TableWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_activated",
+           [](const TableWidgetRef &self, size_t connection) {
+             return self.get().activated().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_header_clicked",
+           [](const TableWidgetRef &self, size_t connection) {
+             return self.get().header_clicked().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_column_resized",
+           [](const TableWidgetRef &self, size_t connection) {
+             return self.get().column_resized().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_context_menu_requested",
+           [](const TableWidgetRef &self, size_t connection) {
+             return self.get().context_menu_requested().disconnect(connection);
+           },
+           nb::arg("connection"));
 }

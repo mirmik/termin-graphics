@@ -125,7 +125,7 @@ def test_python_box_layout_policies_padding_spacing_and_limits():
     fixed = document.create_label("Fixed")
     preferred = document.create_label("Preferred")
     flexible = document.create_label("Flexible")
-    preferred.preferred_size = Size(40.0, 40.0)
+    preferred.widget.preferred_size = Size(40.0, 40.0)
 
     root.set_layout_padding(EdgeInsets(10.0, 10.0, 10.0, 10.0))
     root.set_layout_spacing(5.0)
@@ -138,21 +138,67 @@ def test_python_box_layout_policies_padding_spacing_and_limits():
     assert document.add_root(root.handle)
     document.layout_roots(Rect(0.0, 0.0, 300.0, 200.0))
 
-    assert fixed.bounds.x == pytest.approx(10.0)
-    assert fixed.bounds.width == pytest.approx(280.0)
-    assert fixed.bounds.height == pytest.approx(30.0)
-    assert preferred.bounds.y == pytest.approx(45.0)
-    assert preferred.bounds.height == pytest.approx(40.0)
-    assert flexible.bounds.y == pytest.approx(90.0)
-    assert flexible.bounds.height == pytest.approx(100.0)
+    assert fixed.widget.bounds.x == pytest.approx(10.0)
+    assert fixed.widget.bounds.width == pytest.approx(280.0)
+    assert fixed.widget.bounds.height == pytest.approx(30.0)
+    assert preferred.widget.bounds.y == pytest.approx(45.0)
+    assert preferred.widget.bounds.height == pytest.approx(40.0)
+    assert flexible.widget.bounds.y == pytest.approx(90.0)
+    assert flexible.widget.bounds.height == pytest.approx(100.0)
 
     draw_list = DrawList()
     document.paint_roots(PaintContext(draw_list))
     assert sum(command.type == DrawCommandType.FillRect for command in draw_list.commands) >= 1
     assert sum(command.type == DrawCommandType.StrokeRect for command in draw_list.commands) >= 1
 
-    with pytest.raises(RuntimeError, match="BoxLayout"):
-        fixed.append_child(document.create_label("invalid"), LayoutPolicy.Fixed, 10.0)
+    with pytest.raises(TypeError):
+        fixed.append_child(
+            document.create_label("invalid"), LayoutPolicy.Fixed, 10.0
+        )
+
+
+def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy():
+    document = tc_ui_document_create()
+    root = document.create_box_layout(horizontal=False, debug_name="typed-root")
+    grid = document.create_grid_layout("typed-grid")
+    panel = document.create_panel("typed-panel")
+    label = document.create_label("before", "typed-label")
+    slider = document.create_slider(0.25)
+    separator = document.create_separator(horizontal=True)
+    spacer = document.create_spacer(Size(8.0, 6.0))
+    swatch = document.create_swatch(Color(0.2, 0.4, 0.6, 1.0))
+
+    label.text = "after"
+    label.set_font_size(15.0)
+    panel.set_fill(Color(0.1, 0.1, 0.1, 1.0))
+    separator.set_thickness(2.0)
+    grid.add_column(LayoutPolicy.Stretch)
+    grid.add_row(LayoutPolicy.Fixed, 24.0)
+    grid.add_child(label, 0, 0)
+    root.add_fixed_child(panel, 12.0)
+    root.add_stretch_child(grid)
+    root.add_fixed_child(slider, 20.0)
+    root.add_fixed_child(separator, 2.0)
+    root.add_fixed_child(spacer, 6.0)
+    root.add_fixed_child(swatch, 10.0)
+    assert document.add_root(root.handle)
+
+    changed = []
+    connection = slider.connect_changed(changed.append)
+    slider.value = 0.75
+    assert changed == pytest.approx([0.75])
+    assert slider.disconnect_changed(connection)
+    assert not slider.disconnect_changed(connection)
+    slider.value = 0.5
+    assert changed == pytest.approx([0.75])
+
+    document.layout_roots(Rect(0.0, 0.0, 160.0, 120.0))
+    assert label.text == "after"
+    assert label.widget.parent.handle == grid.handle
+
+    assert document.destroy_widget_recursive(root.handle)
+    for typed in (root, grid, panel, label, slider, separator, spacer, swatch):
+        assert not typed.widget.alive
 
 
 def test_python_registered_widget_type_identity_lifetime_and_reload():
@@ -966,22 +1012,22 @@ def test_widget_ref_wraps_native_cpp_widgets_without_duplicate_state():
     panel = document.create_panel("native-panel")
     label = document.create_label("native", "native-label")
     assert document.add_root(root.handle)
-    assert root.append_child(panel)
-    assert root.append_child(label)
-    panel.preferred_size = Size(40.0, 20.0)
-    label.preferred_size = Size(60.0, 20.0)
+    root.add_child(panel)
+    root.add_child(label)
+    panel.widget.preferred_size = Size(40.0, 20.0)
+    label.widget.preferred_size = Size(60.0, 20.0)
 
     document.layout_roots(Rect(0.0, 0.0, 120.0, 30.0))
-    assert root.debug_name == "native-root"
-    assert panel.parent.handle == root.handle
-    assert label.parent.handle == root.handle
-    assert panel.bounds.width == pytest.approx(50.0)
-    assert label.bounds.width == pytest.approx(70.0)
+    assert root.widget.debug_name == "native-root"
+    assert panel.widget.parent.handle == root.handle
+    assert label.widget.parent.handle == root.handle
+    assert panel.widget.bounds.width == pytest.approx(50.0)
+    assert label.widget.bounds.width == pytest.approx(70.0)
 
     assert document.destroy_widget_recursive(root.handle)
-    assert not root.alive
-    assert not panel.alive
-    assert not label.alive
+    assert not root.widget.alive
+    assert not panel.widget.alive
+    assert not label.widget.alive
 
 
 def test_theme_style_inheritance_state_and_runtime_update():
@@ -1325,13 +1371,13 @@ def test_native_basic_input_and_media_widget_factories():
     assert group.content_handle == group_content.handle
     group.set_content(replacement)
     assert group.content_handle == replacement.handle
-    assert group_content.parent is None
-    assert group_content.alive
+    assert group_content.widget.parent is None
+    assert group_content.widget.alive
     group.widget.layout(Rect(0.0, 0.0, 180.0, 120.0))
-    assert replacement.bounds.x == pytest.approx(8.0)
-    assert replacement.bounds.y == pytest.approx(36.0)
-    assert replacement.bounds.width == pytest.approx(162.0)
-    assert replacement.bounds.height == pytest.approx(72.0)
+    assert replacement.widget.bounds.x == pytest.approx(8.0)
+    assert replacement.widget.bounds.y == pytest.approx(36.0)
+    assert replacement.widget.bounds.width == pytest.approx(162.0)
+    assert replacement.widget.bounds.height == pytest.approx(72.0)
     group_draw_list = DrawList()
     group.widget.paint(PaintContext(group_draw_list))
     assert any(
@@ -1340,14 +1386,14 @@ def test_native_basic_input_and_media_widget_factories():
     )
     assert document.destroy_widget_recursive(group.handle)
     assert not group.widget.alive
-    assert not replacement.alive
-    assert group_content.alive
+    assert not replacement.widget.alive
+    assert group_content.widget.alive
     with pytest.raises(RuntimeError, match="stale"):
         _ = group.title
 
     scroll = document.create_scroll_area("python-scroll")
     scroll_content = document.create_vstack("python-scroll-content")
-    scroll_content.preferred_size = Size(200.0, 300.0)
+    scroll_content.widget.preferred_size = Size(200.0, 300.0)
     scroll.set_content(scroll_content)
     scroll.set_scroll_axes(False, True)
     scroll.widget.layout(Rect(0.0, 0.0, 100.0, 80.0))
@@ -1397,8 +1443,8 @@ def test_native_basic_input_and_media_widget_factories():
     splitter.split_fraction = 0.25
     splitter.widget.layout(Rect(0.0, 0.0, 200.0, 80.0))
     assert splitter.split_fraction == pytest.approx(0.25)
-    assert split_first.bounds.width == pytest.approx(48.5)
-    assert split_second.bounds.width == pytest.approx(145.5)
+    assert split_first.widget.bounds.width == pytest.approx(48.5)
+    assert split_second.widget.bounds.width == pytest.approx(145.5)
     assert tabs.remove_page(1)
     assert tabs.page_count == 1
     assert tabs.selected_index == 0

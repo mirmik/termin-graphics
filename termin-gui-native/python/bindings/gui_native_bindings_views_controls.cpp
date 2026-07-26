@@ -86,7 +86,12 @@ void bind_gui_native_control_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_changed",
+           [](const ComboBoxRef &self, size_t connection) {
+             return self.get().changed().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<IconButtonRef>(m, "IconButton")
       .def_prop_ro("widget",
@@ -165,7 +170,12 @@ void bind_gui_native_control_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_clicked",
+           [](const IconButtonRef &self, size_t connection) {
+             return self.get().clicked().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<ProgressBarRef>(m, "ProgressBar")
       .def_prop_ro("widget",
@@ -316,6 +326,16 @@ void bind_gui_native_control_views(nb::module_ &m) {
                 });
           },
           nb::arg("callback"))
+      .def("disconnect_zoom_changed",
+           [](const CanvasRef &self, size_t connection) {
+             return self.get().zoom_changed().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_pointer_input",
+           [](const CanvasRef &self, size_t connection) {
+             return self.get().pointer_input().disconnect(connection);
+           },
+           nb::arg("connection"))
       .def(
           "set_paint_callback",
           [](const CanvasRef &self, nb::object callback) {

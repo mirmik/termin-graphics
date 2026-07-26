@@ -42,15 +42,16 @@ def _widget(document: TcDocument, reference: Any) -> WidgetRef:
 
 def _append(
     document: TcDocument,
-    parent: WidgetRef,
+    parent: Any,
     reference: Any,
     *,
     preferred: Size | None = None,
 ) -> WidgetRef:
+    parent_widget = _widget(document, parent)
     child = _widget(document, reference)
     if preferred is not None:
         child.preferred_size = preferred
-    if not parent.append_child(child):
+    if not parent_widget.append_child(child):
         raise RuntimeError("failed to append Python showcase widget")
     return child
 
@@ -58,7 +59,8 @@ def _append(
 def build_python_showcase(document: TcDocument) -> PythonShowcase:
     """Build a real native-widget tree from Python without compatibility widgets."""
 
-    root = document.create_vstack("python-showcase-root")
+    root_layout = document.create_vstack("python-showcase-root")
+    root = root_layout.widget
     root.stable_id = "python-showcase.root"
     root.preferred_size = Size(800.0, 600.0)
     if not document.add_root(root.handle):

@@ -2,20 +2,122 @@
 
 using namespace termin::gui_native::python_bindings;
 
+namespace {
+
+template <typename Ref, typename... Bases>
+void bind_box_layout_api(nb::class_<Ref, Bases...>& cls) {
+    cls.def_prop_ro("widget", [](const Ref& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const Ref& self) { return WidgetHandle{self.widget.handle}; })
+        .def(
+            "add_child",
+            [](const Ref& self, const WidgetRef& child,
+               termin::gui_native::LayoutPolicy policy, float value) {
+                if (self.widget.state != child.state) {
+                    throw std::invalid_argument(
+                        "BoxLayout child belongs to another document");
+                }
+                self.get().add_child(child.handle, policy, value);
+                self.widget.throw_pending_exception();
+            },
+            nb::arg("child"),
+            nb::arg("policy") = termin::gui_native::LayoutPolicy::Stretch,
+            nb::arg("value") = 0.0f)
+        .def("add_fixed_child",
+             [](const Ref& self, const WidgetRef& child, float extent) {
+                 self.get().add_fixed_child(child.handle, extent);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"), nb::arg("extent"))
+        .def("add_preferred_child",
+             [](const Ref& self, const WidgetRef& child) {
+                 self.get().add_preferred_child(child.handle);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"))
+        .def("add_flex_child",
+             [](const Ref& self, const WidgetRef& child, float flex) {
+                 self.get().add_flex_child(child.handle, flex);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"), nb::arg("flex") = 1.0f)
+        .def("add_stretch_child",
+             [](const Ref& self, const WidgetRef& child) {
+                 self.get().add_stretch_child(child.handle);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"))
+        .def("set_padding",
+             [](const Ref& self, termin::gui_native::EdgeInsets padding) {
+                 self.get().set_padding(padding);
+             },
+             nb::arg("padding"))
+        .def("set_layout_padding",
+             [](const Ref& self, termin::gui_native::EdgeInsets padding) {
+                 self.get().set_padding(padding);
+             },
+             nb::arg("padding"))
+        .def("set_spacing",
+             [](const Ref& self, float spacing) {
+                 self.get().set_spacing(spacing);
+             },
+             nb::arg("spacing"))
+        .def("set_layout_spacing",
+             [](const Ref& self, float spacing) {
+                 self.get().set_spacing(spacing);
+             },
+             nb::arg("spacing"))
+        .def("set_background",
+             [](const Ref& self, tc_ui_color color) {
+                 self.get().set_background(
+                     {color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_layout_background",
+             [](const Ref& self, tc_ui_color color) {
+                 self.get().set_background(
+                     {color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_border",
+             [](const Ref& self, tc_ui_color color, float thickness) {
+                 self.get().set_border(
+                     {color.r, color.g, color.b, color.a}, thickness);
+             },
+             nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("set_layout_border",
+             [](const Ref& self, tc_ui_color color, float thickness) {
+                 self.get().set_border(
+                     {color.r, color.g, color.b, color.a}, thickness);
+             },
+             nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("set_corner_radius",
+             [](const Ref& self, float radius) {
+                 self.get().set_corner_radius(radius);
+             },
+             nb::arg("radius"))
+        .def("set_layout_corner_radius",
+             [](const Ref& self, float radius) {
+                 self.get().set_corner_radius(radius);
+             },
+             nb::arg("radius"))
+        .def("set_child_extent_limits",
+             [](const Ref& self, const WidgetRef& child, float minimum,
+                float maximum) {
+                 return self.get().set_child_extent_limits(
+                     child.handle, minimum, maximum);
+             },
+             nb::arg("child"), nb::arg("minimum"),
+             nb::arg("maximum") = 0.0f);
+}
+
+} // namespace
+
 void bind_gui_native_widgets(nb::module_& m) {
     nb::class_<WidgetRef>(m, "WidgetRef")
         .def_prop_ro("handle", [](const WidgetRef& self) { return WidgetHandle{self.handle}; })
         .def_prop_ro("alive", &WidgetRef::alive)
         .def("__bool__", &WidgetRef::alive)
-        .def_prop_rw(
-            "text",
-            [](const WidgetRef& self) {
-                return native_widget_checked<termin::gui_native::Label>(self, "Label").text();
-            },
-            [](const WidgetRef& self, const std::string& value) {
-                native_widget_checked<termin::gui_native::Label>(self, "Label")
-                    .set_text(value);
-            })
         .def_prop_rw(
             "bounds",
             [](const WidgetRef& self) { return tc_widget_bounds(self.resolve_checked()); },
@@ -184,94 +286,11 @@ void bind_gui_native_widgets(nb::module_& m) {
                      })
         .def(
             "append_child",
-            [](const WidgetRef& self, const WidgetRef& child,
-               termin::gui_native::LayoutPolicy policy, float value) {
-                tc_widget* parent = self.resolve_checked();
-                tc_widget* child_widget = child.resolve_checked();
-                if (parent->native_language == TC_LANGUAGE_CXX) {
-                    auto* base = static_cast<termin::gui_native::Widget*>(parent->body);
-                    if (auto* box = dynamic_cast<termin::gui_native::BoxLayout*>(base)) {
-                        box->add_child(child_widget->handle, policy, value);
-                        return child_widget->parent == parent;
-                    }
-                }
-                if (policy != termin::gui_native::LayoutPolicy::Stretch || value != 0.0f) {
-                    throw std::runtime_error("layout policy requires a BoxLayout parent");
-                }
-                return tc_widget_append_child(parent, child_widget);
-            },
-            nb::arg("child"), nb::arg("policy") = termin::gui_native::LayoutPolicy::Stretch,
-            nb::arg("value") = 0.0f)
-        .def(
-            "add_fixed_child",
-            [](const WidgetRef& self, const WidgetRef& child, float extent) {
-                auto& box = native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout");
-                box.add_fixed_child(child.handle, extent);
-            },
-            nb::arg("child"), nb::arg("extent"))
-        .def(
-            "add_preferred_child",
             [](const WidgetRef& self, const WidgetRef& child) {
-                auto& box = native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout");
-                box.add_preferred_child(child.handle);
+                return tc_widget_append_child(self.resolve_checked(),
+                                              child.resolve_checked());
             },
             nb::arg("child"))
-        .def(
-            "add_flex_child",
-            [](const WidgetRef& self, const WidgetRef& child, float flex) {
-                auto& box = native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout");
-                box.add_flex_child(child.handle, flex);
-            },
-            nb::arg("child"), nb::arg("flex") = 1.0f)
-        .def(
-            "add_stretch_child",
-            [](const WidgetRef& self, const WidgetRef& child) {
-                auto& box = native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout");
-                box.add_stretch_child(child.handle);
-            },
-            nb::arg("child"))
-        .def(
-            "set_layout_spacing",
-            [](const WidgetRef& self, float spacing) {
-                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_spacing(spacing);
-            },
-            nb::arg("spacing"))
-        .def(
-            "set_layout_padding",
-            [](const WidgetRef& self, termin::gui_native::EdgeInsets padding) {
-                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_padding(padding);
-            },
-            nb::arg("padding"))
-        .def(
-            "set_layout_background",
-            [](const WidgetRef& self, tc_ui_color color) {
-                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_background({color.r, color.g, color.b, color.a});
-            },
-            nb::arg("color"))
-        .def(
-            "set_layout_border",
-            [](const WidgetRef& self, tc_ui_color color, float thickness) {
-                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_border({color.r, color.g, color.b, color.a}, thickness);
-            },
-            nb::arg("color"), nb::arg("thickness") = 1.0f)
-        .def(
-            "set_layout_corner_radius",
-            [](const WidgetRef& self, float radius) {
-                native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_corner_radius(radius);
-            },
-            nb::arg("radius"))
-        .def(
-            "set_child_extent_limits",
-            [](const WidgetRef& self, const WidgetRef& child, float minimum, float maximum) {
-                return native_widget_checked<termin::gui_native::BoxLayout>(self, "BoxLayout")
-                    .set_child_extent_limits(child.handle, minimum, maximum);
-            },
-            nb::arg("child"), nb::arg("minimum"), nb::arg("maximum") = 0.0f)
         .def(
             "insert_child",
             [](const WidgetRef& self, size_t index, const WidgetRef& child) {
@@ -366,6 +385,213 @@ void bind_gui_native_widgets(nb::module_& m) {
             return result;
         });
 
+    nb::class_<BoxLayoutRef, WidgetRef> box_layout(m, "BoxLayout");
+    bind_box_layout_api(box_layout);
+    nb::class_<HStackRef, WidgetRef> hstack(m, "HStack");
+    bind_box_layout_api(hstack);
+    nb::class_<VStackRef, WidgetRef> vstack(m, "VStack");
+    bind_box_layout_api(vstack);
+
+    nb::class_<GridLayoutRef, WidgetRef>(m, "GridLayout")
+        .def_prop_ro("widget", [](const GridLayoutRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const GridLayoutRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     })
+        .def("set_padding",
+             [](const GridLayoutRef& self,
+                termin::gui_native::EdgeInsets padding) {
+                 self.get().set_padding(padding);
+             },
+             nb::arg("padding"))
+        .def("set_spacing",
+             [](const GridLayoutRef& self, float columns, float rows) {
+                 self.get().set_spacing(columns, rows);
+             },
+             nb::arg("columns"), nb::arg("rows"))
+        .def("set_background",
+             [](const GridLayoutRef& self, tc_ui_color color) {
+                 self.get().set_background(
+                     {color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_border",
+             [](const GridLayoutRef& self, tc_ui_color color, float thickness) {
+                 self.get().set_border(
+                     {color.r, color.g, color.b, color.a}, thickness);
+             },
+             nb::arg("color"), nb::arg("thickness") = 1.0f)
+        .def("add_column",
+             [](const GridLayoutRef& self,
+                termin::gui_native::LayoutPolicy policy, float value) {
+                 return self.get().add_column(policy, value);
+             },
+             nb::arg("policy") = termin::gui_native::LayoutPolicy::Stretch,
+             nb::arg("value") = 0.0f)
+        .def("add_row",
+             [](const GridLayoutRef& self,
+                termin::gui_native::LayoutPolicy policy, float value) {
+                 return self.get().add_row(policy, value);
+             },
+             nb::arg("policy") = termin::gui_native::LayoutPolicy::Stretch,
+             nb::arg("value") = 0.0f)
+        .def("add_child",
+             [](const GridLayoutRef& self, const WidgetRef& child, size_t row,
+                size_t column, size_t row_span, size_t column_span) {
+                 if (self.widget.state != child.state) {
+                     throw std::invalid_argument(
+                         "GridLayout child belongs to another document");
+                 }
+                 self.get().add_child(child.handle, row, column, row_span,
+                                      column_span);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"), nb::arg("row"), nb::arg("column"),
+             nb::arg("row_span") = 1, nb::arg("column_span") = 1)
+        .def("set_column_extent_limits",
+             [](const GridLayoutRef& self, size_t column, float minimum,
+                float maximum) {
+                 return self.get().set_column_extent_limits(
+                     column, minimum, maximum);
+             },
+             nb::arg("column"), nb::arg("minimum"), nb::arg("maximum") = 0.0f)
+        .def("set_row_extent_limits",
+             [](const GridLayoutRef& self, size_t row, float minimum,
+                float maximum) {
+                 return self.get().set_row_extent_limits(
+                     row, minimum, maximum);
+             },
+             nb::arg("row"), nb::arg("minimum"), nb::arg("maximum") = 0.0f);
+
+    nb::class_<PanelRef, WidgetRef>(m, "Panel")
+        .def_prop_ro("widget", [](const PanelRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const PanelRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     })
+        .def("set_fill",
+             [](const PanelRef& self, tc_ui_color color) {
+                 self.get().set_fill({color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_border",
+             [](const PanelRef& self, tc_ui_color color, float thickness) {
+                 self.get().set_border(
+                     {color.r, color.g, color.b, color.a}, thickness);
+             },
+             nb::arg("color"), nb::arg("thickness") = 1.0f);
+
+    nb::class_<LabelRef, WidgetRef>(m, "Label")
+        .def_prop_ro("widget", [](const LabelRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const LabelRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     })
+        .def_prop_rw(
+            "text", [](const LabelRef& self) { return self.get().text(); },
+            [](const LabelRef& self, const std::string& text) {
+                self.get().set_text(text);
+            })
+        .def("set_color",
+             [](const LabelRef& self, tc_ui_color color) {
+                 self.get().set_color({color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_font_size",
+             [](const LabelRef& self, float font_size) {
+                 self.get().set_font_size(font_size);
+             },
+             nb::arg("font_size"));
+
+    nb::class_<SliderRef, WidgetRef>(m, "Slider")
+        .def_prop_ro("widget", [](const SliderRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const SliderRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     })
+        .def_prop_rw(
+            "value", [](const SliderRef& self) { return self.get().value(); },
+            [](const SliderRef& self, float value) {
+                self.get().set_value(value);
+                self.widget.throw_pending_exception();
+            })
+        .def_prop_ro("min_value",
+                     [](const SliderRef& self) {
+                         return self.get().min_value();
+                     })
+        .def_prop_ro("max_value",
+                     [](const SliderRef& self) {
+                         return self.get().max_value();
+                     })
+        .def_prop_rw(
+            "step", [](const SliderRef& self) { return self.get().step(); },
+            [](const SliderRef& self, float step) {
+                self.get().set_step(step);
+            })
+        .def("set_range",
+             [](const SliderRef& self, float minimum, float maximum) {
+                 self.get().set_range(minimum, maximum);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("minimum"), nb::arg("maximum"))
+        .def("connect_changed",
+             [](const SliderRef& self, nb::object callback) {
+                 auto state = self.widget.state;
+                 return self.get().changed().connect(
+                     [state, callback = std::move(callback)](
+                         termin::gui_native::Slider&, float value) {
+                         try {
+                             nb::gil_scoped_acquire gil;
+                             callback(value);
+                         } catch (...) {
+                             if (state && !state->pending_exception) {
+                                 state->pending_exception =
+                                     std::current_exception();
+                             }
+                             tc_log_error(
+                                 "[termin-gui-native/python] Slider changed callback failed");
+                         }
+                     });
+             },
+             nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const SliderRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"));
+
+    nb::class_<SeparatorRef, WidgetRef>(m, "Separator")
+        .def_prop_ro("widget",
+                     [](const SeparatorRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const SeparatorRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     })
+        .def("set_color",
+             [](const SeparatorRef& self, tc_ui_color color) {
+                 self.get().set_color({color.r, color.g, color.b, color.a});
+             },
+             nb::arg("color"))
+        .def("set_thickness",
+             [](const SeparatorRef& self, float thickness) {
+                 self.get().set_thickness(thickness);
+             },
+             nb::arg("thickness"));
+
+    nb::class_<SpacerRef, WidgetRef>(m, "Spacer")
+        .def_prop_ro("widget", [](const SpacerRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const SpacerRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     });
+
+    nb::class_<SwatchRef, WidgetRef>(m, "Swatch")
+        .def_prop_ro("widget", [](const SwatchRef& self) { return self.widget; })
+        .def_prop_ro("handle",
+                     [](const SwatchRef& self) {
+                         return WidgetHandle{self.widget.handle};
+                     });
+
     nb::class_<TextInputRef>(m, "TextInput")
         .def_prop_ro("widget", [](const TextInputRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const TextInputRef& self) {
@@ -431,7 +657,17 @@ void bind_gui_native_widgets(nb::module_& m) {
                             "[termin-gui-native/python] TextInput submitted callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const TextInputRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"))
+        .def("disconnect_submitted",
+             [](const TextInputRef& self, size_t connection) {
+                 return self.get().submitted().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<TextAreaRef>(m, "TextArea")
         .def_prop_ro("widget", [](const TextAreaRef& self) { return self.widget; })
@@ -483,7 +719,12 @@ void bind_gui_native_widgets(nb::module_& m) {
                             "[termin-gui-native/python] TextArea changed callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const TextAreaRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<SpinBoxRef>(m, "SpinBox")
         .def_prop_ro("widget", [](const SpinBoxRef& self) { return self.widget; })
@@ -520,7 +761,12 @@ void bind_gui_native_widgets(nb::module_& m) {
                     tc_log_error("[termin-gui-native/python] SpinBox changed callback failed");
                 }
             });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const SpinBoxRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<SliderEditRef>(m, "SliderEdit")
         .def_prop_ro("widget", [](const SliderEditRef& self) { return self.widget; })
@@ -571,7 +817,12 @@ void bind_gui_native_widgets(nb::module_& m) {
                         }
                     });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const SliderEditRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<ButtonRef>(m, "Button")
         .def_prop_ro("widget", [](const ButtonRef& self) { return self.widget; })
@@ -598,7 +849,12 @@ void bind_gui_native_widgets(nb::module_& m) {
                         }
                     });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_clicked",
+             [](const ButtonRef& self, size_t connection) {
+                 return self.get().clicked().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<CheckboxRef>(m, "Checkbox")
         .def_prop_ro("widget", [](const CheckboxRef& self) { return self.widget; })
@@ -628,7 +884,12 @@ void bind_gui_native_widgets(nb::module_& m) {
                     }
                 });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_changed",
+             [](const CheckboxRef& self, size_t connection) {
+                 return self.get().changed().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<GroupBoxRef>(m, "GroupBox")
         .def_prop_ro("widget", [](const GroupBoxRef& self) { return self.widget; })

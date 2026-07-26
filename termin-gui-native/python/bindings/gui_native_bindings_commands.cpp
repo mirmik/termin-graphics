@@ -128,7 +128,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         }
                     });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_activated",
+             [](const ToolBarRef& self, size_t connection) {
+                 return self.get().activated().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<TabViewRef>(m, "TabView")
         .def_prop_ro("widget",
@@ -209,7 +214,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                     }
                   });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_selection_changed",
+             [](const TabViewRef& self, size_t connection) {
+                 return self.get().selection_changed().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<MenuRef>(m, "Menu")
         .def_prop_ro("widget", [](const MenuRef& self) { return self.widget; })
@@ -252,7 +262,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         tc_log_error("[termin-gui-native/python] Menu activation callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_activated",
+             [](const MenuRef& self, size_t connection) {
+                 return self.get().activated().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<termin::gui_native::MenuBarEntry>(m, "MenuBarEntry")
         .def(nb::init<std::string, std::string,
@@ -298,7 +313,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         tc_log_error("[termin-gui-native/python] MenuBar activation callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_activated",
+             [](const MenuBarRef& self, size_t connection) {
+                 return self.get().activated().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<StatusBarRef>(m, "StatusBar")
         .def_prop_ro("widget", [](const StatusBarRef& self) { return self.widget; })
@@ -456,7 +476,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         tc_log_error("[termin-gui-native/python] Dialog finished callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_finished",
+             [](const DialogRef& self, size_t connection) {
+                 return self.get().finished().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::enum_<termin::gui_native::MessageBoxKind>(m, "MessageBoxKind")
         .value("Information", termin::gui_native::MessageBoxKind::Information)
@@ -489,7 +514,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         tc_log_error("[termin-gui-native/python] MessageBox callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_finished",
+             [](const MessageBoxRef& self, size_t connection) {
+                 return self.get().finished().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<InputDialogRef>(m, "InputDialog")
         .def_prop_ro("widget", [](const InputDialogRef& self) { return self.widget; })
@@ -522,7 +552,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         tc_log_error("[termin-gui-native/python] InputDialog callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_value_finished",
+             [](const InputDialogRef& self, size_t connection) {
+                 return self.get().value_finished().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<FileDialogOverlayRef>(m, "FileDialogOverlay")
         .def_prop_ro("widget", [](const FileDialogOverlayRef& self) { return self.widget; })
@@ -571,7 +606,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                             "[termin-gui-native/python] FileDialogOverlay callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_path_finished",
+             [](const FileDialogOverlayRef& self, size_t connection) {
+                 return self.get().path_finished().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::enum_<termin::gui_native::ColorPickerSurfaceKind>(m, "ColorPickerSurfaceKind")
         .value("SaturationValue", termin::gui_native::ColorPickerSurfaceKind::SaturationValue)
@@ -667,7 +707,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                             "[termin-gui-native/python] ColorPicker surface callback failed");
                     }
                 });
-        }, nb::arg("callback"));
+        }, nb::arg("callback"))
+        .def("disconnect_surfaces_invalidated",
+             [](const ColorPickerRef& self, size_t connection) {
+                 return self.get().surfaces_invalidated().disconnect(connection);
+             },
+             nb::arg("connection"));
 
     nb::class_<ColorDialogRef>(m, "ColorDialog")
         .def_prop_ro("widget", [](const ColorDialogRef& self) { return self.widget; })
@@ -720,6 +765,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         }
                     });
             },
-            nb::arg("callback"));
+            nb::arg("callback"))
+        .def("disconnect_color_finished",
+             [](const ColorDialogRef& self, size_t connection) {
+                 return self.get().color_finished().disconnect(connection);
+             },
+             nb::arg("connection"));
 
 }

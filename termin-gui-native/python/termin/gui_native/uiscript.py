@@ -425,7 +425,7 @@ class UiScriptLoader:
             if "enabled" in node.properties:
                 widget.enabled = node.properties["enabled"]
             if node.type_name in {"HStack", "VStack"} and "spacing" in node.properties:
-                widget.set_layout_spacing(node.properties["spacing"])
+                public.set_spacing(node.properties["spacing"])
             if node.type_name in {"Overlay", "Panel"}:
                 _apply_panel_style(widget, node.properties)
             if node.type_name == "IconButton":

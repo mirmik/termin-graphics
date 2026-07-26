@@ -170,7 +170,12 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](termin::gui_native::GraphicsScene &self, size_t connection) {
+             return self.selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<termin::gui_native::CollectionItem>(m, "CollectionItem")
       .def(nb::init<>())
@@ -504,7 +509,12 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                                   "selection callback failed");
                    }
                  });
-           }, nb::arg("callback"));
+           }, nb::arg("callback"))
+      .def("disconnect_selection_changed",
+           [](const FrameTimelineWidgetRef &self, size_t connection) {
+             return self.get().selection_changed().disconnect(connection);
+           },
+           nb::arg("connection"));
 
   nb::class_<termin::gui_native::ViewportSurfaceSize>(m, "ViewportSurfaceSize")
       .def(nb::init<>())
@@ -856,5 +866,15 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                   }
                 });
           },
-          nb::arg("callback"));
+          nb::arg("callback"))
+      .def("disconnect_item_moved",
+           [](const SceneViewRef &self, size_t connection) {
+             return self.get().item_moved().disconnect(connection);
+           },
+           nb::arg("connection"))
+      .def("disconnect_transform_changed",
+           [](const SceneViewRef &self, size_t connection) {
+             return self.get().transform_changed().disconnect(connection);
+           },
+           nb::arg("connection"));
 }

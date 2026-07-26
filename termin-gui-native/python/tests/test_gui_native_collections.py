@@ -129,7 +129,9 @@ def test_native_list_widget_input_callbacks_and_model_lifetime():
     assert widget.selected_indices == [0]
 
     activated = []
-    widget.connect_activated(lambda index, item: activated.append((index, item.stable_id)))
+    activation_connection = widget.connect_activated(
+        lambda index, item: activated.append((index, item.stable_id))
+    )
     key = KeyEvent()
     key.type = KeyEventType.Down
     key.key = KeyCode.Down
@@ -141,6 +143,8 @@ def test_native_list_widget_input_callbacks_and_model_lifetime():
     key.key = KeyCode.Enter
     assert document.dispatch_key_event(key) == EventResult.Handled
     assert activated == [(3, "item-3")]
+    assert widget.disconnect_activated(activation_connection)
+    assert not widget.disconnect_activated(activation_connection)
 
     retained_model = widget.model
     assert document.destroy_widget(widget.handle)
@@ -944,10 +948,18 @@ def test_native_table_widget_input_resize_callbacks_lifetime_and_errors():
     resized = []
     activated = []
     contexts = []
-    widget.connect_header_clicked(lambda index, column: headers.append((index, column.stable_id)))
-    widget.connect_column_resized(lambda index, width: resized.append((index, width)))
-    widget.connect_activated(lambda index, row, data: activated.append((index, row, data.stable_id)))
-    widget.connect_context_menu_requested(lambda index, x, y: contexts.append((index, x, y)))
+    header_connection = widget.connect_header_clicked(
+        lambda index, column: headers.append((index, column.stable_id))
+    )
+    resize_connection = widget.connect_column_resized(
+        lambda index, width: resized.append((index, width))
+    )
+    activation_connection = widget.connect_activated(
+        lambda index, row, data: activated.append((index, row, data.stable_id))
+    )
+    context_connection = widget.connect_context_menu_requested(
+        lambda index, x, y: contexts.append((index, x, y))
+    )
 
     pointer = PointerEvent()
     pointer.type = PointerEventType.Down
@@ -988,6 +1000,10 @@ def test_native_table_widget_input_resize_callbacks_lifetime_and_errors():
     pointer.type = PointerEventType.Up
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
     assert not document.pointer_capture
+    assert widget.disconnect_header_clicked(header_connection)
+    assert widget.disconnect_column_resized(resize_connection)
+    assert widget.disconnect_activated(activation_connection)
+    assert widget.disconnect_context_menu_requested(context_connection)
 
     model.insert(0, TableRowData("inserted", ["Inserted", "0"]))
     assert model.index_of(first) == 1

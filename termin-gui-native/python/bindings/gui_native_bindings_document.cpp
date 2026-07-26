@@ -343,39 +343,99 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def("set_cursor_changed_handler", &set_document_cursor_changed_handler,
            nb::arg("handler").none())
       .def(
+          "create_box_layout",
+          [](termin::gui_native::TcDocument &self,
+             bool horizontal,
+             const std::string &debug_name) {
+            return BoxLayoutRef{
+                document_make_native<termin::gui_native::BoxLayout>(
+                    self,
+                    horizontal ? termin::gui_native::Orientation::Horizontal
+                               : termin::gui_native::Orientation::Vertical,
+                    debug_name.c_str())};
+          },
+          nb::arg("horizontal") = true,
+          nb::arg("debug_name") = "BoxLayout")
+      .def(
           "create_hstack",
           [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
-            return document_make_native<termin::gui_native::HStack>(self,
-                debug_name.c_str());
+            return HStackRef{
+                document_make_native<termin::gui_native::HStack>(
+                    self, debug_name.c_str())};
           },
           nb::arg("debug_name") = "HStack")
       .def(
           "create_vstack",
           [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
-            return document_make_native<termin::gui_native::VStack>(self,
-                debug_name.c_str());
+            return VStackRef{
+                document_make_native<termin::gui_native::VStack>(
+                    self, debug_name.c_str())};
           },
           nb::arg("debug_name") = "VStack")
       .def(
+          "create_grid_layout",
+          [](termin::gui_native::TcDocument &self,
+             const std::string &debug_name) {
+            return GridLayoutRef{
+                document_make_native<termin::gui_native::GridLayout>(
+                    self, debug_name.c_str())};
+          },
+          nb::arg("debug_name") = "GridLayout")
+      .def(
           "create_panel",
           [](termin::gui_native::TcDocument &self, const std::string &debug_name) {
-            return document_make_native<termin::gui_native::Panel>(self,
-                debug_name.c_str());
+            return PanelRef{
+                document_make_native<termin::gui_native::Panel>(
+                    self, debug_name.c_str())};
           },
           nb::arg("debug_name") = "Panel")
       .def(
           "create_label",
           [](termin::gui_native::TcDocument &self, const std::string &text,
              const std::string &debug_name) {
-            WidgetRef result =
-                document_make_native<termin::gui_native::Label>(self, text);
+            LabelRef result{
+                document_make_native<termin::gui_native::Label>(self, text)};
             termin::gui_native::Widget *widget =
                 static_cast<termin::gui_native::Widget *>(
-                    result.resolve_checked()->body);
+                    result.widget.resolve_checked()->body);
             widget->set_debug_name(debug_name);
             return result;
           },
           nb::arg("text"), nb::arg("debug_name") = "Label")
+      .def(
+          "create_slider",
+          [](termin::gui_native::TcDocument &self, float value) {
+            return SliderRef{
+                document_make_native<termin::gui_native::Slider>(self, value)};
+          },
+          nb::arg("value") = 0.0f)
+      .def(
+          "create_separator",
+          [](termin::gui_native::TcDocument &self,
+             bool horizontal) {
+            return SeparatorRef{
+                document_make_native<termin::gui_native::Separator>(
+                    self,
+                    horizontal ? termin::gui_native::Orientation::Horizontal
+                               : termin::gui_native::Orientation::Vertical)};
+          },
+          nb::arg("horizontal") = true)
+      .def(
+          "create_spacer",
+          [](termin::gui_native::TcDocument &self, tc_ui_size size) {
+            return SpacerRef{
+                document_make_native<termin::gui_native::Spacer>(self, size)};
+          },
+          nb::arg("size"))
+      .def(
+          "create_swatch",
+          [](termin::gui_native::TcDocument &self, tc_ui_color color) {
+            return SwatchRef{
+                document_make_native<termin::gui_native::Swatch>(
+                    self, termin::gui_native::Color{
+                              color.r, color.g, color.b, color.a})};
+          },
+          nb::arg("color"))
       .def(
           "create_button",
           [](termin::gui_native::TcDocument &self, const std::string &text,

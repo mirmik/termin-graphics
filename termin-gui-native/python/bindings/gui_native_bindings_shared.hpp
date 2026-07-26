@@ -126,6 +126,10 @@ struct WidgetRef {
   std::shared_ptr<DocumentState> state;
   tc_widget_handle handle = tc_widget_handle_invalid();
 
+  WidgetRef() = default;
+  WidgetRef(std::shared_ptr<DocumentState> state_value,
+            tc_widget_handle handle_value)
+      : state(std::move(state_value)), handle(handle_value) {}
   bool alive() const;
   tc_widget *resolve() const;
   tc_widget *resolve_checked() const;
@@ -152,6 +156,39 @@ struct TextAreaRef {
   WidgetRef widget;
   termin::gui_native::TextArea &get() const;
 };
+
+#define TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(Name, Type)                       \
+  struct Name : WidgetRef {                                                    \
+    WidgetRef &widget;                                                         \
+    Name() : widget(*this) {}                                                  \
+    explicit Name(WidgetRef value)                                             \
+        : WidgetRef(std::move(value)), widget(*this) {}                        \
+    Name(const Name &other) : WidgetRef(other), widget(*this) {}               \
+    Name(Name &&other) noexcept                                                \
+        : WidgetRef(std::move(other)), widget(*this) {}                        \
+    Name &operator=(const Name &other) {                                       \
+      WidgetRef::operator=(other);                                             \
+      return *this;                                                            \
+    }                                                                          \
+    Name &operator=(Name &&other) noexcept {                                   \
+      WidgetRef::operator=(std::move(other));                                  \
+      return *this;                                                            \
+    }                                                                          \
+    termin::gui_native::Type &get() const;                                     \
+  }
+
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(BoxLayoutRef, BoxLayout);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(HStackRef, HStack);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(VStackRef, VStack);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(GridLayoutRef, GridLayout);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(PanelRef, Panel);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(LabelRef, Label);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(SliderRef, Slider);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(SeparatorRef, Separator);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(SpacerRef, Spacer);
+TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF(SwatchRef, Swatch);
+
+#undef TERMIN_GUI_NATIVE_DERIVED_WIDGET_REF
 
 #define TERMIN_GUI_NATIVE_WIDGET_REF(Name, Type)                               \
   struct Name {                                                                \
