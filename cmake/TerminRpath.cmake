@@ -7,6 +7,7 @@
 #   termin_set_rpath_lib(my_shared_lib)
 #   termin_set_rpath_python(my_nanobind_module)
 #   termin_set_rpath_tool(my_sdk_executable)
+#   termin_set_rpath_relocatable_tool(my_dual_layout_executable)
 
 # For native shared libraries (.so) installed into lib/
 function(termin_set_rpath_lib target)
@@ -23,6 +24,18 @@ function(termin_set_rpath_tool target)
     if(NOT WIN32)
         set_target_properties(${target} PROPERTIES
             INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    endif()
+endfunction()
+
+# For executables installed into SDK bin/ and also copied to a bundle root.
+# The two relative lib locations keep both layouts relocatable; unlike the
+# generic SDK tool policy, this contract intentionally has no absolute prefix.
+function(termin_set_rpath_relocatable_tool target)
+    if(NOT WIN32)
+        set_target_properties(${target} PROPERTIES
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/lib;$ORIGIN/../lib"
             BUILD_WITH_INSTALL_RPATH TRUE
         )
     endif()
