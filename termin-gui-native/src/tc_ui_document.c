@@ -433,7 +433,10 @@ bool tc_ui_internal_detach_widget(tc_widget* widget) {
     if (!widget || !widget->parent) {
         return false;
     }
-    tc_ui_internal_invalidate_subtree_interaction_state(widget);
+    tc_ui_internal_invalidate_subtree_interaction_state(
+        widget,
+        TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+    );
     index = tc_ui_internal_find_child_index(widget->parent, widget);
     if (index == SIZE_MAX) {
         tc_log_error("[termin-gui-native] widget parent link is not mirrored by its parent child list");
@@ -556,7 +559,10 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
 
     widget = slot->widget;
     slot->destroying = true;
-    tc_ui_internal_invalidate_subtree_interaction_state(widget);
+    tc_ui_internal_invalidate_subtree_interaction_state(
+        widget,
+        TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+    );
 
     if (recursive) {
         while (widget->child_count > 0) {

@@ -86,6 +86,11 @@ class TcDocument {
     bool release_pointer_capture(const Widget& widget) const {
         return tc_ui_document_release_pointer_capture(handle_, widget.handle());
     }
+    bool cancel_pointer_interaction(
+        tc_ui_pointer_cancel_reason reason = TC_UI_POINTER_CANCEL_EXPLICIT
+    ) const {
+        return tc_ui_document_cancel_pointer_interaction(handle_, reason);
+    }
     tc_widget_handle focused_widget() const {
         return tc_ui_document_focused_widget(handle_);
     }

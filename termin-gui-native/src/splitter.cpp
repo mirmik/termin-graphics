@@ -128,6 +128,10 @@ tc_ui_event_result Splitter::pointer_event(tc_ui_document_handle document, const
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        mark_dirty(TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
+        return TC_UI_EVENT_HANDLED;
+    }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
     if ((event->type == TC_UI_POINTER_ENTER || event->type == TC_UI_POINTER_LEAVE) && !captured) {
         mark_dirty(TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);

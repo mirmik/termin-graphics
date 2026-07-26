@@ -881,6 +881,10 @@ bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
         out_event = {};
         switch (ev.type) {
             case SDL_WINDOWEVENT:
+                if (ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    out_event.type = WindowEventType::FocusLost;
+                    return true;
+                }
                 if (ev.window.event != SDL_WINDOWEVENT_RESIZED &&
                     ev.window.event != SDL_WINDOWEVENT_SIZE_CHANGED) {
                     continue;

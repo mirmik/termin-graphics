@@ -17,6 +17,8 @@ enum class WindowEventType : uint8_t {
     PointerButtonPressed,
     PointerButtonReleased,
     PointerWheel,
+    PointerCaptureLost,
+    FocusLost,
     KeyPressed,
     KeyReleased,
     TextInput,

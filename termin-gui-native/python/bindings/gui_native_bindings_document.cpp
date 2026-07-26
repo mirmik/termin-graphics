@@ -872,6 +872,14 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                                                           handle.handle);
           },
           nb::arg("handle"))
+      .def(
+          "cancel_pointer_interaction",
+          [](termin::gui_native::TcDocument &self,
+             tc_ui_pointer_cancel_reason reason) {
+            return tc_ui_document_cancel_pointer_interaction(
+                checked_document_handle(self), reason);
+          },
+          nb::arg("reason") = TC_UI_POINTER_CANCEL_EXPLICIT)
       .def_prop_ro("focused_widget",
                    [](const termin::gui_native::TcDocument &self) {
                      return WidgetHandle{

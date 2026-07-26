@@ -71,6 +71,10 @@ std::optional<tc_ui_pointer_event> make_pointer_event(const WindowEvent& event) 
         case WindowEventType::PointerWheel:
             type = TC_UI_POINTER_WHEEL;
             break;
+        case WindowEventType::PointerCaptureLost:
+        case WindowEventType::FocusLost:
+            type = TC_UI_POINTER_CANCEL;
+            break;
         default:
             return std::nullopt;
     }
@@ -83,7 +87,12 @@ std::optional<tc_ui_pointer_event> make_pointer_event(const WindowEvent& event) 
         event.pointer.clicks,
         translate_modifiers(event.pointer.modifiers),
         event.pointer.wheel_x,
-        event.pointer.wheel_y};
+        event.pointer.wheel_y,
+        event.type == WindowEventType::FocusLost
+            ? TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST
+            : event.type == WindowEventType::PointerCaptureLost
+                ? TC_UI_POINTER_CANCEL_HOST_CAPTURE_LOST
+                : TC_UI_POINTER_CANCEL_EXPLICIT};
 }
 
 std::optional<tc_ui_key_event> make_key_event(const WindowEvent& event) {

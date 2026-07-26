@@ -32,6 +32,7 @@ from termin.gui_native import (
     PaintContext,
     Point,
     PointerEvent,
+    PointerCancelReason,
     PointerEventType,
     Rect,
     RichTextModel,
@@ -646,6 +647,31 @@ def test_python_widget_complete_vtable_and_common_state():
     assert document.dispatch_text_event("hello") == EventResult.Handled
     assert widget.key_events == [KeyCode.Enter]
     assert widget.text_events == ["hello"]
+
+
+def test_python_pointer_cancel_is_mutation_safe_and_reasoned():
+    document = tc_ui_document_create()
+    events = []
+
+    class CancelingWidget(Widget):
+        def pointer_event(self, event):
+            events.append((event.type, event.cancel_reason))
+            if event.type == PointerEventType.Cancel:
+                document.destroy_widget(self.handle)
+            return EventResult.Handled
+
+    widget = CancelingWidget()
+    handle = document.adopt_root(widget, "canceling-widget")
+    assert document.set_pointer_capture(handle)
+    assert document.cancel_pointer_interaction(
+        PointerCancelReason.HostCaptureLost
+    )
+    assert events == [
+        (PointerEventType.Cancel, PointerCancelReason.HostCaptureLost)
+    ]
+    assert not document.is_alive(handle)
+    assert not document.pointer_capture
+    assert not document.pressed_widget
 
 
 def test_python_routing_bubbles_and_survives_target_destroy():

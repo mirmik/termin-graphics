@@ -33,6 +33,13 @@ int main() {
     assert(gui_wheel->wheel_x == -1.0f);
     assert(gui_wheel->wheel_y == 2.0f);
 
+    termin::WindowEvent focus_lost;
+    focus_lost.type = termin::WindowEventType::FocusLost;
+    const auto gui_cancel = termin::gui_native::make_pointer_event(focus_lost);
+    assert(gui_cancel.has_value());
+    assert(gui_cancel->type == TC_UI_POINTER_CANCEL);
+    assert(gui_cancel->cancel_reason == TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST);
+
     termin::WindowEvent key;
     key.type = termin::WindowEventType::KeyPressed;
     key.key.key = termin::WindowKey::C;

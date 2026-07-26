@@ -474,6 +474,16 @@ tc_ui_event_result RichTextView::pointer_event(tc_ui_document_handle document,
                                                const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool active = selecting_ || dragging_scrollbar_;
+        selecting_ = false;
+        dragging_scrollbar_ = false;
+        if (selection_anchor_ == selection_cursor_)
+            clear_selection();
+        if (active)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return active ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     const tc_ui_style style = computed_style(document);
     const tc_ui_rect content = prepare_layout(document, style);
     const ScrollbarGeometry scrollbar = scrollbar_geometry(content);

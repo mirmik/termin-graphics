@@ -281,6 +281,13 @@ tc_ui_event_result ToolBar::pointer_event(tc_ui_document_handle document,
     if (!event)
         return TC_UI_EVENT_IGNORED;
     sync_model();
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_pressed = pressed_ != SIZE_MAX;
+        pressed_ = SIZE_MAX;
+        if (was_pressed)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return was_pressed ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_LEAVE && pressed_ == SIZE_MAX) {
         hovered_ = SIZE_MAX;
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);

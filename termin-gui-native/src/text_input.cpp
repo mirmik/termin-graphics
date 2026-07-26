@@ -197,6 +197,16 @@ tc_ui_event_result TextInput::pointer_event(tc_ui_document_handle document, cons
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_selecting = selecting_;
+        selecting_ = false;
+        if (selection_anchor_ == caret_) {
+            clear_selection();
+        }
+        if (was_selecting)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return was_selecting ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         tc_ui_document_set_focus(document, handle());
         const tc_ui_rect clip = text_clip_rect(document);

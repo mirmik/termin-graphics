@@ -316,6 +316,13 @@ tc_ui_event_result ColorPicker::pointer_event(tc_ui_document_handle document,
                                               const tc_ui_pointer_event* event) {
     if (!event)
         return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_dragging = dragging_ != DragTarget::None;
+        dragging_ = DragTarget::None;
+        if (was_dragging)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return was_dragging ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
     if (event->type == TC_UI_POINTER_DOWN) {
         if (contains(sv_rect(), event->x, event->y))

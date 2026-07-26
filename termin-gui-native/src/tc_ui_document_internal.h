@@ -129,7 +129,16 @@ TC_UI_INTERNAL bool tc_ui_internal_handle_is_in_subtree(
     tc_widget_handle handle,
     const tc_widget* root
 );
-TC_UI_INTERNAL void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root);
+TC_UI_INTERNAL bool tc_ui_internal_cancel_pointer_state(
+    tc_ui_document* document,
+    bool clear_capture,
+    bool clear_pressed,
+    tc_ui_pointer_cancel_reason reason
+);
+TC_UI_INTERNAL void tc_ui_internal_invalidate_subtree_interaction_state(
+    tc_widget* root,
+    tc_ui_pointer_cancel_reason reason
+);
 TC_UI_INTERNAL bool tc_ui_internal_valid_style_override(
     const tc_ui_style_override* style_override
 );

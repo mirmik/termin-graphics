@@ -389,6 +389,9 @@ static bool handle_is_root(const tc_ui_document* document, tc_widget_handle hand
 
 static void invalidate_interaction_outside_subtree(tc_widget* root) {
     tc_ui_document* document;
+    tc_ui_document_handle document_handle;
+    tc_widget_handle old_hover;
+    tc_widget_handle old_focus;
     bool clear_hover;
     bool clear_capture;
     bool clear_pressed;
@@ -397,6 +400,9 @@ static void invalidate_interaction_outside_subtree(tc_widget* root) {
         !(document = tc_ui_internal_resolve_document(root->document))) {
         return;
     }
+    document_handle = document->handle;
+    old_hover = document->hovered_widget;
+    old_focus = document->focused_widget;
     clear_hover = !tc_widget_handle_is_invalid(document->hovered_widget) &&
         !tc_ui_internal_handle_is_in_subtree(document, document->hovered_widget, root);
     clear_capture = !tc_widget_handle_is_invalid(document->pointer_capture) &&
@@ -405,20 +411,24 @@ static void invalidate_interaction_outside_subtree(tc_widget* root) {
         !tc_ui_internal_handle_is_in_subtree(document, document->pressed_widget, root);
     clear_focus = !tc_widget_handle_is_invalid(document->focused_widget) &&
         !tc_ui_internal_handle_is_in_subtree(document, document->focused_widget, root);
-    if (clear_hover) {
+    tc_ui_internal_cancel_pointer_state(
+        document,
+        clear_capture,
+        clear_pressed,
+        TC_UI_POINTER_CANCEL_MODAL_OPENED
+    );
+    document = tc_ui_internal_resolve_document(document_handle);
+    if (!document) {
+        return;
+    }
+    if (clear_hover && tc_ui_internal_same_handle(document->hovered_widget, old_hover)) {
         if (document->has_pointer_event) {
             tc_ui_internal_update_hover(document, tc_widget_handle_invalid(), &document->last_pointer_event);
         } else {
             document->hovered_widget = tc_widget_handle_invalid();
         }
     }
-    if (clear_capture) {
-        document->pointer_capture = tc_widget_handle_invalid();
-    }
-    if (clear_pressed) {
-        document->pressed_widget = tc_widget_handle_invalid();
-    }
-    if (clear_focus) {
+    if (clear_focus && tc_ui_internal_same_handle(document->focused_widget, old_focus)) {
         tc_ui_internal_change_focus(document, tc_widget_handle_invalid());
     }
 }
@@ -666,7 +676,10 @@ bool tc_ui_document_dismiss_overlay(
     tc_ui_internal_remove_overlay_at(document, index);
     widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (widget) {
-        tc_ui_internal_invalidate_subtree_interaction_state(widget);
+        tc_ui_internal_invalidate_subtree_interaction_state(
+            widget,
+            TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+        );
     }
     widget = tc_ui_document_resolve_widget(document->handle, handle);
     if (widget && widget->vtable && widget->vtable->overlay_dismissed) {
@@ -1055,6 +1068,14 @@ tc_ui_event_result tc_ui_document_dispatch_pointer_event(
     }
     document->last_pointer_event = *event;
     document->has_pointer_event = true;
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        return tc_ui_internal_cancel_pointer_state(
+            document,
+            true,
+            true,
+            event->cancel_reason
+        ) ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     modal_at_start = top_modal_overlay(document);
     hit_resolution = event->type == TC_UI_POINTER_LEAVE
         ? (tc_ui_hit_resolution){tc_widget_handle_invalid(), tc_widget_handle_invalid(), false, false}
@@ -1176,6 +1197,28 @@ bool tc_ui_document_set_pointer_capture(tc_ui_document_handle document_handle, t
         tc_log_error("[termin-gui-native] cannot capture pointer outside active modal scope");
         return false;
     }
+    if (tc_ui_internal_same_handle(document->pointer_capture, handle)) {
+        return true;
+    }
+    if (!tc_widget_handle_is_invalid(document->pointer_capture)) {
+        tc_ui_internal_cancel_pointer_state(
+            document,
+            true,
+            true,
+            TC_UI_POINTER_CANCEL_CAPTURE_REPLACED
+        );
+        document = tc_ui_internal_resolve_document(document_handle);
+        widget = document ? tc_ui_document_resolve_widget(document_handle, handle) : NULL;
+        modal_index = top_modal_overlay_index(document);
+        if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) ||
+            (modal_index != SIZE_MAX &&
+             !handle_is_in_modal_scope(document, handle, modal_index))) {
+            tc_log_error(
+                "[termin-gui-native] capture replacement invalidated the new pointer owner"
+            );
+            return false;
+        }
+    }
     document->pointer_capture = handle;
     return true;
 }
@@ -1188,6 +1231,25 @@ bool tc_ui_document_release_pointer_capture(tc_ui_document_handle document_handl
     }
     document->pointer_capture = tc_widget_handle_invalid();
     return true;
+}
+
+bool tc_ui_document_cancel_pointer_interaction(
+    tc_ui_document_handle document_handle,
+    tc_ui_pointer_cancel_reason reason
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_cancel_pointer_interaction"
+    );
+    if (!document) {
+        return false;
+    }
+    if (reason < TC_UI_POINTER_CANCEL_EXPLICIT ||
+        reason > TC_UI_POINTER_CANCEL_HOST_CAPTURE_LOST) {
+        tc_log_error("[termin-gui-native] invalid pointer cancellation reason");
+        return false;
+    }
+    return tc_ui_internal_cancel_pointer_state(document, true, true, reason);
 }
 
 tc_widget_handle tc_ui_document_focused_widget(tc_ui_document_handle document_handle) {

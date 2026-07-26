@@ -112,6 +112,14 @@ void Canvas::paint(tc_ui_document_handle document, tc_ui_paint_context* context)
 tc_ui_event_result Canvas::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_panning = panning_ || captured;
+        panning_ = false;
+        if (was_panning)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        pointer_input_.emit(*this, widget_to_image(tc_ui_point {event->x, event->y}), *event);
+        return was_panning ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_WHEEL && rect_contains(bounds(), event->x, event->y) && image_size_.width > 0.0f) {
         const float factor = event->wheel_y > 0.0f ? 1.15f : 1.0f / 1.15f;
         set_zoom(zoom_ * factor, tc_ui_point {event->x, event->y});

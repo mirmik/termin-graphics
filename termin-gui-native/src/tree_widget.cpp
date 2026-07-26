@@ -521,6 +521,13 @@ tc_ui_event_result TreeWidget::pointer_event(tc_ui_document_handle document,
   if (!event)
     return TC_UI_EVENT_IGNORED;
   sync_models();
+  if (event->type == TC_UI_POINTER_CANCEL) {
+    const bool active = pressed_ != kInvalidTreeNodeId ||
+                        pressed_toggle_node_ != kInvalidTreeNodeId || dragging_;
+    clear_drag_state();
+    clear_toggle_press();
+    return active ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+  }
   if (event->type == TC_UI_POINTER_LEAVE) {
     if (hovered_ != kInvalidTreeNodeId) {
       hovered_ = kInvalidTreeNodeId;

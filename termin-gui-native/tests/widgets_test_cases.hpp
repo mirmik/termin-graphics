@@ -32,6 +32,7 @@ void test_pointer_capture_routes_events_outside_bounds_until_release();
 void test_destroy_clears_hover_and_pointer_capture();
 void test_remove_child_clears_subtree_focus_and_preserves_reuse();
 void test_detach_clears_pointer_interaction_state_only_inside_subtree();
+void test_pointer_cancel_clears_controls_and_blocks_late_release();
 void test_focus_and_key_text_dispatch_follow_focused_widget();
 void test_focus_api_rejects_non_focusable_and_clears_on_destroy();
 void test_recursive_destroy_removes_container_children();

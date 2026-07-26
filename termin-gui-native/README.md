@@ -150,8 +150,12 @@ The current foundation includes:
 - focus changes emit an explicit vtable callback. Unhandled `Tab` and
   `Shift+Tab` cycle over effectively visible/enabled focusable widgets in
   canonical depth-first order;
-- hiding or disabling a subtree clears hover, pressed, capture and focus state
-  that points into it through the common `tc_widget` setters;
+- capture replacement, subtree hide/disable/detach/destruction, modal opening
+  and host focus/capture loss clear document pointer state before delivering
+  one direct `TC_UI_POINTER_CANCEL` to each former pressed/captured owner.
+  Clearing before the callback makes destruction and reparenting safe and
+  prevents a later pointer-up from completing the canceled gesture. Normal
+  owner-initiated release after pointer-up does not emit cancellation;
 - ordered overlays are non-owning presentation entries over the same canonical
   widgets. They paint after roots and win hit testing from top to bottom;
 - overlay flags provide modal barriers, outside-click dismissal and

@@ -36,6 +36,7 @@ int main() {
   test_destroy_clears_hover_and_pointer_capture();
   test_remove_child_clears_subtree_focus_and_preserves_reuse();
   test_detach_clears_pointer_interaction_state_only_inside_subtree();
+  test_pointer_cancel_clears_controls_and_blocks_late_release();
   test_focus_and_key_text_dispatch_follow_focused_widget();
   test_focus_api_rejects_non_focusable_and_clears_on_destroy();
   test_recursive_destroy_removes_container_children();

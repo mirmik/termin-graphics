@@ -238,8 +238,18 @@ typedef enum tc_ui_pointer_event_type {
     TC_UI_POINTER_UP = 2,
     TC_UI_POINTER_WHEEL = 3,
     TC_UI_POINTER_ENTER = 4,
-    TC_UI_POINTER_LEAVE = 5
+    TC_UI_POINTER_LEAVE = 5,
+    TC_UI_POINTER_CANCEL = 6
 } tc_ui_pointer_event_type;
+
+typedef enum tc_ui_pointer_cancel_reason {
+    TC_UI_POINTER_CANCEL_EXPLICIT = 0,
+    TC_UI_POINTER_CANCEL_CAPTURE_REPLACED = 1,
+    TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE = 2,
+    TC_UI_POINTER_CANCEL_MODAL_OPENED = 3,
+    TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST = 4,
+    TC_UI_POINTER_CANCEL_HOST_CAPTURE_LOST = 5
+} tc_ui_pointer_cancel_reason;
 
 typedef enum tc_ui_cursor_intent {
     TC_UI_CURSOR_INHERIT = 0,
@@ -320,6 +330,7 @@ typedef struct tc_ui_pointer_event {
     int32_t modifiers;
     float wheel_x;
     float wheel_y;
+    tc_ui_pointer_cancel_reason cancel_reason;
 } tc_ui_pointer_event;
 
 typedef enum tc_ui_key_event_type {
@@ -781,6 +792,11 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_set_pointer_capture(
 TERMIN_GUI_NATIVE_API bool tc_ui_document_release_pointer_capture(
     tc_ui_document_handle document,
     tc_widget_handle handle
+);
+
+TERMIN_GUI_NATIVE_API bool tc_ui_document_cancel_pointer_interaction(
+    tc_ui_document_handle document,
+    tc_ui_pointer_cancel_reason reason
 );
 
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_focused_widget(

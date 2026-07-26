@@ -101,11 +101,19 @@ public:
   int down_count = 0;
   int move_count = 0;
   int up_count = 0;
+  int cancel_count = 0;
+  tc_ui_pointer_cancel_reason last_cancel_reason =
+      TC_UI_POINTER_CANCEL_EXPLICIT;
 
   tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                    const tc_ui_pointer_event *event) override {
     if (!event) {
       return TC_UI_EVENT_IGNORED;
+    }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+      cancel_count += 1;
+      last_cancel_reason = event->cancel_reason;
+      return TC_UI_EVENT_HANDLED;
     }
     const bool inside = event->x >= bounds().x && event->y >= bounds().y &&
                         event->x <= bounds().x + bounds().width &&

@@ -932,11 +932,47 @@ void test_detach_clears_pointer_interaction_state_only_inside_subtree() {
   assert(document.set_focus(outside));
 
   assert(probe.detach());
+  assert(probe.cancel_count == 1);
+  assert(probe.last_cancel_reason ==
+         TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
   assert(tc_widget_handle_is_invalid(document.hovered_widget()));
   assert(tc_widget_handle_is_invalid(document.pointer_capture()));
   assert(tc_widget_handle_is_invalid(document.pressed_widget()));
   assert(tc_widget_handle_eq(document.focused_widget(), outside.handle()));
   assert(tc_ui_document_is_alive(document.get(), probe.handle()));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_pointer_cancel_clears_controls_and_blocks_late_release() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
+  auto &button = ui.make<Button>("button");
+  int activations = 0;
+  button.clicked().connect([&](Button &) { activations += 1; });
+  root.add_stretch_child(button);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 40.0f});
+
+  tc_ui_pointer_event event{};
+  event.type = TC_UI_POINTER_DOWN;
+  event.button = tcbase::mouse_button_value(tcbase::MouseButton::LEFT);
+  event.x = 10.0f;
+  event.y = 10.0f;
+  assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
+  assert(button.pressed());
+
+  tc_widget_set_enabled(button.c_widget(), false);
+  assert(!button.pressed());
+  assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+  assert(tc_widget_handle_is_invalid(document.pressed_widget()));
+
+  tc_widget_set_enabled(button.c_widget(), true);
+  event.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_IGNORED);
+  assert(activations == 0);
 
   tc_ui_document_destroy(document_handle);
 }

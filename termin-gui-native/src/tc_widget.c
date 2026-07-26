@@ -110,8 +110,59 @@ bool tc_ui_internal_handle_is_in_subtree(
     return false;
 }
 
-void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root) {
+bool tc_ui_internal_cancel_pointer_state(
+    tc_ui_document* document,
+    bool clear_capture,
+    bool clear_pressed,
+    tc_ui_pointer_cancel_reason reason
+) {
+    tc_widget_handle targets[2];
+    tc_ui_document_handle document_handle;
+    tc_ui_pointer_event event;
+    size_t target_count = 0;
+    size_t index;
+    bool notified = false;
+    if (!document) {
+        return false;
+    }
+    document_handle = document->handle;
+    if (clear_capture && !tc_widget_handle_is_invalid(document->pointer_capture)) {
+        targets[target_count++] = document->pointer_capture;
+        document->pointer_capture = tc_widget_handle_invalid();
+    }
+    if (clear_pressed && !tc_widget_handle_is_invalid(document->pressed_widget)) {
+        if (target_count == 0 ||
+            !tc_ui_internal_same_handle(targets[0], document->pressed_widget)) {
+            targets[target_count++] = document->pressed_widget;
+        }
+        document->pressed_widget = tc_widget_handle_invalid();
+    }
+    if (target_count == 0) {
+        return false;
+    }
+    event = document->has_pointer_event
+        ? document->last_pointer_event
+        : (tc_ui_pointer_event){0};
+    event.type = TC_UI_POINTER_CANCEL;
+    event.cancel_reason = reason;
+    for (index = 0; index < target_count; ++index) {
+        tc_widget* widget = tc_ui_document_resolve_widget(document_handle, targets[index]);
+        if (widget && widget->vtable && widget->vtable->pointer_event) {
+            widget->vtable->pointer_event(widget, document_handle, &event);
+            notified = true;
+        }
+    }
+    return notified;
+}
+
+void tc_ui_internal_invalidate_subtree_interaction_state(
+    tc_widget* root,
+    tc_ui_pointer_cancel_reason reason
+) {
     tc_ui_document* document;
+    tc_ui_document_handle document_handle;
+    tc_widget_handle old_hover;
+    tc_widget_handle old_focus;
     bool clear_hover;
     bool clear_capture;
     bool clear_pressed;
@@ -119,11 +170,19 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root) {
     if (!root || !(document = tc_ui_internal_resolve_document(root->document))) {
         return;
     }
+    document_handle = document->handle;
+    old_hover = document->hovered_widget;
+    old_focus = document->focused_widget;
     clear_hover = tc_ui_internal_handle_is_in_subtree(document, document->hovered_widget, root);
     clear_capture = tc_ui_internal_handle_is_in_subtree(document, document->pointer_capture, root);
     clear_pressed = tc_ui_internal_handle_is_in_subtree(document, document->pressed_widget, root);
     clear_focus = tc_ui_internal_handle_is_in_subtree(document, document->focused_widget, root);
-    if (clear_hover) {
+    tc_ui_internal_cancel_pointer_state(document, clear_capture, clear_pressed, reason);
+    document = tc_ui_internal_resolve_document(document_handle);
+    if (!document) {
+        return;
+    }
+    if (clear_hover && tc_ui_internal_same_handle(document->hovered_widget, old_hover)) {
         if (document->has_pointer_event) {
             tc_ui_internal_update_hover(document, tc_widget_handle_invalid(), &document->last_pointer_event);
         } else {
@@ -131,13 +190,7 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root) {
             tc_ui_internal_refresh_cursor(document);
         }
     }
-    if (clear_capture) {
-        document->pointer_capture = tc_widget_handle_invalid();
-    }
-    if (clear_pressed) {
-        document->pressed_widget = tc_widget_handle_invalid();
-    }
-    if (clear_focus) {
+    if (clear_focus && tc_ui_internal_same_handle(document->focused_widget, old_focus)) {
         tc_ui_internal_change_focus(document, tc_widget_handle_invalid());
     }
 }
@@ -187,7 +240,10 @@ void tc_widget_set_visible(tc_widget* widget, bool visible) {
     bool changed = widget && tc_widget_is_visible(widget) != visible;
     set_widget_flag(widget, TC_WIDGET_VISIBLE, visible);
     if (changed && !visible) {
-        tc_ui_internal_invalidate_subtree_interaction_state(widget);
+        tc_ui_internal_invalidate_subtree_interaction_state(
+            widget,
+            TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+        );
     }
     if (changed) {
         tc_widget* live_widget = !tc_ui_document_handle_is_invalid(document)
@@ -213,7 +269,10 @@ void tc_widget_set_enabled(tc_widget* widget, bool enabled) {
     bool changed = widget && tc_widget_is_enabled(widget) != enabled;
     set_widget_flag(widget, TC_WIDGET_ENABLED, enabled);
     if (changed && !enabled) {
-        tc_ui_internal_invalidate_subtree_interaction_state(widget);
+        tc_ui_internal_invalidate_subtree_interaction_state(
+            widget,
+            TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+        );
     }
     if (changed) {
         tc_widget* live_widget = !tc_ui_document_handle_is_invalid(document)
@@ -233,7 +292,10 @@ void tc_widget_set_tree_participating(tc_widget* widget, bool participating) {
     bool changed = widget && tc_widget_is_tree_participating(widget) != participating;
     set_widget_flag(widget, TC_WIDGET_TREE_PARTICIPATING, participating);
     if (changed && !participating) {
-        tc_ui_internal_invalidate_subtree_interaction_state(widget);
+        tc_ui_internal_invalidate_subtree_interaction_state(
+            widget,
+            TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
+        );
     }
 }
 

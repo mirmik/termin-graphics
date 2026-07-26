@@ -255,6 +255,14 @@ void SpinBox::paint(tc_ui_document_handle document, tc_ui_paint_context* context
 
 tc_ui_event_result SpinBox::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_selecting = selecting_;
+        selecting_ = false;
+        if (selection_anchor_ == caret_) selection_anchor_ = SIZE_MAX;
+        if (was_selecting)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return was_selecting ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         tc_ui_document_set_focus(document, handle());
         if (rect_contains(up_button_rect(), event->x, event->y)) {

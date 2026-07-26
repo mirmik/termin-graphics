@@ -521,6 +521,13 @@ TreeTableWidget::pointer_event(tc_ui_document_handle document,
   if (!event)
     return TC_UI_EVENT_IGNORED;
   sync_models();
+  if (event->type == TC_UI_POINTER_CANCEL) {
+    const bool was_resizing = resizing_column_ != SIZE_MAX;
+    resizing_column_ = SIZE_MAX;
+    if (was_resizing)
+      mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    return was_resizing ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+  }
   if (resizing_column_ != SIZE_MAX) {
     if (event->type == TC_UI_POINTER_MOVE) {
       const float width = columns_->resize(

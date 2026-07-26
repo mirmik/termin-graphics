@@ -58,6 +58,14 @@ tc_ui_event_result Checkbox::pointer_event(tc_ui_document_handle document, const
     if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_pressed = pressed_;
+        pressed_ = false;
+        if (was_pressed) {
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        }
+        return was_pressed ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;

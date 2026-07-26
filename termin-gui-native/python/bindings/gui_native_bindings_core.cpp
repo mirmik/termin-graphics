@@ -199,7 +199,16 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Up", TC_UI_POINTER_UP)
         .value("Wheel", TC_UI_POINTER_WHEEL)
         .value("Enter", TC_UI_POINTER_ENTER)
-        .value("Leave", TC_UI_POINTER_LEAVE);
+        .value("Leave", TC_UI_POINTER_LEAVE)
+        .value("Cancel", TC_UI_POINTER_CANCEL);
+
+    nb::enum_<tc_ui_pointer_cancel_reason>(m, "PointerCancelReason")
+        .value("Explicit", TC_UI_POINTER_CANCEL_EXPLICIT)
+        .value("CaptureReplaced", TC_UI_POINTER_CANCEL_CAPTURE_REPLACED)
+        .value("SubtreeIneffective", TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE)
+        .value("ModalOpened", TC_UI_POINTER_CANCEL_MODAL_OPENED)
+        .value("WindowFocusLost", TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST)
+        .value("HostCaptureLost", TC_UI_POINTER_CANCEL_HOST_CAPTURE_LOST);
 
     nb::enum_<tc_ui_cursor_intent>(m, "CursorIntent")
         .value("Inherit", TC_UI_CURSOR_INHERIT)
@@ -264,7 +273,8 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("click_count", &tc_ui_pointer_event::click_count)
         .def_rw("modifiers", &tc_ui_pointer_event::modifiers)
         .def_rw("wheel_x", &tc_ui_pointer_event::wheel_x)
-        .def_rw("wheel_y", &tc_ui_pointer_event::wheel_y);
+        .def_rw("wheel_y", &tc_ui_pointer_event::wheel_y)
+        .def_rw("cancel_reason", &tc_ui_pointer_event::cancel_reason);
 
     nb::enum_<tc_ui_key_event_type>(m, "KeyEventType")
         .value("Down", TC_UI_KEY_DOWN)

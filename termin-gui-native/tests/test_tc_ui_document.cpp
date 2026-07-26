@@ -103,10 +103,12 @@ struct RouteWidget {
     std::vector<int>* focus_log = nullptr;
     std::vector<int>* paint_log = nullptr;
     std::vector<int>* dismiss_log = nullptr;
+    std::vector<tc_ui_pointer_cancel_reason>* cancel_log = nullptr;
     tc_widget_handle hit_target = tc_widget_handle_invalid();
     tc_widget_handle destroy_target = tc_widget_handle_invalid();
     tc_widget_handle destroy_on_leave = tc_widget_handle_invalid();
     tc_widget_handle destroy_on_focus_loss = tc_widget_handle_invalid();
+    tc_widget_handle destroy_on_cancel = tc_widget_handle_invalid();
     tc_ui_pointer_event_type handled_pointer = static_cast<tc_ui_pointer_event_type>(-1);
     bool destroy_recursive = false;
     bool handle_key = false;
@@ -137,6 +139,14 @@ static tc_ui_event_result route_widget_pointer_event(
     RouteWidget* self = route_widget_from(widget);
     if (self->pointer_log) {
         self->pointer_log->push_back(self->id * 10 + static_cast<int>(event->type));
+    }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        if (self->cancel_log) {
+            self->cancel_log->push_back(event->cancel_reason);
+        }
+        if (!tc_widget_handle_is_invalid(self->destroy_on_cancel)) {
+            tc_ui_document_destroy_widget(document, self->destroy_on_cancel);
+        }
     }
     if (event->type == TC_UI_POINTER_DOWN &&
         !tc_widget_handle_is_invalid(self->destroy_target)) {
@@ -220,6 +230,51 @@ static tc_widget_handle adopt_route_widget(
         &widget
     );
     return tc_ui_document_attach_borrowed_widget(document, &widget.widget);
+}
+
+static void test_pointer_cancel_reasons_and_callback_mutation() {
+    const tc_ui_document_handle document = tc_ui_document_create();
+    RouteWidget first;
+    RouteWidget second;
+    RouteWidget modal;
+    std::vector<tc_ui_pointer_cancel_reason> first_cancels;
+    std::vector<tc_ui_pointer_cancel_reason> second_cancels;
+    const tc_widget_handle first_handle = adopt_route_widget(document, first, 1);
+    const tc_widget_handle second_handle = adopt_route_widget(document, second, 2);
+    const tc_widget_handle modal_handle = adopt_route_widget(document, modal, 3);
+    first.cancel_log = &first_cancels;
+    second.cancel_log = &second_cancels;
+
+    assert(tc_ui_document_set_pointer_capture(document, first_handle));
+    first.destroy_on_cancel = first_handle;
+    assert(tc_ui_document_set_pointer_capture(document, second_handle));
+    assert((first_cancels == std::vector{
+        TC_UI_POINTER_CANCEL_CAPTURE_REPLACED}));
+    assert(!tc_ui_document_is_alive(document, first_handle));
+    assert(tc_widget_handle_eq(
+        tc_ui_document_pointer_capture(document), second_handle));
+
+    assert(tc_ui_document_cancel_pointer_interaction(
+        document, TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST));
+    assert((second_cancels == std::vector{
+        TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST}));
+    assert(tc_widget_handle_is_invalid(
+        tc_ui_document_pointer_capture(document)));
+
+    assert(tc_ui_document_set_pointer_capture(document, second_handle));
+    tc_widget_set_visible(&second.widget, false);
+    assert(second_cancels.back() ==
+           TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
+    tc_widget_set_visible(&second.widget, true);
+
+    assert(tc_ui_document_set_pointer_capture(document, second_handle));
+    assert(tc_ui_document_show_overlay(
+        document, modal_handle, TC_UI_OVERLAY_MODAL));
+    assert(second_cancels.back() == TC_UI_POINTER_CANCEL_MODAL_OPENED);
+    assert(tc_widget_handle_is_invalid(
+        tc_ui_document_pointer_capture(document)));
+
+    tc_ui_document_destroy(document);
 }
 
 struct OverlayLayoutProbe {
@@ -1226,6 +1281,7 @@ int main() {
     test_document_owned_overlay_layout_tracks_viewport_anchor_and_content();
     test_theme_style_resolution_inheritance_and_invalidation();
     test_cursor_intent_inheritance_transitions_and_lifetime();
+    test_pointer_cancel_reasons_and_callback_mutation();
     test_tc_document_is_a_non_owning_handle_value();
     return EXIT_SUCCESS;
 }

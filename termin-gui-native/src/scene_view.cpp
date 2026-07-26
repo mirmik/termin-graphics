@@ -328,6 +328,14 @@ tc_ui_event_result SceneView::pointer_event(tc_ui_document_handle document,
             tc_log_error("[termin-gui-native] SceneView pointer handler failed");
         }
     }
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool active = panning_ || static_cast<bool>(drag_item_) || captured;
+        panning_ = false;
+        drag_item_.reset();
+        if (active)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return active ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_WHEEL && detail::rect_contains(bounds(), event->x, event->y)) {
         const float factor = event->wheel_y > 0.0f ? zoom_factor_ : 1.0f / zoom_factor_;
         set_zoom(zoom_ * factor, {event->x, event->y});

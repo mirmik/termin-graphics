@@ -102,6 +102,13 @@ void IconButton::paint(tc_ui_document_handle document, tc_ui_paint_context* cont
 
 tc_ui_event_result IconButton::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event* event) {
     if (!event) return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_pressed = pressed_;
+        pressed_ = false;
+        if (was_pressed)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return was_pressed ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);

@@ -490,6 +490,17 @@ tc_ui_event_result FileGridWidget::pointer_event(tc_ui_document_handle document,
     if (!event)
         return TC_UI_EVENT_IGNORED;
     sync_model();
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool active = dragging_scrollbar_ ||
+                            pressed_item_ != SelectionModel::npos ||
+                            dragging_item_;
+        dragging_scrollbar_ = false;
+        pressed_item_ = SelectionModel::npos;
+        dragging_item_ = false;
+        if (active)
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        return active ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
     if (dragging_scrollbar_) {
         if (event->type == TC_UI_POINTER_MOVE) {
             const tc_ui_rect thumb = scrollbar_thumb_rect();
