@@ -27,6 +27,8 @@ from termin.gui_native import (
     ModifierFlag,
     OverlayDismissReason,
     OverlayFlag,
+    OverlayGeometry,
+    OverlayPlacement,
     PaintContext,
     Point,
     PointerEvent,
@@ -782,6 +784,44 @@ def test_python_overlay_order_dismissal_and_tooltip_placement():
     )
     assert placed.x == 66.0
     assert placed.y == 56.0
+
+
+def test_python_document_owned_overlay_layout_binding():
+    class MeasuredOverlay(Widget):
+        def measure(self, constraints):
+            return Size(
+                min(40.0, constraints.max_size.width),
+                min(20.0, constraints.max_size.height),
+            )
+
+    document = tc_ui_document_create()
+    anchor = Widget()
+    overlay = MeasuredOverlay()
+    anchor_handle = document.adopt_root(anchor, "anchor")
+    overlay_handle = document.adopt(overlay, "overlay")
+    anchor.bounds = Rect(10.0, 10.0, 60.0, 20.0)
+    geometry = OverlayGeometry()
+    geometry.placement = OverlayPlacement.AnchorBelow
+    geometry.anchor = anchor_handle
+    geometry.margin = 4.0
+    geometry.match_anchor_width = True
+    assert document.show_overlay_placed(
+        overlay_handle,
+        0,
+        geometry,
+        Rect(0.0, 0.0, 100.0, 80.0),
+    )
+    assert overlay.bounds.x == 10.0
+    assert overlay.bounds.y == 30.0
+    assert overlay.bounds.width == 60.0
+    assert overlay.bounds.height == 20.0
+
+    anchor.bounds = Rect(50.0, 45.0, 40.0, 10.0)
+    document.layout_roots(Rect(0.0, 0.0, 80.0, 60.0))
+    assert overlay.bounds.x == 4.0
+    assert overlay.bounds.y == 4.0
+    assert overlay.bounds.width == 72.0
+    assert overlay.bounds.height == 20.0
 
 
 def test_python_widget_tree_recursive_destroy_and_stale_refs():

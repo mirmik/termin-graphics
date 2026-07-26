@@ -30,7 +30,6 @@ class Dialog : public NativeWidget {
     std::vector<tc_widget_handle> button_handles_;
     std::vector<size_t> button_connections_;
     tc_widget_handle previous_focus_ = tc_widget_handle_invalid();
-    tc_ui_rect viewport_{};
     DialogResult pending_result_{};
     DialogResult result_{};
     float title_height_ = 38.0f;

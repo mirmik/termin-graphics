@@ -704,6 +704,19 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           },
           nb::arg("handle"), nb::arg("flags") = 0)
       .def(
+          "show_overlay_placed",
+          [](termin::gui_native::TcDocument &self, WidgetHandle handle,
+             uint32_t flags, const tc_ui_overlay_layout& layout,
+             tc_ui_rect viewport) {
+            bool shown = tc_ui_document_show_overlay_with_layout(
+                checked_document_handle(self), handle.handle, flags, &layout,
+                viewport);
+            throw_pending_document_exception(self);
+            return shown;
+          },
+          nb::arg("handle"), nb::arg("flags"), nb::arg("layout"),
+          nb::arg("viewport"))
+      .def(
           "dismiss_overlay",
           [](termin::gui_native::TcDocument &self, WidgetHandle handle,
              tc_ui_overlay_dismiss_reason reason) {

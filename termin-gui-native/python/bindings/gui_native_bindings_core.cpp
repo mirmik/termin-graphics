@@ -231,6 +231,30 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Outside", TC_UI_OVERLAY_DISMISS_OUTSIDE)
         .value("Escape", TC_UI_OVERLAY_DISMISS_ESCAPE);
 
+    nb::enum_<tc_ui_overlay_placement>(m, "OverlayPlacement")
+        .value("Manual", TC_UI_OVERLAY_PLACEMENT_MANUAL)
+        .value("ViewportCenter", TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER)
+        .value("Point", TC_UI_OVERLAY_PLACEMENT_POINT)
+        .value("AnchorBelow", TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW)
+        .value("AnchorRight", TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT);
+
+    nb::class_<tc_ui_overlay_layout>(m, "OverlayGeometry")
+        .def(nb::init<>())
+        .def_rw("placement", &tc_ui_overlay_layout::placement)
+        .def_prop_rw(
+            "anchor",
+            [](const tc_ui_overlay_layout& layout) {
+                return WidgetHandle{layout.anchor};
+            },
+            [](tc_ui_overlay_layout& layout, WidgetHandle anchor) {
+                layout.anchor = anchor.handle;
+            })
+        .def_rw("point", &tc_ui_overlay_layout::point)
+        .def_rw("offset", &tc_ui_overlay_layout::offset)
+        .def_rw("margin", &tc_ui_overlay_layout::margin)
+        .def_rw("match_anchor_width",
+                &tc_ui_overlay_layout::match_anchor_width);
+
     nb::class_<tc_ui_pointer_event>(m, "PointerEvent")
         .def(nb::init<>())
         .def_rw("type", &tc_ui_pointer_event::type)

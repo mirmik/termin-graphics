@@ -250,19 +250,16 @@ bool Dialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
         tc_log_error("[termin-gui-native] Dialog show requires a live closed adopted widget");
         return false;
     }
-    viewport_ = viewport;
     previous_focus_ = tc_ui_document_focused_widget(document);
     has_result_ = false;
     has_pending_result_ = false;
-    const tc_ui_size wanted = measure(document, unconstrained());
-    const float width = std::min(wanted.width, viewport.width);
-    const float height = std::min(wanted.height, viewport.height);
-    layout(document, tc_ui_rect{viewport.x + (viewport.width - width) * 0.5f,
-                                viewport.y + (viewport.height - height) * 0.5f, width, height});
     uint32_t overlay_flags = TC_UI_OVERLAY_MODAL;
     if (!dismiss_on_escape_)
         overlay_flags |= TC_UI_OVERLAY_BLOCK_ESCAPE;
-    open_ = tc_ui_document_show_overlay(document, handle(), overlay_flags);
+    tc_ui_overlay_layout overlay_layout{};
+    overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER;
+    open_ = tc_ui_document_show_overlay_with_layout(
+        document, handle(), overlay_flags, &overlay_layout, viewport);
     if (!open_)
         return false;
     const DialogAction* selected = default_action();

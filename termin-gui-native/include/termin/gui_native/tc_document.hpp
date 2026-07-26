@@ -43,6 +43,16 @@ class TcDocument {
     bool show_overlay(const Widget& widget, uint32_t flags = 0) const {
         return tc_ui_document_show_overlay(handle_, widget.handle(), flags);
     }
+    bool show_overlay(
+        const Widget& widget,
+        uint32_t flags,
+        const tc_ui_overlay_layout& layout,
+        tc_ui_rect viewport
+    ) const {
+        return tc_ui_document_show_overlay_with_layout(
+            handle_, widget.handle(), flags, &layout, viewport);
+    }
+    tc_ui_rect layout_rect() const { return tc_ui_document_layout_rect(handle_); }
     bool dismiss_overlay(
         const Widget& widget,
         tc_ui_overlay_dismiss_reason reason = TC_UI_OVERLAY_DISMISS_PROGRAMMATIC) const {

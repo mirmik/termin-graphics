@@ -423,10 +423,130 @@ static void invalidate_interaction_outside_subtree(tc_widget* root) {
     }
 }
 
-bool tc_ui_document_show_overlay(
+static bool layout_overlay_entry(
+    tc_ui_document* document,
+    const tc_ui_overlay_entry* entry,
+    tc_ui_rect viewport
+) {
+    tc_widget* widget;
+    tc_widget* anchor_widget = NULL;
+    tc_ui_constraints constraints;
+    tc_ui_size wanted;
+    tc_ui_rect bounds;
+    float margin;
+    float max_x;
+    float max_y;
+    if (!document || !entry || !entry->has_layout ||
+        entry->layout.placement == TC_UI_OVERLAY_PLACEMENT_MANUAL) {
+        return true;
+    }
+    if (!isfinite(viewport.x) || !isfinite(viewport.y) ||
+        !isfinite(viewport.width) || !isfinite(viewport.height) ||
+        viewport.width < 0.0f || viewport.height < 0.0f) {
+        tc_log_error("[termin-gui-native] overlay layout requires a finite viewport");
+        return false;
+    }
+    if (!isfinite(entry->layout.point.x) ||
+        !isfinite(entry->layout.point.y) ||
+        !isfinite(entry->layout.offset.x) ||
+        !isfinite(entry->layout.offset.y) ||
+        !isfinite(entry->layout.margin)) {
+        tc_log_error("[termin-gui-native] overlay layout requires finite geometry");
+        return false;
+    }
+    widget = tc_ui_document_resolve_widget(document->handle, entry->handle);
+    if (!widget) {
+        return false;
+    }
+    margin = fminf(
+        fmaxf(0.0f, entry->layout.margin),
+        fminf(viewport.width, viewport.height) * 0.5f
+    );
+    constraints.min_size = (tc_ui_size){0.0f, 0.0f};
+    constraints.max_size = (tc_ui_size){
+        fmaxf(0.0f, viewport.width - margin * 2.0f),
+        fmaxf(0.0f, viewport.height - margin * 2.0f)
+    };
+    wanted = widget->preferred_size;
+    if (widget->vtable && widget->vtable->measure) {
+        wanted = widget->vtable->measure(
+            widget, document->handle, constraints);
+    }
+    widget = tc_ui_document_resolve_widget(document->handle, entry->handle);
+    if (!widget ||
+        tc_ui_internal_find_overlay_index(document, entry->handle) == SIZE_MAX) {
+        return false;
+    }
+    wanted.width = fminf(fmaxf(0.0f, wanted.width), constraints.max_size.width);
+    wanted.height = fminf(fmaxf(0.0f, wanted.height), constraints.max_size.height);
+
+    if (entry->layout.placement == TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW ||
+        entry->layout.placement == TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT) {
+        anchor_widget = tc_ui_document_resolve_widget(
+            document->handle, entry->layout.anchor);
+        if (!anchor_widget) {
+            tc_log_error("[termin-gui-native] overlay layout anchor is not live");
+            return false;
+        }
+    }
+    if (entry->layout.match_anchor_width && anchor_widget) {
+        wanted.width = fminf(
+            fmaxf(0.0f, anchor_widget->bounds.width),
+            constraints.max_size.width
+        );
+    }
+
+    bounds.width = wanted.width;
+    bounds.height = wanted.height;
+    switch (entry->layout.placement) {
+        case TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER:
+            bounds.x = viewport.x + (viewport.width - bounds.width) * 0.5f;
+            bounds.y = viewport.y + (viewport.height - bounds.height) * 0.5f;
+            break;
+        case TC_UI_OVERLAY_PLACEMENT_POINT:
+            bounds.x = entry->layout.point.x + entry->layout.offset.x;
+            bounds.y = entry->layout.point.y + entry->layout.offset.y;
+            break;
+        case TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW:
+            bounds.x = anchor_widget->bounds.x + entry->layout.offset.x;
+            bounds.y = anchor_widget->bounds.y + anchor_widget->bounds.height +
+                entry->layout.offset.y;
+            if (bounds.y + bounds.height > viewport.y + viewport.height - margin) {
+                bounds.y = anchor_widget->bounds.y - bounds.height -
+                    entry->layout.offset.y;
+            }
+            break;
+        case TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT:
+            bounds.x = anchor_widget->bounds.x + anchor_widget->bounds.width +
+                entry->layout.offset.x;
+            bounds.y = anchor_widget->bounds.y + entry->layout.offset.y;
+            if (bounds.x + bounds.width > viewport.x + viewport.width - margin) {
+                bounds.x = anchor_widget->bounds.x - bounds.width -
+                    entry->layout.offset.x;
+            }
+            break;
+        default:
+            tc_log_error("[termin-gui-native] overlay has invalid placement policy");
+            return false;
+    }
+    max_x = viewport.x + viewport.width - margin - bounds.width;
+    max_y = viewport.y + viewport.height - margin - bounds.height;
+    bounds.x = fmaxf(viewport.x + margin, fminf(bounds.x, max_x));
+    bounds.y = fmaxf(viewport.y + margin, fminf(bounds.y, max_y));
+    if (widget->vtable && widget->vtable->layout) {
+        widget->vtable->layout(widget, document->handle, bounds);
+    } else {
+        tc_widget_set_bounds(widget, bounds);
+    }
+    return true;
+}
+
+static bool show_overlay_impl(
     tc_ui_document_handle document_handle,
     tc_widget_handle handle,
-    uint32_t flags
+    uint32_t flags,
+    const tc_ui_overlay_layout* layout,
+    tc_ui_rect viewport
 ) {
     const uint32_t known_flags = TC_UI_OVERLAY_MODAL |
         TC_UI_OVERLAY_DISMISS_ON_OUTSIDE |
@@ -459,6 +579,11 @@ bool tc_ui_document_show_overlay(
         tc_log_error("[termin-gui-native] modal overlay cannot route hits to root widgets");
         return false;
     }
+    if (layout && (layout->placement < TC_UI_OVERLAY_PLACEMENT_MANUAL ||
+                   layout->placement > TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT)) {
+        tc_log_error("[termin-gui-native] overlay has unknown layout placement");
+        return false;
+    }
     existing = tc_ui_internal_find_overlay_index(document, handle);
     if (existing != SIZE_MAX) {
         tc_ui_internal_remove_overlay_at(document, existing);
@@ -470,12 +595,55 @@ bool tc_ui_document_show_overlay(
             document->overlay_count + 1)) {
         return false;
     }
-    document->overlays[document->overlay_count++] = (tc_ui_overlay_entry){handle, flags};
+    tc_ui_overlay_entry entry;
+    memset(&entry, 0, sizeof(entry));
+    entry.handle = handle;
+    entry.flags = flags;
+    entry.has_layout = layout != NULL;
+    if (layout) {
+        entry.layout = *layout;
+    }
+    document->overlays[document->overlay_count++] = entry;
+    if (layout && !layout_overlay_entry(document, &entry, viewport)) {
+        existing = tc_ui_internal_find_overlay_index(document, handle);
+        if (existing != SIZE_MAX) {
+            tc_ui_internal_remove_overlay_at(document, existing);
+        }
+        return false;
+    }
+    widget = tc_ui_document_resolve_widget(document->handle, handle);
+    if (!widget ||
+        tc_ui_internal_find_overlay_index(document, handle) == SIZE_MAX) {
+        return false;
+    }
     if ((flags & TC_UI_OVERLAY_MODAL) != 0) {
         invalidate_interaction_outside_subtree(widget);
     }
     return tc_ui_document_is_alive(document_handle, handle) &&
         tc_ui_internal_find_overlay_index(document, handle) != SIZE_MAX;
+}
+
+bool tc_ui_document_show_overlay(
+    tc_ui_document_handle document_handle,
+    tc_widget_handle handle,
+    uint32_t flags
+) {
+    return show_overlay_impl(
+        document_handle, handle, flags, NULL, (tc_ui_rect){0});
+}
+
+bool tc_ui_document_show_overlay_with_layout(
+    tc_ui_document_handle document_handle,
+    tc_widget_handle handle,
+    uint32_t flags,
+    const tc_ui_overlay_layout* layout,
+    tc_ui_rect viewport
+) {
+    if (!layout) {
+        tc_log_error("[termin-gui-native] placed overlay requires a layout policy");
+        return false;
+    }
+    return show_overlay_impl(document_handle, handle, flags, layout, viewport);
 }
 
 bool tc_ui_document_dismiss_overlay(
@@ -539,7 +707,11 @@ tc_ui_rect tc_ui_tooltip_rect(
     tc_ui_rect result;
     float available_width;
     float available_height;
-    margin = fmaxf(0.0f, margin);
+    margin = fminf(
+        fmaxf(0.0f, margin),
+        fminf(fmaxf(0.0f, viewport.width),
+              fmaxf(0.0f, viewport.height)) * 0.5f
+    );
     available_width = fmaxf(0.0f, viewport.width - margin * 2.0f);
     available_height = fmaxf(0.0f, viewport.height - margin * 2.0f);
     result.width = fminf(fmaxf(0.0f, preferred_size.width), available_width);
@@ -554,18 +726,47 @@ tc_ui_rect tc_ui_tooltip_rect(
 }
 
 void tc_ui_document_layout_roots(tc_ui_document_handle document_handle, tc_ui_rect rect) {
+    tc_ui_overlay_entry* overlays = NULL;
+    size_t overlay_count = 0;
     size_t index;
     tc_ui_document* document = tc_ui_internal_resolve_document_checked(
         document_handle, "tc_ui_document_layout_roots");
     if (!document) {
         return;
     }
+    document->layout_rect = rect;
+    document->has_layout_rect = true;
     for (index = 0; index < document->root_count; ++index) {
         tc_widget* widget = tc_ui_document_resolve_widget(document->handle, document->roots[index]);
         if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->layout) {
             widget->vtable->layout(widget, document->handle, rect);
         }
     }
+    overlay_count = document->overlay_count;
+    if (overlay_count > 0) {
+        overlays = (tc_ui_overlay_entry*)malloc(overlay_count * sizeof(*overlays));
+        if (!overlays) {
+            tc_log_error("[termin-gui-native] failed to snapshot overlays for layout");
+            return;
+        }
+        memcpy(overlays, document->overlays, overlay_count * sizeof(*overlays));
+    }
+    for (index = 0; index < overlay_count; ++index) {
+        const tc_ui_overlay_entry entry = overlays[index];
+        if (entry.has_layout &&
+            tc_ui_internal_find_overlay_index(document, entry.handle) != SIZE_MAX) {
+            (void)layout_overlay_entry(document, &entry, rect);
+        }
+    }
+    free(overlays);
+}
+
+tc_ui_rect tc_ui_document_layout_rect(tc_ui_document_handle document_handle) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_layout_rect");
+    return document && document->has_layout_rect
+        ? document->layout_rect
+        : (tc_ui_rect){0};
 }
 
 bool tc_ui_internal_change_focus(tc_ui_document* document, tc_widget_handle next) {

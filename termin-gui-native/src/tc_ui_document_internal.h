@@ -20,6 +20,8 @@ typedef struct tc_widget_slot {
 typedef struct tc_ui_overlay_entry {
     tc_widget_handle handle;
     uint32_t flags;
+    tc_ui_overlay_layout layout;
+    bool has_layout;
 } tc_ui_overlay_entry;
 
 struct tc_ui_document {
@@ -41,6 +43,8 @@ struct tc_ui_document {
     tc_ui_overlay_entry* overlays;
     size_t overlay_count;
     size_t overlay_capacity;
+    tc_ui_rect layout_rect;
+    bool has_layout_rect;
 
     tc_widget_handle hovered_widget;
     tc_widget_handle pointer_capture;

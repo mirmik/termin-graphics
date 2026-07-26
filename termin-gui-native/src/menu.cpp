@@ -116,10 +116,7 @@ tc_ui_size Menu::measure(tc_ui_document_handle document, tc_ui_constraints const
         width += column_gap_ + shortcut_width;
     if (has_submenu)
         width += column_gap_;
-    const float viewport_limit = viewport_.height > 0.0f
-                                     ? std::max(item_height_, viewport_.height - 8.0f)
-                                     : max_visible_height_;
-    const float height = std::min(content_height_, std::min(max_visible_height_, viewport_limit));
+    const float height = std::min(content_height_, max_visible_height_);
     return clamp_size(tc_ui_size{std::max(min_width_, width), height}, constraints);
 }
 
@@ -137,20 +134,34 @@ bool Menu::show(tc_ui_document_handle document, tc_ui_point position, tc_ui_rect
         return false;
     }
     viewport_ = viewport;
-    const tc_ui_size wanted = measure(document, unconstrained());
-    float x = position.x;
-    float y = position.y;
-    if (x + wanted.width > viewport.x + viewport.width)
-        x = viewport.x + viewport.width - wanted.width;
-    if (y + wanted.height > viewport.y + viewport.height)
-        y = viewport.y + viewport.height - wanted.height;
-    x = std::max(viewport.x, x);
-    y = std::max(viewport.y, y);
-    layout(document, tc_ui_rect{x, y, wanted.width, wanted.height});
     uint32_t flags = dismiss_on_outside ? TC_UI_OVERLAY_DISMISS_ON_OUTSIDE : 0;
     if (!tc_widget_handle_is_invalid(anchor_owner_))
         flags |= TC_UI_OVERLAY_ALLOW_ROOT_HIT;
-    open_ = tc_ui_document_show_overlay(document, handle(), flags);
+    tc_ui_overlay_layout overlay_layout{};
+    overlay_layout.margin = 4.0f;
+    if (parent_menu_) {
+        overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT;
+        overlay_layout.anchor = parent_menu_->handle();
+        overlay_layout.offset.y = position.y - parent_menu_->bounds().y;
+    } else if (!tc_widget_handle_is_invalid(anchor_owner_)) {
+        tc_widget* anchor = tc_ui_document_resolve_widget(
+            document, anchor_owner_);
+        if (anchor) {
+            overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW;
+            overlay_layout.anchor = anchor_owner_;
+            overlay_layout.offset.x = position.x - anchor->bounds.x;
+            overlay_layout.offset.y =
+                position.y - (anchor->bounds.y + anchor->bounds.height);
+        } else {
+            overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_POINT;
+            overlay_layout.point = position;
+        }
+    } else {
+        overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_POINT;
+        overlay_layout.point = position;
+    }
+    open_ = tc_ui_document_show_overlay_with_layout(
+        document, handle(), flags, &overlay_layout, viewport);
     if (open_)
         tc_ui_document_set_focus(document, handle());
     return open_;
@@ -267,11 +278,15 @@ bool Menu::open_submenu(tc_ui_document_handle document, size_t index, bool selec
     child_index_ = index;
     Menu* child_ptr = child.release();
     const float item_y = bounds().y + item_tops_[index] - scroll_offset_;
-    tc_ui_size child_size = child_ptr->measure(document, unconstrained());
-    float x = bounds().x + bounds().width;
-    if (x + child_size.width > viewport_.x + viewport_.width)
-        x = bounds().x - child_size.width;
-    if (!child_ptr->show(document, tc_ui_point{x, item_y}, viewport_, false)) {
+    tc_ui_rect viewport = tc_ui_document_layout_rect(document);
+    if (viewport.width <= 0.0f || viewport.height <= 0.0f) {
+        viewport = viewport_;
+    }
+    if (!child_ptr->show(
+            document,
+            tc_ui_point{bounds().x + bounds().width, item_y},
+            viewport,
+            false)) {
         tc_ui_document_destroy_widget(document, handle);
         child_handle_ = tc_widget_handle_invalid();
         child_index_ = SIZE_MAX;

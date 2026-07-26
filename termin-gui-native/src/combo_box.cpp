@@ -12,6 +12,19 @@ public:
     explicit ComboBoxPopup(ComboBox& owner)
         : NativeWidget("ComboBoxPopup"), owner_(owner) {}
 
+    tc_ui_size measure(
+        tc_ui_document_handle,
+        tc_ui_constraints constraints
+    ) override {
+        const float height =
+            std::min(owner_.items_.size(), owner_.max_visible_items_) *
+            owner_.item_height_;
+        return clamp_size(
+            tc_ui_size{owner_.bounds().width, height},
+            constraints
+        );
+    }
+
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override {
         const tc_ui_style style = owner_.computed_style(document);
         tc_ui_painter_fill_rect(context, bounds(), tc_ui_color {0.18f, 0.18f, 0.22f, 0.98f});
@@ -149,13 +162,19 @@ bool ComboBox::show_popup(tc_ui_document_handle document) {
     }
     tc_widget* popup = tc_ui_document_resolve_widget(document, popup_handle_);
     if (!popup) return false;
-    const float height = std::min(items_.size(), max_visible_items_) * item_height_;
-    float y = bounds().y + bounds().height;
     const tc_widget* root = c_widget();
     while (root->parent) root = root->parent;
-    if (y + height > root->bounds.y + root->bounds.height) y = bounds().y - height;
-    tc_widget_set_bounds(popup, tc_ui_rect {bounds().x, y, bounds().width, height});
-    open_ = tc_ui_document_show_overlay(document, popup_handle_, TC_UI_OVERLAY_DISMISS_ON_OUTSIDE);
+    tc_ui_overlay_layout overlay_layout{};
+    overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW;
+    overlay_layout.anchor = handle();
+    overlay_layout.match_anchor_width = true;
+    open_ = tc_ui_document_show_overlay_with_layout(
+        document,
+        popup_handle_,
+        TC_UI_OVERLAY_DISMISS_ON_OUTSIDE,
+        &overlay_layout,
+        root->bounds
+    );
     mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
     return open_;
 }

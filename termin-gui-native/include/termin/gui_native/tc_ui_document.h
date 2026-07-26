@@ -282,6 +282,23 @@ typedef enum tc_ui_overlay_dismiss_reason {
     TC_UI_OVERLAY_DISMISS_ESCAPE = 2
 } tc_ui_overlay_dismiss_reason;
 
+typedef enum tc_ui_overlay_placement {
+    TC_UI_OVERLAY_PLACEMENT_MANUAL = 0,
+    TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER = 1,
+    TC_UI_OVERLAY_PLACEMENT_POINT = 2,
+    TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW = 3,
+    TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT = 4
+} tc_ui_overlay_placement;
+
+typedef struct tc_ui_overlay_layout {
+    tc_ui_overlay_placement placement;
+    tc_widget_handle anchor;
+    tc_ui_point point;
+    tc_ui_point offset;
+    float margin;
+    bool match_anchor_width;
+} tc_ui_overlay_layout;
+
 typedef enum tc_widget_flag {
     TC_WIDGET_FOCUSABLE = 1u << 0,
     TC_WIDGET_DIRTY_LAYOUT = 1u << 1,
@@ -688,6 +705,14 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_show_overlay(
     uint32_t flags
 );
 
+TERMIN_GUI_NATIVE_API bool tc_ui_document_show_overlay_with_layout(
+    tc_ui_document_handle document,
+    tc_widget_handle handle,
+    uint32_t flags,
+    const tc_ui_overlay_layout* layout,
+    tc_ui_rect viewport
+);
+
 TERMIN_GUI_NATIVE_API bool tc_ui_document_dismiss_overlay(
     tc_ui_document_handle document,
     tc_widget_handle handle,
@@ -702,6 +727,9 @@ TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_overlay_at(
 TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_overlay_flags_at(
     tc_ui_document_handle document,
     size_t index
+);
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_ui_document_layout_rect(
+    tc_ui_document_handle document
 );
 
 TERMIN_GUI_NATIVE_API tc_ui_rect tc_ui_tooltip_rect(

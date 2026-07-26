@@ -1,6 +1,7 @@
 #include <termin/gui_native/tc_ui_document.h>
 #include <termin/gui_native/tc_document.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <string>
@@ -219,6 +220,83 @@ static tc_widget_handle adopt_route_widget(
         &widget
     );
     return tc_ui_document_attach_borrowed_widget(document, &widget.widget);
+}
+
+struct OverlayLayoutProbe {
+    tc_widget widget {};
+    tc_ui_size preferred {0.0f, 0.0f};
+    int measure_count = 0;
+    int layout_count = 0;
+};
+
+static OverlayLayoutProbe* overlay_layout_probe_from(tc_widget* widget) {
+    return static_cast<OverlayLayoutProbe*>(widget->body);
+}
+
+static tc_ui_size overlay_layout_probe_measure(
+    tc_widget* widget,
+    tc_ui_document_handle,
+    tc_ui_constraints constraints
+) {
+    OverlayLayoutProbe* self = overlay_layout_probe_from(widget);
+    self->measure_count += 1;
+    return tc_ui_size {
+        std::min(std::max(self->preferred.width, constraints.min_size.width),
+                 constraints.max_size.width),
+        std::min(std::max(self->preferred.height, constraints.min_size.height),
+                 constraints.max_size.height)
+    };
+}
+
+static void overlay_layout_probe_layout(
+    tc_widget* widget,
+    tc_ui_document_handle,
+    tc_ui_rect rect
+) {
+    OverlayLayoutProbe* self = overlay_layout_probe_from(widget);
+    self->layout_count += 1;
+    tc_widget_set_bounds(widget, rect);
+}
+
+static tc_widget_handle overlay_layout_probe_hit_test(
+    tc_widget* widget,
+    tc_ui_document_handle,
+    float x,
+    float y
+) {
+    const tc_ui_rect bounds = widget->bounds;
+    return x >= bounds.x && y >= bounds.y &&
+                   x < bounds.x + bounds.width &&
+                   y < bounds.y + bounds.height
+        ? widget->handle
+        : tc_widget_handle_invalid();
+}
+
+static const tc_widget_vtable OVERLAY_LAYOUT_PROBE_VTABLE {
+    "OverlayLayoutProbe",
+    overlay_layout_probe_measure,
+    overlay_layout_probe_layout,
+    nullptr,
+    nullptr,
+    overlay_layout_probe_hit_test,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+};
+
+static tc_widget_handle adopt_overlay_layout_probe(
+    tc_ui_document_handle document,
+    OverlayLayoutProbe& probe
+) {
+    tc_widget_init_unowned(
+        &probe.widget,
+        &OVERLAY_LAYOUT_PROBE_VTABLE,
+        TC_LANGUAGE_CXX,
+        &probe
+    );
+    return tc_ui_document_attach_borrowed_widget(document, &probe.widget);
 }
 
 static tc_widget_handle adopt(tc_ui_document_handle document, TestWidget* widget) {
@@ -848,6 +926,101 @@ static void test_tooltip_rect_is_host_driven_and_clamped() {
     assert(rect.width == 14.0f && rect.height == 4.0f);
 }
 
+static void test_document_owned_overlay_layout_tracks_viewport_anchor_and_content() {
+    tc_ui_document_handle document = tc_ui_document_create();
+    RouteWidget root;
+    RouteWidget anchor;
+    OverlayLayoutProbe overlay;
+    tc_widget_handle root_handle = adopt_route_widget(document, root, 1);
+    tc_widget_handle anchor_handle = adopt_route_widget(document, anchor, 2);
+    tc_widget_handle overlay_handle =
+        adopt_overlay_layout_probe(document, overlay);
+    assert(tc_widget_append_child(&root.widget, &anchor.widget));
+    assert(tc_ui_document_add_root(document, root_handle));
+    tc_widget_set_bounds(&root.widget, tc_ui_rect {0.0f, 0.0f, 120.0f, 80.0f});
+    tc_widget_set_bounds(&anchor.widget, tc_ui_rect {70.0f, 55.0f, 40.0f, 10.0f});
+    overlay.preferred = tc_ui_size {80.0f, 30.0f};
+
+    tc_ui_overlay_layout layout {};
+    layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW;
+    layout.anchor = anchor_handle;
+    layout.margin = 4.0f;
+    layout.match_anchor_width = true;
+    assert(tc_ui_document_show_overlay_with_layout(
+        document,
+        overlay_handle,
+        0,
+        &layout,
+        tc_ui_rect {0.0f, 0.0f, 120.0f, 80.0f}
+    ));
+    assert(overlay.widget.bounds.x == 70.0f);
+    assert(overlay.widget.bounds.y == 25.0f);
+    assert(overlay.widget.bounds.width == 40.0f);
+    assert(overlay.widget.bounds.height == 30.0f);
+
+    tc_widget_set_bounds(&anchor.widget, tc_ui_rect {10.0f, 5.0f, 50.0f, 10.0f});
+    tc_ui_document_layout_roots(
+        document, tc_ui_rect {0.0f, 0.0f, 200.0f, 120.0f});
+    assert(overlay.widget.bounds.x == 10.0f);
+    assert(overlay.widget.bounds.y == 15.0f);
+    assert(overlay.widget.bounds.width == 50.0f);
+    assert(overlay.widget.bounds.height == 30.0f);
+
+    overlay.preferred = tc_ui_size {90.0f, 60.0f};
+    tc_ui_document_layout_roots(
+        document, tc_ui_rect {0.0f, 0.0f, 200.0f, 120.0f});
+    assert(overlay.widget.bounds.x == 10.0f);
+    assert(overlay.widget.bounds.y == 15.0f);
+    assert(overlay.widget.bounds.width == 50.0f);
+    assert(overlay.widget.bounds.height == 60.0f);
+
+    tc_ui_document_layout_roots(
+        document, tc_ui_rect {0.0f, 0.0f, 40.0f, 30.0f});
+    assert(overlay.widget.bounds.x == 4.0f);
+    assert(overlay.widget.bounds.y == 4.0f);
+    assert(overlay.widget.bounds.width == 32.0f);
+    assert(overlay.widget.bounds.height == 22.0f);
+    assert(tc_widget_handle_eq(
+        tc_ui_document_hit_test(document, 5.0f, 5.0f), overlay_handle));
+    assert(tc_widget_handle_is_invalid(
+        tc_ui_document_hit_test(document, 50.0f, 50.0f)));
+
+    layout = tc_ui_overlay_layout {};
+    layout.placement = TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER;
+    overlay.preferred = tc_ui_size {30.0f, 20.0f};
+    assert(tc_ui_document_show_overlay_with_layout(
+        document,
+        overlay_handle,
+        TC_UI_OVERLAY_MODAL,
+        &layout,
+        tc_ui_rect {0.0f, 0.0f, 100.0f, 80.0f}
+    ));
+    assert(overlay.widget.bounds.x == 35.0f);
+    assert(overlay.widget.bounds.y == 30.0f);
+    tc_ui_document_layout_roots(
+        document, tc_ui_rect {0.0f, 0.0f, 60.0f, 40.0f});
+    assert(overlay.widget.bounds.x == 15.0f);
+    assert(overlay.widget.bounds.y == 10.0f);
+
+    layout = tc_ui_overlay_layout {};
+    layout.placement = TC_UI_OVERLAY_PLACEMENT_POINT;
+    layout.point = tc_ui_point {95.0f, 75.0f};
+    layout.offset = tc_ui_point {12.0f, 18.0f};
+    layout.margin = 4.0f;
+    assert(tc_ui_document_show_overlay_with_layout(
+        document,
+        overlay_handle,
+        TC_UI_OVERLAY_TOOLTIP,
+        &layout,
+        tc_ui_rect {0.0f, 0.0f, 100.0f, 80.0f}
+    ));
+    assert(overlay.widget.bounds.x == 66.0f);
+    assert(overlay.widget.bounds.y == 56.0f);
+    assert(overlay.measure_count >= 7);
+    assert(overlay.layout_count >= 7);
+    tc_ui_document_destroy(document);
+}
+
 static void test_theme_style_resolution_inheritance_and_invalidation() {
     tc_ui_document_handle document = tc_ui_document_create();
     RouteWidget parent_a;
@@ -1050,6 +1223,7 @@ int main() {
     test_overlay_outside_escape_and_programmatic_dismissal();
     test_modal_overlay_blocks_lower_input_and_scopes_focus();
     test_tooltip_rect_is_host_driven_and_clamped();
+    test_document_owned_overlay_layout_tracks_viewport_anchor_and_content();
     test_theme_style_resolution_inheritance_and_invalidation();
     test_cursor_intent_inheritance_transitions_and_lifetime();
     test_tc_document_is_a_non_owning_handle_value();
