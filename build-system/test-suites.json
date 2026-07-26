@@ -196,7 +196,7 @@
       "executor": "process-smoke",
       "roots": ["scripts/smoke-editor-mcp-offscreen"],
       "platforms": ["linux"],
-      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands, Vulkan offscreen PNG readback, and deterministic cleanup."
+      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands and Vulkan offscreen PNG readback, then covers deterministic MCP-close and SIGINT shutdown paths."
     },
     {
       "id": "relocated-sdk-acceptance",
