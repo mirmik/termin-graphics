@@ -209,6 +209,16 @@
       "reason": "Copies the manifest-verified SDK and exercises bundled editor, launcher, player, and Python hosts under the same hostile-environment contract on Linux and Windows."
     },
     {
+      "id": "native-player-mcp-smoke",
+      "module": "termin-player",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-native-player-mcp.py"],
+      "profiles": ["sdk-installed"],
+      "platforms": ["linux"],
+      "required_capabilities": ["installed-sdk", "virtual-display"],
+      "reason": "Builds a starter desktop bundle, verifies native player MCP live context and PNG readback, then checks request_quit and owned-session cleanup."
+    },
+    {
       "id": "tgfx2-d3d11-bound-smoke",
       "module": "termin-graphics",
       "executor": "process-smoke",
