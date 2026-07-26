@@ -2,6 +2,31 @@
 
 namespace termin::gui_native {
 using namespace detail;
+
+namespace {
+
+std::string normalize_single_line(std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    for (size_t index = 0; index < text.size(); ++index) {
+        const char current = text[index];
+        if (current != '\r' && current != '\n') {
+            result.push_back(current);
+            continue;
+        }
+        if (current == '\r' && index + 1 < text.size() &&
+            text[index + 1] == '\n') {
+            ++index;
+        }
+        if (result.empty() || result.back() != ' ') {
+            result.push_back(' ');
+        }
+    }
+    return result;
+}
+
+} // namespace
+
 TextInput::TextInput(std::string text)
     : NativeWidget("TextInput"), text_(std::move(text)) {
     set_style_role(TC_UI_STYLE_TEXT_INPUT);
@@ -9,6 +34,8 @@ TextInput::TextInput(std::string text)
     if (!valid_utf8(text_)) {
         tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 initial text");
         text_.clear();
+    } else {
+        text_ = normalize_single_line(text_);
     }
     caret_ = text_.size();
     set_focusable(true);
@@ -20,6 +47,7 @@ void TextInput::set_text(std::string text) {
         tc_log_error("[termin-gui-native] TextInput rejected invalid UTF-8 text");
         return;
     }
+    text = normalize_single_line(text);
     if (text_ == text) {
         return;
     }
@@ -207,7 +235,9 @@ tc_ui_event_result TextInput::pointer_event(tc_ui_document_handle document, cons
             mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return was_selecting ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(bounds(), event->x, event->y)) {
         tc_ui_document_set_focus(document, handle());
         const tc_ui_rect clip = text_clip_rect(document);
         const float content_x = std::max(0.0f, event->x - clip.x + scroll_x_);
@@ -466,12 +496,13 @@ bool TextInput::delete_selection() {
 }
 
 bool TextInput::replace_selection(std::string_view inserted) {
-    if (inserted.empty() && !has_selection()) {
+    const std::string normalized = normalize_single_line(inserted);
+    if (normalized.empty() && !has_selection()) {
         return false;
     }
     delete_selection();
-    text_.insert(caret_, inserted.data(), inserted.size());
-    caret_ += inserted.size();
+    text_.insert(caret_, normalized);
+    caret_ += normalized.size();
     selection_anchor_ = SIZE_MAX;
     return true;
 }

@@ -8,6 +8,7 @@ using namespace detail;
 TabView::TabView(const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "TabView") {
     set_style_role(TC_UI_STYLE_TAB);
+    set_focusable(true);
     set_preferred_size(tc_ui_size {320.0f, 220.0f});
 }
 
@@ -189,7 +190,10 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document_handle document, const 
     if (!event || !rect_contains(bounds(), event->x, event->y)) {
         return TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && event->y < bounds().y + header_height_ && child_count() > 0) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        event->y < bounds().y + header_height_ && child_count() > 0) {
+        tc_ui_document_set_focus(document, handle());
         for (size_t index = 0; index < child_count(); ++index) {
             if (!rect_contains(tab_rect(document, index), event->x, event->y)) {
                 continue;
@@ -202,6 +206,39 @@ tc_ui_event_result TabView::pointer_event(tc_ui_document_handle document, const 
         }
     }
     return TC_UI_EVENT_IGNORED;
+}
+
+tc_ui_event_result TabView::key_event(
+    tc_ui_document_handle document,
+    const tc_ui_key_event* event
+) {
+    if (!event || event->type != TC_UI_KEY_DOWN || child_count() == 0) {
+        return TC_UI_EVENT_IGNORED;
+    }
+    size_t next = selected_index_;
+    switch (event->key) {
+    case TC_UI_KEY_LEFT:
+    case TC_UI_KEY_PAGE_UP:
+        next = selected_index_ == 0 ? child_count() - 1 : selected_index_ - 1;
+        break;
+    case TC_UI_KEY_RIGHT:
+    case TC_UI_KEY_PAGE_DOWN:
+        next = (selected_index_ + 1) % child_count();
+        break;
+    case TC_UI_KEY_HOME:
+        next = 0;
+        break;
+    case TC_UI_KEY_END:
+        next = child_count() - 1;
+        break;
+    default:
+        return TC_UI_EVENT_IGNORED;
+    }
+    set_selected_index(next);
+    if (tc_widget* selected = child_at(selected_index_)) {
+        layout_widget(selected, document, page_rect());
+    }
+    return TC_UI_EVENT_HANDLED;
 }
 
 tc_widget_handle TabView::hit_test(tc_ui_document_handle document, float x, float y) {

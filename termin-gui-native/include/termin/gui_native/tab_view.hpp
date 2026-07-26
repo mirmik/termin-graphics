@@ -34,6 +34,7 @@ public:
     void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
     tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
 private:
     void sync_page_participation();

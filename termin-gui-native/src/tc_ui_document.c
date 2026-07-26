@@ -286,6 +286,8 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
         TC_UI_STYLE_BORDER,
         style_color(0.48f, 0.72f, 1.0f, 1.0f)
     );
+    theme->roles[TC_UI_STYLE_BUTTON].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
+    theme->roles[TC_UI_STYLE_BUTTON].focused.value.border_width = 1.0f;
     theme->roles[TC_UI_STYLE_BUTTON].disabled = color_override(
         TC_UI_STYLE_BACKGROUND,
         style_color(0.20f, 0.21f, 0.23f, 1.0f)
@@ -337,6 +339,22 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
         TC_UI_STYLE_BACKGROUND,
         style_color(0.18f, 0.58f, 0.34f, 1.0f)
     );
+    theme->roles[TC_UI_STYLE_CHECKBOX].focused = color_override(
+        TC_UI_STYLE_BORDER,
+        style_color(0.48f, 0.72f, 1.0f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_CHECKBOX].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
+    theme->roles[TC_UI_STYLE_CHECKBOX].focused.value.border_width = 2.0f;
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled = color_override(
+        TC_UI_STYLE_BACKGROUND,
+        style_color(0.11f, 0.12f, 0.14f, 1.0f)
+    );
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.fields |=
+        TC_UI_STYLE_BORDER | TC_UI_STYLE_FOREGROUND;
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.border =
+        style_color(0.25f, 0.26f, 0.29f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.foreground =
+        style_color(0.50f, 0.52f, 0.55f, 1.0f);
 
     theme->roles[TC_UI_STYLE_PROGRESS].base.background = style_color(0.09f, 0.10f, 0.12f, 1.0f);
     theme->roles[TC_UI_STYLE_PROGRESS].base.min_width = 120.0f;

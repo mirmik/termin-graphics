@@ -308,7 +308,9 @@ tc_ui_event_result TextArea::pointer_event(
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(bounds(), event->x, event->y)) {
         tc_ui_document_set_focus(document, handle());
         const size_t next = caret_from_point(document, event->x, event->y);
         if ((event->modifiers & TC_UI_MOD_SHIFT) != 0) {

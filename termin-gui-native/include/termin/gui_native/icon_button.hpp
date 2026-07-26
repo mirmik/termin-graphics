@@ -15,6 +15,7 @@ private:
     uint32_t texture_id_ = 0;
     bool active_ = false;
     bool pressed_ = false;
+    bool keyboard_pressed_ = false;
     std::string tooltip_;
     std::optional<Color> background_color_;
     std::optional<Color> hover_color_;
@@ -44,5 +45,7 @@ public:
     const Signal<IconButton&>& clicked() const { return clicked_; }
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    void focus_event(tc_ui_document_handle document, bool focused) override;
 };
 } // namespace termin::gui_native

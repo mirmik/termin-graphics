@@ -9,6 +9,7 @@ IconButton::IconButton(std::string icon)
     : NativeWidget("IconButton"), icon_(std::move(icon)) {
     set_style_role(TC_UI_STYLE_BUTTON);
     set_cursor_intent(TC_UI_CURSOR_HAND);
+    set_focusable(true);
     set_preferred_size(tc_ui_size {28.0f, 28.0f});
 }
 
@@ -76,7 +77,7 @@ void IconButton::set_font_size(float size) {
 
 void IconButton::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
     const uint32_t extra = (active_ ? TC_UI_STYLE_STATE_CHECKED : 0) |
-        (pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0);
+        ((pressed_ || keyboard_pressed_) ? TC_UI_STYLE_STATE_PRESSED : 0);
     tc_ui_style style = computed_style(document, extra);
     const uint32_t state = tc_ui_document_widget_style_state(document, c_widget()) | extra;
     if (background_color_) style.background = background_color_->c_color();
@@ -100,7 +101,10 @@ void IconButton::paint(tc_ui_document_handle document, tc_ui_paint_context* cont
     }
 }
 
-tc_ui_event_result IconButton::pointer_event(tc_ui_document_handle, const tc_ui_pointer_event* event) {
+tc_ui_event_result IconButton::pointer_event(
+    tc_ui_document_handle document,
+    const tc_ui_pointer_event* event
+) {
     if (!event) return TC_UI_EVENT_IGNORED;
     if (event->type == TC_UI_POINTER_CANCEL) {
         const bool was_pressed = pressed_;
@@ -109,18 +113,68 @@ tc_ui_event_result IconButton::pointer_event(tc_ui_document_handle, const tc_ui_
             mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return was_pressed ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+    const bool captured = tc_widget_handle_eq(
+        tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;
+        tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
         return TC_UI_EVENT_HANDLED;
     }
-    if (event->type == TC_UI_POINTER_UP && pressed_) {
+    if (event->type == TC_UI_POINTER_UP && (pressed_ || captured)) {
+        const bool activate = pressed_ &&
+            rect_contains(bounds(), event->x, event->y);
         pressed_ = false;
+        if (captured)
+            tc_ui_document_release_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
-        if (rect_contains(bounds(), event->x, event->y)) clicked_.emit(*this);
+        if (activate) clicked_.emit(*this);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_MOVE && captured)
+        return TC_UI_EVENT_HANDLED;
+    return TC_UI_EVENT_IGNORED;
+}
+
+tc_ui_event_result IconButton::key_event(
+    tc_ui_document_handle,
+    const tc_ui_key_event* event
+) {
+    if (!event)
+        return TC_UI_EVENT_IGNORED;
+    if (event->key == TC_UI_KEY_ENTER && event->type == TC_UI_KEY_DOWN) {
+        if (!event->repeat)
+            clicked_.emit(*this);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key != TC_UI_KEY_SPACE)
+        return TC_UI_EVENT_IGNORED;
+    if (event->type == TC_UI_KEY_DOWN) {
+        if (!event->repeat && !keyboard_pressed_) {
+            keyboard_pressed_ = true;
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_KEY_UP) {
+        const bool activate = keyboard_pressed_;
+        keyboard_pressed_ = false;
+        if (activate) {
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            clicked_.emit(*this);
+        }
         return TC_UI_EVENT_HANDLED;
     }
     return TC_UI_EVENT_IGNORED;
+}
+
+void IconButton::focus_event(tc_ui_document_handle, bool focused) {
+    if (!focused && keyboard_pressed_) {
+        keyboard_pressed_ = false;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    }
 }
 
 

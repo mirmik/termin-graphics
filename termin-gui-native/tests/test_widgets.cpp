@@ -54,6 +54,7 @@ int main() {
   test_combo_box_overlay_selection_and_destruction();
   test_icon_image_and_canvas_media_contracts();
   test_widget_signals_are_emitted_from_interactions();
+  test_standard_control_input_conformance();
   test_containers_register_and_replace_canonical_children();
   test_common_visibility_enabled_and_mouse_transparent_state();
   test_cpp_theme_style_facade_inheritance_and_state();

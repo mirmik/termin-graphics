@@ -50,6 +50,7 @@ void test_slider_edit_owns_canonical_children_and_syncs_values();
 void test_combo_box_overlay_selection_and_destruction();
 void test_icon_image_and_canvas_media_contracts();
 void test_widget_signals_are_emitted_from_interactions();
+void test_standard_control_input_conformance();
 void test_containers_register_and_replace_canonical_children();
 void test_common_visibility_enabled_and_mouse_transparent_state();
 void test_cpp_theme_style_facade_inheritance_and_state();

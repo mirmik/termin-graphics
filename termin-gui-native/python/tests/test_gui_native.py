@@ -1275,6 +1275,13 @@ def test_native_text_input_utf8_selection_uses_injected_clipboard():
     assert document.dispatch_key_event(key) == EventResult.Handled
     assert submitted == ["aé🙂b"]
 
+    widget.caret = len(widget.text.encode())
+    clipboard["text"] = "\r\nnext\nline"
+    key.modifiers = int(ModifierFlag.Ctrl)
+    key.key = KeyCode.V
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert widget.text == "aé🙂b next line"
+
     widget.text = ""
     assert changed[-1] == ""
     widget.placeholder = ""
@@ -1575,6 +1582,64 @@ def test_native_basic_input_and_media_widget_factories():
     canvas.widget.paint(PaintContext(DrawList()))
     assert paints == [True]
     tc_ui_document_destroy(document)
+
+
+def test_native_standard_controls_keyboard_and_primary_pointer_contract():
+    document = tc_ui_document_create()
+    button = document.create_button("Run")
+    button.widget.bounds = Rect(0.0, 0.0, 80.0, 28.0)
+    clicks = []
+    button.connect_clicked(lambda: clicks.append(True))
+    assert button.widget.focusable
+
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Enter
+    assert button.widget.dispatch_key_event(key) == EventResult.Handled
+    key.repeat = True
+    assert button.widget.dispatch_key_event(key) == EventResult.Handled
+    assert clicks == [True]
+
+    key.repeat = False
+    key.key = KeyCode.Space
+    assert button.widget.dispatch_key_event(key) == EventResult.Handled
+    key.repeat = True
+    assert button.widget.dispatch_key_event(key) == EventResult.Handled
+    key.type = KeyEventType.Up
+    key.repeat = False
+    assert button.widget.dispatch_key_event(key) == EventResult.Handled
+    assert clicks == [True, True]
+
+    pointer = PointerEvent()
+    pointer.type = PointerEventType.Down
+    pointer.button = 1
+    pointer.x = 4.0
+    pointer.y = 4.0
+    assert button.widget.dispatch_pointer_event(pointer) == EventResult.Ignored
+    pointer.type = PointerEventType.Up
+    assert button.widget.dispatch_pointer_event(pointer) == EventResult.Ignored
+    assert clicks == [True, True]
+
+    checkbox = document.create_checkbox(False)
+    slider = document.create_slider(0.5)
+    icon = document.create_icon_button("I")
+    assert checkbox.widget.focusable
+    assert slider.widget.focusable
+    assert icon.widget.focusable
+
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Home
+    assert slider.widget.dispatch_key_event(key) == EventResult.Handled
+    assert slider.value == pytest.approx(0.0)
+    key.key = KeyCode.PageUp
+    assert slider.widget.dispatch_key_event(key) == EventResult.Handled
+    assert slider.value > 0.0
+
+    text_input = document.create_text_input("")
+    assert text_input.widget.dispatch_text_event(
+        "first\r\nsecond\nthird"
+    ) == EventResult.Handled
+    assert text_input.text == "first second third"
 
 
 def test_native_value_setters_propagate_callback_exceptions_immediately():

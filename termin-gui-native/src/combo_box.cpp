@@ -65,7 +65,9 @@ public:
             mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
             return TC_UI_EVENT_HANDLED;
         }
-        if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+        if (event->type == TC_UI_POINTER_DOWN &&
+            event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+            rect_contains(bounds(), event->x, event->y)) {
             const int index = static_cast<int>((event->y - bounds().y + scroll_y_) / owner_.item_height_);
             if (index >= 0 && index < static_cast<int>(owner_.items_.size())) {
                 owner_.set_selected_index(index);
@@ -189,7 +191,10 @@ void ComboBox::popup_dismissed() {
 }
 
 tc_ui_event_result ComboBox::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
-    if (!event || event->type != TC_UI_POINTER_DOWN || !rect_contains(bounds(), event->x, event->y)) return TC_UI_EVENT_IGNORED;
+    if (!event || event->type != TC_UI_POINTER_DOWN ||
+        event->button != tcbase::mouse_button_value(tcbase::MouseButton::LEFT) ||
+        !rect_contains(bounds(), event->x, event->y))
+        return TC_UI_EVENT_IGNORED;
     tc_ui_document_set_focus(document, handle());
     if (open_) hide_popup(document); else show_popup(document);
     return TC_UI_EVENT_HANDLED;

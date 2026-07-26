@@ -6,6 +6,7 @@ using namespace detail;
 Slider::Slider(float value)
     : NativeWidget("Slider") {
     set_style_role(TC_UI_STYLE_SLIDER);
+    set_focusable(true);
     set_preferred_size(tc_ui_size {140.0f, 28.0f});
     set_value(value);
 }
@@ -86,7 +87,9 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document_handle document, const t
         return was_dragging ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(bounds(), event->x, event->y)) {
         dragging_ = true;
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
@@ -112,6 +115,42 @@ tc_ui_event_result Slider::pointer_event(tc_ui_document_handle document, const t
     const float ratio = clamp_float((event->x - left) / (right - left), 0.0f, 1.0f);
     set_value(min_value_ + ratio * (max_value_ - min_value_));
     return TC_UI_EVENT_HANDLED;
+}
+
+tc_ui_event_result Slider::key_event(
+    tc_ui_document_handle,
+    const tc_ui_key_event* event
+) {
+    if (!event || event->type != TC_UI_KEY_DOWN) {
+        return TC_UI_EVENT_IGNORED;
+    }
+    const float range = max_value_ - min_value_;
+    const float increment = step_ > 0.0f ? step_ : range / 100.0f;
+    const float page = step_ > 0.0f ? step_ * 10.0f : range / 10.0f;
+    switch (event->key) {
+    case TC_UI_KEY_LEFT:
+    case TC_UI_KEY_DOWN_ARROW:
+        set_value(value_ - increment);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_RIGHT:
+    case TC_UI_KEY_UP_ARROW:
+        set_value(value_ + increment);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_PAGE_DOWN:
+        set_value(value_ - page);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_PAGE_UP:
+        set_value(value_ + page);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_HOME:
+        set_value(min_value_);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_END:
+        set_value(max_value_);
+        return TC_UI_EVENT_HANDLED;
+    default:
+        return TC_UI_EVENT_IGNORED;
+    }
 }
 
 

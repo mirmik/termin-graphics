@@ -58,6 +58,12 @@ int main() {
     assert(termin::gui_native::make_key_event(key)->key == '[');
     key.key.key = termin::WindowKey::RightBracket;
     assert(termin::gui_native::make_key_event(key)->key == ']');
+    key.key.key = termin::WindowKey::Insert;
+    assert(termin::gui_native::make_key_event(key)->key == TC_UI_KEY_INSERT);
+    key.key.key = termin::WindowKey::PageUp;
+    assert(termin::gui_native::make_key_event(key)->key == TC_UI_KEY_PAGE_UP);
+    key.key.key = termin::WindowKey::PageDown;
+    assert(termin::gui_native::make_key_event(key)->key == TC_UI_KEY_PAGE_DOWN);
 
     termin::WindowEvent text;
     text.type = termin::WindowEventType::TextInput;

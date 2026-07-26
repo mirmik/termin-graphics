@@ -58,6 +58,8 @@ class ColorPicker : public NativeWidget {
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
     tc_ui_event_result pointer_event(tc_ui_document_handle document,
                                      const tc_ui_pointer_event* event) override;
+    tc_ui_event_result key_event(tc_ui_document_handle document,
+                                 const tc_ui_key_event* event) override;
     void on_destroy(tc_ui_document_handle document) override;
 
   private:

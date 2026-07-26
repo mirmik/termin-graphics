@@ -11,12 +11,35 @@ Button::Button(std::string text) : NativeWidget("Button"), text_(std::move(text)
 }
 
 tc_ui_event_result Button::key_event(tc_ui_document_handle, const tc_ui_key_event* event) {
-    if (!event || event->type != TC_UI_KEY_DOWN ||
-        (event->key != TC_UI_KEY_ENTER && event->key != ' ')) {
+    if (!event) {
         return TC_UI_EVENT_IGNORED;
     }
-    clicked_.emit(*this);
-    return TC_UI_EVENT_HANDLED;
+    if (event->key == TC_UI_KEY_ENTER && event->type == TC_UI_KEY_DOWN) {
+        if (!event->repeat) {
+            clicked_.emit(*this);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->key != TC_UI_KEY_SPACE) {
+        return TC_UI_EVENT_IGNORED;
+    }
+    if (event->type == TC_UI_KEY_DOWN) {
+        if (!event->repeat && !keyboard_pressed_) {
+            keyboard_pressed_ = true;
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_KEY_UP) {
+        const bool activate = keyboard_pressed_;
+        keyboard_pressed_ = false;
+        if (activate) {
+            mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+            clicked_.emit(*this);
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
 }
 
 Button::Button(std::string text, Color fill) : Button(std::move(text)) {
@@ -38,7 +61,10 @@ Button& Button::set_text(std::string text) {
 }
 
 void Button::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
-    const tc_ui_style style = computed_style(document);
+    const tc_ui_style style = computed_style(
+        document,
+        keyboard_pressed_ ? TC_UI_STYLE_STATE_PRESSED : 0
+    );
     tc_ui_painter_fill_rounded_rect(context, bounds(), style.corner_radius, style.background);
     if (style.border_width > 0.0f && color_visible(style.border)) {
         tc_ui_painter_stroke_rounded_rect(
@@ -74,7 +100,9 @@ tc_ui_event_result Button::pointer_event(tc_ui_document_handle document,
         return was_pressed ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN && rect_contains(bounds(), event->x, event->y)) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(bounds(), event->x, event->y)) {
         pressed_ = true;
         tc_ui_document_set_pointer_capture(document, handle());
         mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
@@ -96,6 +124,13 @@ tc_ui_event_result Button::pointer_event(tc_ui_document_handle document,
         return TC_UI_EVENT_HANDLED;
     }
     return TC_UI_EVENT_IGNORED;
+}
+
+void Button::focus_event(tc_ui_document_handle, bool focused) {
+    if (!focused && keyboard_pressed_) {
+        keyboard_pressed_ = false;
+        mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+    }
 }
 
 } // namespace termin::gui_native

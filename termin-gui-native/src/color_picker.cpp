@@ -324,7 +324,8 @@ tc_ui_event_result ColorPicker::pointer_event(tc_ui_document_handle document,
         return was_dragging ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
     }
     const bool captured = tc_widget_handle_eq(tc_ui_document_pointer_capture(document), handle());
-    if (event->type == TC_UI_POINTER_DOWN) {
+    if (event->type == TC_UI_POINTER_DOWN &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT)) {
         if (contains(sv_rect(), event->x, event->y))
             dragging_ = DragTarget::SaturationValue;
         else if (contains(hue_rect(), event->x, event->y))
@@ -349,6 +350,44 @@ tc_ui_event_result ColorPicker::pointer_event(tc_ui_document_handle document,
         return TC_UI_EVENT_HANDLED;
     }
     return TC_UI_EVENT_IGNORED;
+}
+
+tc_ui_event_result ColorPicker::key_event(
+    tc_ui_document_handle,
+    const tc_ui_key_event* event
+) {
+    if (!event || event->type != TC_UI_KEY_DOWN)
+        return TC_UI_EVENT_IGNORED;
+    switch (event->key) {
+    case TC_UI_KEY_LEFT:
+        model_->set_hue(clamp_float(model_->hue() - 0.01f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_RIGHT:
+        model_->set_hue(clamp_float(model_->hue() + 0.01f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_DOWN_ARROW:
+        model_->set_value(clamp_float(model_->value() - 0.05f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_UP_ARROW:
+        model_->set_value(clamp_float(model_->value() + 0.05f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_PAGE_DOWN:
+        model_->set_saturation(
+            clamp_float(model_->saturation() - 0.1f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_PAGE_UP:
+        model_->set_saturation(
+            clamp_float(model_->saturation() + 0.1f, 0.0f, 1.0f));
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_HOME:
+        model_->set_value(0.0f);
+        return TC_UI_EVENT_HANDLED;
+    case TC_UI_KEY_END:
+        model_->set_value(1.0f);
+        return TC_UI_EVENT_HANDLED;
+    default:
+        return TC_UI_EVENT_IGNORED;
+    }
 }
 
 void ColorPicker::on_destroy(tc_ui_document_handle document) {

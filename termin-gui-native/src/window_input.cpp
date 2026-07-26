@@ -32,11 +32,14 @@ int32_t translate_key(WindowKey key) {
         case WindowKey::Space: return TC_UI_KEY_SPACE;
         case WindowKey::Escape: return TC_UI_KEY_ESCAPE;
         case WindowKey::Backspace: return TC_UI_KEY_BACKSPACE;
+        case WindowKey::Insert: return TC_UI_KEY_INSERT;
         case WindowKey::Delete: return TC_UI_KEY_DELETE;
         case WindowKey::Right: return TC_UI_KEY_RIGHT;
         case WindowKey::Left: return TC_UI_KEY_LEFT;
         case WindowKey::Down: return TC_UI_KEY_DOWN_ARROW;
         case WindowKey::Up: return TC_UI_KEY_UP_ARROW;
+        case WindowKey::PageUp: return TC_UI_KEY_PAGE_UP;
+        case WindowKey::PageDown: return TC_UI_KEY_PAGE_DOWN;
         case WindowKey::Home: return TC_UI_KEY_HOME;
         case WindowKey::End: return TC_UI_KEY_END;
         case WindowKey::Apostrophe: return '\'';
