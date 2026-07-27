@@ -58,6 +58,12 @@ foreach ($arg in $args) {
 }
 
 $Failures = New-Object System.Collections.Generic.List[string]
+$TestBuildType = if ($CppArgs.Contains("--debug") -or $CppArgs.Contains("-d")) { "Debug" } else { "Release" }
+$TestBuildDir = if ($env:BUILD_DIR) {
+    $env:BUILD_DIR
+} else {
+    Join-Path (Join-Path $ScriptDir "build") $TestBuildType
+}
 
 if ($ProcessSmokeOnly -and $ProcessSmokeDisabled) {
     throw "--process-smoke-only cannot be combined with --no-process-smoke"
@@ -81,33 +87,46 @@ if (-not $ProcessSmokeOnly) {
             $PythonArgs += "--full"
         }
 
-        $TestBuildType = if ($CppArgs.Contains("--debug") -or $CppArgs.Contains("-d")) {
-            "Debug"
-        } else {
-            "Release"
+        $ArtifactPython = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $ArtifactPython) {
+            $ArtifactPython = Get-Command python3 -ErrorAction SilentlyContinue
         }
-        $TestBuildDir = if ($env:BUILD_DIR) {
-            $env:BUILD_DIR
-        } else {
-            Join-Path (Join-Path $ScriptDir "build") $TestBuildType
+        if (-not $ArtifactPython) {
+            throw "System Python is required to resolve test artifacts."
         }
-        $TestShadercCandidates = @(
-            (Join-Path (Join-Path (Join-Path $TestBuildDir "bin") $TestBuildType) "termin_shaderc.exe"),
-            (Join-Path (Join-Path $TestBuildDir "bin") "termin_shaderc.exe"),
-            (Join-Path (Join-Path $TestBuildDir "bin") "termin_shaderc")
-        )
-        $TestShaderc = $TestShadercCandidates |
-            Where-Object { Test-Path $_ -PathType Leaf } |
-            Select-Object -First 1
-        if (-not $TestShaderc) {
-            Write-Warning "[run-tests] test-built termin_shaderc is missing from $TestBuildDir"
-            $Failures.Add("termin_shaderc provenance")
+
+        $OldPythonPath = $env:PYTHONPATH
+        $BuildToolsPath = Join-Path $ScriptDir "termin-build-tools"
+        $env:PYTHONPATH = if ($OldPythonPath) {
+            "$BuildToolsPath$([IO.Path]::PathSeparator)$OldPythonPath"
         } else {
-            $env:TERMIN_SHADERC = (Resolve-Path $TestShaderc).Path
-            & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
+            $BuildToolsPath
+        }
+        try {
+            $ResolvedShaderCompiler = & $ArtifactPython.Path -m termin_build.artifact_resolution `
+                shader-compiler `
+                --build-dir $TestBuildDir `
+                --configuration $TestBuildType `
+                --platform windows
             if ($LASTEXITCODE -ne 0) {
-                $Failures.Add("Python")
+                throw "Failed to resolve termin_shaderc from the active CMake build graph."
             }
+        } finally {
+            if ($null -eq $OldPythonPath) {
+                Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+            } else {
+                $env:PYTHONPATH = $OldPythonPath
+            }
+        }
+
+        $env:TERMIN_SHADERC = ($ResolvedShaderCompiler | Out-String).Trim()
+        if (-not $env:TERMIN_SHADERC) {
+            throw "Artifact resolver returned an empty termin_shaderc path."
+        }
+
+        & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
+        if ($LASTEXITCODE -ne 0) {
+            $Failures.Add("Python")
         }
     } catch {
         Write-Warning "[run-tests] Python test runner failed: $_"
@@ -128,10 +147,6 @@ if (-not $ProcessSmokeDisabled) {
             $env:PYTHONPATH = (Join-Path $ScriptDir "termin-build-tools") + $(
                 if ($env:PYTHONPATH) { [IO.Path]::PathSeparator + $env:PYTHONPATH } else { "" }
             )
-            $BuildType = "Release"
-            if ($CppArgs.Contains("--debug") -or $CppArgs.Contains("-d")) {
-                $BuildType = "Debug"
-            }
             $ProcessRoot = Join-Path (Join-Path $ScriptDir "build\process-smoke") $ProcessSmokeProfile
             New-Item -ItemType Directory -Force -Path $ProcessRoot | Out-Null
             $PlanPath = Join-Path $ProcessRoot "expected.json"
@@ -171,7 +186,7 @@ if (-not $ProcessSmokeDisabled) {
             & $PythonExe @RepositoryControl run $ProcessSmokeProfile `
                 --platform windows `
                 --executor process-smoke `
-                --configuration $BuildType `
+                --configuration $TestBuildType `
                 --process-timeout $Timeout `
                 --process-log-dir $LogDir `
                 --report-output $ReportPath `

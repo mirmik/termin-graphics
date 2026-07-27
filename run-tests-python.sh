@@ -101,19 +101,19 @@ echo "Overlay: $OVERLAY_MANIFEST"
 SDK_PREFIX="${SDK_PREFIX:-$TERMIN_SDK}"
 export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-# Shader compiler tests must exercise the executable produced by the current
-# C++ test graph, never a potentially stale SDK copy.
+# Shader compiler tests must exercise the executable selected by the top-level
+# runner from the current C++ test graph.
 if [[ -z "${TERMIN_SHADERC:-}" ]]; then
-    for shader_compiler in \
-        "$SCRIPT_DIR/build/Release/bin/termin_shaderc" \
-        "$SCRIPT_DIR/build/Release/bin/Release/termin_shaderc.exe"; do
-        if [[ -x "$shader_compiler" ]]; then
-            export TERMIN_SHADERC="$shader_compiler"
-            echo "TERMIN_SHADERC: $TERMIN_SHADERC"
-            break
-        fi
-    done
+    echo "ERROR: TERMIN_SHADERC is not set. Run ./run-tests.sh or set it to the compiler produced by the current C++ test graph." >&2
+    exit 1
 fi
+if [[ ! -x "$TERMIN_SHADERC" ]]; then
+    echo "ERROR: TERMIN_SHADERC is not executable: $TERMIN_SHADERC" >&2
+    exit 1
+fi
+TERMIN_SHADERC="$(cd "$(dirname "$TERMIN_SHADERC")" && pwd)/$(basename "$TERMIN_SHADERC")"
+export TERMIN_SHADERC
+echo "TERMIN_SHADERC: $TERMIN_SHADERC"
 
 # The launcher deliberately ignores ambient Python configuration.
 unset PYTHONHOME PYTHONPATH PYTHONUSERBASE
