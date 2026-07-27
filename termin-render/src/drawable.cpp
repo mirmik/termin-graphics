@@ -84,9 +84,10 @@ bool validate_render_item(
         return false;
     }
 
-    if (item.kind == TC_RENDER_ITEM_KIND_MESH && !item.payload.mesh.mesh) {
+    if (item.kind == TC_RENDER_ITEM_KIND_MESH &&
+        tc_mesh_handle_is_invalid(item.payload.mesh.mesh_handle)) {
         tc::Log::error(
-            "[RenderItemSink] malformed Mesh item: pass='%s' phase='%s' component='%s' geometry=%d has null mesh",
+            "[RenderItemSink] malformed Mesh item: pass='%s' phase='%s' component='%s' geometry=%d has no stable mesh handle",
             pass_name,
             phase_mark,
             component_type,
@@ -117,11 +118,11 @@ bool validate_render_item(
     }
 
     if (item.kind == TC_RENDER_ITEM_KIND_FOLIAGE_BATCH &&
-        (!item.payload.foliage_batch.prototype_mesh ||
+        (tc_mesh_handle_is_invalid(item.payload.foliage_batch.prototype_mesh_handle) ||
          !item.payload.foliage_batch.foliage_uuid ||
          item.payload.foliage_batch.foliage_uuid[0] == '\0')) {
         tc::Log::error(
-            "[RenderItemSink] malformed FoliageBatch item: pass='%s' phase='%s' component='%s' geometry=%d has no prototype mesh or foliage asset",
+            "[RenderItemSink] malformed FoliageBatch item: pass='%s' phase='%s' component='%s' geometry=%d has no stable prototype mesh handle or foliage asset",
             pass_name,
             phase_mark,
             component_type,

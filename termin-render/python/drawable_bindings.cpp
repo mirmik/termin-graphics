@@ -30,7 +30,6 @@ PythonRenderItem PythonRenderItem::mesh(
         result.item.flags |= TC_RENDER_ITEM_FLAG_HAS_MATERIAL_PHASE;
         tc_material_find_phase_ref(phase, &result.item.material, &result.item.material_phase_index);
     }
-    result.item.payload.mesh.mesh = mesh.get();
     result.item.payload.mesh.mesh_handle = mesh.handle;
     result.item.payload.mesh.submesh_index = submesh_index;
     return result;

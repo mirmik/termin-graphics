@@ -14,12 +14,17 @@ GUARD_TEST_MAIN();
 namespace {
 
 size_t vertex_contract_diagnostic_count = 0;
+size_t stale_mesh_diagnostic_count = 0;
 
 void capture_vertex_contract_diagnostic(tc_log_level level, const char* message)
 {
     if (level == TC_LOG_ERROR && message &&
         std::strstr(message, "phase contract requires vertex semantic")) {
         ++vertex_contract_diagnostic_count;
+    }
+    if (level == TC_LOG_ERROR && message &&
+        std::strstr(message, "mesh handle is stale or invalid")) {
+        ++stale_mesh_diagnostic_count;
     }
 }
 
@@ -93,7 +98,7 @@ termin::RenderItemTaskRejection owning_test_shader_planner(
 
 } // namespace
 
-TEST_CASE("Mesh RenderItem planner rejects a phase contract requiring absent vertex semantics") {
+TEST_CASE("Mesh RenderItem planner resolves its mesh handle after registry growth") {
     tc_mesh_init();
 
     const tc_mesh_handle mesh_handle = tc_mesh_create(
@@ -106,6 +111,11 @@ TEST_CASE("Mesh RenderItem planner rejects a phase contract requiring absent ver
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.payload.mesh.mesh_handle = mesh_handle;
+
+    for (size_t i = 0; i < 64; ++i) {
+        REQUIRE(!tc_mesh_handle_is_invalid(tc_mesh_create(nullptr)));
+    }
+    REQUIRE(tc_mesh_get(mesh_handle) != nullptr);
 
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "normal";
@@ -147,6 +157,49 @@ TEST_CASE("Mesh RenderItem planner rejects a phase contract requiring absent ver
     CHECK(tasks.empty());
     CHECK(repeated_tasks.empty());
     CHECK(vertex_contract_diagnostic_count == 1u);
+
+    tc_mesh_shutdown();
+}
+
+TEST_CASE("Mesh RenderItem planner rejects a stale mesh handle") {
+    tc_mesh_init();
+
+    const tc_mesh_handle mesh_handle = tc_mesh_create(
+        "render-item-stale-mesh-handle-test");
+    REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
+
+    tc_render_item item{};
+    item.kind = TC_RENDER_ITEM_KIND_MESH;
+    item.payload.mesh.mesh_handle = mesh_handle;
+
+    termin::MaterialPipelinePassContract shader_contract{};
+    termin::RenderItemTaskPlanningContract contract{};
+    contract.phase = TC_PHASE_OPAQUE;
+    contract.provided_input_mask =
+        termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+    contract.shader_contract = &shader_contract;
+    contract.debug_pass_name = "StaleMeshHandlePass";
+
+    termin::RenderItemTaskPlanningRequest request{};
+    request.item = &item;
+    request.contract = &contract;
+
+    REQUIRE(tc_mesh_destroy(mesh_handle));
+
+    stale_mesh_diagnostic_count = 0;
+    tc_log_set_callback(capture_vertex_contract_diagnostic);
+    termin::RenderTaskList tasks;
+    const termin::RenderItemTaskPlanningResult result =
+        termin::plan_render_item_task(request, tasks);
+    tc_log_set_callback(nullptr);
+
+    CHECK(result.rejection ==
+          termin::RenderItemTaskRejection::ShaderPlanningRejected);
+    REQUIRE(result.detail != nullptr);
+    CHECK(std::strcmp(result.detail, "mesh handle is stale or invalid") == 0);
+    CHECK(tasks.empty());
+    CHECK(stale_mesh_diagnostic_count >= 1u);
 
     tc_mesh_shutdown();
 }
@@ -252,6 +305,7 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
 
 TEST_CASE("RenderItem task planner accepts a supported mesh contract") {
     tc_shader_init();
+    tc_mesh_init();
 
     termin::TcShaderCreateInfo create_info{};
     create_info.sources.fragment = R"(
@@ -307,6 +361,13 @@ FragmentOutput fs_main() {
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
+    const tc_mesh_handle mesh_handle = tc_mesh_create(
+        "supported-mesh-render-item-planner-test");
+    REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
+    tc_mesh* mesh = tc_mesh_get(mesh_handle);
+    REQUIRE(mesh != nullptr);
+    mesh->layout = tc_vertex_layout_pos_normal_uv_tangent();
+    item.payload.mesh.mesh_handle = mesh_handle;
     tc_material_phase phase{};
 
     termin::MaterialPipelinePassContract shader_contract{};
@@ -373,6 +434,7 @@ FragmentOutput fs_main() {
     REQUIRE(planned_material != nullptr);
     CHECK(planned_material->stage_mask == TC_SHADER_STAGE_FRAGMENT);
 
+    tc_mesh_shutdown();
     tc_shader_shutdown();
 }
 

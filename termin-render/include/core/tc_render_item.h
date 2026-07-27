@@ -14,8 +14,6 @@
 extern "C" {
 #endif
 
-struct tc_mesh;
-
 typedef enum tc_render_item_kind {
     TC_RENDER_ITEM_KIND_INVALID = 0,
     TC_RENDER_ITEM_KIND_MESH = 1,
@@ -62,7 +60,6 @@ typedef struct tc_render_item_vec4 {
 } tc_render_item_vec4;
 
 typedef struct tc_render_item_mesh_payload {
-    struct tc_mesh* mesh;
     tc_mesh_handle mesh_handle;
     size_t submesh_index;
     const float* skinning_matrices;
@@ -94,7 +91,6 @@ typedef struct tc_render_item_text_batch_payload {
 } tc_render_item_text_batch_payload;
 
 typedef struct tc_render_item_foliage_batch_payload {
-    struct tc_mesh* prototype_mesh;
     tc_mesh_handle prototype_mesh_handle;
     /* Borrowed unless the item is stored in termin::RenderItemCollection. */
     const char* foliage_uuid;
