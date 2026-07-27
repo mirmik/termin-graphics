@@ -105,10 +105,6 @@ void append_vertex_transform_to_hash(
     hash = fnv1a_append(":", hash);
     hash = fnv1a_append(vertex_transform.debug_name.c_str(), hash);
     hash = fnv1a_append(":", hash);
-    if (vertex_transform.template_uuid.has_value()) {
-        hash = fnv1a_append(vertex_transform.template_uuid->c_str(), hash);
-    }
-    hash = fnv1a_append(":", hash);
     hash = fnv1a_append(vertex_transform.vertex_entry.c_str(), hash);
     hash = fnv1a_append(":inputs:", hash);
     append_semantics_to_hash(vertex_transform.vertex_inputs.mesh_attributes, hash);

@@ -515,17 +515,6 @@
       }
     },
     {
-      "uuid": "termin-engine-foliage-shadow",
-      "name": "FoliageShadowVariantVS",
-      "language": "slang",
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-foliage-shadow.vert.slang",
-          "entry": "vs_main"
-        }
-      }
-    },
-    {
       "uuid": "termin-engine-id",
       "name": "IdEngineVSFS",
       "language": "slang",
