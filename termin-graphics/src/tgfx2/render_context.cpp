@@ -905,13 +905,20 @@ void RenderContext2::bind_uniform_data(const tc_shader_resource_binding* rb,
         buffer.id != 0 && device_.ring_ubo_write(data, size, ring_offset);
     uint64_t offset = ring_offset;
     if (!ring_write_succeeded) {
-        BufferDesc bd;
-        bd.size = size;
-        bd.usage = BufferUsage::Uniform;
-        bd.cpu_visible = true;
-        buffer = device_.create_buffer(bd);
-        device_.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), size});
-        defer_destroy(buffer);
+        uint32_t transient_offset = 0;
+        if (device_.transient_uniform_write(
+                data, size, buffer, transient_offset)) {
+            offset = transient_offset;
+        } else {
+            BufferDesc bd;
+            bd.size = size;
+            bd.usage = BufferUsage::Uniform;
+            bd.cpu_visible = true;
+            buffer = device_.create_buffer(bd);
+            device_.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), size});
+            defer_destroy(buffer);
+            offset = 0;
+        }
     }
 
     BoundResourceValue value;

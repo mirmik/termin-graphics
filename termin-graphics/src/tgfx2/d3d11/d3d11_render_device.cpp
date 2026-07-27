@@ -1145,6 +1145,142 @@ void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t>
     context_->UpdateSubresource(buf->buffer.Get(), 0, &box, data.data(), 0, 0);
 }
 
+BufferHandle D3D11RenderDevice::transient_vertex_buffer() {
+    if (transient_vertex_buffer_) {
+        return transient_vertex_buffer_;
+    }
+
+    BufferDesc desc;
+    desc.size = kTransientVertexBufferSize;
+    desc.usage = BufferUsage::Vertex;
+    desc.cpu_visible = true;
+    transient_vertex_buffer_ = create_buffer(desc);
+    if (!transient_vertex_buffer_) {
+        tc::Log::error(
+            "D3D11RenderDevice::transient_vertex_buffer: failed to create %u-byte streaming buffer",
+            kTransientVertexBufferSize);
+    }
+    return transient_vertex_buffer_;
+}
+
+uint64_t D3D11RenderDevice::transient_vertex_write(
+    const void* data,
+    uint32_t size) {
+    if (!data || size == 0 || size > kTransientVertexBufferSize) {
+        return UINT64_MAX;
+    }
+    const BufferHandle handle = transient_vertex_buffer();
+    D3D11Buffer* buffer = get_buffer(handle);
+    if (!buffer || !buffer->buffer) {
+        return UINT64_MAX;
+    }
+
+    constexpr uint32_t kAlignment = 16;
+    const uint32_t padded_size = (size + kAlignment - 1) & ~(kAlignment - 1);
+    if (transient_vertex_offset_ + padded_size > kTransientVertexBufferSize) {
+        transient_vertex_offset_ = 0;
+        transient_vertex_discard_ = true;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    const D3D11_MAP map_type = transient_vertex_discard_
+        ? D3D11_MAP_WRITE_DISCARD
+        : D3D11_MAP_WRITE_NO_OVERWRITE;
+    const HRESULT hr = context_->Map(
+        buffer->buffer.Get(), 0, map_type, 0, &mapped);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::transient_vertex_write: Map failed HRESULT=0x%08X size=%u",
+            static_cast<unsigned>(hr),
+            size);
+        return UINT64_MAX;
+    }
+
+    const uint32_t offset = transient_vertex_offset_;
+    std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data, size);
+    context_->Unmap(buffer->buffer.Get(), 0);
+    transient_vertex_offset_ += padded_size;
+    transient_vertex_discard_ = false;
+    return offset;
+}
+
+bool D3D11RenderDevice::transient_uniform_write(
+    const void* data,
+    uint32_t size,
+    BufferHandle& out_buffer,
+    uint32_t& out_offset) {
+    out_buffer = {};
+    out_offset = 0;
+    if (!data || size == 0 || size > D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u) {
+        return false;
+    }
+
+    const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
+    if (transient_uniform_cursor_ == transient_uniform_buffers_.size()) {
+        transient_uniform_buffers_.push_back({});
+    }
+    TransientUniformBuffer& slot =
+        transient_uniform_buffers_[transient_uniform_cursor_++];
+
+    if (!slot.handle || slot.capacity < padded_size) {
+        if (slot.handle) {
+            destroy(slot.handle);
+        }
+        uint32_t capacity = 256;
+        while (capacity < padded_size) {
+            capacity *= 2;
+        }
+        BufferDesc desc;
+        desc.size = capacity;
+        desc.usage = BufferUsage::Uniform;
+        desc.cpu_visible = true;
+        slot.handle = create_buffer(desc);
+        slot.capacity = slot.handle ? capacity : 0;
+        if (!slot.handle) {
+            tc::Log::error(
+                "D3D11RenderDevice::transient_uniform_write: failed to create %u-byte pooled buffer",
+                capacity);
+            return false;
+        }
+    }
+
+    D3D11Buffer* buffer = get_buffer(slot.handle);
+    if (!buffer || !buffer->buffer) {
+        tc::Log::error(
+            "D3D11RenderDevice::transient_uniform_write: pooled buffer handle %u is invalid",
+            slot.handle.id);
+        return false;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    const HRESULT hr = context_->Map(
+        buffer->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) {
+        tc::Log::error(
+            "D3D11RenderDevice::transient_uniform_write: Map failed HRESULT=0x%08X size=%u",
+            static_cast<unsigned>(hr),
+            size);
+        return false;
+    }
+    std::memcpy(mapped.pData, data, size);
+    if (size < slot.capacity) {
+        std::memset(
+            static_cast<uint8_t*>(mapped.pData) + size,
+            0,
+            slot.capacity - size);
+    }
+    context_->Unmap(buffer->buffer.Get(), 0);
+
+    out_buffer = slot.handle;
+    return true;
+}
+
+void D3D11RenderDevice::reset_transient_uploads() {
+    transient_vertex_offset_ = 0;
+    transient_vertex_discard_ = true;
+    transient_uniform_cursor_ = 0;
+}
+
 void D3D11RenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
     auto* tex = get_texture(dst);
     if (!tex || !tex->texture || data.empty()) return;
