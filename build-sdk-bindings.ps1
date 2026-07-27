@@ -216,6 +216,9 @@ Invoke-TerminCMakeBuild -BuildDir $BuildDir -BuildType $BuildType -BuildJobs $Bu
 & cmake --install $BuildDir --config $BuildType
 if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
 
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir prepare-build-python-runtime --sdk-prefix $SdkPrefix
+if ($LASTEXITCODE -ne 0) { throw "failed to prepare bundled Python runtime" }
+
 & $pythonExec -m termin_build.sdk --repo-root $ScriptDir publish-cmake-python --install-dir $SdkPrefix --sdk-prefix $SdkPrefix
 if ($LASTEXITCODE -ne 0) { throw "failed to publish CMake Python install" }
 
