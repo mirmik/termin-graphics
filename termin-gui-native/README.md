@@ -294,11 +294,11 @@ The current foundation includes:
 - `GraphicsScene` is a thin GUI metadata/invalidation adapter around the one
   `termin::visual::VisualScene2D`; `SceneView` renders its frozen `DrawList2D`
   and routes interaction through the canonical scene controllers
-  used by node-graph-style editors: exclusive item/child ownership, stable
-  z-order, custom draw-list paint and local hit callbacks, selection, captured
-  drag/pan and anchored zoom. Embedded native widgets are generation-checked
-  canonical document children and detach without implicit destruction. Plot
-  annotations intentionally remain owned by `tcplot`;
+  used by node-graph-style editors. Graphic items use generation handles,
+  typed canonical payloads, stable z-order, selection, captured drag/pan and
+  anchored zoom. Embedded native widgets remain generation-checked canonical
+  document children in a separate portal table and detach without implicit
+  destruction. Plot annotations intentionally remain owned by `tcplot`;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds native window examples on the
@@ -343,6 +343,36 @@ The current foundation includes:
   explicit paired hooks on `register_widget_type`; unsupported Python objects
   are rejected rather than reflected or stringified;
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.
+
+## Widgets + VisualScene2D example
+
+`examples/visual_scene_composition.cpp` builds one canonical document
+containing an ordinary control panel, a `SceneView` backed by
+`VisualScene2D`, several draggable typed graphic items and a document-owned
+button attached through the public widget-portal API. The same builder is used
+by the windowed application and its automated headless smoke.
+
+Build and run the installed example:
+
+```bash
+./build-sdk.sh
+./sdk/bin/termin_gui_native_visual_scene_example --headless-smoke
+./sdk/bin/termin_gui_native_visual_scene_example
+```
+
+The manual scenario is:
+
+1. resize the window and confirm the control panel keeps its fixed width while
+   the scene view and its clip resize;
+2. drag the blue card and orange ellipse, including moving the pointer outside
+   the original item bounds while captured;
+3. click `Reset scene` and confirm both graphic items return to their initial
+   positions;
+4. click the green `Portal action` control and confirm the click updates its
+   label without selecting or dragging the underlying graphic hit region;
+5. pan with the middle mouse button and zoom with the wheel; the portal remains
+   aligned with its scene item and the purple right-edge item remains clipped
+   by the view.
 
 This module does not replace the existing Python `termin-gui` package yet. It
 is the native implementation under active parity work; ownership, handle,

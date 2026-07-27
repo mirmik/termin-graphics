@@ -276,6 +276,20 @@ else()
     target_compile_options(termin_gui_native PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+if(TERMIN_GUI_NATIVE_BUILD_TESTS OR TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
+    add_library(termin_gui_native_visual_scene_example_support STATIC
+        examples/visual_scene_composition.cpp
+    )
+    target_include_directories(
+        termin_gui_native_visual_scene_example_support
+        PUBLIC ${CMAKE_CURRENT_LIST_DIR}/examples
+    )
+    target_link_libraries(
+        termin_gui_native_visual_scene_example_support
+        PUBLIC termin_gui_native
+    )
+endif()
+
 if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     enable_testing()
 
@@ -351,6 +365,14 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_scene_view_test
         tests/test_scene_view.cpp
     )
+    termin_gui_native_add_test(
+        termin_gui_native_visual_scene_example_smoke
+        tests/test_visual_scene_composition_example.cpp
+    )
+    target_link_libraries(
+        termin_gui_native_visual_scene_example_smoke
+        PRIVATE termin_gui_native_visual_scene_example_support
+    )
     if(TARGET termin_shaderc)
         set(_termin_gui_native_offscreen_test_shaderc "$<TARGET_FILE:termin_shaderc>")
     else()
@@ -418,6 +440,8 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
         examples/showcase_window.cpp
     )
     target_link_libraries(termin_gui_native_example_support
+        PUBLIC
+            termin_gui_native
         PRIVATE
             termin_gui_native_window_adapter
     )
@@ -446,11 +470,26 @@ if(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
         PRIVATE
             termin_gui_native_example_support
     )
+    add_executable(termin_gui_native_visual_scene_example
+        examples/visual_scene_composition_window.cpp
+    )
+    target_link_libraries(termin_gui_native_visual_scene_example
+        PRIVATE
+            termin_gui_native_example_support
+            termin_gui_native_visual_scene_example_support
+    )
+    termin_set_rpath_tool(termin_gui_native_visual_scene_example)
     if(NOT WIN32)
-        set_target_properties(termin_gui_native_showcase termin_gui_native_rect_window PROPERTIES
+        set_target_properties(
+            termin_gui_native_showcase
+            termin_gui_native_rect_window
+            termin_gui_native_visual_scene_example
+            PROPERTIES
             BUILD_RPATH "$<TARGET_FILE_DIR:termin_gui_native>;$<TARGET_FILE_DIR:termin_gui_native_window_adapter>;$<TARGET_FILE_DIR:termin_window::termin_window>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:tcbase::termin_base>"
         )
     endif()
+    install(TARGETS termin_gui_native_visual_scene_example
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 if(TERMIN_BUILD_PYTHON)
