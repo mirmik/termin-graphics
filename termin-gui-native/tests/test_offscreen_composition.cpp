@@ -36,6 +36,10 @@ int main() {
         }
 
         termin::gui_native::OffscreenGuiCompositionConfig config;
+        if (config.backend != termin::gui_native::default_offscreen_backend()) {
+            std::fprintf(stderr, "offscreen config did not use canonical default backend\n");
+            return 1;
+        }
         config.width = 64;
         config.height = 48;
         config.backend = backend;
