@@ -12,6 +12,7 @@
 #include <termin/geom/rect2.hpp>
 
 #include "tgfx2/font_atlas.hpp"
+#include "tgfx2/draw_list2d.hpp"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/path2d.hpp"
 #include "tgfx2/text2d_renderer.hpp"
@@ -26,10 +27,7 @@ class IRenderDevice;
 using CanvasColor = Color4f;
 using CanvasVec2 = termin::Vec2f;
 
-enum class CanvasTextureSampling {
-    Linear,
-    Nearest,
-};
+using CanvasTextureSampling = DrawTextureSampling2D;
 
 struct CanvasArc {
     CanvasVec2 center;
@@ -87,6 +85,11 @@ public:
     void begin(RenderContext2& ctx, int x, int y, int width, int height);
     void end();
 
+    // Executes a frozen backend-neutral list inside the current Canvas frame.
+    // The list retains no resolver or render-context pointer. Returns false
+    // when a runtime resource cannot be resolved or geometry cannot be lowered.
+    bool execute(const DrawList2D& list, DrawResourceResolver2D& resources);
+
     void begin_clip(float x, float y, float w, float h);
     void end_clip();
 
@@ -142,6 +145,10 @@ private:
         CanvasColor tint,
         TextureHandle texture,
         CanvasTextureSampling sampling);
+    void append_mesh_(std::span<const DrawVertex2D> vertices,
+                      CanvasColor color,
+                      TextureHandle texture,
+                      CanvasTextureSampling sampling);
 };
 
 }  // namespace tgfx

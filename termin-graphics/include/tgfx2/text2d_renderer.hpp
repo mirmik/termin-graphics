@@ -19,9 +19,11 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include <termin/geom/color.hpp>
+#include <termin/geom/vec2.hpp>
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
@@ -34,6 +36,11 @@ namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 class FontAtlas;
+
+struct Text2DVertex {
+    termin::Vec2f position{};
+    termin::Vec2f uv{};
+};
 
 class TGFX2_TYPE_API Text2DRenderer {
 public:
@@ -85,6 +92,14 @@ public:
     // (x, y) is the left, centre or right of the text box (top-aligned
     // on Y for Left/Right, center for Center).
     void draw(std::string_view text_utf8, const DrawOptions& options);
+
+    // Draw caller-prepared glyph triangles. This is used by DrawList2D after
+    // affine transformation and CPU geometric clipping. The caller must have
+    // populated glyphs on `font` for `display_px`; the atlas remains borrowed.
+    void draw_mesh(std::span<const Text2DVertex> vertices,
+                   termin::Color4 color,
+                   float display_px,
+                   FontAtlas* font);
 
     // End batch. Currently a no-op — shader/state stays bound on ctx
     // until the caller rebinds or ends its pass.

@@ -4,14 +4,18 @@
 
 #include "tgfx2/builtin_shader_sources.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <numeric>
+#include <type_traits>
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
+#include "internal/utf8_decode.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -84,6 +88,377 @@ bool same_color(CanvasColor a, CanvasColor b) {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
+using DrawTriangle2D = std::array<DrawVertex2D, 3>;
+using ClipMesh2D = std::vector<DrawTriangle2D>;
+
+float cross(termin::Vec2f a, termin::Vec2f b, termin::Vec2f c) {
+    return (b.x - a.x) * (c.y - a.y) -
+           (b.y - a.y) * (c.x - a.x);
+}
+
+float signed_area(std::span<const termin::Vec2f> points) {
+    float result = 0.0f;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const auto a = points[i];
+        const auto b = points[(i + 1) % points.size()];
+        result += a.x * b.y - b.x * a.y;
+    }
+    return result * 0.5f;
+}
+
+bool point_in_triangle(
+    termin::Vec2f point,
+    termin::Vec2f a,
+    termin::Vec2f b,
+    termin::Vec2f c,
+    float orientation)
+{
+    constexpr float epsilon = 1.0e-5f;
+    return orientation * cross(a, b, point) >= -epsilon &&
+           orientation * cross(b, c, point) >= -epsilon &&
+           orientation * cross(c, a, point) >= -epsilon;
+}
+
+bool triangulate_contour(
+    std::span<const termin::Vec2f> input,
+    std::vector<DrawTriangle2D>& output)
+{
+    std::vector<termin::Vec2f> points(input.begin(), input.end());
+    if (points.size() > 1 &&
+        points.front().x == points.back().x &&
+        points.front().y == points.back().y) {
+        points.pop_back();
+    }
+    if (points.size() < 3) return false;
+
+    const float area = signed_area(points);
+    if (!std::isfinite(area) || std::fabs(area) <= 1.0e-6f) {
+        tc::Log::error("[Canvas2DRenderer] degenerate contour rejected");
+        return false;
+    }
+    const float orientation = area > 0.0f ? 1.0f : -1.0f;
+    std::vector<std::size_t> indices(points.size());
+    std::iota(indices.begin(), indices.end(), 0);
+
+    std::size_t guard = points.size() * points.size();
+    while (indices.size() > 3 && guard-- > 0) {
+        bool removed = false;
+        for (std::size_t i = 0; i < indices.size(); ++i) {
+            const std::size_t ia =
+                indices[(i + indices.size() - 1) % indices.size()];
+            const std::size_t ib = indices[i];
+            const std::size_t ic = indices[(i + 1) % indices.size()];
+            const auto a = points[ia];
+            const auto b = points[ib];
+            const auto c = points[ic];
+            if (orientation * cross(a, b, c) <= 1.0e-6f) continue;
+
+            bool contains = false;
+            for (const auto index : indices) {
+                if (index == ia || index == ib || index == ic) continue;
+                if (point_in_triangle(points[index], a, b, c, orientation)) {
+                    contains = true;
+                    break;
+                }
+            }
+            if (contains) continue;
+
+            output.push_back(DrawTriangle2D{{
+                {a, {}}, {b, {}}, {c, {}}}});
+            indices.erase(indices.begin() + static_cast<std::ptrdiff_t>(i));
+            removed = true;
+            break;
+        }
+        if (!removed) {
+            tc::Log::error(
+                "[Canvas2DRenderer] non-simple contour cannot be tessellated");
+            return false;
+        }
+    }
+    if (indices.size() != 3) return false;
+    output.push_back(DrawTriangle2D{{
+        {points[indices[0]], {}},
+        {points[indices[1]], {}},
+        {points[indices[2]], {}}}});
+    return true;
+}
+
+float edge_x_at(
+    termin::Vec2f a,
+    termin::Vec2f b,
+    float y)
+{
+    return a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y);
+}
+
+bool tessellate_path(
+    const Path2f& path,
+    const termin::Affine2f& transform,
+    FillRule rule,
+    ClipMesh2D& output)
+{
+    const auto flattened = path.flatten(0.2f, transform);
+    std::vector<float> levels;
+    for (const auto& contour : flattened.contours) {
+        if (!contour.closed || contour.points.size() < 3) continue;
+        for (const auto point : contour.points) levels.push_back(point.y);
+    }
+    std::sort(levels.begin(), levels.end());
+    levels.erase(std::unique(levels.begin(), levels.end()), levels.end());
+
+    struct Crossing {
+        float x = 0.0f;
+        termin::Vec2f a{};
+        termin::Vec2f b{};
+    };
+    for (std::size_t level = 1; level < levels.size(); ++level) {
+        const float y0 = levels[level - 1];
+        const float y1 = levels[level];
+        if (y1 - y0 <= 1.0e-6f) continue;
+        const float middle_y = (y0 + y1) * 0.5f;
+        std::vector<Crossing> crossings;
+        for (const auto& contour : flattened.contours) {
+            if (!contour.closed || contour.points.size() < 3) continue;
+            for (std::size_t i = 0; i < contour.points.size(); ++i) {
+                const auto a = contour.points[i];
+                const auto b =
+                    contour.points[(i + 1) % contour.points.size()];
+                if (std::fabs(a.y - b.y) <= 1.0e-8f) continue;
+                if (middle_y <= std::min(a.y, b.y) ||
+                    middle_y >= std::max(a.y, b.y)) {
+                    continue;
+                }
+                crossings.push_back({edge_x_at(a, b, middle_y), a, b});
+            }
+        }
+        std::sort(
+            crossings.begin(),
+            crossings.end(),
+            [](const Crossing& a, const Crossing& b) {
+                return a.x < b.x;
+            });
+        for (std::size_t i = 1; i < crossings.size(); ++i) {
+            const auto& left = crossings[i - 1];
+            const auto& right = crossings[i];
+            if (right.x - left.x <= 1.0e-6f ||
+                !flattened.contains(
+                    {(left.x + right.x) * 0.5f, middle_y}, rule)) {
+                continue;
+            }
+            const DrawVertex2D left0{
+                {edge_x_at(left.a, left.b, y0), y0}, {}};
+            const DrawVertex2D left1{
+                {edge_x_at(left.a, left.b, y1), y1}, {}};
+            const DrawVertex2D right0{
+                {edge_x_at(right.a, right.b, y0), y0}, {}};
+            const DrawVertex2D right1{
+                {edge_x_at(right.a, right.b, y1), y1}, {}};
+            output.push_back({{left0, left1, right1}});
+            output.push_back({{left0, right1, right0}});
+        }
+    }
+    if (output.empty()) {
+        tc::Log::error("[Canvas2DRenderer] path has no closed fill contour");
+        return false;
+    }
+    return true;
+}
+
+DrawVertex2D interpolate(
+    const DrawVertex2D& a,
+    const DrawVertex2D& b,
+    float t)
+{
+    return {
+        {a.position.x + (b.position.x - a.position.x) * t,
+         a.position.y + (b.position.y - a.position.y) * t},
+        {a.uv.x + (b.uv.x - a.uv.x) * t,
+         a.uv.y + (b.uv.y - a.uv.y) * t}};
+}
+
+std::vector<DrawVertex2D> clip_polygon_to_triangle(
+    std::span<const DrawVertex2D> polygon,
+    const DrawTriangle2D& clip)
+{
+    std::vector<DrawVertex2D> current(polygon.begin(), polygon.end());
+    const float area = cross(
+        clip[0].position, clip[1].position, clip[2].position);
+    if (std::fabs(area) <= 1.0e-6f) return {};
+    const float orientation = area > 0.0f ? 1.0f : -1.0f;
+
+    for (int edge = 0; edge < 3; ++edge) {
+        const auto edge_a = clip[edge].position;
+        const auto edge_b = clip[(edge + 1) % 3].position;
+        std::vector<DrawVertex2D> next;
+        if (current.empty()) break;
+        DrawVertex2D previous = current.back();
+        float previous_distance =
+            orientation * cross(edge_a, edge_b, previous.position);
+        for (const auto& vertex : current) {
+            const float distance =
+                orientation * cross(edge_a, edge_b, vertex.position);
+            const bool inside = distance >= -1.0e-5f;
+            const bool previous_inside = previous_distance >= -1.0e-5f;
+            if (inside != previous_inside) {
+                const float denominator = previous_distance - distance;
+                if (std::fabs(denominator) > 1.0e-8f) {
+                    next.push_back(interpolate(
+                        previous, vertex, previous_distance / denominator));
+                }
+            }
+            if (inside) next.push_back(vertex);
+            previous = vertex;
+            previous_distance = distance;
+        }
+        current = std::move(next);
+    }
+    return current;
+}
+
+std::vector<DrawTriangle2D> apply_clips(
+    DrawTriangle2D input,
+    const std::vector<ClipMesh2D>& clips)
+{
+    std::vector<DrawTriangle2D> fragments{input};
+    for (const auto& clip_mesh : clips) {
+        std::vector<DrawTriangle2D> next;
+        for (const auto& fragment : fragments) {
+            for (const auto& clip : clip_mesh) {
+                const auto polygon = clip_polygon_to_triangle(fragment, clip);
+                for (std::size_t i = 2; i < polygon.size(); ++i) {
+                    next.push_back(DrawTriangle2D{{
+                        polygon[0], polygon[i - 1], polygon[i]}});
+                }
+            }
+        }
+        fragments = std::move(next);
+        if (fragments.empty()) break;
+    }
+    return fragments;
+}
+
+std::vector<DrawVertex2D> flatten_and_clip(
+    std::span<const DrawTriangle2D> triangles,
+    const std::vector<ClipMesh2D>& clips)
+{
+    std::vector<DrawVertex2D> result;
+    for (const auto& triangle : triangles) {
+        const auto fragments = apply_clips(triangle, clips);
+        for (const auto& fragment : fragments) {
+            result.insert(result.end(), fragment.begin(), fragment.end());
+        }
+    }
+    return result;
+}
+
+Color4f with_opacity(Color4f color, float opacity) {
+    color.a *= opacity;
+    return color;
+}
+
+std::vector<termin::Vec2f> rect_contour(termin::Rect2f rect) {
+    return {
+        {rect.x, rect.y},
+        {rect.x + rect.width, rect.y},
+        {rect.x + rect.width, rect.y + rect.height},
+        {rect.x, rect.y + rect.height}};
+}
+
+std::vector<termin::Vec2f> ellipse_contour(
+    termin::Rect2f bounds,
+    int segments = 48)
+{
+    constexpr float tau = 6.2831853071795864769f;
+    std::vector<termin::Vec2f> result;
+    result.reserve(static_cast<std::size_t>(segments));
+    const float rx = bounds.width * 0.5f;
+    const float ry = bounds.height * 0.5f;
+    const float cx = bounds.x + rx;
+    const float cy = bounds.y + ry;
+    for (int i = 0; i < segments; ++i) {
+        const float angle = tau * static_cast<float>(i) /
+                            static_cast<float>(segments);
+        result.push_back(
+            {cx + std::cos(angle) * rx, cy + std::sin(angle) * ry});
+    }
+    return result;
+}
+
+std::vector<termin::Vec2f> rounded_rect_contour(
+    termin::Rect2f rect,
+    float radius)
+{
+    constexpr float pi = 3.14159265358979323846f;
+    constexpr int segments = 8;
+    radius = std::clamp(
+        radius, 0.0f, std::min(rect.width, rect.height) * 0.5f);
+    if (radius <= 0.0f) return rect_contour(rect);
+    std::vector<termin::Vec2f> result;
+    result.reserve(4 * (segments + 1));
+    const auto corner = [&](float cx, float cy, float start) {
+        for (int i = 0; i <= segments; ++i) {
+            const float angle =
+                start + pi * 0.5f * static_cast<float>(i) /
+                            static_cast<float>(segments);
+            result.push_back(
+                {cx + std::cos(angle) * radius,
+                 cy + std::sin(angle) * radius});
+        }
+    };
+    corner(rect.x + radius, rect.y + radius, pi);
+    corner(rect.x + rect.width - radius, rect.y + radius, pi * 1.5f);
+    corner(rect.x + rect.width - radius,
+           rect.y + rect.height - radius, 0.0f);
+    corner(rect.x + radius,
+           rect.y + rect.height - radius, pi * 0.5f);
+    return result;
+}
+
+bool fill_contour(
+    std::span<const termin::Vec2f> local_points,
+    const termin::Affine2f& transform,
+    ClipMesh2D& triangles)
+{
+    std::vector<termin::Vec2f> transformed;
+    transformed.reserve(local_points.size());
+    for (const auto point : local_points) {
+        transformed.push_back(transform.transform_point(point));
+    }
+    return triangulate_contour(transformed, triangles);
+}
+
+ClipMesh2D stroke_contour(
+    std::span<const termin::Vec2f> points,
+    bool closed,
+    float width,
+    const termin::Affine2f& transform)
+{
+    ClipMesh2D result;
+    if (points.size() < 2 || width <= 0.0f) return result;
+    const std::size_t segment_count = closed ? points.size() : points.size() - 1;
+    for (std::size_t i = 0; i < segment_count; ++i) {
+        const auto a = points[i];
+        const auto b = points[(i + 1) % points.size()];
+        const float dx = b.x - a.x;
+        const float dy = b.y - a.y;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        if (length <= 1.0e-6f) continue;
+        const float nx = -dy / length * width * 0.5f;
+        const float ny = dx / length * width * 0.5f;
+        DrawVertex2D v0{transform.transform_point({a.x + nx, a.y + ny}), {}};
+        DrawVertex2D v1{transform.transform_point({a.x - nx, a.y - ny}), {}};
+        DrawVertex2D v2{transform.transform_point({b.x - nx, b.y - ny}), {}};
+        DrawVertex2D v3{transform.transform_point({b.x + nx, b.y + ny}), {}};
+        result.push_back({{v0, v1, v2}});
+        result.push_back({{v0, v2, v3}});
+    }
+    return result;
+}
+
+CanvasTextureSampling sampling_from(DrawTextureSampling2D sampling) {
+    return sampling;
+}
+
 }  // namespace
 
 Canvas2DRenderer::Canvas2DRenderer(FontAtlas* default_font)
@@ -133,6 +508,269 @@ void Canvas2DRenderer::end() {
     }
     clip_stack_.clear();
     ctx_ = nullptr;
+}
+
+bool Canvas2DRenderer::execute(
+    const DrawList2D& list,
+    DrawResourceResolver2D& resources)
+{
+    if (ctx_ == nullptr) {
+        tc::Log::error(
+            "[Canvas2DRenderer] execute requires an active Canvas frame");
+        return false;
+    }
+
+    std::vector<termin::Affine2f> transforms{
+        termin::Affine2f::identity()};
+    std::vector<float> opacities{1.0f};
+    std::vector<ClipMesh2D> clips;
+
+    const auto emit = [this, &clips](
+        std::span<const DrawTriangle2D> triangles,
+        Color4f color,
+        TextureHandle texture = {},
+        CanvasTextureSampling sampling = CanvasTextureSampling::Linear) {
+        const auto vertices = flatten_and_clip(triangles, clips);
+        append_mesh_(vertices, color, texture, sampling);
+    };
+
+    for (const auto& command : list.commands()) {
+        const bool ok = std::visit(
+            [&](const auto& value) -> bool {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, PushTransform2D>) {
+                    transforms.push_back(transforms.back() * value.transform);
+                    return true;
+                } else if constexpr (std::is_same_v<T, PopTransform2D>) {
+                    if (transforms.size() <= 1) return false;
+                    transforms.pop_back();
+                    return true;
+                } else if constexpr (std::is_same_v<T, PushOpacity2D>) {
+                    opacities.push_back(opacities.back() * value.opacity);
+                    return true;
+                } else if constexpr (std::is_same_v<T, PopOpacity2D>) {
+                    if (opacities.size() <= 1) return false;
+                    opacities.pop_back();
+                    return true;
+                } else if constexpr (std::is_same_v<T, PushClip2D>) {
+                    ClipMesh2D mesh;
+                    if (!tessellate_path(
+                            value.path, transforms.back(), value.rule, mesh)) {
+                        return false;
+                    }
+                    clips.push_back(std::move(mesh));
+                    return true;
+                } else if constexpr (std::is_same_v<T, PopClip2D>) {
+                    if (clips.empty()) return false;
+                    clips.pop_back();
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawRect2D>) {
+                    ClipMesh2D triangles;
+                    if (!fill_contour(
+                            rect_contour(value.rect), transforms.back(), triangles)) {
+                        return false;
+                    }
+                    emit(triangles, with_opacity(
+                        value.paint.color, opacities.back()));
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawRoundedRect2D>) {
+                    const auto contour =
+                        rounded_rect_contour(value.rect, value.radius);
+                    ClipMesh2D triangles;
+                    if (!fill_contour(contour, transforms.back(), triangles)) {
+                        return false;
+                    }
+                    emit(triangles, with_opacity(
+                        value.paint.color, opacities.back()));
+                    if (value.stroke) {
+                        const auto stroke = stroke_contour(
+                            contour, true, value.stroke->width, transforms.back());
+                        emit(stroke, with_opacity(
+                            value.stroke->color, opacities.back()));
+                    }
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawEllipse2D>) {
+                    const auto contour = ellipse_contour(value.bounds);
+                    ClipMesh2D triangles;
+                    if (!fill_contour(contour, transforms.back(), triangles)) {
+                        return false;
+                    }
+                    emit(triangles, with_opacity(
+                        value.paint.color, opacities.back()));
+                    if (value.stroke) {
+                        const auto stroke = stroke_contour(
+                            contour, true, value.stroke->width, transforms.back());
+                        emit(stroke, with_opacity(
+                            value.stroke->color, opacities.back()));
+                    }
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawPath2D>) {
+                    if (value.fill) {
+                        ClipMesh2D triangles;
+                        if (!tessellate_path(
+                                value.path,
+                                transforms.back(),
+                                value.fill->rule,
+                                triangles)) {
+                            return false;
+                        }
+                        emit(triangles, with_opacity(
+                            value.fill->color, opacities.back()));
+                    }
+                    if (value.stroke) {
+                        const auto flattened = value.path.flatten(0.2f);
+                        for (const auto& contour : flattened.contours) {
+                            const auto stroke = stroke_contour(
+                                contour.points,
+                                contour.closed,
+                                value.stroke->width,
+                                transforms.back());
+                            emit(stroke, with_opacity(
+                                value.stroke->color, opacities.back()));
+                        }
+                    }
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawPolyline2D>) {
+                    const auto triangles = stroke_contour(
+                        value.points,
+                        value.closed,
+                        value.stroke.width,
+                        transforms.back());
+                    emit(triangles, with_opacity(
+                        value.stroke.color, opacities.back()));
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawImage2D>) {
+                    const auto& transform = transforms.back();
+                    const float x0 = value.rect.x;
+                    const float y0 = value.rect.y;
+                    const float x1 = value.rect.x + value.rect.width;
+                    const float y1 = value.rect.y + value.rect.height;
+                    const float u0 = value.uv.x;
+                    const float v0 = value.uv.y;
+                    const float u1 = value.uv.x + value.uv.width;
+                    const float v1 = value.uv.y + value.uv.height;
+                    const DrawVertex2D a{
+                        transform.transform_point({x0, y0}), {u0, v0}};
+                    const DrawVertex2D b{
+                        transform.transform_point({x0, y1}), {u0, v1}};
+                    const DrawVertex2D c{
+                        transform.transform_point({x1, y1}), {u1, v1}};
+                    const DrawVertex2D d{
+                        transform.transform_point({x1, y0}), {u1, v0}};
+                    const ClipMesh2D triangles{{{a, b, c}}, {{a, c, d}}};
+                    emit(
+                        triangles,
+                        with_opacity(value.tint, opacities.back()),
+                        value.texture,
+                        sampling_from(value.sampling));
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawCustomBatch2D>) {
+                    ClipMesh2D triangles;
+                    triangles.reserve(value.vertices.size() / 3);
+                    for (std::size_t i = 0; i < value.vertices.size(); i += 3) {
+                        DrawTriangle2D triangle{};
+                        for (int vertex = 0; vertex < 3; ++vertex) {
+                            triangle[vertex] = value.vertices[i + vertex];
+                            triangle[vertex].position =
+                                transforms.back().transform_point(
+                                    triangle[vertex].position);
+                        }
+                        triangles.push_back(triangle);
+                    }
+                    emit(
+                        triangles,
+                        with_opacity(value.color, opacities.back()),
+                        value.texture,
+                        sampling_from(value.sampling));
+                    return true;
+                } else if constexpr (std::is_same_v<T, DrawText2D>) {
+                    FontAtlas* font = resources.resolve_font(value.font);
+                    if (font == nullptr) {
+                        tc::Log::error(
+                            "[Canvas2DRenderer] FontHandle %u did not resolve",
+                            value.font.id);
+                        return false;
+                    }
+                    font->ensure_glyphs(value.text, value.size_px, ctx_);
+                    const auto measured =
+                        font->measure_text(value.text, value.size_px);
+                    float start_x = value.origin.x;
+                    float start_y = value.origin.y;
+                    if (value.anchor == TextAnchor2D::Center) {
+                        start_x -= measured.width * 0.5f;
+                        start_y -= value.size_px * 0.5f;
+                    } else if (value.anchor == TextAnchor2D::Right) {
+                        start_x -= measured.width;
+                    }
+                    const bool sdf = font->is_sdf_size(value.size_px);
+                    const float spread = sdf
+                        ? static_cast<float>(font->sdf_spread()) *
+                              value.size_px /
+                              static_cast<float>(font->sdf_reference_px())
+                        : 0.0f;
+                    ClipMesh2D triangles;
+                    float cursor_x = start_x;
+                    std::size_t byte_index = 0;
+                    while (byte_index < value.text.size()) {
+                        const std::uint32_t codepoint =
+                            internal::utf8_decode(value.text, byte_index);
+                        const auto glyph =
+                            font->get_glyph(codepoint, value.size_px);
+                        if (!glyph) continue;
+                        const float x0 = cursor_x;
+                        const float x1 = x0 + glyph->width_px;
+                        const float y0 = start_y - spread;
+                        const float y1 = y0 + glyph->height_px;
+                        const auto& transform = transforms.back();
+                        const DrawVertex2D a{
+                            transform.transform_point({x0, y0}),
+                            {glyph->u0, glyph->v0}};
+                        const DrawVertex2D b{
+                            transform.transform_point({x0, y1}),
+                            {glyph->u0, glyph->v1}};
+                        const DrawVertex2D c{
+                            transform.transform_point({x1, y1}),
+                            {glyph->u1, glyph->v1}};
+                        const DrawVertex2D d{
+                            transform.transform_point({x1, y0}),
+                            {glyph->u1, glyph->v0}};
+                        triangles.push_back({{a, b, c}});
+                        triangles.push_back({{a, c, d}});
+                        cursor_x += glyph->advance_px;
+                    }
+                    const auto clipped = flatten_and_clip(triangles, clips);
+                    if (clipped.empty()) return true;
+                    flush_();
+                    std::vector<Text2DVertex> text_vertices;
+                    text_vertices.reserve(clipped.size());
+                    for (const auto& vertex : clipped) {
+                        text_vertices.push_back({
+                            {vertex.position.x -
+                                 static_cast<float>(viewport_x_),
+                             vertex.position.y -
+                                 static_cast<float>(viewport_y_)},
+                            vertex.uv});
+                    }
+                    const auto color =
+                        with_opacity(value.color, opacities.back());
+                    text2d_.draw_mesh(
+                        text_vertices,
+                        termin::Color4{
+                            color.r, color.g, color.b, color.a},
+                        value.size_px,
+                        font);
+                    return true;
+                }
+                return false;
+            },
+            command);
+        if (!ok) {
+            tc::Log::error(
+                "[Canvas2DRenderer] failed to execute DrawList2D command");
+            return false;
+        }
+    }
+    return true;
 }
 
 void Canvas2DRenderer::begin_clip(float x, float y, float w, float h) {
@@ -654,6 +1292,39 @@ void Canvas2DRenderer::append_textured_quad_(
         batch_texture_sampling_ = sampling;
     }
     push_quad_(bounds, uv);
+}
+
+void Canvas2DRenderer::append_mesh_(
+    std::span<const DrawVertex2D> vertices,
+    CanvasColor color,
+    TextureHandle texture,
+    CanvasTextureSampling sampling)
+{
+    if (vertices.empty()) return;
+    if (texture) {
+        if (batch_mode_ != BatchMode::Texture ||
+            !same_color(batch_color_, color) ||
+            batch_texture_ != texture ||
+            batch_texture_sampling_ != sampling) {
+            flush_();
+            batch_mode_ = BatchMode::Texture;
+            batch_color_ = color;
+            batch_texture_ = texture;
+            batch_texture_sampling_ = sampling;
+        }
+    } else if (batch_mode_ != BatchMode::Solid ||
+               !same_color(batch_color_, color)) {
+        flush_();
+        batch_mode_ = BatchMode::Solid;
+        batch_color_ = color;
+        batch_texture_ = {};
+    }
+    for (const auto& vertex : vertices) {
+        batch_vertices_.insert(
+            batch_vertices_.end(),
+            {vertex.position.x, vertex.position.y, 0.0f,
+             vertex.uv.x, vertex.uv.y, 0.0f, 0.0f});
+    }
 }
 
 }  // namespace tgfx

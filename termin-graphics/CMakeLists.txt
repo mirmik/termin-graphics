@@ -118,6 +118,7 @@ set(TGFX2_SOURCES
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
+    src/tgfx2/draw_list2d.cpp
     src/tgfx2/engine_shader_catalog.cpp
     src/tgfx2/font_atlas.cpp
     src/tgfx2/immediate_renderer.cpp
@@ -528,6 +529,11 @@ if(BUILD_TGFX2_TESTS)
     termin_set_rpath_test(tgfx2_path2d_test)
     add_test(NAME tgfx2_path2d_test COMMAND tgfx2_path2d_test)
 
+    add_executable(tgfx2_draw_list2d_test tests/test_draw_list2d.cpp)
+    target_link_libraries(tgfx2_draw_list2d_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_draw_list2d_test)
+    add_test(NAME tgfx2_draw_list2d_test COMMAND tgfx2_draw_list2d_test)
+
     add_executable(tgfx2_front_face_contract_test
         tests/test_tgfx2_front_face_contract.cpp)
     target_link_libraries(tgfx2_front_face_contract_test PRIVATE termin_graphics2)
@@ -740,6 +746,23 @@ if(BUILD_TGFX2_TESTS)
             TIMEOUT 20
             SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
         termin_add_test_labels(tgfx2_vulkan_smoke "termin:capability:vulkan")
+
+        add_executable(tgfx2_draw_list2d_pixel_smoke
+            tests/test_draw_list2d_pixel_smoke.cpp)
+        target_compile_definitions(tgfx2_draw_list2d_pixel_smoke
+            PRIVATE
+                TGFX2_HAS_VULKAN
+                TGFX2_BUILTIN_SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/resources/builtin_shaders")
+        target_link_libraries(tgfx2_draw_list2d_pixel_smoke
+            PRIVATE termin_graphics2 Vulkan::Vulkan)
+        termin_set_rpath_test(tgfx2_draw_list2d_pixel_smoke)
+        add_test(NAME tgfx2_draw_list2d_pixel_smoke
+            COMMAND tgfx2_draw_list2d_pixel_smoke)
+        set_tests_properties(tgfx2_draw_list2d_pixel_smoke PROPERTIES
+            TIMEOUT 20
+            SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
+        termin_add_test_labels(
+            tgfx2_draw_list2d_pixel_smoke "termin:capability:vulkan")
     endif()
 
     if(TGFX2_ENABLE_VULKAN AND BUILD_TGFX2_WINDOW_TESTS)

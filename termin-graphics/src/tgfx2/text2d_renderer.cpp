@@ -360,6 +360,82 @@ void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
     ctx.draw_immediate_triangles(verts.data(), vertex_count);
 }
 
+void Text2DRenderer::draw_mesh(
+    std::span<const Text2DVertex> vertices,
+    termin::Color4 color,
+    float display_px,
+    FontAtlas* font)
+{
+    if (vertices.empty() || vertices.size() % 3 != 0 ||
+        font == nullptr || ctx_ == nullptr) {
+        return;
+    }
+
+    RenderContext2& ctx = *ctx_;
+    const bool use_sdf = font->is_sdf_size(display_px);
+    const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
+    const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
+    if (selected_vs.id == 0 || selected_fs.id == 0) {
+        tc::Log::error(
+            "[Text2DRenderer] %s shader is unavailable; skipping text mesh",
+            use_sdf ? "SDF" : "bitmap");
+        return;
+    }
+
+    tc_shader* raw = nullptr;
+    if (use_sdf) {
+        ctx.bind_shader(selected_vs, selected_fs);
+        raw = tc_shader_get(sdf_shader_handle_);
+        Text2DSdfPushData push{};
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                push.projection[col * 4 + row] = proj_[row * 4 + col];
+            }
+        }
+        push.color[0] = color.r;
+        push.color[1] = color.g;
+        push.color[2] = color.b;
+        push.color[3] = color.a;
+        push.smoothing =
+            1.0f / (2.0f * static_cast<float>(font->sdf_spread()));
+        ctx.use_shader_resource_layout(raw);
+        ctx.bind_uniform_data(
+            "text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
+    } else {
+        ctx.bind_shader(selected_vs, selected_fs);
+        raw = tc_shader_get(shader_handle_);
+        Text2DPushData push{};
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                push.projection[col * 4 + row] = proj_[row * 4 + col];
+            }
+        }
+        push.color[0] = color.r;
+        push.color[1] = color.g;
+        push.color[2] = color.b;
+        push.color[3] = color.a;
+        ctx.use_shader_resource_layout(raw);
+        ctx.bind_uniform_data(
+            "text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
+    }
+
+    const TextureHandle atlas = use_sdf
+        ? font->sdf_atlas_texture(&ctx)
+        : font->ensure_texture(&ctx);
+    ctx.bind_texture("u_font_atlas", atlas);
+
+    std::vector<float> packed;
+    packed.reserve(vertices.size() * 7);
+    for (const auto& vertex : vertices) {
+        packed.insert(
+            packed.end(),
+            {vertex.position.x, vertex.position.y, 0.0f,
+             vertex.uv.x, vertex.uv.y, 0.0f, 0.0f});
+    }
+    ctx.draw_immediate_triangles(
+        packed.data(), static_cast<uint32_t>(vertices.size()));
+}
+
 void Text2DRenderer::end() {
     ctx_ = nullptr;
 }

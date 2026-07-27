@@ -24,6 +24,7 @@ TGFX2_DEFINE_HANDLE(ShaderHandle);
 TGFX2_DEFINE_HANDLE(PipelineHandle);
 TGFX2_DEFINE_HANDLE(ResourceSetHandle);
 TGFX2_DEFINE_HANDLE(RenderTargetHandle);
+TGFX2_DEFINE_HANDLE(FontHandle);
 
 #undef TGFX2_DEFINE_HANDLE
 
