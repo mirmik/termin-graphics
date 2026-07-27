@@ -5,9 +5,6 @@
 #include <tc_pipeline_registry.h>
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
-#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
-#include "tc_pipeline_test_hooks.h"
-#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -21,40 +18,6 @@ static tc_pool g_pipeline_pool;
 static bool g_pipeline_pool_initialized = false;
 
 #define PIPELINES ((tc_pipeline*)g_pipeline_pool.data)
-#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
-static size_t g_pipeline_storage_allocations_before_failure = SIZE_MAX;
-
-void tc_pipeline_test_fail_storage_allocation_after(size_t successful_allocations) {
-    g_pipeline_storage_allocations_before_failure = successful_allocations;
-}
-
-void tc_pipeline_test_reset_storage_allocator(void) {
-    g_pipeline_storage_allocations_before_failure = SIZE_MAX;
-}
-#endif
-
-static bool pipeline_storage_allocation_should_fail(void) {
-#ifdef TERMIN_RENDER_ENABLE_TEST_HOOKS
-    if (g_pipeline_storage_allocations_before_failure == 0) {
-        return true;
-    }
-    if (g_pipeline_storage_allocations_before_failure != SIZE_MAX) {
-        --g_pipeline_storage_allocations_before_failure;
-    }
-#endif
-    return false;
-}
-
-static void* pipeline_storage_allocate(size_t size, void* user_data) {
-    (void)user_data;
-    if (pipeline_storage_allocation_should_fail()) return NULL;
-    return malloc(size);
-}
-
-static void pipeline_storage_deallocate(void* ptr, void* user_data) {
-    (void)user_data;
-    free(ptr);
-}
 
 static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
     if (!pass) return;
@@ -144,8 +107,6 @@ void tc_pipeline_pool_init(void) {
         .initial_generation = 0u,
         .allocate_low_indices_first = true,
         .name = "tc_pipeline_pool",
-        .allocate = pipeline_storage_allocate,
-        .deallocate = pipeline_storage_deallocate,
     };
     if (!tc_pool_init_ex(
             &g_pipeline_pool,

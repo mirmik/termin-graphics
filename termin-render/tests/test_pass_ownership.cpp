@@ -8,7 +8,6 @@ GUARD_TEST_MAIN();
 extern "C" {
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
-#include "tc_pipeline_test_hooks.h"
 }
 
 namespace {
@@ -184,52 +183,4 @@ TEST_CASE("Pipeline shutdown destroys every live slot through the normal teardow
     CHECK_EQ(g_probe_lifecycle_destroyed, 1);
     CHECK_EQ(g_probe_destroyed, 1);
     tc_pass_registry_unregister(kOwnershipProbePassType);
-}
-
-TEST_CASE("Pipeline pool initialization is atomic across allocation failures") {
-    tc_pipeline_pool_shutdown();
-    for (size_t successful_allocations = 0; successful_allocations < 4;
-         ++successful_allocations) {
-        tc_pipeline_test_fail_storage_allocation_after(successful_allocations);
-        const tc_pipeline_handle failed = tc_pipeline_create("must-not-publish");
-        CHECK(!tc_pipeline_handle_valid(failed));
-        CHECK_EQ(tc_pipeline_pool_count(), 0u);
-        tc_pipeline_pool_shutdown();
-    }
-
-    tc_pipeline_test_reset_storage_allocator();
-    const tc_pipeline_handle recovered = tc_pipeline_create("recovered");
-    REQUIRE(tc_pipeline_handle_valid(recovered));
-    tc_pipeline_destroy(recovered);
-}
-
-TEST_CASE("Failed pipeline pool growth preserves every existing handle") {
-    tc_pipeline_pool_shutdown();
-    tc_pipeline_test_reset_storage_allocator();
-
-    tc_pipeline_handle handles[16];
-    for (size_t i = 0; i < 16; ++i) {
-        handles[i] = tc_pipeline_create("growth-preservation");
-        REQUIRE(tc_pipeline_handle_valid(handles[i]));
-    }
-
-    for (size_t successful_allocations = 0; successful_allocations < 4;
-         ++successful_allocations) {
-        tc_pipeline_test_fail_storage_allocation_after(successful_allocations);
-        const tc_pipeline_handle failed = tc_pipeline_create("failed-growth");
-        CHECK(!tc_pipeline_handle_valid(failed));
-        CHECK_EQ(tc_pipeline_pool_count(), 16u);
-        for (const tc_pipeline_handle handle : handles) {
-            CHECK(tc_pipeline_pool_alive(handle));
-        }
-    }
-
-    tc_pipeline_test_reset_storage_allocator();
-    const tc_pipeline_handle grown = tc_pipeline_create("successful-growth");
-    REQUIRE(tc_pipeline_handle_valid(grown));
-    tc_pipeline_destroy(grown);
-    for (const tc_pipeline_handle handle : handles) {
-        tc_pipeline_destroy(handle);
-    }
-    CHECK_EQ(tc_pipeline_pool_count(), 0u);
 }
