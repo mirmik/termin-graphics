@@ -271,8 +271,11 @@ public:
     void set_uniform_vec3(const char* name, const Vec3& v) {
         tc_material* m = get();
         if (m) {
-            float arr[3] = {static_cast<float>(v.x), static_cast<float>(v.y), static_cast<float>(v.z)};
-            tc_material_set_uniform(m, name, TC_UNIFORM_VEC3, arr);
+            const Vec3f value{
+                static_cast<float>(v.x),
+                static_cast<float>(v.y),
+                static_cast<float>(v.z)};
+            tc_material_set_uniform(m, name, TC_UNIFORM_VEC3, &value.x);
         }
     }
 
