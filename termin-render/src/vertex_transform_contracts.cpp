@@ -338,37 +338,6 @@ std::vector<MaterialPipelineResourceDecl> material_pipeline_foliage_vertex_resou
     return resources;
 }
 
-VertexTransformContract material_pipeline_make_static_vertex_transform_contract(
-    std::string debug_name,
-    VertexInputContract vertex_inputs,
-    MaterialFragmentInterface produced_fragment_input,
-    std::vector<MaterialPipelineResourceDecl> resources)
-{
-    VertexTransformContract contract;
-    contract.kind = VertexTransformKind::StaticMesh;
-    contract.debug_name = std::move(debug_name);
-    contract.vertex_entry = "vs_main";
-    contract.vertex_inputs = std::move(vertex_inputs);
-    contract.produced_fragment_input = std::move(produced_fragment_input);
-    contract.resources = std::move(resources);
-    return contract;
-}
-
-VertexTransformContract material_pipeline_make_skinned_vertex_transform_contract(
-    const VertexTransformContract& static_contract,
-    std::string debug_name,
-    std::optional<std::string> template_uuid,
-    VertexInputContract vertex_inputs)
-{
-    VertexTransformContract contract = static_contract;
-    contract.kind = VertexTransformKind::SkinnedMesh;
-    contract.debug_name = std::move(debug_name);
-    contract.template_uuid = std::move(template_uuid);
-    contract.vertex_inputs = std::move(vertex_inputs);
-    append_bone_block(contract);
-    return contract;
-}
-
 VertexTransformProvider material_pipeline_make_static_mesh_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile,
@@ -489,29 +458,6 @@ struct VertexInput {
         break;
     }
     return provider;
-}
-
-VertexTransformContract material_pipeline_make_foliage_vertex_transform_contract(
-    VertexTransformKind kind,
-    std::string debug_name,
-    std::string template_uuid,
-    VertexInputContract vertex_inputs,
-    MaterialFragmentInterface produced_fragment_input,
-    std::vector<MaterialPipelineResourceDecl> resources)
-{
-    VertexTransformContract contract;
-    contract.kind = kind;
-    contract.debug_name = std::move(debug_name);
-    contract.template_uuid = std::move(template_uuid);
-    contract.vertex_entry = "vs_main";
-    contract.vertex_inputs = std::move(vertex_inputs);
-    contract.produced_fragment_input = std::move(produced_fragment_input);
-    contract.resources = std::move(resources);
-    if (kind == VertexTransformKind::Foliage ||
-        kind == VertexTransformKind::FoliageShadow) {
-        contract.instance_streams.push_back({"foliage_instances", 32u});
-    }
-    return contract;
 }
 
 bool material_pipeline_interface_produces(

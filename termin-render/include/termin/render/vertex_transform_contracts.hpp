@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -63,10 +62,6 @@ struct ShaderSourceModuleIdentity {
 struct VertexTransformContract {
     VertexTransformKind kind = VertexTransformKind::StaticMesh;
     std::string debug_name;
-    // Legacy whole-stage source selection.  New passes must use the modular
-    // provider fields below; this remains while non-migrated passes are moved
-    // to the composition substrate.
-    std::optional<std::string> template_uuid;
     std::string vertex_entry = "vs_main";
     VertexInputContract vertex_inputs;
     MaterialFragmentInterface produced_fragment_input;
@@ -130,18 +125,6 @@ RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_pass_vert
 
 RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_foliage_vertex_resources();
 
-RENDER_API VertexTransformContract material_pipeline_make_static_vertex_transform_contract(
-    std::string debug_name,
-    VertexInputContract vertex_inputs,
-    MaterialFragmentInterface produced_fragment_input,
-    std::vector<MaterialPipelineResourceDecl> resources);
-
-RENDER_API VertexTransformContract material_pipeline_make_skinned_vertex_transform_contract(
-    const VertexTransformContract& static_contract,
-    std::string debug_name,
-    std::optional<std::string> template_uuid,
-    VertexInputContract vertex_inputs);
-
 RENDER_API VertexTransformProvider material_pipeline_make_static_mesh_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile,
@@ -160,14 +143,6 @@ RENDER_API VertexTransformProvider material_pipeline_make_foliage_material_verte
 RENDER_API VertexTransformProvider material_pipeline_make_foliage_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile);
-
-RENDER_API VertexTransformContract material_pipeline_make_foliage_vertex_transform_contract(
-    VertexTransformKind kind,
-    std::string debug_name,
-    std::string template_uuid,
-    VertexInputContract vertex_inputs,
-    MaterialFragmentInterface produced_fragment_input,
-    std::vector<MaterialPipelineResourceDecl> resources);
 
 RENDER_API bool material_pipeline_interface_produces(
     const MaterialFragmentInterface& interface,

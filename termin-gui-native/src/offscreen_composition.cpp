@@ -25,6 +25,21 @@
 
 namespace termin::gui_native {
 
+tgfx::BackendType default_offscreen_backend() {
+    const tgfx::BackendType platform_default = tgfx::compiled_default_backend();
+    if (platform_default == tgfx::BackendType::Vulkan ||
+        platform_default == tgfx::BackendType::D3D11) {
+        return platform_default;
+    }
+    if (tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
+        return tgfx::BackendType::Vulkan;
+    }
+    if (tgfx::backend_is_compiled(tgfx::BackendType::D3D11)) {
+        return tgfx::BackendType::D3D11;
+    }
+    return tgfx::BackendType::Null;
+}
+
 namespace {
 
 namespace fs = std::filesystem;

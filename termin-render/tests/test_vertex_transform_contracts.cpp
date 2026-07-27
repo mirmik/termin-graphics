@@ -73,13 +73,12 @@ termin::VertexTransformContract foliage_material_transform()
 
 termin::VertexTransformContract foliage_shadow_transform()
 {
-    return termin::material_pipeline_make_foliage_vertex_transform_contract(
-        termin::VertexTransformKind::FoliageShadow,
+    termin::VertexTransformContract contract =
+        termin::material_pipeline_make_foliage_vertex_transform_provider(
         "foliage_shadow",
-        "termin-engine-foliage-shadow",
-        termin::material_pipeline_position_mesh_input(),
-        termin::material_pipeline_standard_material_fragment_interface(),
-        termin::material_pipeline_foliage_vertex_resources());
+        termin::MeshVertexTransformProfile::Position);
+    contract.kind = termin::VertexTransformKind::FoliageShadow;
+    return contract;
 }
 
 } // namespace
@@ -91,7 +90,6 @@ TEST_CASE("Skinned material provider is modular and owns deformation resources")
             termin::MeshVertexTransformProfile::Material,
             "draw_data.u_model");
 
-    CHECK(!contract.template_uuid.has_value());
     CHECK(termin::vertex_transform_provider_is_modular(contract));
     CHECK_EQ(contract.source_module.module_name, std::string("termin_vertex_transform"));
     CHECK_EQ(contract.vertex_entry, std::string("vs_main"));
@@ -122,7 +120,6 @@ TEST_CASE("Skinned compact provider keeps position-only mesh input") {
             termin::MeshVertexTransformProfile::Position,
             "shadow_draw.u_model");
 
-    CHECK(!contract.template_uuid.has_value());
     CHECK(termin::vertex_transform_provider_is_modular(contract));
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "joints", termin::MaterialPipelineValueType::Float4));
@@ -134,7 +131,6 @@ TEST_CASE("Skinned compact provider keeps position-only mesh input") {
 TEST_CASE("Foliage material provider is modular and declares instanced resources") {
     termin::VertexTransformContract contract = foliage_material_transform();
 
-    CHECK(!contract.template_uuid.has_value());
     CHECK(termin::vertex_transform_provider_is_modular(contract));
     CHECK_EQ(
         contract.source_module.module_name,
@@ -182,9 +178,8 @@ TEST_CASE("Foliage auxiliary providers expose only the pass-required mesh ABI") 
 TEST_CASE("Foliage shadow transform uses position-only mesh input") {
     termin::VertexTransformContract contract = foliage_shadow_transform();
 
-    REQUIRE(contract.template_uuid.has_value());
-    CHECK_EQ(*contract.template_uuid, std::string("termin-engine-foliage-shadow"));
     CHECK(contract.kind == termin::VertexTransformKind::FoliageShadow);
+    CHECK(termin::vertex_transform_provider_is_modular(contract));
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(!has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
     CHECK(!has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));
@@ -193,7 +188,6 @@ TEST_CASE("Foliage shadow transform uses position-only mesh input") {
 TEST_CASE("Static transform is descriptor-built") {
     termin::VertexTransformContract contract = material_static_transform();
 
-    CHECK(!contract.template_uuid.has_value());
     CHECK(has_attribute(contract.vertex_inputs, "position", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "normal", termin::MaterialPipelineValueType::Float3));
     CHECK(has_attribute(contract.vertex_inputs, "uv", termin::MaterialPipelineValueType::Float2));

@@ -294,14 +294,11 @@ termin::MaterialPipelinePassContract modular_shadow_pass_contract()
             TC_SHADER_STAGE_VERTEX,
             64u));
     pass.foliage_vertex_transform =
-        termin::material_pipeline_make_foliage_vertex_transform_contract(
-            termin::VertexTransformKind::FoliageShadow,
+        termin::material_pipeline_make_foliage_vertex_transform_provider(
             "foliage_shadow_provider",
-            "termin-engine-foliage-shadow",
-            termin::material_pipeline_position_mesh_input(),
-            termin::MaterialFragmentInterface{},
-            termin::material_pipeline_foliage_vertex_resources());
-    pass.foliage_vertex_transform->template_uuid.reset();
+            termin::MeshVertexTransformProfile::Position);
+    pass.foliage_vertex_transform->kind =
+        termin::VertexTransformKind::FoliageShadow;
     std::erase_if(
         pass.foliage_vertex_transform->resources,
         [](const termin::MaterialPipelineResourceDecl& resource) {
@@ -735,6 +732,19 @@ TEST_CASE("material shader intent fingerprint includes modular source identities
             pass_b);
 
     CHECK(fingerprint_a != fingerprint_b);
+
+    termin::VertexTransformContract changed_provider =
+        *pass_a.static_vertex_transform;
+    changed_provider.source_module.source_identity =
+        "builtin_shaders/termin_vertex_transform.changed.slang";
+    const std::string provider_fingerprint =
+        termin::material_pipeline_shader_intent_fingerprint(
+            material.shader,
+            TC_SHADER_VARIANT_NONE,
+            changed_provider,
+            pass_a);
+
+    CHECK(fingerprint_a != provider_fingerprint);
 
     tc_shader_destroy(material.shader.handle);
     tc_shader_shutdown();

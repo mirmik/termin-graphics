@@ -13,11 +13,13 @@
 
 namespace termin::gui_native {
 
+TERMIN_GUI_NATIVE_OFFSCREEN_API tgfx::BackendType default_offscreen_backend();
+
 struct OffscreenGuiCompositionConfig {
     DocumentRendererConfig renderer;
     int width = 1280;
     int height = 720;
-    tgfx::BackendType backend = tgfx::BackendType::Vulkan;
+    tgfx::BackendType backend = default_offscreen_backend();
     bool continuous_rendering = true;
     bool application_graphics_domain = false;
     std::string sdk_root;

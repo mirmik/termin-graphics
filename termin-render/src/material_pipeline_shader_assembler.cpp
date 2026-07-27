@@ -5,7 +5,6 @@
 #include <utility>
 
 #include <tcbase/tc_log.hpp>
-#include <tgfx2/builtin_shader_sources.hpp>
 
 namespace termin {
 namespace {
@@ -269,12 +268,6 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
             *request.pass.vertex_output_adapter,
             entry);
     }
-    if (vertex_source.empty() && request.vertex_transform.template_uuid.has_value()) {
-        vertex_source = tgfx::load_builtin_shader_stage_source_from_catalog(
-            request.vertex_transform.template_uuid->c_str(),
-            "vertex");
-    }
-
     if (vertex_source.empty()) {
         result.diagnostics.push_back(diagnostic(
             MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate,

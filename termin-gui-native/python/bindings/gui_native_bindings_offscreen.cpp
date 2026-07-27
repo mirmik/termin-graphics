@@ -118,6 +118,9 @@ class PythonOffscreenGuiComposition {
 };
 
 tgfx::BackendType offscreen_backend(const std::string& name) {
+    if (name.empty() || name == "auto") {
+        return termin::gui_native::default_offscreen_backend();
+    }
     const tgfx::BackendType backend = tgfx::backend_from_name(name);
     if (backend == tgfx::BackendType::Null) {
         throw std::invalid_argument(
@@ -209,7 +212,7 @@ void bind_gui_native_offscreen(nb::module_& m) {
             },
             nb::arg("width") = 1280,
             nb::arg("height") = 720,
-            nb::arg("backend") = "vulkan",
+            nb::arg("backend") = "auto",
             nb::arg("font_path") = "",
             nb::arg("font_size") = 14,
             nb::arg("clear_color") =
