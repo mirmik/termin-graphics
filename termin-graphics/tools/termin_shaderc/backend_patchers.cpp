@@ -768,6 +768,39 @@ bool legalize_slang_opengl_glsl_builtins(
         "gl_InstanceIndex",
         "gl_InstanceID");
 
+    // Slang 2026.11 emits GLSL 4.60 for SV_InstanceID even when invoked with
+    // -profile glsl_450. The only promoted capability it declares is
+    // ARB_shader_draw_parameters, which is explicitly available as an
+    // extension on GLSL 4.50. Keep the extension requirement and restore the
+    // requested profile contract. Do not silently lower arbitrary 4.60 output:
+    // it may contain constructs that have no 4.50 extension equivalent.
+    static const std::regex version_re(
+        R"(^#version[ \t]+([0-9]+)(?:[ \t]+core)?[ \t]*\r?\n)");
+    std::smatch version_match;
+    if (std::regex_search(glsl, version_match, version_re)) {
+        const int version = std::stoi(version_match[1].str());
+        if (version > 450) {
+            const bool has_draw_parameters_extension =
+                glsl.find(
+                    "#extension GL_ARB_shader_draw_parameters : require") !=
+                std::string::npos;
+            if (version == 460 && has_draw_parameters_extension) {
+                glsl.replace(
+                    static_cast<size_t>(version_match.position(1)),
+                    static_cast<size_t>(version_match.length(1)),
+                    "450");
+                changed = true;
+            } else {
+                std::cerr
+                    << "termin_shaderc: Slang emitted unsupported GLSL "
+                    << version
+                    << " for requested OpenGL GLSL 450 profile; refusing "
+                       "unsafe version lowering\n";
+                return false;
+            }
+        }
+    }
+
     if (!changed) {
         return true;
     }

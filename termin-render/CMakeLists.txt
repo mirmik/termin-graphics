@@ -86,6 +86,8 @@ set(TERMIN_RENDER_SOURCES
     src/render_scene_item_collector.cpp
     src/render_item_submission.cpp
     src/render_task.cpp
+    src/world2d_ordering.cpp
+    src/world2d_quad_geometry.cpp
     src/shader_abi.cpp
     src/shader_usage_collector.cpp
     src/shader_resource_apply.cpp
@@ -152,6 +154,8 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_engine.hpp
     include/termin/render/render_item_submission.hpp
     include/termin/render/render_scene_item_collector.hpp
+    include/termin/render/world2d_ordering.hpp
+    include/termin/render/world2d_quad_geometry.hpp
     include/termin/render/python_render_item.hpp
     include/termin/render/shader_abi.hpp
     include/termin/render/shader_resource_apply.hpp
@@ -324,6 +328,20 @@ if(TERMIN_RENDER_BUILD_TESTS)
     add_test(NAME termin_render_task_test COMMAND termin_render_task_test)
     add_test(NAME termin_render_item_submission_test COMMAND termin_render_item_submission_test)
 
+    add_executable(termin_render_world2d_ordering_test tests/test_world2d_ordering.cpp)
+    target_include_directories(termin_render_world2d_ordering_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_world2d_ordering_test PRIVATE termin_render)
+    add_test(NAME termin_render_world2d_ordering_test COMMAND termin_render_world2d_ordering_test)
+
+    add_executable(termin_render_world2d_quad_geometry_test tests/test_world2d_quad_geometry.cpp)
+    target_include_directories(termin_render_world2d_quad_geometry_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_world2d_quad_geometry_test PRIVATE termin_render)
+    add_test(NAME termin_render_world2d_quad_geometry_test COMMAND termin_render_world2d_quad_geometry_test)
+
     add_executable(
         termin_render_scene_item_snapshot_test
         tests/test_render_scene_item_snapshot.cpp)
@@ -348,6 +366,8 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_pipeline_template_test
         termin_render_unknown_pass_test
         termin_render_item_submission_test
+        termin_render_world2d_ordering_test
+        termin_render_world2d_quad_geometry_test
         termin_render_task_test
         termin_render_scene_item_snapshot_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

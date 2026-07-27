@@ -163,6 +163,21 @@
       }
     },
     {
+      "uuid": "termin-engine-world2d",
+      "name": "World2DEngineVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-world2d.slang",
+          "entry": "vs_main"
+        },
+        "fragment": {
+          "path": "termin-engine-world2d.slang",
+          "entry": "fs_main"
+        }
+      }
+    },
+    {
       "uuid": "termin-engine-text2d",
       "name": "Text2DEngineVSFS",
       "language": "slang",
