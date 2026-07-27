@@ -382,6 +382,11 @@ D3D11RenderDevice::~D3D11RenderDevice() {
     reset_state();
     wait_idle();
 
+    if (pixel_readback_depth_target_) {
+        destroy(pixel_readback_depth_target_);
+        pixel_readback_depth_target_ = {};
+    }
+
     for (auto& pair : tc_mesh_cache_) {
         if (pair.second.vbo) destroy(pair.second.vbo);
         if (pair.second.ebo) destroy(pair.second.ebo);
@@ -701,6 +706,8 @@ void D3D11RenderDevice::query_capabilities() {
     caps_.supports_geometry_shaders = true;
     caps_.supports_timestamp_queries = true;
     caps_.supports_multisample_resolve = true;
+    caps_.supports_dynamic_uniform_offsets = false;
+    caps_.supports_storage_textures = false;
     caps_.max_color_attachments = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
     caps_.max_texture_dimension_2d = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
     caps_.max_texture_units = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
@@ -1653,6 +1660,303 @@ bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, flo
     }
     context_->Unmap(staging.Get(), 0);
     return true;
+}
+
+uint64_t D3D11RenderDevice::request_pixel_rgba8(TextureHandle handle, int x, int y) {
+    return request_pixel_readback(handle, x, y, PixelReadbackKind::Rgba8);
+}
+
+bool D3D11RenderDevice::poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) {
+    if (request_id == 0 || !out_rgba) return false;
+    PixelReadbackSlot* slot = find_pixel_readback_slot(request_id);
+    if (!slot || !pixel_readback_ready(*slot, true)) return false;
+    if (slot->kind != PixelReadbackKind::Rgba8) {
+        tc::Log::error(
+            "D3D11RenderDevice::poll_pixel_rgba8: request %llu has the wrong kind",
+            static_cast<unsigned long long>(request_id));
+        release_pixel_readback_slot(*slot);
+        return false;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    const HRESULT hr = context_->Map(
+        slot->staging.Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+    if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return false;
+    if (FAILED(hr) || !mapped.pData) {
+        tc::Log::error(
+            "D3D11RenderDevice::poll_pixel_rgba8: Map failed for request %llu: HRESULT=0x%08X",
+            static_cast<unsigned long long>(request_id),
+            static_cast<unsigned>(hr));
+        release_pixel_readback_slot(*slot);
+        return false;
+    }
+
+    const auto* pixel = static_cast<const uint8_t*>(mapped.pData);
+    if (slot->format == PixelFormat::BGRA8_UNorm) {
+        out_rgba[0] = pixel[2] / 255.0f;
+        out_rgba[1] = pixel[1] / 255.0f;
+        out_rgba[2] = pixel[0] / 255.0f;
+        out_rgba[3] = pixel[3] / 255.0f;
+    } else {
+        out_rgba[0] = pixel[0] / 255.0f;
+        out_rgba[1] = pixel[1] / 255.0f;
+        out_rgba[2] = pixel[2] / 255.0f;
+        out_rgba[3] = pixel[3] / 255.0f;
+    }
+    context_->Unmap(slot->staging.Get(), 0);
+    release_pixel_readback_slot(*slot);
+    return true;
+}
+
+uint64_t D3D11RenderDevice::request_pixel_depth_float(
+    TextureHandle handle, int x, int y
+) {
+    return request_pixel_readback(handle, x, y, PixelReadbackKind::DepthF32);
+}
+
+bool D3D11RenderDevice::poll_pixel_depth_float(uint64_t request_id, float* out_depth) {
+    if (request_id == 0 || !out_depth) return false;
+    PixelReadbackSlot* slot = find_pixel_readback_slot(request_id);
+    if (!slot || !pixel_readback_ready(*slot, true)) return false;
+    if (slot->kind != PixelReadbackKind::DepthF32) {
+        tc::Log::error(
+            "D3D11RenderDevice::poll_pixel_depth_float: request %llu has the wrong kind",
+            static_cast<unsigned long long>(request_id));
+        release_pixel_readback_slot(*slot);
+        return false;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    const HRESULT hr = context_->Map(
+        slot->staging.Get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+    if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return false;
+    if (FAILED(hr) || !mapped.pData) {
+        tc::Log::error(
+            "D3D11RenderDevice::poll_pixel_depth_float: Map failed for request %llu: HRESULT=0x%08X",
+            static_cast<unsigned long long>(request_id),
+            static_cast<unsigned>(hr));
+        release_pixel_readback_slot(*slot);
+        return false;
+    }
+
+    std::memcpy(out_depth, mapped.pData, sizeof(float));
+    context_->Unmap(slot->staging.Get(), 0);
+    release_pixel_readback_slot(*slot);
+    return true;
+}
+
+uint64_t D3D11RenderDevice::request_pixel_readback(
+    TextureHandle handle, int x, int y, PixelReadbackKind kind
+) {
+    D3D11Texture* texture = get_texture(handle);
+    if (!texture || !texture->texture) return 0;
+    if (x < 0 || y < 0 ||
+        static_cast<uint32_t>(x) >= texture->desc.width ||
+        static_cast<uint32_t>(y) >= texture->desc.height) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: coordinates (%d,%d) are outside texture %u (%ux%u)",
+            x, y, handle.id, texture->desc.width, texture->desc.height);
+        return 0;
+    }
+    if (texture->desc.sample_count != 1) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: multisampled texture %u is unsupported",
+            handle.id);
+        return 0;
+    }
+    if (kind == PixelReadbackKind::Rgba8 &&
+        texture->desc.format != PixelFormat::RGBA8_UNorm &&
+        texture->desc.format != PixelFormat::BGRA8_UNorm) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: texture %u is not RGBA8/BGRA8",
+            handle.id);
+        return 0;
+    }
+    if (kind == PixelReadbackKind::DepthF32 &&
+        texture->desc.format != PixelFormat::D32F) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: texture %u is not D32F",
+            handle.id);
+        return 0;
+    }
+    if (kind == PixelReadbackKind::DepthF32 && !texture->srv) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: depth texture %u has no sampled SRV",
+            handle.id);
+        return 0;
+    }
+
+    PixelReadbackSlot* slot = acquire_pixel_readback_slot(kind, texture->desc.format);
+    if (!slot) {
+        tc::Log::error(
+            "D3D11RenderDevice::request_pixel_readback: all %zu slots are pending",
+            kPixelReadbackSlotCount);
+        return 0;
+    }
+
+    D3D11Texture* copy_source = texture;
+    int copy_x = x;
+    int copy_y = y;
+    if (kind == PixelReadbackKind::DepthF32) {
+        if (!pixel_readback_depth_target_) {
+            TextureDesc depth_target_desc;
+            depth_target_desc.width = 1;
+            depth_target_desc.height = 1;
+            depth_target_desc.format = PixelFormat::R32F;
+            depth_target_desc.usage =
+                TextureUsage::ColorAttachment | TextureUsage::CopySrc;
+            pixel_readback_depth_target_ = create_texture(depth_target_desc);
+            if (!pixel_readback_depth_target_) {
+                tc::Log::error(
+                    "D3D11RenderDevice::request_pixel_readback: depth conversion target creation failed");
+                release_pixel_readback_slot(*slot);
+                return 0;
+            }
+        }
+        blit_to_texture(
+            pixel_readback_depth_target_,
+            handle,
+            termin::Bounds2i{x, y, x + 1, y + 1},
+            termin::Bounds2i::from_size(1, 1));
+        copy_source = get_texture(pixel_readback_depth_target_);
+        copy_x = 0;
+        copy_y = 0;
+        if (!copy_source || !copy_source->texture) {
+            tc::Log::error(
+                "D3D11RenderDevice::request_pixel_readback: depth conversion target is invalid");
+            release_pixel_readback_slot(*slot);
+            return 0;
+        }
+    }
+
+    D3D11_TEXTURE2D_DESC source_desc{};
+    copy_source->texture->GetDesc(&source_desc);
+    D3D11_TEXTURE2D_DESC staging_desc = source_desc;
+    staging_desc.Width = 1;
+    staging_desc.Height = 1;
+    staging_desc.MipLevels = 1;
+    staging_desc.ArraySize = 1;
+    staging_desc.SampleDesc.Count = 1;
+    staging_desc.SampleDesc.Quality = 0;
+    staging_desc.Usage = D3D11_USAGE_STAGING;
+    staging_desc.BindFlags = 0;
+    staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    staging_desc.MiscFlags = 0;
+
+    bool create_staging = !slot->staging;
+    if (slot->staging) {
+        D3D11_TEXTURE2D_DESC existing_desc{};
+        slot->staging->GetDesc(&existing_desc);
+        create_staging = existing_desc.Format != staging_desc.Format;
+    }
+    if (create_staging) {
+        slot->staging.Reset();
+        const HRESULT hr =
+            device_->CreateTexture2D(&staging_desc, nullptr, &slot->staging);
+        if (FAILED(hr) || !slot->staging) {
+            tc::Log::error(
+                "D3D11RenderDevice::request_pixel_readback: 1x1 staging creation failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+            release_pixel_readback_slot(*slot);
+            return 0;
+        }
+    }
+    if (!slot->completion) {
+        D3D11_QUERY_DESC query_desc{};
+        query_desc.Query = D3D11_QUERY_EVENT;
+        const HRESULT hr = device_->CreateQuery(&query_desc, &slot->completion);
+        if (FAILED(hr) || !slot->completion) {
+            tc::Log::error(
+                "D3D11RenderDevice::request_pixel_readback: event query creation failed: HRESULT=0x%08X",
+                static_cast<unsigned>(hr));
+            release_pixel_readback_slot(*slot);
+            return 0;
+        }
+    }
+
+    const D3D11_BOX source_box{
+        static_cast<UINT>(copy_x),
+        static_cast<UINT>(copy_y),
+        0,
+        static_cast<UINT>(copy_x + 1),
+        static_cast<UINT>(copy_y + 1),
+        1,
+    };
+    context_->CopySubresourceRegion(
+        slot->staging.Get(), 0, 0, 0, 0,
+        copy_source->texture.Get(), 0, &source_box);
+    context_->End(slot->completion.Get());
+
+    slot->request_id = next_pixel_readback_id_++;
+    if (slot->request_id == 0) slot->request_id = next_pixel_readback_id_++;
+    slot->issue_sequence = pixel_readback_issue_sequence_++;
+    slot->kind = kind;
+    slot->format = texture->desc.format;
+    slot->active = true;
+    return slot->request_id;
+}
+
+D3D11RenderDevice::PixelReadbackSlot*
+D3D11RenderDevice::acquire_pixel_readback_slot(
+    PixelReadbackKind kind, PixelFormat format
+) {
+    (void)kind;
+    (void)format;
+    for (PixelReadbackSlot& slot : pixel_readback_slots_) {
+        if (!slot.active) return &slot;
+    }
+
+    PixelReadbackSlot* oldest_completed = nullptr;
+    for (PixelReadbackSlot& slot : pixel_readback_slots_) {
+        if (pixel_readback_ready(slot, true) &&
+            (!oldest_completed ||
+             slot.issue_sequence < oldest_completed->issue_sequence)) {
+            oldest_completed = &slot;
+        }
+    }
+    if (!oldest_completed) return nullptr;
+
+    tc::Log::warn(
+        "D3D11RenderDevice::request_pixel_readback: reclaiming unpolled completed request %llu",
+        static_cast<unsigned long long>(oldest_completed->request_id));
+    release_pixel_readback_slot(*oldest_completed);
+    return oldest_completed;
+}
+
+D3D11RenderDevice::PixelReadbackSlot*
+D3D11RenderDevice::find_pixel_readback_slot(uint64_t request_id) {
+    for (PixelReadbackSlot& slot : pixel_readback_slots_) {
+        if (slot.active && slot.request_id == request_id) return &slot;
+    }
+    return nullptr;
+}
+
+bool D3D11RenderDevice::pixel_readback_ready(
+    PixelReadbackSlot& slot, bool log_failure
+) {
+    if (!slot.active || !slot.completion) return false;
+    // GetData is non-blocking for an event query. Allow it to flush queued
+    // commands so offscreen hosts that never call present() still make
+    // progress; DONOTFLUSH can leave a low-traffic hover request pending
+    // indefinitely.
+    const HRESULT hr = context_->GetData(
+        slot.completion.Get(), nullptr, 0, 0);
+    if (hr == S_OK) return true;
+    if (hr == S_FALSE) return false;
+    if (log_failure) {
+        tc::Log::error(
+            "D3D11RenderDevice::pixel_readback_ready: GetData failed for request %llu: HRESULT=0x%08X",
+            static_cast<unsigned long long>(slot.request_id),
+            static_cast<unsigned>(hr));
+    }
+    release_pixel_readback_slot(slot);
+    return false;
+}
+
+void D3D11RenderDevice::release_pixel_readback_slot(PixelReadbackSlot& slot) {
+    slot.active = false;
+    slot.request_id = 0;
+    slot.issue_sequence = 0;
 }
 
 bool D3D11RenderDevice::read_texture_rgba_float(TextureHandle handle, float* out) {

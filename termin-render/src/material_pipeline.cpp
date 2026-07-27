@@ -719,7 +719,7 @@ bool prepare_material_pipeline_resources(
             ctx);
     }
 
-    if (resources.shadow_maps && resources.shadow_map_count > 0 && resources.shadow_sampler) {
+    if (resources.shadow_sampler) {
         bound_any |= bind_shadow_maps_for_shader(
             ctx,
             shader,

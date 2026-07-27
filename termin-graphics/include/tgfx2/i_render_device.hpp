@@ -214,9 +214,11 @@ public:
     }
     // Asynchronous one-pixel readback. Returns a non-zero request id
     // when a backend accepted the request; poll_* returns true once the
-    // result is ready and writes the output value. Backends without
-    // async readback keep returning 0/false and callers can fall back to
-    // the synchronous helpers above.
+    // result is ready, writes the output value, and consumes the request.
+    // Implementations keep a bounded number of in-flight requests and
+    // safely reclaim abandoned completed requests. Backends without async
+    // readback keep returning 0/false and callers can fall back to the
+    // synchronous helpers above.
     virtual uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) {
         (void)tex; (void)x; (void)y;
         return 0;

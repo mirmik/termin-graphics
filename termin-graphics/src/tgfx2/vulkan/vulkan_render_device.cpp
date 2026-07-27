@@ -213,6 +213,8 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     caps_.supports_geometry_shaders = features.geometryShader;
     caps_.supports_timestamp_queries = (props.limits.timestampComputeAndGraphics != 0);
     caps_.supports_multisample_resolve = true;
+    caps_.supports_dynamic_uniform_offsets = true;
+    caps_.supports_storage_textures = true;
 
     // Subscribe to registry destroy-hooks so per-device tc_texture /
     // tc_mesh / tc_shader caches get invalidated before a slot is recycled. The

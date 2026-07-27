@@ -1,4 +1,5 @@
 #include <tgfx/tgfx2_interop.h>
+#include <tgfx2/builtin_shader_sources.hpp>
 #include <tgfx2/i_render_device.hpp>
 
 #ifdef _WIN32
@@ -23,6 +24,27 @@ extern "C" {
 static std::mutex g_tgfx2_device_mutex;
 static void* g_tgfx2_device = nullptr;
 static const void* g_tgfx2_device_owner = nullptr;
+
+tc_shader_handle tgfx2_interop_register_builtin_shader(const char* shader_uuid) {
+    if (!shader_uuid || shader_uuid[0] == '\0') {
+        tc_log(
+            TC_LOG_ERROR,
+            "tgfx2_interop_register_builtin_shader: shader UUID is required");
+        return tc_shader_handle_invalid();
+    }
+    if (!tgfx2_interop_get_device()) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tgfx2_interop_register_builtin_shader: no current graphics device");
+        return tc_shader_handle_invalid();
+    }
+    return tgfx::register_builtin_shader_from_catalog(shader_uuid);
+}
+
+uintptr_t tgfx2_interop_get_graphics_domain_key(void) {
+    return reinterpret_cast<uintptr_t>(tgfx2_interop_get_device());
+}
+
 #ifdef _WIN32
 namespace {
 

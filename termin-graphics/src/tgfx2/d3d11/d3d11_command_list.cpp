@@ -366,8 +366,11 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
                                          uint32_t /*set_index*/,
                                          const uint32_t* dynamic_offsets,
                                          uint32_t dynamic_offset_count) {
-    if (dynamic_offsets || dynamic_offset_count != 0) {
-        tc::Log::error("D3D11CommandList::bind_resource_set: dynamic offsets are not implemented");
+    if (dynamic_offsets != nullptr || dynamic_offset_count != 0) {
+        tc::Log::error(
+            "D3D11CommandList::bind_resource_set: dynamic uniform offsets are "
+            "not supported; query supports_dynamic_uniform_offsets before binding");
+        return;
     }
     auto* rs = device_.get_resource_set(set);
     if (!rs) return;

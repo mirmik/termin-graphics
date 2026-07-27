@@ -13,6 +13,8 @@ TEST_CASE("tgfx2 interop device claim has one explicit owner") {
 
     CHECK(tgfx2_interop_claim_device(&first_device, &first_owner) == 1);
     CHECK(tgfx2_interop_get_device() == &first_device);
+    CHECK(tgfx2_interop_get_graphics_domain_key() ==
+          reinterpret_cast<uintptr_t>(&first_device));
 
     // The owning composition root may repeat its claim during idempotent
     // initialization, but no other owner may adopt or replace it.
@@ -27,4 +29,5 @@ TEST_CASE("tgfx2 interop device claim has one explicit owner") {
 
     CHECK(tgfx2_interop_release_device(&first_device, &first_owner) == 1);
     CHECK(tgfx2_interop_get_device() == nullptr);
+    CHECK(tgfx2_interop_get_graphics_domain_key() == 0u);
 }

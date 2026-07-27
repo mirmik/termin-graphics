@@ -587,6 +587,14 @@ int main(int argc, char** argv) {
     }
 
     auto caps = device->capabilities();
+    if (!caps.supports_dynamic_uniform_offsets) {
+        std::fprintf(stderr, "Vulkan smoke: dynamic uniform offsets must be advertised\n");
+        return 1;
+    }
+    if (!caps.supports_storage_textures) {
+        std::fprintf(stderr, "Vulkan smoke: storage textures must be advertised\n");
+        return 1;
+    }
     printf("Backend: Vulkan, max_tex: %u, compute: %s, geometry: %s\n",
            caps.max_texture_dimension_2d,
            caps.supports_compute ? "yes" : "no",

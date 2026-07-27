@@ -139,8 +139,6 @@ bool bind_shadow_maps_for_shader(
     tgfx::SamplerHandle sampler,
     size_t max_count)
 {
-    if (shadow_maps.empty()) return false;
-
     const tc_shader_resource_binding* rb = find_valid_abi_resource(
         shader,
         ShaderAbiResourceId::ShadowMaps,
@@ -156,6 +154,21 @@ bool bind_shadow_maps_for_shader(
             "resource layout entry",
             shader_debug_name(shader));
         return false;
+    }
+
+    // Comparison samplers are part of the statically compiled shader ABI even
+    // when this frame has no shadow-casting lights. D3D11's debug layer
+    // rejects a draw when that sampler slot is left unbound. Bind the sampler
+    // through the reflected texture slot with a null texture; backends that
+    // require a complete sampled-image descriptor supply their canonical
+    // fallback texture while preserving the comparison sampler.
+    if (shadow_maps.empty()) {
+        ctx.bind_texture_array_element(
+            rb,
+            0,
+            tgfx::TextureHandle{},
+            sampler);
+        return true;
     }
 
     bool any_bound = false;

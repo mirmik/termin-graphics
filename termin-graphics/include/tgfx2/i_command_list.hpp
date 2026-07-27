@@ -48,8 +48,10 @@ public:
     // Bind a descriptor/resource set at the given set index (default 0).
     // `dynamic_offsets` corresponds to the UNIFORM_BUFFER_DYNAMIC bindings
     // declared by the pipeline's descriptor set layout for this set, in
-    // ascending-binding order. Backends that do not use dynamic descriptors
-    // (OpenGL) ignore the array.
+    // ascending-binding order. Callers must check
+    // BackendCapabilities::supports_dynamic_uniform_offsets before passing
+    // offsets. Unsupported backends log an error and leave the set unbound;
+    // they never silently ignore offsets or bind the wrong buffer range.
     virtual void bind_resource_set(ResourceSetHandle set,
                                    uint32_t set_index = 0,
                                    const uint32_t* dynamic_offsets = nullptr,

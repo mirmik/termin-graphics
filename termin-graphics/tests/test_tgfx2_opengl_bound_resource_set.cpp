@@ -1,8 +1,11 @@
 // OpenGL runtime smoke for the backend-facing BoundResourceSetDesc path.
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <memory>
 #include <span>
+#include <thread>
 #include <utility>
 
 #ifndef SDL_MAIN_HANDLED
@@ -109,6 +112,27 @@ int main() {
         device = tgfx::create_device(tgfx::BackendType::OpenGL);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "Window creation failed: OpenGL device creation: %s\n", e.what());
+        return 1;
+    }
+
+    const auto caps = device->capabilities();
+    if (caps.supports_dynamic_uniform_offsets) {
+        std::fprintf(stderr, "OpenGL 3.3 must not advertise dynamic uniform offsets\n");
+        return 1;
+    }
+    if (caps.supports_storage_textures) {
+        std::fprintf(stderr, "OpenGL 3.3 must not advertise storage textures\n");
+        return 1;
+    }
+
+    tgfx::TextureDesc unsupported_storage_desc;
+    unsupported_storage_desc.width = 2;
+    unsupported_storage_desc.height = 2;
+    unsupported_storage_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    unsupported_storage_desc.usage = tgfx::TextureUsage::Storage |
+                                     tgfx::TextureUsage::Sampled;
+    if (device->create_texture(unsupported_storage_desc)) {
+        std::fprintf(stderr, "OpenGL storage texture creation should fail explicitly\n");
         return 1;
     }
 
@@ -228,7 +252,58 @@ int main() {
     cmd->end_render_pass();
     cmd->end();
     device->submit(*cmd);
-    device->wait_idle();
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = kWidth;
+    depth_desc.height = kHeight;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage =
+        tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc;
+    const tgfx::TextureHandle depth = device->create_texture(depth_desc);
+    std::unique_ptr<tgfx::ICommandList> depth_cmd = device->create_command_list();
+    depth_cmd->begin();
+    tgfx::RenderPassDesc depth_pass;
+    depth_pass.has_depth = true;
+    depth_pass.depth.texture = depth;
+    depth_pass.depth.load = tgfx::LoadOp::Clear;
+    depth_pass.depth.clear_depth = 0.37f;
+    depth_cmd->begin_render_pass(depth_pass);
+    depth_cmd->end_render_pass();
+    depth_cmd->end();
+    device->submit(*depth_cmd);
+
+    std::array<uint64_t, 4> color_requests{};
+    for (size_t i = 0; i < color_requests.size(); ++i) {
+        color_requests[i] = device->request_pixel_rgba8(
+            rt, kWidth / 2 + static_cast<int>(i), kHeight / 2);
+    }
+    const uint64_t depth_request =
+        device->request_pixel_depth_float(depth, kWidth / 2, kHeight / 2);
+    device->flush();
+
+    std::array<bool, 4> color_ready{};
+    std::array<std::array<float, 4>, 4> async_colors{};
+    bool depth_ready = false;
+    float async_depth = 0.0f;
+    for (int attempt = 0; attempt < 1000; ++attempt) {
+        for (size_t i = 0; i < color_requests.size(); ++i) {
+            if (!color_ready[i] && color_requests[i] != 0) {
+                color_ready[i] = device->poll_pixel_rgba8(
+                    color_requests[i], async_colors[i].data());
+            }
+        }
+        if (!depth_ready && depth_request != 0) {
+            depth_ready =
+                device->poll_pixel_depth_float(depth_request, &async_depth);
+        }
+        if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
+                return ready;
+            }) &&
+            depth_ready) {
+            break;
+        }
+        std::this_thread::yield();
+    }
 
     float pixel[4] = {};
     const bool read_ok = device->read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, pixel);
@@ -242,12 +317,26 @@ int main() {
         pixel[0] > 0.12f && pixel[0] < 0.35f &&
         pixel[1] > 0.55f && pixel[1] < 0.85f &&
         pixel[2] > 0.04f && pixel[2] < 0.25f &&
-        pixel[3] > 0.90f;
+        pixel[3] > 0.90f &&
+        std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
+            return ready;
+        }) &&
+        std::all_of(
+            async_colors.begin(), async_colors.end(),
+            [](const std::array<float, 4>& color) {
+                return color[0] > 0.12f && color[0] < 0.35f &&
+                       color[1] > 0.55f && color[1] < 0.85f &&
+                       color[2] > 0.04f && color[2] < 0.25f &&
+                       color[3] > 0.90f;
+            }) &&
+        depth_ready &&
+        async_depth > 0.36f && async_depth < 0.38f;
 
     device->destroy(resource_set);
     device->destroy(ubo);
     device->destroy(vb);
     device->destroy(rt);
+    device->destroy(depth);
     device->destroy(pipeline);
     device->destroy(vs);
     device->destroy(fs);

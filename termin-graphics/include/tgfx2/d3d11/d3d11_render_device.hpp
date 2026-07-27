@@ -11,6 +11,7 @@
 #include <d3d11sdklayers.h>
 #include <wrl/client.h>
 
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -138,6 +139,10 @@ public:
 
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
+    uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
+    uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
     bool read_texture_depth_float(TextureHandle tex, float* out) override;
 
@@ -173,6 +178,27 @@ private:
     void query_capabilities();
     Microsoft::WRL::ComPtr<ID3D11Texture2D> create_staging_texture(const D3D11Texture& src) const;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> resolve_texture_for_readback(const D3D11Texture& src);
+    enum class PixelReadbackKind : uint8_t {
+        Rgba8,
+        DepthF32,
+    };
+    struct PixelReadbackSlot {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        Microsoft::WRL::ComPtr<ID3D11Query> completion;
+        uint64_t request_id = 0;
+        uint64_t issue_sequence = 0;
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        PixelFormat format = PixelFormat::Undefined;
+        bool active = false;
+    };
+    static constexpr size_t kPixelReadbackSlotCount = 16;
+    uint64_t request_pixel_readback(
+        TextureHandle tex, int x, int y, PixelReadbackKind kind);
+    PixelReadbackSlot* acquire_pixel_readback_slot(
+        PixelReadbackKind kind, PixelFormat format);
+    PixelReadbackSlot* find_pixel_readback_slot(uint64_t request_id);
+    bool pixel_readback_ready(PixelReadbackSlot& slot, bool log_failure);
+    void release_pixel_readback_slot(PixelReadbackSlot& slot);
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
@@ -188,6 +214,10 @@ private:
     BackendCapabilities caps_;
     bool debug_layer_enabled_ = false;
     bool log_info_queue_ = false;
+    std::array<PixelReadbackSlot, kPixelReadbackSlotCount> pixel_readback_slots_{};
+    TextureHandle pixel_readback_depth_target_{};
+    uint64_t next_pixel_readback_id_ = 1;
+    uint64_t pixel_readback_issue_sequence_ = 1;
 
     D3D11HandlePool<D3D11Buffer> buffers_;
     D3D11HandlePool<D3D11Texture> textures_;

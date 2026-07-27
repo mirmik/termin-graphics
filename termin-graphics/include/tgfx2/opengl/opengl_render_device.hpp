@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <array>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -262,6 +263,10 @@ public:
     // implementations of the backend-neutral virtual interface.
     bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
     bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
+    uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
+    uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
+    bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
     bool read_texture_rgba_float(TextureHandle tex, float* out) override;
     bool read_texture_depth_float(TextureHandle tex, float* out) override;
 
@@ -348,12 +353,36 @@ public:
     void invalidate_tc_shader_cache(uint32_t pool_index) override;
 
 private:
+    enum class PixelReadbackKind : uint8_t {
+        Rgba8,
+        DepthF32,
+    };
+    struct PixelReadbackSlot {
+        GLuint pbo = 0;
+        GLsync fence = nullptr;
+        uint64_t request_id = 0;
+        uint64_t issue_sequence = 0;
+        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+        bool active = false;
+    };
+    static constexpr size_t kPixelReadbackSlotCount = 16;
+    uint64_t request_pixel_readback(
+        TextureHandle tex, int x, int y, PixelReadbackKind kind);
+    PixelReadbackSlot* acquire_pixel_readback_slot(PixelReadbackKind kind);
+    PixelReadbackSlot* find_pixel_readback_slot(uint64_t request_id);
+    bool pixel_readback_ready(PixelReadbackSlot& slot, bool log_failure);
+    void release_pixel_readback_slot(PixelReadbackSlot& slot);
+    void destroy_pixel_readback_resources();
     GLuint acquire_program(const PipelineDesc& desc);
     void release_program(GLuint program);
     void query_capabilities();
     void ensure_push_ring();
     void ensure_transient_vb();
     void ensure_ring_ubo();
+    std::array<PixelReadbackSlot, kPixelReadbackSlotCount> pixel_readback_slots_{};
+    GLuint pixel_readback_fbo_ = 0;
+    uint64_t next_pixel_readback_id_ = 1;
+    uint64_t pixel_readback_issue_sequence_ = 1;
 };
 
 } // namespace tgfx

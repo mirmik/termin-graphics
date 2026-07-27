@@ -219,6 +219,36 @@
       "reason": "Focused Windows build-and-run smoke for the D3D11 bound-resource and optional present paths."
     },
     {
+      "id": "editor-d3d11-scene-smoke",
+      "module": "termin-app",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-windows-d3d11-editor.py"],
+      "profiles": ["windows-d3d11"],
+      "platforms": ["windows"],
+      "required_capabilities": ["d3d11"],
+      "reason": "Runs the installed editor against a repository-owned scene, verifies the D3D11 framegraph and PNG readback, and rejects debug-layer errors or backend fallback."
+    },
+    {
+      "id": "player-d3d11-scene-smoke",
+      "module": "termin-player",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-windows-d3d11-player.py"],
+      "profiles": ["windows-d3d11"],
+      "platforms": ["windows"],
+      "required_capabilities": ["d3d11"],
+      "reason": "Builds a strict D3D11-only desktop bundle and runs its native player for 30 presented frames with the D3D11 debug layer enabled."
+    },
+    {
+      "id": "wpf-d3d11-scene-smoke",
+      "module": "termin-csharp",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-windows-d3d11-wpf-scene.py"],
+      "profiles": ["windows-d3d11"],
+      "platforms": ["windows"],
+      "required_capabilities": ["d3d11"],
+      "reason": "Builds SceneApp without OpenGL and presents 30 frames from a display-owned D3D11 offscreen texture through WPF D3DImage with the debug layer enabled."
+    },
+    {
       "id": "android-apk-build-gate",
       "module": "termin-android",
       "executor": "device",

@@ -53,6 +53,7 @@ public:
     tgfx::IRenderDevice&  device();
     tgfx::PipelineCache&  cache();
     tgfx::RenderContext2& ctx();
+    tgfx::GraphicsHost&   graphics() { return *graphics_; }
     tgfx::FontAtlas&      font()   { return *font_;   }
 
 };

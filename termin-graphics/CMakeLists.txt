@@ -484,6 +484,7 @@ if(BUILD_TESTS)
         tests/tests_vertex_layout.cpp
         tests/tests_log.cpp
         tests/tests_phase.cpp
+        tests/tests_fixed_string.cpp
         tests/tests_shader_resource_layout.cpp
         tests/tests_shader_program.cpp
     )

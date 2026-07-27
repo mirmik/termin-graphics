@@ -2,6 +2,7 @@
 #pragma once
 
 #include "tgfx2/tgfx2_api.h"
+#include <tcbase/tc_binding_types.h>
 
 #ifdef __cplusplus
 #include <cstdint>
@@ -23,6 +24,15 @@ TGFX2_API int tgfx2_interop_release_device(void* device, const void* owner);
 
 // Get the tgfx2 render device (returns NULL if not set).
 TGFX2_API void* tgfx2_interop_get_device(void);
+// Opaque identity of the current application graphics domain. Hosts use this
+// for equality validation without receiving a callable device pointer.
+TGFX2_API uintptr_t tgfx2_interop_get_graphics_domain_key(void);
+
+// Registers a shader from the installed SDK builtin catalog for the current
+// graphics domain. This is the backend-neutral host API for samples and
+// embedders; it resolves the artifact matching the active backend.
+TGFX2_API tc_shader_handle tgfx2_interop_register_builtin_shader(
+    const char* shader_uuid);
 
 // ---------------------------------------------------------------------------
 // External GL texture registration - plain-C bridge to

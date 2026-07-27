@@ -34,9 +34,9 @@ if(TERMIN_GUI_NATIVE_BUILD_WINDOW_INTEGRATION)
     else()
         find_package(termin_window REQUIRED)
     endif()
-elseif(TERMIN_BUILD_PYTHON OR TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
+elseif(TERMIN_GUI_NATIVE_BUILD_EXAMPLES)
     message(FATAL_ERROR
-        "Python bindings and examples currently require "
+        "Examples currently require "
         "TERMIN_GUI_NATIVE_BUILD_WINDOW_INTEGRATION=ON")
 endif()
 
@@ -145,10 +145,8 @@ add_library(termin_gui_native::document_renderer ALIAS
 set_target_properties(termin_gui_native_document_renderer PROPERTIES
     EXPORT_NAME document_renderer
 )
-if(WIN32)
-    set_target_properties(termin_gui_native_document_renderer PROPERTIES
-        WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
+# Public renderer classes carry TERMIN_GUI_NATIVE_RENDERER_API explicitly.
+# CMake auto-export would add the same vtables again on MSVC (LNK4197).
 target_compile_definitions(termin_gui_native_document_renderer
     PRIVATE TERMIN_GUI_NATIVE_RENDERER_EXPORTS)
 target_include_directories(termin_gui_native_document_renderer
@@ -175,10 +173,7 @@ add_library(termin_gui_native::offscreen ALIAS termin_gui_native_offscreen)
 set_target_properties(termin_gui_native_offscreen PROPERTIES
     EXPORT_NAME offscreen
 )
-if(WIN32)
-    set_target_properties(termin_gui_native_offscreen PROPERTIES
-        WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
+# Public offscreen classes carry TERMIN_GUI_NATIVE_OFFSCREEN_API explicitly.
 target_compile_definitions(termin_gui_native_offscreen
     PRIVATE TERMIN_GUI_NATIVE_OFFSCREEN_EXPORTS)
 target_include_directories(termin_gui_native_offscreen

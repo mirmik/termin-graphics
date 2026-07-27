@@ -21,6 +21,7 @@ extern "C" {
 #include <termin/geom/vec4.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_texture_handle.hpp>
+#include <tgfx/detail/tgfx_fixed_string.hpp>
 
 namespace termin {
 
@@ -132,8 +133,7 @@ public:
     void set_shader_name(const char* shader) {
         tc_material* m = get();
         if (m) {
-            strncpy(m->shader_name, shader, TC_MATERIAL_NAME_MAX - 1);
-            m->shader_name[TC_MATERIAL_NAME_MAX - 1] = '\0';
+            detail::copy_c_string_truncated(m->shader_name, shader);
         }
     }
 
@@ -150,8 +150,7 @@ public:
     void set_shader_program_dependency(const char* uuid, uint32_t version) {
         tc_material* m = get();
         if (!m) return;
-        strncpy(m->shader_program_uuid, uuid ? uuid : "", TC_UUID_SIZE - 1);
-        m->shader_program_uuid[TC_UUID_SIZE - 1] = '\0';
+        detail::copy_c_string_truncated(m->shader_program_uuid, uuid);
         m->shader_program_version = version;
     }
 
@@ -239,7 +238,12 @@ public:
     void set_color(const Vec4& rgba) {
         tc_material* m = get();
         if (m) {
-            tc_material_set_color(m, rgba.x, rgba.y, rgba.z, rgba.w);
+            tc_material_set_color(
+                m,
+                static_cast<float>(rgba.x),
+                static_cast<float>(rgba.y),
+                static_cast<float>(rgba.z),
+                static_cast<float>(rgba.w));
         }
     }
 
@@ -309,8 +313,7 @@ public:
     void set_active_phase_mark(const char* mark) {
         tc_material* m = get();
         if (m) {
-            strncpy(m->active_phase_mark, mark, TC_PHASE_MARK_MAX - 1);
-            m->active_phase_mark[TC_PHASE_MARK_MAX - 1] = '\0';
+            detail::copy_c_string_truncated(m->active_phase_mark, mark);
         }
     }
 

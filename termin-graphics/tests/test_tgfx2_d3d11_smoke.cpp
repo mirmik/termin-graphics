@@ -20,6 +20,8 @@
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -30,6 +32,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -228,6 +231,14 @@ int main() {
         const auto caps = device->capabilities();
         if (caps.supports_compute) {
             std::fprintf(stderr, "D3D11 smoke: supports_compute advertised without a compute command path\n");
+            return 1;
+        }
+        if (caps.supports_dynamic_uniform_offsets) {
+            std::fprintf(stderr, "D3D11 smoke: dynamic uniform offsets must be rejected explicitly\n");
+            return 1;
+        }
+        if (caps.supports_storage_textures) {
+            std::fprintf(stderr, "D3D11 smoke: storage textures must be rejected explicitly\n");
             return 1;
         }
 
@@ -429,6 +440,75 @@ int main() {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected D32F single-pixel readback %.3f\n",
                          depth_pixel);
+            device->destroy(depth_tex);
+            return 1;
+        }
+
+        std::array<uint64_t, 4> color_requests{};
+        for (size_t i = 0; i < color_requests.size(); ++i) {
+            color_requests[i] = device->request_pixel_rgba8(
+                color, static_cast<int>(i), static_cast<int>(i));
+            if (color_requests[i] == 0) {
+                std::fprintf(stderr, "D3D11 smoke: async color request %zu failed\n", i);
+                device->destroy(depth_tex);
+                return 1;
+            }
+        }
+        const uint64_t depth_request =
+            device->request_pixel_depth_float(depth_tex, 1, 1);
+        if (depth_request == 0) {
+            std::fprintf(stderr, "D3D11 smoke: async depth request failed\n");
+            device->destroy(depth_tex);
+            return 1;
+        }
+        device->flush();
+
+        std::array<bool, 4> color_ready{};
+        bool depth_ready = false;
+        float async_depth = 0.0f;
+        std::array<std::array<float, 4>, 4> async_colors{};
+        for (int attempt = 0; attempt < 1000; ++attempt) {
+            for (size_t i = 0; i < color_requests.size(); ++i) {
+                if (!color_ready[i]) {
+                    color_ready[i] = device->poll_pixel_rgba8(
+                        color_requests[i], async_colors[i].data());
+                }
+            }
+            if (!depth_ready) {
+                depth_ready = device->poll_pixel_depth_float(
+                    depth_request, &async_depth);
+            }
+            if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
+                    return ready;
+                }) &&
+                depth_ready) {
+                break;
+            }
+            std::this_thread::yield();
+        }
+        if (!std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
+                return ready;
+            }) ||
+            !depth_ready) {
+            std::fprintf(stderr, "D3D11 smoke: async readback requests did not complete\n");
+            device->destroy(depth_tex);
+            return 1;
+        }
+        for (const auto& async_color : async_colors) {
+            if (!close_enough(async_color[0], 0.10f) ||
+                !close_enough(async_color[1], 0.20f) ||
+                !close_enough(async_color[2], 0.30f) ||
+                !close_enough(async_color[3], 1.00f)) {
+                std::fprintf(stderr, "D3D11 smoke: async color readback mismatch\n");
+                device->destroy(depth_tex);
+                return 1;
+            }
+        }
+        if (!close_enough(async_depth, 0.42f)) {
+            std::fprintf(
+                stderr,
+                "D3D11 smoke: async depth readback mismatch %.3f\n",
+                async_depth);
             device->destroy(depth_tex);
             return 1;
         }

@@ -16,6 +16,8 @@ struct BackendCapabilities {
     bool supports_geometry_shaders = false;
     bool supports_timestamp_queries = false;
     bool supports_multisample_resolve = true;
+    bool supports_dynamic_uniform_offsets = false;
+    bool supports_storage_textures = false;
     uint32_t max_color_attachments = 4;
     uint32_t max_texture_dimension_2d = 8192;
     uint32_t max_texture_units = 16;
