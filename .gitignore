@@ -149,3 +149,6 @@ tmp
 
 # Local Codex configuration
 .codex/
+
+# Generated Termin Data
+.termin
