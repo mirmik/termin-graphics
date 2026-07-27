@@ -60,11 +60,21 @@ for arg in "${CPP_ARGS[@]}"; do
         TEST_BUILD_TYPE="Debug"
     fi
 done
-TEST_SHADERC="${BUILD_DIR:-$SCRIPT_DIR/build/$TEST_BUILD_TYPE-tests}/bin/termin_shaderc"
-if [[ ! -x "$TEST_SHADERC" ]]; then
-    echo "ERROR: test-built termin_shaderc is missing: $TEST_SHADERC" >&2
+TEST_BUILD_DIR="${BUILD_DIR:-$SCRIPT_DIR/build/$TEST_BUILD_TYPE}"
+TEST_ARTIFACT_PYTHON="$(command -v python3 || command -v python || true)"
+if [[ -z "$TEST_ARTIFACT_PYTHON" ]]; then
+    echo "ERROR: Python is required to resolve C++ test artifacts" >&2
     failures+=("termin_shaderc provenance")
-elif ! TERMIN_SHADERC="$TEST_SHADERC" bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
+elif ! TEST_SHADERC="$(
+    PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+        "$TEST_ARTIFACT_PYTHON" -m termin_build.artifact_resolution shader-compiler \
+        --build-dir "$TEST_BUILD_DIR" \
+        --configuration "$TEST_BUILD_TYPE" \
+        --platform linux
+)"; then
+    failures+=("termin_shaderc provenance")
+elif ! TERMIN_SHADERC="$TEST_SHADERC" \
+    bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")
 fi
 

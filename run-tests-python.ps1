@@ -119,19 +119,13 @@ if ($pathEntries.Count -gt 0) {
 # Shader compiler tests must exercise the executable produced by the current
 # C++ test graph, never a potentially stale SDK copy.
 if (-not $env:TERMIN_SHADERC) {
-    $shaderCompilerCandidates = @(
-        (Join-Path $ScriptDir "build\Release-tests\bin\Release\termin_shaderc.exe"),
-        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc.exe"),
-        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc")
-    )
-    $shaderCompiler = $shaderCompilerCandidates |
-        Where-Object { Test-Path $_ -PathType Leaf } |
-        Select-Object -First 1
-    if ($shaderCompiler) {
-        $env:TERMIN_SHADERC = (Resolve-Path $shaderCompiler).Path
-        Write-Host "TERMIN_SHADERC: $($env:TERMIN_SHADERC)"
-    }
+    throw "TERMIN_SHADERC is not set. Run .\run-tests.ps1 so it can select the compiler from the active CMake graph, or set TERMIN_SHADERC explicitly."
 }
+if (-not (Test-Path $env:TERMIN_SHADERC -PathType Leaf)) {
+    throw "TERMIN_SHADERC does not point to a file: $env:TERMIN_SHADERC"
+}
+$env:TERMIN_SHADERC = (Resolve-Path $env:TERMIN_SHADERC).Path
+Write-Host "TERMIN_SHADERC: $($env:TERMIN_SHADERC)"
 
 $sdkLib = Join-Path $SdkPrefix "lib"
 if ($env:LD_LIBRARY_PATH) {
