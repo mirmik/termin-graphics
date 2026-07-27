@@ -196,7 +196,7 @@
       "executor": "process-smoke",
       "roots": ["scripts/smoke-editor-mcp-offscreen"],
       "platforms": ["linux"],
-      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands, Vulkan offscreen PNG readback, and deterministic cleanup."
+      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands and Vulkan offscreen PNG readback, then covers deterministic MCP-close and SIGINT shutdown paths."
     },
     {
       "id": "relocated-sdk-acceptance",
@@ -207,6 +207,16 @@
       "platforms": ["linux", "windows"],
       "required_capabilities": ["installed-sdk", "sdk-relocation"],
       "reason": "Copies the manifest-verified SDK and exercises bundled editor, launcher, player, and Python hosts under the same hostile-environment contract on Linux and Windows."
+    },
+    {
+      "id": "native-player-mcp-smoke",
+      "module": "termin-player",
+      "executor": "process-smoke",
+      "roots": ["scripts/smoke-native-player-mcp.py"],
+      "profiles": ["sdk-installed"],
+      "platforms": ["linux"],
+      "required_capabilities": ["installed-sdk", "virtual-display"],
+      "reason": "Builds a starter desktop bundle, verifies native player MCP live context and PNG readback, then checks request_quit and owned-session cleanup."
     },
     {
       "id": "tgfx2-d3d11-bound-smoke",

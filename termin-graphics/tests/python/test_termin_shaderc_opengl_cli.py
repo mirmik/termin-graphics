@@ -506,8 +506,53 @@ def test_termin_shaderc_legalizes_opengl_slang_instance_index_builtin(tmp_path: 
 
     assert result.returncode == 0, result.stderr
     glsl = output.read_text(encoding="utf-8")
+    assert glsl.startswith("#version 450\n")
+    assert "#extension GL_ARB_shader_draw_parameters : require" in glsl
     assert "gl_InstanceIndex" not in glsl
     assert "uint(gl_InstanceID)" in glsl
+
+
+def test_termin_shaderc_rejects_unsafe_opengl_slang_version_lowering(
+    tmp_path: Path,
+) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        '[shader("vertex")] float4 main() : SV_Position { return 0.0; }\n',
+        encoding="utf-8",
+    )
+    output = tmp_path / "out.vert.glsl"
+    fake_slangc = tmp_path / "fake_slangc.py"
+    fake_slangc.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "reflection = pathlib.Path(sys.argv[sys.argv.index('-reflection-json') + 1])\n"
+        "out.write_text('#version 460\\nvoid main() {}\\n', encoding='utf-8')\n"
+        "reflection.write_text(json.dumps({'parameters': []}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc([
+        "compile",
+        "--language",
+        "slang",
+        "--target",
+        "opengl",
+        "--stage",
+        "vertex",
+        "--entry",
+        "main",
+        "--input",
+        str(shader),
+        "--output",
+        str(output),
+        "--slangc",
+        str(fake_slangc),
+    ])
+
+    assert result.returncode == 1
+    assert "refusing unsafe version lowering" in result.stderr
 
 
 def test_termin_shaderc_patches_opengl_slang_storage_buffer_bindings(tmp_path: Path) -> None:
