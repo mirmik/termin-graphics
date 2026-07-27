@@ -105,8 +105,8 @@ export LD_LIBRARY_PATH="${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 # C++ test graph, never a potentially stale SDK copy.
 if [[ -z "${TERMIN_SHADERC:-}" ]]; then
     for shader_compiler in \
-        "$SCRIPT_DIR/build/Release-tests/bin/termin_shaderc" \
-        "$SCRIPT_DIR/build/Release-tests/bin/Release/termin_shaderc.exe"; do
+        "$SCRIPT_DIR/build/Release/bin/termin_shaderc" \
+        "$SCRIPT_DIR/build/Release/bin/Release/termin_shaderc.exe"; do
         if [[ -x "$shader_compiler" ]]; then
             export TERMIN_SHADERC="$shader_compiler"
             echo "TERMIN_SHADERC: $TERMIN_SHADERC"

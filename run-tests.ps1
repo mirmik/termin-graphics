@@ -80,9 +80,34 @@ if (-not $ProcessSmokeOnly) {
         if ($Full) {
             $PythonArgs += "--full"
         }
-        & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
-        if ($LASTEXITCODE -ne 0) {
-            $Failures.Add("Python")
+
+        $TestBuildType = if ($CppArgs.Contains("--debug") -or $CppArgs.Contains("-d")) {
+            "Debug"
+        } else {
+            "Release"
+        }
+        $TestBuildDir = if ($env:BUILD_DIR) {
+            $env:BUILD_DIR
+        } else {
+            Join-Path (Join-Path $ScriptDir "build") $TestBuildType
+        }
+        $TestShadercCandidates = @(
+            (Join-Path (Join-Path (Join-Path $TestBuildDir "bin") $TestBuildType) "termin_shaderc.exe"),
+            (Join-Path (Join-Path $TestBuildDir "bin") "termin_shaderc.exe"),
+            (Join-Path (Join-Path $TestBuildDir "bin") "termin_shaderc")
+        )
+        $TestShaderc = $TestShadercCandidates |
+            Where-Object { Test-Path $_ -PathType Leaf } |
+            Select-Object -First 1
+        if (-not $TestShaderc) {
+            Write-Warning "[run-tests] test-built termin_shaderc is missing from $TestBuildDir"
+            $Failures.Add("termin_shaderc provenance")
+        } else {
+            $env:TERMIN_SHADERC = (Resolve-Path $TestShaderc).Path
+            & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
+            if ($LASTEXITCODE -ne 0) {
+                $Failures.Add("Python")
+            }
         }
     } catch {
         Write-Warning "[run-tests] Python test runner failed: $_"

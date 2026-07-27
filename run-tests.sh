@@ -60,7 +60,8 @@ for arg in "${CPP_ARGS[@]}"; do
         TEST_BUILD_TYPE="Debug"
     fi
 done
-TEST_SHADERC="${BUILD_DIR:-$SCRIPT_DIR/build/$TEST_BUILD_TYPE-tests}/bin/termin_shaderc"
+TEST_BUILD_DIR="${BUILD_DIR:-$SCRIPT_DIR/build/$TEST_BUILD_TYPE}"
+TEST_SHADERC="$TEST_BUILD_DIR/bin/termin_shaderc"
 if [[ ! -x "$TEST_SHADERC" ]]; then
     echo "ERROR: test-built termin_shaderc is missing: $TEST_SHADERC" >&2
     failures+=("termin_shaderc provenance")

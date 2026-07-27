@@ -120,9 +120,9 @@ if ($pathEntries.Count -gt 0) {
 # C++ test graph, never a potentially stale SDK copy.
 if (-not $env:TERMIN_SHADERC) {
     $shaderCompilerCandidates = @(
-        (Join-Path $ScriptDir "build\Release-tests\bin\Release\termin_shaderc.exe"),
-        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc.exe"),
-        (Join-Path $ScriptDir "build\Release-tests\bin\termin_shaderc")
+        (Join-Path $ScriptDir "build\Release\bin\Release\termin_shaderc.exe"),
+        (Join-Path $ScriptDir "build\Release\bin\termin_shaderc.exe"),
+        (Join-Path $ScriptDir "build\Release\bin\termin_shaderc")
     )
     $shaderCompiler = $shaderCompilerCandidates |
         Where-Object { Test-Path $_ -PathType Leaf } |
