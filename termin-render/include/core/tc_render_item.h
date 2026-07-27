@@ -8,6 +8,7 @@
 #include "core/tc_component.h"
 #include "tgfx/resources/tc_material.h"
 #include "tgfx/resources/tc_mesh_registry.h"
+#include "tgfx/resources/tc_texture.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,7 @@ typedef enum tc_render_item_kind {
     TC_RENDER_ITEM_KIND_LINE_BATCH = 2,
     TC_RENDER_ITEM_KIND_TEXT_BATCH = 3,
     TC_RENDER_ITEM_KIND_FOLIAGE_BATCH = 4,
+    TC_RENDER_ITEM_KIND_WORLD_QUAD = 5,
 } tc_render_item_kind;
 
 typedef enum tc_render_item_flags {
@@ -98,11 +100,38 @@ typedef struct tc_render_item_foliage_batch_payload {
     const char* foliage_uuid;
 } tc_render_item_foliage_batch_payload;
 
+typedef enum tc_world_quad_sampling {
+    TC_WORLD_QUAD_SAMPLING_LINEAR = 0,
+    TC_WORLD_QUAD_SAMPLING_NEAREST = 1,
+} tc_world_quad_sampling;
+
+typedef struct tc_render_item_world_quad_payload {
+    struct tc_texture* texture;
+    tc_texture_handle texture_handle;
+    /* Local XZ rectangle. The quad front faces world -Y. */
+    float min_x;
+    float min_z;
+    float max_x;
+    float max_z;
+    /* Normalized UV rectangle, using Termin's canonical top-left content origin. */
+    float u0;
+    float v0;
+    float u1;
+    float v1;
+    tc_render_item_vec4 tint;
+    int32_t sorting_layer;
+    int32_t order_in_layer;
+    double spatial_depth;
+    uint64_t stable_tie_breaker;
+    uint32_t sampling;
+} tc_render_item_world_quad_payload;
+
 typedef union tc_render_item_payload {
     tc_render_item_mesh_payload mesh;
     tc_render_item_line_batch_payload line_batch;
     tc_render_item_text_batch_payload text_batch;
     tc_render_item_foliage_batch_payload foliage_batch;
+    tc_render_item_world_quad_payload world_quad;
 } tc_render_item_payload;
 
 typedef struct tc_render_item {
