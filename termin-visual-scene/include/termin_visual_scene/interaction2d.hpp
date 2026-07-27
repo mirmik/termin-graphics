@@ -111,6 +111,8 @@ public:
         const VisualScene2D& scene,
         const PointerDispatch2D& dispatch);
     void clear();
+    bool select(const VisualScene2D& scene, GraphicItemHandle item);
+    bool toggle(const VisualScene2D& scene, GraphicItemHandle item);
     void reconcile(const VisualScene2D& scene);
     std::vector<GraphicItemHandle> selection() const;
 

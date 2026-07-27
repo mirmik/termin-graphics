@@ -10,7 +10,7 @@ import weakref
 from tcbase import MouseButton
 from termin.gui_native import (
     Color,
-    GraphicsItem,
+    GraphicItemRef,
     GraphicsScene,
     KeyCode,
     KeyEventType,
@@ -107,18 +107,6 @@ def _bezier_points(start: Point, end: Point, *, steps: int = 32) -> list[Point]:
     return result
 
 
-def _distance_sq_to_segment(point: Point, start: Point, end: Point) -> float:
-    vx = end.x - start.x
-    vy = end.y - start.y
-    length_sq = vx * vx + vy * vy
-    if length_sq <= 1.0e-8:
-        return (point.x - start.x) ** 2 + (point.y - start.y) ** 2
-    projection = ((point.x - start.x) * vx + (point.y - start.y) * vy) / length_sq
-    projection = max(0.0, min(1.0, projection))
-    closest = Point(start.x + projection * vx, start.y + projection * vy)
-    return (point.x - closest.x) ** 2 + (point.y - closest.y) ** 2
-
-
 @dataclass
 class NativeNodeGraphView:
     """Own a native scene projection and graph editing interaction state."""
@@ -129,17 +117,17 @@ class NativeNodeGraphView:
     scene: GraphicsScene
     view: object
     request_render: Callable[[], None]
-    node_items: dict[str, GraphicsItem] = field(default_factory=dict)
-    edge_items: dict[str, GraphicsItem] = field(default_factory=dict)
-    group_items: dict[str, GraphicsItem] = field(default_factory=dict)
+    node_items: dict[str, GraphicItemRef] = field(default_factory=dict)
+    edge_items: dict[str, GraphicItemRef] = field(default_factory=dict)
+    group_items: dict[str, GraphicItemRef] = field(default_factory=dict)
     param_widgets: dict[tuple[str, str], object] = field(default_factory=dict)
     on_context_requested: Callable[[Point, str | None], None] | None = None
     on_graph_changed: Callable[[], None] | None = None
     on_param_changed: Callable[[Node, str, object], None] | None = None
     _pending_connection: tuple[str, str, bool] | None = None
     _pending_world: Point | None = None
-    _pending_item: GraphicsItem | None = None
-    _embedded_items: list[GraphicsItem] = field(default_factory=list)
+    _pending_item: GraphicItemRef | None = None
+    _embedded_items: list[tuple[GraphicItemRef, object]] = field(default_factory=list)
 
     @property
     def root(self):
@@ -158,21 +146,61 @@ class NativeNodeGraphView:
         self.edge_items.clear()
         self.group_items.clear()
         for group in self.graph.groups.values():
-            item = GraphicsItem(f"group:{group.id}")
+            item = self.scene.create_rect(
+                f"group:{group.id}",
+                Rect(0.0, 0.0, group.width, group.height),
+                Color(0.16, 0.20, 0.30, 0.20),
+                Color(0.28, 0.40, 0.62, 0.9),
+                1.5,
+            )
             item.position = Point(group.x, group.y)
-            item.size = Size(group.width, group.height)
-            item.z_index = -20.0
+            item.z_order = -20
             item.draggable = True
-            item.set_paint_callback(self._group_painter(group.title))
-            self.scene.add_item(item)
+            label = self.scene.create_text(
+                "",
+                group.title,
+                Point(8.0, 18.0),
+                12.0,
+                _TEXT,
+                Rect(8.0, 4.0, max(1.0, group.width - 16.0), 18.0),
+                item,
+            )
+            label.selectable = False
             self.group_items[group.id] = item
         for node in self.graph.nodes.values():
-            item = GraphicsItem(f"node:{node.id}")
+            height = self._node_height(node)
+            fill, title, border = _node_palette(node)
+            item = self.scene.create_rounded_rect(
+                f"node:{node.id}",
+                Rect(0.0, 0.0, node.width, height),
+                5.0,
+                fill,
+                border,
+                1.5,
+            )
             item.position = Point(node.x, node.y)
-            item.size = Size(node.width, self._node_height(node))
             item.draggable = True
-            item.set_paint_callback(self._node_painter(node))
-            self.scene.add_item(item)
+            title_item = self.scene.create_rect(
+                "",
+                Rect(0.0, 0.0, node.width, 26.0),
+                title,
+                None,
+                1.0,
+                item,
+            )
+            title_item.selectable = False
+            title_text = self.scene.create_text(
+                "",
+                node.title,
+                Point(8.0, 18.0),
+                13.0,
+                _TEXT,
+                Rect(8.0, 3.0, max(1.0, node.width - 16.0), 20.0),
+                item,
+            )
+            title_text.selectable = False
+            self._append_socket_visuals(item, node)
+            self._append_param_labels(item, node)
             self._append_param_widgets(item, node)
             self.node_items[node.id] = item
         for edge in self.graph.edges.values():
@@ -191,146 +219,83 @@ class NativeNodeGraphView:
         self.scene.clear()
 
     def _append_edge(self, edge: Edge) -> None:
-        item = GraphicsItem(f"edge:{edge.id}")
-        item.z_index = -10.0
-        item.set_paint_callback(self._edge_painter(edge))
-        item.set_hit_test_callback(self._edge_hit_tester(edge))
-        self.scene.add_item(item)
+        points = self._edge_points(edge)
+        item = self.scene.create_polyline(
+            f"edge:{edge.id}",
+            points,
+            self._edge_color(edge),
+            2.6,
+        )
+        item.z_order = -10
         self.edge_items[edge.id] = item
 
-    def _node_painter(self, node: Node):
-        def paint(item: GraphicsItem, context, transform) -> None:
-            position = transform.world_to_screen(item.world_position)
-            size = item.size
-            width = size.width * transform.zoom
-            height = size.height * transform.zoom
-            title_height = 26.0 * transform.zoom
-            fill, title, border = _node_palette(node)
-            if item.selected:
-                border = Color(0.70, 0.85, 1.0, 1.0)
-            context.fill_rect(Rect(position.x, position.y, width, height), fill)
-            context.fill_rect(Rect(position.x, position.y, width, title_height), title)
-            context.stroke_rect(Rect(position.x, position.y, width, height), border, 1.5)
-            context.draw_text(
-                node.title,
-                Point(position.x + 8.0, position.y + min(title_height - 4.0, 18.0 * transform.zoom)),
-                max(7.0, 13.0 * transform.zoom),
-                _TEXT,
-            )
-            NativeNodeGraphView._paint_sockets(node, context, transform)
-            NativeNodeGraphView._paint_param_labels(node, context, transform)
-
-        return paint
-
-    @staticmethod
-    def _group_painter(title: str):
-        def paint(item: GraphicsItem, context, transform) -> None:
-            position = transform.world_to_screen(item.world_position)
-            size = item.size
-            rect = Rect(
-                position.x,
-                position.y,
-                size.width * transform.zoom,
-                size.height * transform.zoom,
-            )
-            context.fill_rect(rect, Color(0.16, 0.20, 0.30, 0.20))
-            context.stroke_rect(
-                rect,
-                Color(0.70, 0.85, 1.0, 1.0) if item.selected else Color(0.28, 0.40, 0.62, 0.9),
-                1.5,
-            )
-            context.draw_text(title, Point(position.x + 8.0, position.y + 18.0), 12.0, _TEXT)
-
-        return paint
-
-    def _edge_painter(self, edge: Edge):
-        weak_owner = weakref.ref(self)
-
-        def paint(item: GraphicsItem, context, transform) -> None:
-            owner = weak_owner()
-            if owner is None:
-                return
-            start = owner._edge_endpoint(edge, output=True)
-            end = owner._edge_endpoint(edge, output=False)
-            if start is None or end is None:
-                return
-            points = [transform.world_to_screen(point) for point in _bezier_points(start, end)]
-            color = owner._edge_color(edge)
-            if item.selected:
-                color = Color(1.0, 0.85, 0.32, 1.0)
-            context.draw_polyline(points, color, 2.6 if item.selected else 1.8)
-
-        return paint
-
-    def _edge_hit_tester(self, edge: Edge):
-        weak_owner = weakref.ref(self)
-
-        def hit(_item: GraphicsItem, x: float, y: float) -> bool:
-            owner = weak_owner()
-            if owner is None:
-                return False
-            start = owner._edge_endpoint(edge, output=True)
-            end = owner._edge_endpoint(edge, output=False)
-            if start is None or end is None:
-                return False
-            point = Point(x, y)
-            points = _bezier_points(start, end)
-            return any(
-                _distance_sq_to_segment(point, points[index], points[index + 1]) <= 100.0
-                for index in range(len(points) - 1)
-            )
-
-        return hit
-
-    @staticmethod
-    def _paint_sockets(node: Node, context, transform) -> None:
+    def _append_socket_visuals(self, parent: GraphicItemRef, node: Node) -> None:
         for output, sockets in ((False, node.inputs), (True, node.outputs)):
             for index, socket in enumerate(sockets):
-                world = Point(
-                    node.x + (node.width if output else 0.0),
-                    node.y + 26.0 + 20.0 * (index + 0.5),
+                local = Point(
+                    node.width if output else 0.0,
+                    26.0 + 20.0 * (index + 0.5),
                 )
-                screen = transform.world_to_screen(world)
-                size = max(4.0, 8.0 * transform.zoom)
-                context.fill_rect(
-                    Rect(screen.x - size / 2.0, screen.y - size / 2.0, size, size),
+                marker = self.scene.create_ellipse(
+                    "",
+                    Rect(local.x - 4.0, local.y - 4.0, 8.0, 8.0),
                     _SOCKET_COLORS.get(socket.socket_type, _SOCKET_COLORS["any"]),
+                    None,
+                    1.0,
+                    parent,
                 )
-                label_x = screen.x + 8.0 if not output else screen.x - node.width * 0.45 * transform.zoom
-                context.draw_text(
+                marker.selectable = False
+                label_x = local.x + 8.0 if not output else local.x - node.width * 0.45
+                label = self.scene.create_text(
+                    "",
                     socket.name,
-                    Point(label_x, screen.y + 4.0 * transform.zoom),
-                    max(6.0, 11.0 * transform.zoom),
+                    Point(label_x, local.y + 4.0),
+                    11.0,
                     _TEXT,
+                    Rect(label_x, local.y - 8.0, node.width * 0.4, 16.0),
+                    parent,
                 )
+                label.selectable = False
 
-    @staticmethod
-    def _paint_param_labels(node: Node, context, transform) -> None:
-        row_y = node.y + 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 8.0
+    def _append_param_labels(self, parent: GraphicItemRef, node: Node) -> None:
+        row_y = 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 8.0
         specs = node.data.get("param_specs", {})
         if not isinstance(specs, dict):
             specs = {}
         for name, _value in node.params.items():
-            screen = transform.world_to_screen(Point(node.x + 8.0, row_y + 13.0))
             spec = specs.get(name, {})
             label = str(spec.get("label", name)) if isinstance(spec, dict) else name
-            context.draw_text(label, screen, max(6.0, 10.0 * transform.zoom), _PARAM_TEXT)
+            item = self.scene.create_text(
+                "",
+                label,
+                Point(8.0, row_y + 13.0),
+                10.0,
+                _PARAM_TEXT,
+                Rect(8.0, row_y, node.width * 0.45, 16.0),
+                parent,
+            )
+            item.selectable = False
             row_y += 18.0
 
-    def _append_param_widgets(self, parent: GraphicsItem, node: Node) -> None:
+    def _append_param_widgets(self, parent: GraphicItemRef, node: Node) -> None:
         row_y = 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 5.0
         for name, value in node.params.items():
             widget = self._create_param_widget(node, name, value)
-            item = GraphicsItem(f"param:{node.id}:{name}")
+            item = self.scene.create_rect(
+                f"param:{node.id}:{name}",
+                Rect(0.0, 0.0, max(64.0, node.width * 0.46 - 8.0), 18.0),
+                Color(0.0, 0.0, 0.0, 0.0),
+                None,
+                1.0,
+                parent,
+            )
             item.position = Point(node.width * 0.52, row_y)
-            item.size = Size(max(64.0, node.width * 0.46 - 8.0), 18.0)
             item.selectable = False
-            item.embedded_widget = widget.handle
-            if not parent.add_child(item):
-                item.clear_embedded_widget()
+            if not self.view.set_widget_portal(item, widget.handle):
+                self.scene.destroy(item)
                 self.document.destroy_widget_recursive(widget.handle)
                 raise RuntimeError(f"failed to attach native node parameter '{node.id}.{name}'")
-            self._embedded_items.append(item)
+            self._embedded_items.append((item, widget))
             self.param_widgets[(node.id, name)] = widget
             row_y += 18.0
 
@@ -418,9 +383,9 @@ class NativeNodeGraphView:
         self.request_render()
 
     def _destroy_param_widgets(self) -> None:
-        for item in self._embedded_items:
-            handle = item.embedded_widget
-            item.clear_embedded_widget()
+        for item, widget in self._embedded_items:
+            self.view.clear_widget_portal(item)
+            handle = widget.handle
             if self.document.is_alive(handle):
                 self.document.destroy_widget_recursive(handle)
         self._embedded_items.clear()
@@ -445,7 +410,7 @@ class NativeNodeGraphView:
         if event.type == PointerEventType.Move and self._pending_connection is not None:
             self._pending_world = world
             if self._pending_item is not None:
-                self._pending_item.position = Point(world.x, world.y)
+                self._update_pending_item()
             self.request_render()
             return True
         if (event.type == PointerEventType.Up and
@@ -471,7 +436,7 @@ class NativeNodeGraphView:
         if event.type != KeyEventType.Down or event.key != KeyCode.Delete:
             return False
         removed = False
-        for item in tuple(self.scene.selected_items):
+        for item in tuple(self.view.selected_items):
             stable_id = item.stable_id
             if stable_id.startswith("node:"):
                 removed = self.controller.remove_node(stable_id[5:]) or removed
@@ -484,7 +449,7 @@ class NativeNodeGraphView:
             self.rebuild()
         return removed
 
-    def _item_moved(self, item: GraphicsItem) -> None:
+    def _item_moved(self, item: GraphicItemRef) -> None:
         stable_id = item.stable_id
         position = item.position
         if stable_id.startswith("node:"):
@@ -494,6 +459,7 @@ class NativeNodeGraphView:
             if group is not None:
                 group.x = position.x
                 group.y = position.y
+        self._refresh_edges()
         self._notify_graph_changed()
         self.request_render()
 
@@ -511,33 +477,37 @@ class NativeNodeGraphView:
 
     def _install_pending_item(self) -> None:
         if self._pending_item is not None:
-            self.scene.remove_item(self._pending_item)
-        weak_owner = weakref.ref(self)
-        item = GraphicsItem("pending-connection")
+            self.scene.destroy(self._pending_item)
+        item = self.scene.create_polyline(
+            "pending-connection",
+            [Point(0.0, 0.0), Point(0.0, 0.0)],
+            Color(0.9, 0.86, 0.55, 1.0),
+            2.0,
+        )
         item.selectable = False
-        item.z_index = -9.0
-
-        def paint(_item: GraphicsItem, context, transform) -> None:
-            owner = weak_owner()
-            if owner is None or owner._pending_connection is None or owner._pending_world is None:
-                return
-            node_id, socket_name, output = owner._pending_connection
-            node = owner.graph.nodes.get(node_id)
-            if node is None:
-                return
-            start = _socket_position(node, socket_name, output=output)
-            if start is None:
-                return
-            points = [transform.world_to_screen(point) for point in _bezier_points(start, owner._pending_world)]
-            context.draw_polyline(points, Color(0.9, 0.86, 0.55, 1.0), 2.0)
-
-        item.set_paint_callback(paint)
-        self.scene.add_item(item)
+        item.z_order = -9
         self._pending_item = item
+        self._update_pending_item()
+
+    def _update_pending_item(self) -> None:
+        if (self._pending_item is None or self._pending_connection is None
+                or self._pending_world is None):
+            return
+        node_id, socket_name, output = self._pending_connection
+        node = self.graph.nodes.get(node_id)
+        if node is None:
+            return
+        start = _socket_position(node, socket_name, output=output)
+        if start is not None:
+            self._pending_item.set_polyline(
+                _bezier_points(start, self._pending_world),
+                Color(0.9, 0.86, 0.55, 1.0),
+                2.0,
+            )
 
     def _clear_pending(self) -> None:
         if self._pending_item is not None:
-            self.scene.remove_item(self._pending_item)
+            self.scene.destroy(self._pending_item)
         self._pending_item = None
         self._pending_connection = None
         self._pending_world = None
@@ -549,6 +519,23 @@ class NativeNodeGraphView:
         if node is None:
             return None
         return _socket_position(node, socket_name, output=output)
+
+    def _edge_points(self, edge: Edge) -> list[Point]:
+        start = self._edge_endpoint(edge, output=True)
+        end = self._edge_endpoint(edge, output=False)
+        if start is None or end is None:
+            return [Point(0.0, 0.0), Point(0.0, 0.0)]
+        return _bezier_points(start, end)
+
+    def _refresh_edges(self) -> None:
+        for edge_id, item in self.edge_items.items():
+            edge = self.graph.edges.get(edge_id)
+            if edge is not None:
+                item.set_polyline(
+                    self._edge_points(edge),
+                    self._edge_color(edge),
+                    2.6,
+                )
 
     def _edge_color(self, edge: Edge) -> Color:
         node = self.graph.nodes.get(edge.src_node_id)
@@ -600,7 +587,7 @@ def build_native_node_graph_view(
         owner = weak_result()
         return False if owner is None else owner._key(event)
 
-    def moved(item: GraphicsItem) -> None:
+    def moved(item: GraphicItemRef) -> None:
         owner = weak_result()
         if owner is not None:
             owner._item_moved(item)

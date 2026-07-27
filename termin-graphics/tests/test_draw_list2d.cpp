@@ -133,6 +133,22 @@ int main() {
     assert(image && image->texture.id == 23);
     assert(custom && custom->vertices.size() == 3);
 
+    // Appending a frozen list copies its immutable commands into the current
+    // state scopes. This is how adapters apply camera transforms without
+    // reopening or mutating the scene snapshot.
+    tgfx::DrawList2DBuilder composed;
+    assert(composed.push_transform(termin::Affine2f::translation(40, 50)));
+    assert(composed.append(first));
+    assert(composed.pop_transform());
+    auto frozen_composed = composed.freeze();
+    assert(frozen_composed);
+    assert(frozen_composed->size() == first.size() + 2);
+    assert(std::holds_alternative<tgfx::PushTransform2D>(
+        frozen_composed->commands().front()));
+    assert(std::holds_alternative<tgfx::PopTransform2D>(
+        frozen_composed->commands().back()));
+    assert(fingerprint(first) == fingerprint(second));
+
     tgfx::DrawList2DBuilder invalid;
     assert(invalid.push_opacity(0.5f));
     assert(!invalid.freeze());

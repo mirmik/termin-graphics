@@ -8,11 +8,13 @@
 #include <vector>
 
 #include <tcbase/tc_log.h>
+#include <termin/gui_native/draw_list2d_bridge.hpp>
 
 struct tc_ui_draw_list {
     std::vector<tc_ui_draw_command> commands;
     std::vector<std::unique_ptr<std::string>> text_storage;
     std::vector<std::unique_ptr<std::vector<tc_ui_point>>> point_storage;
+    std::vector<std::unique_ptr<tgfx::DrawList2D>> canvas2d_storage;
 };
 
 struct tc_ui_paint_context {
@@ -37,6 +39,7 @@ void tc_ui_draw_list_clear(tc_ui_draw_list* draw_list) {
     draw_list->commands.clear();
     draw_list->text_storage.clear();
     draw_list->point_storage.clear();
+    draw_list->canvas2d_storage.clear();
 }
 
 size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list) {
@@ -350,3 +353,36 @@ void tc_ui_painter_pop_clip(tc_ui_paint_context* context) {
 }
 
 } // extern "C"
+
+namespace termin::gui_native {
+
+bool append_draw_list2d(
+    tc_ui_paint_context* context,
+    tgfx::DrawList2D draw_list) {
+    if (!context || !context->draw_list) {
+        tc_log_error(
+            "[termin-gui-native] cannot append DrawList2D without paint context");
+        return false;
+    }
+    try {
+        auto owned =
+            std::make_unique<tgfx::DrawList2D>(std::move(draw_list));
+        const void* stable = owned.get();
+        context->draw_list->canvas2d_storage.push_back(std::move(owned));
+        tc_ui_draw_command command{};
+        command.type = TC_UI_DRAW_CANVAS2D_LIST;
+        command.canvas2d_list = stable;
+        if (!append_draw_command(context, command)) {
+            context->draw_list->canvas2d_storage.pop_back();
+            return false;
+        }
+        return true;
+    } catch (const std::exception& error) {
+        tc_log_error(
+            "[termin-gui-native] failed to own DrawList2D: %s",
+            error.what());
+        return false;
+    }
+}
+
+} // namespace termin::gui_native

@@ -48,6 +48,21 @@ bool DrawList2DBuilder::pop_scope_(Scope expected, const char* operation) {
     return true;
 }
 
+bool DrawList2DBuilder::append(const DrawList2D& list) {
+    try {
+        commands_.insert(
+            commands_.end(),
+            list.commands().begin(),
+            list.commands().end());
+        return true;
+    } catch (const std::exception& error) {
+        tc_log_error(
+            "[tgfx2] DrawList2D append failed: %s",
+            error.what());
+        return false;
+    }
+}
+
 bool DrawList2DBuilder::push_transform(const termin::Affine2f& transform) {
     if (!transform.is_finite()) {
         tc::Log::error("[DrawList2DBuilder] non-finite transform rejected");

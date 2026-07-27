@@ -291,7 +291,9 @@ The current foundation includes:
   pointer transport.
   External drag/drop is a separate typed host callback so OS payload ownership
   never leaks into the core pointer-event ABI;
-- `GraphicsScene` and `SceneView` provide the retained 2D tool-scene boundary
+- `GraphicsScene` is a thin GUI metadata/invalidation adapter around the one
+  `termin::visual::VisualScene2D`; `SceneView` renders its frozen `DrawList2D`
+  and routes interaction through the canonical scene controllers
   used by node-graph-style editors: exclusive item/child ownership, stable
   z-order, custom draw-list paint and local hit callbacks, selection, captured
   drag/pan and anchored zoom. Embedded native widgets are generation-checked

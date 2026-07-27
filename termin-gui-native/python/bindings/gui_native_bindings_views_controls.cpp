@@ -375,5 +375,6 @@ void bind_gui_native_control_views(nb::module_ &m) {
       .value("StrokeCircle", TC_UI_DRAW_STROKE_CIRCLE)
       .value("Arc", TC_UI_DRAW_ARC)
       .value("Polyline", TC_UI_DRAW_POLYLINE)
-      .value("Texture", TC_UI_DRAW_TEXTURE);
+      .value("Texture", TC_UI_DRAW_TEXTURE)
+      .value("Canvas2DList", TC_UI_DRAW_CANVAS2D_LIST);
 }

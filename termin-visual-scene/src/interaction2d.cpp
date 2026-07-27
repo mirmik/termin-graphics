@@ -367,6 +367,38 @@ void SelectionController2D::clear() {
     selection_.clear();
 }
 
+bool SelectionController2D::select(
+    const VisualScene2D& scene,
+    GraphicItemHandle item) {
+    selection_.clear();
+    if (!valid_handle(item)) return true;
+    const auto snapshot = scene.snapshot(item);
+    if (!snapshot || !snapshot->effective_enabled) return false;
+    selection_.push_back({item, snapshot->topology_revision});
+    return true;
+}
+
+bool SelectionController2D::toggle(
+    const VisualScene2D& scene,
+    GraphicItemHandle item) {
+    reconcile(scene);
+    if (!valid_handle(item)) return true;
+    const auto found = std::find_if(
+        selection_.begin(),
+        selection_.end(),
+        [&](const Entry& entry) {
+            return equal_handle(entry.handle, item);
+        });
+    if (found != selection_.end()) {
+        selection_.erase(found);
+        return true;
+    }
+    const auto snapshot = scene.snapshot(item);
+    if (!snapshot || !snapshot->effective_enabled) return false;
+    selection_.push_back({item, snapshot->topology_revision});
+    return true;
+}
+
 void SelectionController2D::reconcile(const VisualScene2D& scene) {
     const auto snapshots = scene.snapshots();
     std::erase_if(selection_, [&](const Entry& value) {

@@ -154,6 +154,10 @@ private:
 
 class TGFX2_TYPE_API DrawList2DBuilder {
 public:
+    // Deep-copies an already frozen command stream into the current builder.
+    // Scope balance is validated by the source freeze operation, so the
+    // appended stream cannot disturb the destination scope stack.
+    bool append(const DrawList2D& list);
     bool push_transform(const termin::Affine2f& transform);
     bool pop_transform();
     bool push_opacity(float opacity);

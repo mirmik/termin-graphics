@@ -24,6 +24,13 @@ else()
     find_package(termin_graphics REQUIRED)
 endif()
 if(COMMAND termin_require_package)
+    termin_require_package(
+        termin_visual_scene
+        termin_visual_scene::termin_visual_scene)
+else()
+    find_package(termin_visual_scene REQUIRED)
+endif()
+if(COMMAND termin_require_package)
     termin_require_package(termin_inspect termin_inspect::termin_inspect)
 else()
     find_package(termin_inspect REQUIRED)
@@ -133,6 +140,7 @@ target_link_libraries(termin_gui_native
     PUBLIC
         tcbase::termin_base
         tgfx::termin_graphics2
+        termin_visual_scene::termin_visual_scene
         termin_inspect::termin_inspect
 )
 
@@ -257,7 +265,7 @@ termin_set_rpath_lib(termin_gui_native)
 if(NOT WIN32)
     set_target_properties(termin_gui_native PROPERTIES
         BUILD_WITH_INSTALL_RPATH FALSE
-        BUILD_RPATH "$ORIGIN;$<TARGET_FILE_DIR:tcbase::termin_base>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>"
+        BUILD_RPATH "$ORIGIN;$<TARGET_FILE_DIR:tcbase::termin_base>;$<TARGET_FILE_DIR:tgfx::termin_graphics2>;$<TARGET_FILE_DIR:termin_visual_scene::termin_visual_scene>"
     )
 endif()
 

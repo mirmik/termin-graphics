@@ -23,159 +23,167 @@ void bind_gui_native_scene_views(nb::module_ &m) {
            &termin::gui_native::SceneTransform::screen_to_world,
            nb::arg("point"));
 
-  nb::class_<termin::gui_native::GraphicsItem>(m, "GraphicsItem")
-      .def(nb::init<std::string>(), nb::arg("stable_id") = "")
-      .def_prop_ro("id", &termin::gui_native::GraphicsItem::id)
-      .def_prop_rw("stable_id", &termin::gui_native::GraphicsItem::stable_id,
-                   &termin::gui_native::GraphicsItem::set_stable_id)
-      .def_prop_ro("parent", &termin::gui_native::GraphicsItem::parent)
-      .def_prop_ro("children",
-                   [](const termin::gui_native::GraphicsItem &self) {
-                     return self.children();
-                   })
-      .def_prop_rw("position", &termin::gui_native::GraphicsItem::position,
-                   &termin::gui_native::GraphicsItem::set_position)
-      .def_prop_rw("size", &termin::gui_native::GraphicsItem::size,
-                   &termin::gui_native::GraphicsItem::set_size)
-      .def_prop_rw("z_index", &termin::gui_native::GraphicsItem::z_index,
-                   &termin::gui_native::GraphicsItem::set_z_index)
-      .def_prop_rw("visible", &termin::gui_native::GraphicsItem::visible,
-                   &termin::gui_native::GraphicsItem::set_visible)
-      .def_prop_rw("enabled", &termin::gui_native::GraphicsItem::enabled,
-                   &termin::gui_native::GraphicsItem::set_enabled)
-      .def_prop_rw("selectable", &termin::gui_native::GraphicsItem::selectable,
-                   &termin::gui_native::GraphicsItem::set_selectable)
-      .def_prop_rw("draggable", &termin::gui_native::GraphicsItem::draggable,
-                   &termin::gui_native::GraphicsItem::set_draggable)
-      .def_prop_ro("selected", &termin::gui_native::GraphicsItem::selected)
-      .def_prop_ro("hovered", &termin::gui_native::GraphicsItem::hovered)
+  nb::class_<termin::gui_native::GraphicItemRef>(m, "GraphicItemRef")
+      .def_prop_ro("valid", &termin::gui_native::GraphicItemRef::valid)
+      .def_prop_rw("stable_id",
+                   &termin::gui_native::GraphicItemRef::stable_id,
+                   &termin::gui_native::GraphicItemRef::set_stable_id)
+      .def_prop_ro("parent", &termin::gui_native::GraphicItemRef::parent)
+      .def_prop_ro("children", &termin::gui_native::GraphicItemRef::children)
+      .def_prop_rw("position", &termin::gui_native::GraphicItemRef::position,
+                   &termin::gui_native::GraphicItemRef::set_position)
+      .def_prop_rw("size", &termin::gui_native::GraphicItemRef::size,
+                   &termin::gui_native::GraphicItemRef::set_size)
+      .def_prop_rw("z_order", &termin::gui_native::GraphicItemRef::z_order,
+                   &termin::gui_native::GraphicItemRef::set_z_order)
+      .def_prop_rw("visible", &termin::gui_native::GraphicItemRef::visible,
+                   &termin::gui_native::GraphicItemRef::set_visible)
+      .def_prop_rw("enabled", &termin::gui_native::GraphicItemRef::enabled,
+                   &termin::gui_native::GraphicItemRef::set_enabled)
+      .def_prop_rw("selectable",
+                   &termin::gui_native::GraphicItemRef::selectable,
+                   &termin::gui_native::GraphicItemRef::set_selectable)
+      .def_prop_rw("draggable",
+                   &termin::gui_native::GraphicItemRef::draggable,
+                   &termin::gui_native::GraphicItemRef::set_draggable)
       .def_prop_ro("world_position",
-                   &termin::gui_native::GraphicsItem::world_position)
+                   &termin::gui_native::GraphicItemRef::world_position)
       .def_prop_ro("world_bounds",
-                   &termin::gui_native::GraphicsItem::world_bounds)
-      .def_prop_rw(
-          "embedded_widget",
-          [](const termin::gui_native::GraphicsItem &self) {
-            return WidgetHandle{self.embedded_widget()};
-          },
-          [](termin::gui_native::GraphicsItem &self, WidgetHandle handle) {
-            self.set_embedded_widget(handle.handle);
-          })
-      .def("add_child", &termin::gui_native::GraphicsItem::add_child,
-           nb::arg("child"))
-      .def("remove_child", &termin::gui_native::GraphicsItem::remove_child,
-           nb::arg("child"))
-      .def("clear_children", &termin::gui_native::GraphicsItem::clear_children)
-      .def("contains_local", &termin::gui_native::GraphicsItem::contains_local,
-           nb::arg("x"), nb::arg("y"))
-      .def("hit_test", &termin::gui_native::GraphicsItem::hit_test,
-           nb::arg("world_x"), nb::arg("world_y"))
-      .def("clear_embedded_widget",
-           &termin::gui_native::GraphicsItem::clear_embedded_widget)
+                   &termin::gui_native::GraphicItemRef::world_bounds)
+      .def("reparent", &termin::gui_native::GraphicItemRef::reparent,
+           nb::arg("parent") = std::nullopt)
       .def(
-          "set_paint_callback",
-          [](termin::gui_native::GraphicsItem &self, nb::object callback) {
-            if (callback.is_none()) {
-              self.set_paint_callback({});
-              return;
-            }
-            self.set_paint_callback(
-                [callback = std::move(callback)](
-                    termin::gui_native::GraphicsItem &item,
-                    tc_ui_paint_context *context,
-                    const termin::gui_native::SceneTransform &transform) {
-                  nb::gil_scoped_acquire gil;
-                  try {
-                    PaintContext borrowed(context, false);
-                    callback(item.shared_from_this(), std::move(borrowed),
-                             termin::gui_native::SceneTransform{transform});
-                  } catch (...) {
-                    tc_log_error("[termin-gui-native/python] GraphicsItem "
-                                 "paint callback failed");
-                    throw;
-                  }
-                });
+          "set_polyline",
+          [](termin::gui_native::GraphicItemRef &self,
+             const std::vector<tc_ui_point> &points,
+             tc_ui_color color, float width, bool closed) {
+            std::vector<termin::Vec2f> values;
+            values.reserve(points.size());
+            for (const auto point : points)
+              values.push_back({point.x, point.y});
+            return self.set_polyline(
+                std::move(values),
+                tgfx::StrokePaint{
+                    {color.r, color.g, color.b, color.a}, width},
+                closed);
           },
-          nb::arg("callback").none())
-      .def(
-          "set_hit_test_callback",
-          [](termin::gui_native::GraphicsItem &self, nb::object callback) {
-            if (callback.is_none()) {
-              self.set_hit_test_callback({});
-              return;
-            }
-            self.set_hit_test_callback(
-                [callback = std::move(callback)](
-                    const termin::gui_native::GraphicsItem &item, float x,
-                    float y) {
-                  nb::gil_scoped_acquire gil;
-                  try {
-                    return nb::cast<bool>(callback(
-                        const_cast<termin::gui_native::GraphicsItem &>(item)
-                            .shared_from_this(),
-                        x, y));
-                  } catch (...) {
-                    tc_log_error("[termin-gui-native/python] GraphicsItem "
-                                 "hit-test callback failed");
-                    throw;
-                  }
-                });
-          },
-          nb::arg("callback").none());
+          nb::arg("points"), nb::arg("color"), nb::arg("width") = 1.0f,
+          nb::arg("closed") = false);
 
   nb::class_<termin::gui_native::GraphicsScene>(m, "GraphicsScene")
       .def(nb::init<>())
-      .def_prop_ro("items",
-                   [](const termin::gui_native::GraphicsScene &self) {
-                     return self.items();
-                   })
-      .def_prop_ro("selected_items",
-                   [](const termin::gui_native::GraphicsScene &self) {
-                     return self.selected_items();
-                   })
+      .def_prop_ro("items", &termin::gui_native::GraphicsScene::items)
       .def_prop_ro("revision", &termin::gui_native::GraphicsScene::revision)
-      .def("add_item", &termin::gui_native::GraphicsScene::add_item,
-           nb::arg("item"))
-      .def("remove_item", &termin::gui_native::GraphicsScene::remove_item,
+      .def("create_group", &termin::gui_native::GraphicsScene::create_group,
+           nb::arg("stable_id") = "", nb::arg("parent") = std::nullopt)
+      .def(
+          "create_rect",
+          [](termin::gui_native::GraphicsScene &self, std::string stable_id,
+             tc_ui_rect rect, tc_ui_color fill,
+             std::optional<tc_ui_color> stroke, float stroke_width,
+             std::optional<termin::gui_native::GraphicItemRef> parent) {
+            std::optional<tgfx::StrokePaint> outline;
+            if (stroke) {
+              outline = tgfx::StrokePaint{
+                  {stroke->r, stroke->g, stroke->b, stroke->a},
+                  stroke_width};
+            }
+            return self.create_rect(
+                std::move(stable_id),
+                {rect.x, rect.y, rect.width, rect.height},
+                {{fill.r, fill.g, fill.b, fill.a}},
+                std::move(outline), std::move(parent));
+          },
+          nb::arg("stable_id"), nb::arg("rect"), nb::arg("fill"),
+          nb::arg("stroke") = std::nullopt,
+          nb::arg("stroke_width") = 1.0f,
+          nb::arg("parent") = std::nullopt)
+      .def(
+          "create_rounded_rect",
+          [](termin::gui_native::GraphicsScene &self, std::string stable_id,
+             tc_ui_rect rect, float radius, tc_ui_color fill,
+             std::optional<tc_ui_color> stroke, float stroke_width,
+             std::optional<termin::gui_native::GraphicItemRef> parent) {
+            std::optional<tgfx::StrokePaint> outline;
+            if (stroke) {
+              outline = tgfx::StrokePaint{
+                  {stroke->r, stroke->g, stroke->b, stroke->a},
+                  stroke_width};
+            }
+            return self.create_rounded_rect(
+                std::move(stable_id),
+                {rect.x, rect.y, rect.width, rect.height},
+                radius, {{fill.r, fill.g, fill.b, fill.a}},
+                std::move(outline), std::move(parent));
+          },
+          nb::arg("stable_id"), nb::arg("rect"), nb::arg("radius"),
+          nb::arg("fill"), nb::arg("stroke") = std::nullopt,
+          nb::arg("stroke_width") = 1.0f,
+          nb::arg("parent") = std::nullopt)
+      .def(
+          "create_ellipse",
+          [](termin::gui_native::GraphicsScene &self, std::string stable_id,
+             tc_ui_rect rect, tc_ui_color fill,
+             std::optional<tc_ui_color> stroke, float stroke_width,
+             std::optional<termin::gui_native::GraphicItemRef> parent) {
+            std::optional<tgfx::StrokePaint> outline;
+            if (stroke) {
+              outline = tgfx::StrokePaint{
+                  {stroke->r, stroke->g, stroke->b, stroke->a},
+                  stroke_width};
+            }
+            return self.create_ellipse(
+                std::move(stable_id),
+                {rect.x, rect.y, rect.width, rect.height},
+                {{fill.r, fill.g, fill.b, fill.a}},
+                std::move(outline), std::move(parent));
+          },
+          nb::arg("stable_id"), nb::arg("bounds"), nb::arg("fill"),
+          nb::arg("stroke") = std::nullopt,
+          nb::arg("stroke_width") = 1.0f,
+          nb::arg("parent") = std::nullopt)
+      .def(
+          "create_polyline",
+          [](termin::gui_native::GraphicsScene &self, std::string stable_id,
+             const std::vector<tc_ui_point> &points, tc_ui_color color,
+             float width, bool closed,
+             std::optional<termin::gui_native::GraphicItemRef> parent) {
+            std::vector<termin::Vec2f> values;
+            values.reserve(points.size());
+            for (const auto point : points)
+              values.push_back({point.x, point.y});
+            return self.create_polyline(
+                std::move(stable_id), std::move(values),
+                tgfx::StrokePaint{
+                    {color.r, color.g, color.b, color.a}, width},
+                closed, std::move(parent));
+          },
+          nb::arg("stable_id"), nb::arg("points"), nb::arg("color"),
+          nb::arg("width") = 1.0f, nb::arg("closed") = false,
+          nb::arg("parent") = std::nullopt)
+      .def(
+          "create_text",
+          [](termin::gui_native::GraphicsScene &self, std::string stable_id,
+             std::string text, tc_ui_point origin, float size_px,
+             tc_ui_color color, tc_ui_rect layout_bounds,
+             std::optional<termin::gui_native::GraphicItemRef> parent) {
+            return self.create_text(
+                std::move(stable_id), std::move(text),
+                {origin.x, origin.y}, size_px,
+                {color.r, color.g, color.b, color.a},
+                {layout_bounds.x, layout_bounds.y,
+                 layout_bounds.x + layout_bounds.width,
+                 layout_bounds.y + layout_bounds.height},
+                std::move(parent));
+          },
+          nb::arg("stable_id"), nb::arg("text"), nb::arg("origin"),
+          nb::arg("size_px"), nb::arg("color"),
+          nb::arg("layout_bounds"), nb::arg("parent") = std::nullopt)
+      .def("destroy", &termin::gui_native::GraphicsScene::destroy,
            nb::arg("item"))
       .def("clear", &termin::gui_native::GraphicsScene::clear)
       .def("hit_test", &termin::gui_native::GraphicsScene::hit_test,
-           nb::arg("world_x"), nb::arg("world_y"))
-      .def("set_selected", &termin::gui_native::GraphicsScene::set_selected,
-           nb::arg("item"))
-      .def("toggle_selected",
-           &termin::gui_native::GraphicsScene::toggle_selected, nb::arg("item"))
-      .def("clear_selection",
-           &termin::gui_native::GraphicsScene::clear_selection)
-      .def(
-          "contains",
-          [](const termin::gui_native::GraphicsScene &self,
-             const std::shared_ptr<termin::gui_native::GraphicsItem> &item) {
-            return self.contains(item.get());
-          },
-          nb::arg("item"))
-      .def(
-          "connect_selection_changed",
-          [](termin::gui_native::GraphicsScene &self, nb::object callback) {
-            return self.selection_changed().connect(
-                [callback = std::move(callback)](
-                    termin::gui_native::GraphicsScene &, const auto &selected) {
-                  nb::gil_scoped_acquire gil;
-                  try {
-                    callback(selected);
-                  } catch (...) {
-                    tc_log_error(
-                        "[termin-gui-native/python] GraphicsScene selection "
-                        "callback failed");
-                  }
-                });
-          },
-          nb::arg("callback"))
-      .def("disconnect_selection_changed",
-           [](termin::gui_native::GraphicsScene &self, size_t connection) {
-             return self.selection_changed().disconnect(connection);
-           },
-           nb::arg("connection"));
+           nb::arg("world_x"), nb::arg("world_y"));
 
   nb::class_<termin::gui_native::CollectionItem>(m, "CollectionItem")
       .def(nb::init<>())
@@ -833,7 +841,7 @@ void bind_gui_native_scene_views(nb::module_ &m) {
             return self.get().item_moved().connect(
                 [state, callback = std::move(callback)](
                     termin::gui_native::SceneView &,
-                    std::shared_ptr<termin::gui_native::GraphicsItem> item) {
+                    termin::gui_native::GraphicItemRef item) {
                   nb::gil_scoped_acquire gil;
                   try {
                     callback(std::move(item));
@@ -846,6 +854,31 @@ void bind_gui_native_scene_views(nb::module_ &m) {
                 });
           },
           nb::arg("callback"))
+      .def_prop_ro(
+          "selected_items",
+          [](const SceneViewRef &self) {
+            return self.get().selected_items();
+          })
+      .def_prop_ro(
+          "hovered_item",
+          [](const SceneViewRef &self) {
+            return self.get().hovered_item();
+          })
+      .def(
+          "set_widget_portal",
+          [](const SceneViewRef &self,
+             const termin::gui_native::GraphicItemRef &item,
+             WidgetHandle widget) {
+            return self.get().set_widget_portal(item, widget.handle);
+          },
+          nb::arg("item"), nb::arg("widget"))
+      .def(
+          "clear_widget_portal",
+          [](const SceneViewRef &self,
+             const termin::gui_native::GraphicItemRef &item) {
+            return self.get().clear_widget_portal(item);
+          },
+          nb::arg("item"))
       .def(
           "connect_transform_changed",
           [](const SceneViewRef &self, nb::object callback) {
