@@ -201,6 +201,7 @@ add_subdirectory(termin-components/termin-components-physics)
 add_subdirectory(termin-components/termin-components-skeleton)
 
 add_subdirectory(termin-graphics)
+add_subdirectory(termin-visual-scene)
 add_subdirectory(termin-window)
 add_subdirectory(termin-materials)
 add_subdirectory(termin-render)

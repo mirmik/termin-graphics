@@ -73,6 +73,7 @@
     "termin-engine/docs",
     "termin-glb/docs",
     "termin-graphics/docs",
+    "termin-visual-scene/docs",
     "termin-gui-native/docs",
     "termin-input/docs",
     "termin-lighting/docs",
