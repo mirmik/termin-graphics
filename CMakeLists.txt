@@ -235,6 +235,35 @@ if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(tcplot)
 endif()
 
+if(TERMIN_BUILD_TESTS)
+    foreach(_termin_aggregate IN ITEMS
+            TERMIN_NATIVE_TEST_TARGETS
+            TERMIN_NATIVE_TEST_TARGETS_WITH_WINDOW)
+        get_property(
+            ${_termin_aggregate}
+            GLOBAL
+            PROPERTY ${_termin_aggregate}
+        )
+        list(REMOVE_DUPLICATES ${_termin_aggregate})
+        list(LENGTH ${_termin_aggregate} _termin_aggregate_target_count)
+        if(_termin_aggregate_target_count EQUAL 0)
+            message(FATAL_ERROR
+                "TERMIN_BUILD_TESTS=ON produced no targets for "
+                "${_termin_aggregate}")
+        endif()
+    endforeach()
+    add_custom_target(termin_native_tests)
+    add_dependencies(
+        termin_native_tests
+        ${TERMIN_NATIVE_TEST_TARGETS}
+    )
+    add_custom_target(termin_native_tests_with_window)
+    add_dependencies(
+        termin_native_tests_with_window
+        ${TERMIN_NATIVE_TEST_TARGETS_WITH_WINDOW}
+    )
+endif()
+
 configure_package_config_file(
     ${CMAKE_CURRENT_LIST_DIR}/cmake/terminConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake

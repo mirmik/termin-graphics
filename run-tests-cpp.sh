@@ -1,7 +1,7 @@
 #!/bin/bash
-# Run C/C++ test suites through the top-level CMake graph.
-# Assumes SDK dependencies are available, typically via:
-#   ./build-sdk-cpp.sh
+# Run C/C++ test suites through the SDK's top-level CMake graph.
+# The default build directory is shared with build-sdk.sh so native product
+# libraries and bundled third-party dependencies are reused incrementally.
 
 set -uo pipefail
 
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_PREFIX="${SDK_PREFIX:-$SCRIPT_DIR/sdk}"
 BUILD_TYPE="Release"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
-BUILD_DIR=""
+BUILD_DIR="${BUILD_DIR:-}"
 FULL=0
 VULKAN_MODE="on"
 OPENGL_MODE="on"
@@ -67,7 +67,7 @@ for arg in "$@"; do
             echo ""
             echo "Environment:"
             echo "  SDK_PREFIX        SDK prefix for installed dependencies (default: ./sdk)"
-            echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>-tests)"
+            echo "  BUILD_DIR         CMake build directory (default: ./build/<BUILD_TYPE>)"
             echo "  BUILD_JOBS        Parallel build jobs (default: nproc)"
             echo "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
             echo "                    CMake generator for a new build dir (default: CMake default)"
@@ -81,7 +81,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$BUILD_DIR" ]]; then
-    BUILD_DIR="$SCRIPT_DIR/build/${BUILD_TYPE}-tests"
+    BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
 fi
 
 case "$VULKAN_MODE" in
@@ -135,7 +135,7 @@ export LD_LIBRARY_PATH="${BUILD_DIR}/bin:${SDK_PREFIX}/lib${LD_LIBRARY_PATH:+:$L
 echo ""
 echo "========================================"
 echo "  C/C++ tests ($BUILD_TYPE)"
-echo "  mode: top-level CMake graph"
+echo "  mode: shared SDK CMake graph"
 echo "========================================"
 echo ""
 echo "Source dir:  $SCRIPT_DIR"
@@ -177,25 +177,25 @@ if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
     cmake_args+=(-G "$CMAKE_GENERATOR_NAME")
 fi
 
+FILE_API_QUERY_DIR="$BUILD_DIR/.cmake/api/v1/query"
+mkdir -p "$FILE_API_QUERY_DIR"
+touch "$FILE_API_QUERY_DIR/codemodel-v2"
+
 if ! cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DCMAKE_PREFIX_PATH="$SDK_PREFIX" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
-    -DCMAKE_BUILD_RPATH="${BUILD_DIR}/bin;${SDK_PREFIX}/lib" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
     -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
-    -DTERMIN_BUILD_PYTHON=OFF \
     -DTERMIN_BUILD_TESTS=ON \
     -DTERMIN_BUILD_TGFX2_TESTS=ON \
     -DTERMIN_BUILD_WINDOW_TESTS="$TERMIN_BUILD_WINDOW_TESTS" \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
     -DTERMIN_ENABLE_OPENGL="$TERMIN_ENABLE_OPENGL" \
-    -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
-    -DTERMIN_BUILD_EDITOR_MINIMAL=OFF \
-    -DTERMIN_BUILD_LAUNCHER=OFF; then
+    -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL"; then
     echo "ERROR: CMake configure failed" >&2
     exit 1
 fi
@@ -244,7 +244,25 @@ if [[ "$CTEST_REGEX" == "^()$" ]]; then
     exit 1
 fi
 
-if ! cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"; then
+CTEST_TARGETS_FILE="$BUILD_DIR/ctest-build-targets.txt"
+if ! "${CTEST_PLAN_COMMAND[@]}" --build-targets > "$CTEST_TARGETS_FILE"; then
+    echo "ERROR: CTest build target resolution failed" >&2
+    exit 1
+fi
+mapfile -t CTEST_BUILD_TARGETS < "$CTEST_TARGETS_FILE"
+if [[ "${#CTEST_BUILD_TARGETS[@]}" -eq 0 ]]; then
+    echo "ERROR: CTest planner resolved no CMake build targets" >&2
+    exit 1
+fi
+echo "Building ${#CTEST_BUILD_TARGETS[@]} selected CTest target(s)"
+if [[ "$TERMIN_BUILD_WINDOW_TESTS" == "ON" ]]; then
+    CMAKE_TEST_TARGET=termin_native_tests_with_window
+else
+    CMAKE_TEST_TARGET=termin_native_tests
+fi
+if ! cmake --build "$BUILD_DIR" \
+    --target "$CMAKE_TEST_TARGET" \
+    --parallel "$BUILD_JOBS"; then
     echo "ERROR: C++ test build failed" >&2
     exit 1
 fi

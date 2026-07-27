@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
-# Run C/C++ test suites through the top-level CMake graph.
-# Assumes SDK dependencies are available, typically via:
-#   .\build-sdk-cpp.ps1
+# Run C/C++ test suites through the SDK's top-level CMake graph.
+# The default build directory is shared with build-sdk.ps1 so native product
+# libraries and bundled third-party dependencies are reused incrementally.
 
 $ErrorActionPreference = "Stop"
 
@@ -67,7 +67,7 @@ function Show-Help {
     Write-Host ""
     Write-Host "Environment:"
     Write-Host "  SDK_PREFIX        SDK prefix for installed dependencies (default: .\sdk)"
-    Write-Host "  BUILD_DIR         CMake build directory (default: .\build\<BUILD_TYPE>-tests)"
+    Write-Host "  BUILD_DIR         CMake build directory (default: .\build\<BUILD_TYPE>)"
     Write-Host "  BUILD_JOBS        Parallel build jobs (default: logical processor count)"
     Write-Host "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
     Write-Host "                    CMake generator for a new build dir (default: CMake default)"
@@ -100,7 +100,7 @@ foreach ($arg in $args) {
 }
 
 if (-not $BuildDir) {
-    $BuildDir = Join-Path (Join-Path $ScriptDir "build") "$BuildType-tests"
+    $BuildDir = Join-Path (Join-Path $ScriptDir "build") $BuildType
 }
 
 $TerminEnableVulkan = if ($VulkanMode -eq "on") { "ON" } else { "OFF" }
@@ -161,7 +161,7 @@ $env:LD_LIBRARY_PATH = ($ldEntries -join [IO.Path]::PathSeparator)
 Write-Host ""
 Write-Host "========================================"
 Write-Host "  C/C++ tests ($BuildType)"
-Write-Host "  mode: top-level CMake graph"
+Write-Host "  mode: shared SDK CMake graph"
 Write-Host "========================================"
 Write-Host ""
 Write-Host "Source dir:  $ScriptDir"
@@ -199,21 +199,17 @@ $cmakeArgs += @(
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     "-DCMAKE_PREFIX_PATH=$SdkPrefix",
     "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
-    "-DCMAKE_BUILD_RPATH=$((Join-Path $SdkPrefix 'lib'));$((Join-Path $BuildDir 'bin'))",
     "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
     "-DPython_EXECUTABLE=$PythonForCMake",
     "-DTERMIN_USE_CCACHE=$TerminUseCcache",
     "-DTERMIN_ENABLE_UNITY_BUILD=$TerminEnableUnityBuild",
     "-DTERMIN_ENABLE_PCH=$TerminEnablePch",
-    "-DTERMIN_BUILD_PYTHON=OFF",
     "-DTERMIN_BUILD_TESTS=ON",
     "-DTERMIN_BUILD_TGFX2_TESTS=ON",
     "-DTERMIN_BUILD_WINDOW_TESTS=$TerminBuildWindowTests",
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
-    "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
-    "-DTERMIN_BUILD_EDITOR_MINIMAL=OFF",
-    "-DTERMIN_BUILD_LAUNCHER=OFF"
+    "-DTERMIN_ENABLE_SDL=$TerminEnableSdl"
 )
 
 # Visual Studio generators do not emit compile_commands.json. Request the CMake
@@ -299,7 +295,26 @@ if ($CtestRegex -eq "^()$") {
     exit 1
 }
 
-Invoke-TerminCMakeBuild -BuildDir $BuildDir -BuildType $BuildType -BuildJobs $BuildJobs
+$CtestBuildTargets = @(& $PythonExe @RepositoryControl @CtestPlanArgs --build-targets)
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "CTest build target resolution failed"
+    exit 1
+}
+if ($CtestBuildTargets.Count -eq 0) {
+    Write-Error "CTest planner resolved no CMake build targets"
+    exit 1
+}
+Write-Host "Building $($CtestBuildTargets.Count) selected CTest target(s)"
+$CmakeTestTarget = if ($TerminBuildWindowTests -eq "ON") {
+    "termin_native_tests_with_window"
+} else {
+    "termin_native_tests"
+}
+Invoke-TerminCMakeBuild `
+    -BuildDir $BuildDir `
+    -BuildType $BuildType `
+    -Target $CmakeTestTarget `
+    -BuildJobs $BuildJobs
 
 $CtestJunitPath = Join-Path $BuildDir "ctest-results.xml"
 # CTest may leave an existing JUnit document untouched, so remove only the

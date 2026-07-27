@@ -702,6 +702,10 @@ if(BUILD_TGFX2_TESTS)
             COMMAND tgfx2_vulkan_stats_test enabled)
         set_tests_properties(tgfx2_vulkan_stats_enabled PROPERTIES
             ENVIRONMENT "TGFX2_VULKAN_STATS=1")
+        termin_set_test_build_target(
+            tgfx2_vulkan_stats_disabled tgfx2_vulkan_stats_test)
+        termin_set_test_build_target(
+            tgfx2_vulkan_stats_enabled tgfx2_vulkan_stats_test)
         termin_add_test_labels(tgfx2_vulkan_stats_disabled
             "termin:capability:vulkan")
         termin_add_test_labels(tgfx2_vulkan_stats_enabled
