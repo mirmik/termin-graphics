@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptDir "scripts\Normalize-WindowsBuildEnvironment.ps1")
+. (Join-Path $ScriptDir "scripts\Invoke-CMakeBuild.ps1")
 Normalize-WindowsBuildEnvironment
 
 $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
@@ -22,22 +23,6 @@ $CcacheMode = "on"
 $UnityMode = "off"
 $PchMode = "on"
 $CmakeGeneratorName = if ($env:CMAKE_GENERATOR_NAME) { $env:CMAKE_GENERATOR_NAME } elseif ($env:TERMIN_CMAKE_GENERATOR) { $env:TERMIN_CMAKE_GENERATOR } else { $null }
-
-function Get-CMakeGeneratorFromCache {
-    param([string]$BuildDir)
-
-    $cachePath = Join-Path $BuildDir "CMakeCache.txt"
-    if (-not (Test-Path $cachePath)) {
-        return ""
-    }
-
-    $generatorLine = Get-Content $cachePath | Where-Object { $_ -like "CMAKE_GENERATOR:INTERNAL=*" } | Select-Object -First 1
-    if (-not $generatorLine) {
-        return ""
-    }
-
-    return ($generatorLine -split "=", 2)[1]
-}
 
 function Test-CMakeCacheBoolean {
     param(
@@ -314,17 +299,7 @@ if ($CtestRegex -eq "^()$") {
     exit 1
 }
 
-$ActualGenerator = Get-CMakeGeneratorFromCache $BuildDir
-if ($ActualGenerator -like "Visual Studio*") {
-    Write-Host "Visual Studio generator detected; using MSBuild /m:1 to avoid parallel solution race"
-    & cmake --build $BuildDir --config $BuildType -- /m:1
-} else {
-    & cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
-}
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "C++ test build failed"
-    exit 1
-}
+Invoke-TerminCMakeBuild -BuildDir $BuildDir -BuildType $BuildType -BuildJobs $BuildJobs
 
 $CtestJunitPath = Join-Path $BuildDir "ctest-results.xml"
 # CTest may leave an existing JUnit document untouched, so remove only the

@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptDir "scripts\Normalize-WindowsBuildEnvironment.ps1")
+. (Join-Path $ScriptDir "scripts\Invoke-CMakeBuild.ps1")
 Normalize-WindowsBuildEnvironment
 
 $SdkPrefix = if ($env:SDK_PREFIX) { $env:SDK_PREFIX } else { Join-Path $ScriptDir "sdk" }
@@ -51,22 +52,6 @@ function Show-Help {
     Write-Host "  BUILD_JOBS        Parallel build jobs (default: logical processor count)"
     Write-Host "  TERMIN_CMAKE_GENERATOR or CMAKE_GENERATOR_NAME"
     Write-Host "                    CMake generator for a new build dir (default: CMake default)"
-}
-
-function Get-CMakeGeneratorFromCache {
-    param([string]$BuildDir)
-
-    $cachePath = Join-Path $BuildDir "CMakeCache.txt"
-    if (-not (Test-Path $cachePath)) {
-        return ""
-    }
-
-    $generatorLine = Get-Content $cachePath | Where-Object { $_ -like "CMAKE_GENERATOR:INTERNAL=*" } | Select-Object -First 1
-    if (-not $generatorLine) {
-        return ""
-    }
-
-    return ($generatorLine -split "=", 2)[1]
 }
 
 function Test-VulkanSdkAvailable {
@@ -226,14 +211,7 @@ $cmakeArgs += @(
 & cmake @cmakeArgs
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
-$ActualGenerator = Get-CMakeGeneratorFromCache $BuildDir
-if ($ActualGenerator -like "Visual Studio*") {
-    Write-Host "Visual Studio generator detected; using MSBuild /m:1 to avoid parallel solution race"
-    & cmake --build $BuildDir --config $BuildType -- /m:1
-} else {
-    & cmake --build $BuildDir --config $BuildType --parallel $BuildJobs
-}
-if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
+Invoke-TerminCMakeBuild -BuildDir $BuildDir -BuildType $BuildType -BuildJobs $BuildJobs
 
 & cmake --install $BuildDir --config $BuildType
 if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
