@@ -13,6 +13,7 @@
 
 #include "tgfx2/font_atlas.hpp"
 #include "tgfx2/handles.hpp"
+#include "tgfx2/path2d.hpp"
 #include "tgfx2/text2d_renderer.hpp"
 #include "tgfx2/tgfx2_api.h"
 
@@ -21,20 +22,9 @@ namespace tgfx {
 class RenderContext2;
 class IRenderDevice;
 
-struct CanvasColor {
-    float r = 1.0f;
-    float g = 1.0f;
-    float b = 1.0f;
-    float a = 1.0f;
-
-    static CanvasColor white() { return {1.0f, 1.0f, 1.0f, 1.0f}; }
-    static CanvasColor transparent() { return {0.0f, 0.0f, 0.0f, 0.0f}; }
-};
-
-struct CanvasVec2 {
-    float x = 0.0f;
-    float y = 0.0f;
-};
+// Compatibility names; Canvas uses the canonical shared value vocabulary.
+using CanvasColor = Color4f;
+using CanvasVec2 = termin::Vec2f;
 
 enum class CanvasTextureSampling {
     Linear,

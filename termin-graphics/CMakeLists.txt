@@ -123,6 +123,7 @@ set(TGFX2_SOURCES
     src/tgfx2/immediate_renderer.cpp
     src/tgfx2/line_renderer_common.cpp
     src/tgfx2/line_mesh_builder.cpp
+    src/tgfx2/path2d.cpp
     src/tgfx2/screen_space_line_renderer.cpp
     src/tgfx2/world_space_line_renderer.cpp
     src/tgfx2/world_tube_line_renderer.cpp
@@ -521,6 +522,11 @@ if(BUILD_TGFX2_TESTS)
         "GLFW init failed|Failed to init GLFW|Window creation failed|Failed to create GLFW window|No available video device|Vulkan support is either not configured in SDL")
     set(TGFX2_VULKAN_RUNTIME_SKIP_RE
         "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
+
+    add_executable(tgfx2_path2d_test tests/test_path2d.cpp)
+    target_link_libraries(tgfx2_path2d_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_path2d_test)
+    add_test(NAME tgfx2_path2d_test COMMAND tgfx2_path2d_test)
 
     add_executable(tgfx2_front_face_contract_test
         tests/test_tgfx2_front_face_contract.cpp)

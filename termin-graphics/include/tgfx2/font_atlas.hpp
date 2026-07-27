@@ -36,6 +36,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <termin/geom/size2.hpp>
+
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
 
@@ -47,10 +49,7 @@ class IRenderDevice;
 class TGFX2_TYPE_API FontAtlas {
 public:
     // Pixel (width, height) returned by measure_text.
-    struct Size2f {
-        float width = 0.0f;
-        float height = 0.0f;
-    };
+    using Size2f = termin::Size2f;
 
     // Glyph info, populated lazily by ensure_glyph(cp, display_px).
     // All metrics are in DISPLAY pixels at the baked size — renderer
