@@ -82,3 +82,27 @@ disabled targets and invalidates capture when topology changes.
 over routed events. Dragging maps the world-space pointer delta through the
 exact inverse parent transform and left-multiplies a parent-space translation,
 so rotation, non-uniform scale and shear remain intact.
+
+## Draggable primitive example
+
+The supported example target is built with
+`TERMIN_VISUAL_SCENE_BUILD_EXAMPLES=ON` (the repository default) and installed
+in the SDK. Launch it after `./build-sdk.sh`:
+
+```bash
+./sdk/bin/termin_visual_scene_draggable_example
+```
+
+The window contains an overlapping rectangle, ellipse and diamond path. Move
+the pointer to see hover feedback; press and drag any shape to exercise
+selection and per-pointer capture; release to end the drag. Later-created,
+higher-z items win overlap picking deterministically.
+
+The same executable has a window-free CI mode:
+
+```bash
+./sdk/bin/termin_visual_scene_draggable_example --headless-smoke
+```
+
+It verifies public scene creation, canonical DrawList lowering and captured
+dragging for all three primitives.
