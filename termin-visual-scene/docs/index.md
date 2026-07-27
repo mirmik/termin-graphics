@@ -40,3 +40,24 @@ monotonic scene-owned insertion order.
 All typed mutations validate before committing under the scene mutex. A failed
 path, paint, resource, transform, opacity or geometry update is logged and
 leaves the previous payload, state and revision unchanged.
+
+## Immutable render preparation
+
+`VisualScene2D::prepare_render_snapshot()` copies one coherent scene revision
+under the scene mutex, releases that mutex, and only then calls the
+host-supplied `SceneRenderResourceResolver2D`. The resolver maps persistent
+font/image references and custom-batch keys to canonical `tgfx` runtime
+handles and vertices. User resolver code therefore never runs under the scene
+lock.
+
+The result owns its item values and frozen `tgfx::DrawList2D`; it remains
+structurally valid after the source scene changes or is destroyed. Runtime
+font and texture handles are borrowed, however: the host's resource lease must
+keep them live through `Canvas2DRenderer::execute()`. The snapshot stores no
+device, pass, backend context or raw `FontAtlas*`.
+
+Standard payloads lower directly to the single `tgfx::DrawCommand2D`
+vocabulary. Effective affine transforms, opacity and all inherited clips are
+preserved; clips are emitted as world-space geometry and never pre-reduced to
+scissors. Missing resources or a rejected command abort the whole preparation
+with an error log, so no partial snapshot is published.

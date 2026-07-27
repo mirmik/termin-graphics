@@ -20,6 +20,9 @@
 
 namespace termin::visual {
 
+class SceneRenderResourceResolver2D;
+class SceneRenderSnapshot2D;
+
 // Serializable resource identity. Runtime FontHandle/TextureHandle values are
 // produced only while preparing a render snapshot.
 struct StableResourceRef2D {
@@ -171,6 +174,8 @@ public:
 
     std::optional<GraphicItemSnapshot2D> snapshot(GraphicItemHandle item) const;
     std::vector<GraphicItemSnapshot2D> snapshots() const;
+    std::optional<SceneRenderSnapshot2D> prepare_render_snapshot(
+        SceneRenderResourceResolver2D& resolver) const;
 
     std::size_t size() const;
     std::uint64_t revision() const;
@@ -191,6 +196,7 @@ private:
     bool snapshot_locked_(
         GraphicItemHandle item,
         GraphicItemSnapshot2D& out) const;
+    std::vector<GraphicItemSnapshot2D> snapshots_locked_() const;
     void collect_subtree_locked_(
         GraphicItemHandle root,
         std::vector<GraphicItemHandle>& out) const;

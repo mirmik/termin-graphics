@@ -467,8 +467,7 @@ std::optional<GraphicItemSnapshot2D> VisualScene2D::snapshot(
     return result;
 }
 
-std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots() const {
-    std::scoped_lock lock(mutex_);
+std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots_locked_() const {
     std::vector<GraphicItemSnapshot2D> result;
     result.reserve(records_.size());
     for (const auto& [index, record] : records_) {
@@ -488,6 +487,11 @@ std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots() const {
             return a.stable_order < b.stable_order;
         });
     return result;
+}
+
+std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots() const {
+    std::scoped_lock lock(mutex_);
+    return snapshots_locked_();
 }
 
 std::size_t VisualScene2D::size() const {
