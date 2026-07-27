@@ -61,3 +61,24 @@ vocabulary. Effective affine transforms, opacity and all inherited clips are
 preserved; clips are emitted as world-space geometry and never pre-reduced to
 scissors. Missing resources or a rejected command abort the whole preparation
 with an error log, so no partial snapshot is published.
+
+## Hit testing and interaction
+
+`hit_test()` evaluates front-to-back visual items using the prepared world
+`Affine2f`, its fallible inverse, every inherited geometric clip and the
+canonical `Path2f` fill/stroke predicates. Singular effective transforms are
+diagnosed in item snapshots and are non-hittable; pointer movement does not
+repeat the diagnostic or substitute identity. Descendants win over their
+ancestors at equal z, while unrelated equal-z items use stable scene order.
+
+`SceneInteraction2D` is an explicit controller rather than item policy. It
+tracks hover, press and capture independently per pointer, auto-captures a
+pressed target, emits semantic `ActionEvent2D` activation on a matching
+release, and offers a host fallback for unclaimed plot/view input. Callbacks
+run outside controller and scene locks. Reconciliation removes destroyed or
+disabled targets and invalidates capture when topology changes.
+
+`SelectionController2D` and `DragController2D` are reusable policies layered
+over routed events. Dragging maps the world-space pointer delta through the
+exact inverse parent transform and left-multiplies a parent-space translation,
+so rotation, non-uniform scale and shear remain intact.

@@ -22,6 +22,7 @@ add_library(termin_visual_scene SHARED
     src/tc_visual_scene.c
     src/scene2d.cpp
     src/render_snapshot2d.cpp
+    src/interaction2d.cpp
 )
 add_library(termin_visual_scene::termin_visual_scene ALIAS termin_visual_scene)
 target_compile_definitions(termin_visual_scene PRIVATE
@@ -61,6 +62,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_visual_scene_render_snapshot_test)
     add_test(NAME termin_visual_scene_render_snapshot_test
         COMMAND termin_visual_scene_render_snapshot_test)
+
+    add_executable(termin_visual_scene_interaction_test
+        tests/test_interaction2d.cpp)
+    target_link_libraries(termin_visual_scene_interaction_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene_interaction_test)
+    add_test(NAME termin_visual_scene_interaction_test
+        COMMAND termin_visual_scene_interaction_test)
 endif()
 
 include(GNUInstallDirs)

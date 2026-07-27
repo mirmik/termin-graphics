@@ -232,6 +232,7 @@ std::optional<GraphicItemHandle> VisualScene2D::create(
                 std::move(payload),
                 next_stable_order_++,
                 ++revision_,
+                revision_,
             });
     } catch (const std::exception& error) {
         if (!tc_graphic_item_handle_is_invalid(handle)) {
@@ -321,6 +322,7 @@ bool VisualScene2D::reparent(
     if (!storage_.reparent(item, parent)) return false;
     auto* record = record_locked_(item);
     record->revision = ++revision_;
+    record->topology_revision = revision_;
     return true;
 }
 
@@ -333,6 +335,7 @@ bool VisualScene2D::detach(GraphicItemHandle item) {
     if (!storage_.detach(item)) return false;
     auto* record = record_locked_(item);
     record->revision = ++revision_;
+    record->topology_revision = revision_;
     return true;
 }
 
@@ -418,6 +421,7 @@ bool VisualScene2D::snapshot_locked_(
 
     termin::Affine2f world = termin::Affine2f::identity();
     bool visible = true;
+    bool enabled = true;
     float opacity = 1.0f;
     std::vector<GeometricClip2D> clips;
     for (const auto ancestor : ancestry) {
@@ -425,6 +429,7 @@ bool VisualScene2D::snapshot_locked_(
         if (!ancestor_record) return false;
         world = world * ancestor_record->state.local_transform;
         visible = visible && ancestor_record->state.visible;
+        enabled = enabled && ancestor_record->state.enabled;
         opacity *= ancestor_record->state.opacity;
         if (ancestor_record->state.clip) {
             clips.push_back(transformed_clip(*ancestor_record->state.clip, world));
@@ -439,9 +444,12 @@ bool VisualScene2D::snapshot_locked_(
     out.payload = record->payload;
     out.world_transform = world;
     out.effective_visible = visible;
+    out.effective_enabled = enabled;
     out.effective_opacity = opacity;
     out.stable_order = record->stable_order;
     out.revision = record->revision;
+    out.topology_revision = record->topology_revision;
+    out.depth = static_cast<std::uint32_t>(ancestry.size() - 1);
     out.diagnostics = std::abs(world.determinant()) <= 1e-8f
         ? GraphicItemDiagnostic2D::SingularWorldTransform
         : GraphicItemDiagnostic2D::None;

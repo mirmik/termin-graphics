@@ -118,6 +118,7 @@ using GraphicItemPayload2D = std::variant<
 struct GraphicItemState2D {
     termin::Affine2f local_transform = termin::Affine2f::identity();
     bool visible = true;
+    bool enabled = true;
     float opacity = 1.0f;
     std::int64_t z_order = 0;
     std::optional<GeometricClip2D> clip;
@@ -135,9 +136,12 @@ struct GraphicItemSnapshot2D {
     GraphicItemPayload2D payload;
     termin::Affine2f world_transform = termin::Affine2f::identity();
     bool effective_visible = true;
+    bool effective_enabled = true;
     float effective_opacity = 1.0f;
     std::uint64_t stable_order = 0;
     std::uint64_t revision = 0;
+    std::uint64_t topology_revision = 0;
+    std::uint32_t depth = 0;
     GraphicItemDiagnostic2D diagnostics = GraphicItemDiagnostic2D::None;
     std::optional<termin::Bounds2f> local_bounds;
     std::optional<termin::Bounds2f> world_bounds;
@@ -188,6 +192,7 @@ private:
         GraphicItemPayload2D payload;
         std::uint64_t stable_order = 0;
         std::uint64_t revision = 0;
+        std::uint64_t topology_revision = 0;
     };
 
     bool owns_locked_(GraphicItemHandle item) const;
