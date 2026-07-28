@@ -71,3 +71,24 @@ cache. Python `Texture.sync_to_cpu()` exposes the same operation.
 `IRenderDevice::capabilities()` или Python `Tgfx2Context.texture_origin_top_left`,
 а не ветвление по строке `Tgfx2Context.backend`. Строковый backend оставлен как
 диагностика, не как точка принятия rendering-решений.
+
+## Canonical 2D Draw Lists
+
+`tgfx::DrawList2DBuilder` записывает backend-neutral команды и атомарно
+превращает их в immutable `tgfx::DrawList2D`. Замороженный list владеет своими
+строками, paths, polylines и custom triangle batches; builder после `freeze()`
+можно сразу переиспользовать. Командный state включает exact `Affine2f`,
+opacity и geometric `Path2f` clips, а primitives используют общие geometry и
+paint values.
+
+Geometric clip не является scissor rectangle. `Canvas2DRenderer::execute`
+трансформирует и геометрически клипует triangles на CPU, включая nested,
+rotated/sheared clips и `NonZero`/`EvenOdd` path fills. Device scissor может
+быть только эквивалентной оптимизацией, но не заменой произвольного clip path.
+
+Persistent resource identity в draw list не хранится. Image command получает
+уже разрешённый device-local `TextureHandle`; text command получает
+resolver-local `FontHandle`, который `DrawResourceResolver2D` превращает в
+borrowed `FontAtlas` только во время `execute()`. Эти handles должны оставаться
+валидными до завершения исполнения, но list не владеет ресурсами и не хранит
+сырых указателей на них.

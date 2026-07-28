@@ -101,8 +101,15 @@ bool write_ppm_screenshot(tgfx::IRenderDevice& device, tgfx::TextureHandle targe
 
 } // namespace
 
-int run_showcase_window(const char* title) {
+int run_document_window(
+    const char* title,
+    DocumentBuildCallback build,
+    ExampleTickCallback tick) {
     try {
+        if (!build) {
+            throw std::invalid_argument(
+                "termin-gui-native example requires a document builder");
+        }
         auto session = create_native_windowed_graphics();
         WindowManager windows(*session);
         const WindowHandle handle = windows.create_window(WindowConfig{
@@ -114,7 +121,7 @@ int run_showcase_window(const char* title) {
         renderer_config.font_size = 15;
         GuiWindowAdapter adapter(
             session->graphics(), document, renderer_config, windows.window(handle));
-        ShowcaseRefs showcase = build_showcase(document);
+        build(document);
 
         const double max_seconds = example_seconds();
         const std::filesystem::path capture_path = screenshot_path();
@@ -129,13 +136,7 @@ int run_showcase_window(const char* title) {
             const auto now = std::chrono::steady_clock::now();
             const double elapsed =
                 capture_path.empty() ? std::chrono::duration<double>(now - start).count() : 0.0;
-            if (showcase.progress) {
-                showcase.progress->set_value(static_cast<float>((std::sin(elapsed) + 1.0) * 0.5));
-            }
-            if (showcase.slider && showcase.checkbox && showcase.checkbox->checked()) {
-                showcase.slider->set_value(
-                    static_cast<float>((std::sin(elapsed * 0.6) + 1.0) * 0.5));
-            }
+            if (tick) tick(elapsed);
             if (!adapter.render_and_present()) {
                 continue;
             }
@@ -168,13 +169,37 @@ int run_showcase_window(const char* title) {
         session->close();
         return 0;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "termin-gui-native showcase example failed: %s\n", e.what());
+        std::fprintf(
+            stderr,
+            "termin-gui-native window example failed: %s\n",
+            e.what());
         if (std::strstr(e.what(), "No available video device") ||
             std::strstr(e.what(), "Vulkan support is either not configured in SDL")) {
             return 77;
         }
         return 1;
     }
+}
+
+int run_showcase_window(const char* title) {
+    auto showcase = std::make_shared<ShowcaseRefs>();
+    return run_document_window(
+        title,
+        [showcase](TcDocument document) {
+            *showcase = build_showcase(document);
+        },
+        [showcase](double elapsed) {
+            if (showcase->progress) {
+                showcase->progress->set_value(
+                    static_cast<float>((std::sin(elapsed) + 1.0) * 0.5));
+            }
+            if (showcase->slider && showcase->checkbox &&
+                showcase->checkbox->checked()) {
+                showcase->slider->set_value(
+                    static_cast<float>(
+                        (std::sin(elapsed * 0.6) + 1.0) * 0.5));
+            }
+        });
 }
 
 } // namespace termin::gui_native::examples

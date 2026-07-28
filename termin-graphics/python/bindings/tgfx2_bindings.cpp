@@ -1072,7 +1072,7 @@ void bind_tgfx2(nb::module_& m) {
         .value("Linear", tgfx::CanvasTextureSampling::Linear)
         .value("Nearest", tgfx::CanvasTextureSampling::Nearest);
 
-    nb::class_<tgfx::CanvasColor>(m, "CanvasColor")
+    nb::class_<tgfx::Color4f>(m, "Color4f")
         .def(nb::init<>())
         .def(nb::init<float, float, float, float>(),
              nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
@@ -1098,11 +1098,9 @@ void bind_tgfx2(nb::module_& m) {
             return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a));
         });
 
-    nb::class_<tgfx::CanvasVec2>(m, "CanvasVec2")
-        .def(nb::init<>())
-        .def(nb::init<float, float>(), nb::arg("x"), nb::arg("y"))
-        .def_rw("x", &tgfx::CanvasVec2::x)
-        .def_rw("y", &tgfx::CanvasVec2::y);
+    m.attr("CanvasColor") = m.attr("Color4f");
+    m.attr("CanvasVec2") =
+        nb::module_::import_("tcbase._geom_native").attr("Vec2f");
 
     nb::implicitly_convertible<nb::tuple, tgfx::CanvasColor>();
 

@@ -23,6 +23,18 @@ tgfx::CanvasTextureSampling texture_sampling(tc_ui_texture_sampling sampling) {
         : tgfx::CanvasTextureSampling::Linear;
 }
 
+class UiDrawResources final : public tgfx::DrawResourceResolver2D {
+public:
+    explicit UiDrawResources(tgfx::FontAtlas* font) : font_(font) {}
+
+    tgfx::FontAtlas* resolve_font(tgfx::FontHandle) override {
+        return font_;
+    }
+
+private:
+    tgfx::FontAtlas* font_ = nullptr;
+};
+
 } // namespace
 
 void UiDrawListRenderer::destroy_picker_surface_texture(
@@ -340,6 +352,22 @@ void UiDrawListRenderer::render(
                 missing_font_logged_ = true;
             }
             break;
+        case TC_UI_DRAW_CANVAS2D_LIST: {
+            const auto* nested =
+                static_cast<const tgfx::DrawList2D*>(
+                    command->canvas2d_list);
+            if (!nested) {
+                tc_log_error(
+                    "[termin-gui-native] UI DrawList2D command has null payload");
+                break;
+            }
+            UiDrawResources resources(canvas_.default_font());
+            if (!canvas_.execute(*nested, resources)) {
+                tc_log_error(
+                    "[termin-gui-native] failed to execute nested DrawList2D");
+            }
+            break;
+        }
         default:
             tc_log_error("[termin-gui-native] unknown UI draw command type %d", static_cast<int>(command->type));
             break;

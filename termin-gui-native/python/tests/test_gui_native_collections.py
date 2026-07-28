@@ -23,7 +23,6 @@ from termin.gui_native import (
     FileDialogFilter,
     FileDialogMode,
     FileDialogModel,
-    GraphicsItem,
     GraphicsScene,
     KeyCode,
     KeyEvent,
@@ -38,7 +37,6 @@ from termin.gui_native import (
     PointerEventType,
     Rect,
     SceneTransform,
-    Size,
     TableColumn,
     TableColumnModel,
     TableColumnPolicy,
@@ -1214,30 +1212,24 @@ def test_display_is_the_viewport_surface_and_input_protocol():
 
 def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     scene = GraphicsScene()
-    node = GraphicsItem("node-a")
+    node = scene.create_rect(
+        "node-a",
+        Rect(0.0, 0.0, 120.0, 70.0),
+        Color(0.8, 0.2, 0.1, 1.0),
+    )
     node.position = Point(10.0, 20.0)
-    node.size = Size(120.0, 70.0)
     node.draggable = True
-    painted = []
+    assert scene.hit_test(20.0, 30.0).stable_id == "node-a"
 
-    def paint_item(item, context, transform):
-        painted.append((item.stable_id, transform.zoom))
-        screen = transform.world_to_screen(item.world_position)
-        context.fill_rect(
-            Rect(screen.x, screen.y, item.size.width * transform.zoom, item.size.height * transform.zoom),
-            Color(0.8, 0.2, 0.1, 1.0),
-        )
-
-    node.set_paint_callback(paint_item)
-    assert scene.add_item(node)
-    assert scene.hit_test(20.0, 30.0) is node
-
-    edge = GraphicsItem("edge")
+    edge = scene.create_polyline(
+        "edge",
+        [Point(0.0, 0.0), Point(200.0, 0.0)],
+        Color(0.6, 0.7, 0.9, 1.0),
+        10.0,
+    )
     edge.selectable = False
-    edge.z_index = -10.0
-    edge.set_hit_test_callback(lambda _item, x, y: abs(y) < 5.0 and 0.0 <= x <= 200.0)
-    assert scene.add_item(edge)
-    assert scene.hit_test(50.0, 2.0) is edge
+    edge.z_order = -10
+    assert scene.hit_test(50.0, 2.0).stable_id == "edge"
 
     document = tc_ui_document_create()
     view = document.create_scene_view(scene)
@@ -1247,15 +1239,8 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
 
     draw_list = DrawList()
     document.paint_roots(PaintContext(draw_list))
-    assert painted == [("node-a", 1.0)]
     assert any(command.type == DrawCommandType.FillRect for command in draw_list.commands)
-    node.set_paint_callback(None)
-    node.set_paint_callback(None)
-    edge.set_hit_test_callback(None)
-    edge.set_hit_test_callback(None)
-    document.paint_roots(PaintContext(DrawList()))
-    assert painted == [("node-a", 1.0)]
-    assert scene.hit_test(150.0, 2.0) is None
+    assert any(command.type == DrawCommandType.Canvas2DList for command in draw_list.commands)
 
     moved = []
     view.connect_item_moved(lambda item: moved.append(item.stable_id))
@@ -1265,7 +1250,7 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     pointer.x = 120.0
     pointer.y = 80.0
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
-    assert scene.selected_items == [node]
+    assert [item.stable_id for item in view.selected_items] == ["node-a"]
     pointer.type = PointerEventType.Move
     pointer.x = 150.0
     pointer.y = 110.0
@@ -1291,15 +1276,17 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     embedded = document.create_button("Embedded")
     view.set_zoom(1.0, Point(100.0, 50.0))
     view.offset = Point(0.0, 0.0)
-    editor_item = GraphicsItem("editor")
+    editor_item = scene.create_rect(
+        "editor",
+        Rect(0.0, 0.0, 100.0, 30.0),
+        Color(0.2, 0.2, 0.25, 1.0),
+    )
     editor_item.position = Point(5.0, 6.0)
-    editor_item.size = Size(100.0, 30.0)
-    editor_item.embedded_widget = embedded.handle
-    assert scene.add_item(editor_item)
+    assert view.set_widget_portal(editor_item, embedded.handle)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
     screen = view.world_to_screen(editor_item.position)
     assert document.hit_test(screen.x + 2.0, screen.y + 2.0) == embedded.handle
-    assert scene.remove_item(editor_item)
+    assert scene.destroy(editor_item)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
     assert embedded.widget.parent is None
     view.set_pointer_handler(None)

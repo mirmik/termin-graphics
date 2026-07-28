@@ -199,7 +199,10 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_STROKE_CIRCLE = 9,
     TC_UI_DRAW_ARC = 10,
     TC_UI_DRAW_POLYLINE = 11,
-    TC_UI_DRAW_TEXTURE = 12
+    TC_UI_DRAW_TEXTURE = 12,
+    // C++-owned tgfx::DrawList2D command. The opaque pointer is valid for the
+    // lifetime of its tc_ui_draw_list and is consumed by UiDrawListRenderer.
+    TC_UI_DRAW_CANVAS2D_LIST = 13
 } tc_ui_draw_command_type;
 
 typedef enum tc_ui_texture_sampling {
@@ -225,6 +228,7 @@ typedef struct tc_ui_draw_command {
     uint32_t texture_id;
     tc_ui_texture_sampling texture_sampling;
     bool flip_v;
+    const void* canvas2d_list;
 } tc_ui_draw_command;
 
 typedef enum tc_ui_event_result {

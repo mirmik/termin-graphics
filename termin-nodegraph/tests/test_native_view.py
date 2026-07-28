@@ -48,8 +48,7 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     draw_list = DrawList()
     document.paint_roots(PaintContext(draw_list))
     command_types = [command.type for command in draw_list.commands]
-    assert command_types.count(DrawCommandType.FillRect) >= 6
-    assert DrawCommandType.Text in command_types
+    assert DrawCommandType.Canvas2DList in command_types
     checkbox = native.param_widgets[(target.id, "enabled")]
     checkbox.checked = False
     assert target.params["enabled"] is False

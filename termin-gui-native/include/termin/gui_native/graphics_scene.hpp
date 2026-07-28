@@ -1,13 +1,16 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <termin/gui_native/signal.hpp>
 #include <termin/gui_native/tc_ui_document.h>
+#include <termin_visual_scene/scene2d.hpp>
 
 namespace termin::gui_native {
 
@@ -21,137 +24,179 @@ struct SceneTransform {
 };
 
 class GraphicsScene;
-class SceneView;
 
-class GraphicsItem : public std::enable_shared_from_this<GraphicsItem> {
+// A cheap scene-plus-generation-handle value. It never owns an item and every
+// operation validates the handle through VisualScene2D.
+class GraphicItemRef {
 public:
-    using PaintCallback =
-        std::function<void(GraphicsItem&, tc_ui_paint_context*, const SceneTransform&)>;
-    using HitTestCallback = std::function<bool(const GraphicsItem&, float, float)>;
+    GraphicItemRef() = default;
 
-private:
-    uint64_t id_ = 0;
-    std::string stable_id_;
-    std::weak_ptr<GraphicsItem> parent_;
-    std::vector<std::shared_ptr<GraphicsItem>> children_;
-    GraphicsScene* scene_ = nullptr;
-    tc_ui_point position_{};
-    tc_ui_size size_{100.0f, 60.0f};
-    float z_index_ = 0.0f;
-    bool visible_ = true;
-    bool enabled_ = true;
-    bool selectable_ = true;
-    bool draggable_ = false;
-    bool selected_ = false;
-    bool hovered_ = false;
-    PaintCallback paint_callback_;
-    HitTestCallback hit_test_callback_;
-    tc_widget_handle embedded_widget_ = tc_widget_handle_invalid();
+    bool valid() const;
+    explicit operator bool() const { return valid(); }
+    termin::visual::GraphicItemHandle handle() const { return handle_; }
 
-public:
+    std::string stable_id() const;
+    bool set_stable_id(std::string stable_id);
+    std::optional<GraphicItemRef> parent() const;
+    std::vector<GraphicItemRef> children() const;
+    bool reparent(const std::optional<GraphicItemRef>& parent);
 
-    explicit GraphicsItem(std::string stable_id = {});
-    ~GraphicsItem();
-
-    GraphicsItem(const GraphicsItem&) = delete;
-    GraphicsItem& operator=(const GraphicsItem&) = delete;
-
-    uint64_t id() const { return id_; }
-    const std::string& stable_id() const { return stable_id_; }
-    void set_stable_id(std::string stable_id);
-
-    std::shared_ptr<GraphicsItem> parent() const { return parent_.lock(); }
-    const std::vector<std::shared_ptr<GraphicsItem>>& children() const { return children_; }
-    bool add_child(std::shared_ptr<GraphicsItem> child);
-    bool remove_child(const std::shared_ptr<GraphicsItem>& child);
-    void clear_children();
-
-    tc_ui_point position() const { return position_; }
-    void set_position(tc_ui_point position);
-    tc_ui_size size() const { return size_; }
-    void set_size(tc_ui_size size);
-    float z_index() const { return z_index_; }
-    void set_z_index(float z_index);
-    bool visible() const { return visible_; }
-    void set_visible(bool visible);
-    bool enabled() const { return enabled_; }
-    void set_enabled(bool enabled);
-    bool selectable() const { return selectable_; }
-    void set_selectable(bool selectable);
-    bool draggable() const { return draggable_; }
-    void set_draggable(bool draggable);
-    bool selected() const { return selected_; }
-    bool hovered() const { return hovered_; }
-
+    tc_ui_point position() const;
+    bool set_position(tc_ui_point position);
+    tc_ui_size size() const;
+    bool set_size(tc_ui_size size);
+    std::int64_t z_order() const;
+    bool set_z_order(std::int64_t z_order);
+    bool visible() const;
+    bool set_visible(bool visible);
+    bool enabled() const;
+    bool set_enabled(bool enabled);
+    bool selectable() const;
+    bool set_selectable(bool selectable);
+    bool draggable() const;
+    bool set_draggable(bool draggable);
     tc_ui_point world_position() const;
     tc_ui_rect world_bounds() const;
-    bool contains_local(float x, float y) const;
-    std::shared_ptr<GraphicsItem> hit_test(float world_x, float world_y);
 
-    void set_paint_callback(PaintCallback callback);
-    void set_hit_test_callback(HitTestCallback callback);
-    void paint(tc_ui_paint_context* context, const SceneTransform& transform);
+    bool set_polyline(
+        std::vector<termin::Vec2f> points,
+        tgfx::StrokePaint stroke,
+        bool closed = false);
 
-    tc_widget_handle embedded_widget() const { return embedded_widget_; }
-    void set_embedded_widget(tc_widget_handle handle);
-    void clear_embedded_widget();
+    friend bool operator==(
+        const GraphicItemRef& left,
+        const GraphicItemRef& right) {
+        return left.scene_ == right.scene_ &&
+               left.handle_.scene_id == right.handle_.scene_id &&
+               left.handle_.index == right.handle_.index &&
+               left.handle_.generation == right.handle_.generation;
+    }
 
 private:
+    GraphicItemRef(
+        GraphicsScene* scene,
+        std::weak_ptr<void> lifetime,
+        termin::visual::GraphicItemHandle handle)
+        : scene_(scene),
+          lifetime_(std::move(lifetime)),
+          handle_(handle) {}
+
+    GraphicsScene* scene_ = nullptr;
+    std::weak_ptr<void> lifetime_;
+    termin::visual::GraphicItemHandle handle_ =
+        tc_graphic_item_handle_invalid();
+
     friend class GraphicsScene;
     friend class SceneView;
-
-    bool is_ancestor_of(const GraphicsItem* item) const;
-    void set_scene_recursive(GraphicsScene* scene);
-    void notify_changed();
-    void set_selected_internal(bool selected);
-    void set_hovered_internal(bool hovered);
-
 };
 
+// GUI-facing metadata and invalidation around the one canonical VisualScene2D
+// storage. Topology, transforms, payloads and hit testing all stay in the
+// termin-visual-scene implementation.
 class GraphicsScene : public std::enable_shared_from_this<GraphicsScene> {
-private:
-    std::vector<std::shared_ptr<GraphicsItem>> items_;
-    std::vector<std::shared_ptr<GraphicsItem>> selected_items_;
-    uint64_t revision_ = 1;
-    Signal<GraphicsScene&> changed_;
-    Signal<GraphicsScene&, const std::vector<std::shared_ptr<GraphicsItem>>&> selection_changed_;
-
 public:
     GraphicsScene() = default;
-    ~GraphicsScene();
+    ~GraphicsScene() = default;
 
     GraphicsScene(const GraphicsScene&) = delete;
     GraphicsScene& operator=(const GraphicsScene&) = delete;
 
-    const std::vector<std::shared_ptr<GraphicsItem>>& items() const { return items_; }
-    bool add_item(std::shared_ptr<GraphicsItem> item);
-    bool remove_item(const std::shared_ptr<GraphicsItem>& item);
+    GraphicItemRef create_group(
+        std::string stable_id = {},
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_rect(
+        std::string stable_id,
+        termin::Rect2f rect,
+        tgfx::FillPaint fill,
+        std::optional<tgfx::StrokePaint> stroke = std::nullopt,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_rounded_rect(
+        std::string stable_id,
+        termin::Rect2f rect,
+        float radius,
+        tgfx::FillPaint fill,
+        std::optional<tgfx::StrokePaint> stroke = std::nullopt,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_ellipse(
+        std::string stable_id,
+        termin::Rect2f bounds,
+        tgfx::FillPaint fill,
+        std::optional<tgfx::StrokePaint> stroke = std::nullopt,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_path(
+        std::string stable_id,
+        tgfx::Path2f path,
+        std::optional<tgfx::FillPaint> fill,
+        std::optional<tgfx::StrokePaint> stroke = std::nullopt,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_polyline(
+        std::string stable_id,
+        std::vector<termin::Vec2f> points,
+        tgfx::StrokePaint stroke,
+        bool closed = false,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_text(
+        std::string stable_id,
+        std::string text,
+        termin::Vec2f origin,
+        float size_px,
+        tgfx::Color4f color,
+        termin::Bounds2f layout_bounds,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+    GraphicItemRef create_hit_region(
+        std::string stable_id,
+        tgfx::Path2f path,
+        std::optional<GraphicItemRef> parent = std::nullopt);
+
+    bool destroy(const GraphicItemRef& item);
     void clear();
-    std::shared_ptr<GraphicsItem> hit_test(float world_x, float world_y) const;
+    std::optional<GraphicItemRef> item(
+        termin::visual::GraphicItemHandle handle);
+    std::vector<GraphicItemRef> items();
+    std::optional<GraphicItemRef> hit_test(float world_x, float world_y);
 
-    const std::vector<std::shared_ptr<GraphicsItem>>& selected_items() const {
-        return selected_items_;
-    }
-    bool set_selected(const std::shared_ptr<GraphicsItem>& item);
-    bool toggle_selected(const std::shared_ptr<GraphicsItem>& item);
-    bool clear_selection();
-    bool contains(const GraphicsItem* item) const;
-    uint64_t revision() const { return revision_; }
-
+    std::size_t size() const { return scene_.size(); }
+    std::uint64_t revision() const { return scene_.revision(); }
+    termin::visual::VisualScene2D& visual_scene() { return scene_; }
+    const termin::visual::VisualScene2D& visual_scene() const { return scene_; }
     Signal<GraphicsScene&>& changed() { return changed_; }
-    Signal<GraphicsScene&, const std::vector<std::shared_ptr<GraphicsItem>>&>& selection_changed() {
-        return selection_changed_;
-    }
-
-    void notify_item_changed();
 
 private:
-    friend class GraphicsItem;
+    struct HandleKey {
+        std::uint64_t scene_id = 0;
+        std::uint32_t index = 0;
+        std::uint32_t generation = 0;
+        friend bool operator==(const HandleKey&, const HandleKey&) = default;
+    };
+    struct HandleHash {
+        std::size_t operator()(const HandleKey& value) const noexcept;
+    };
+    struct Metadata {
+        std::string stable_id;
+        bool selectable = true;
+        bool draggable = false;
+    };
 
-    bool contains_recursive(const GraphicsItem* root, const GraphicsItem* item) const;
-    void clear_selected_recursive(const std::shared_ptr<GraphicsItem>& item);
-    void notify_selection_changed();
+    GraphicItemRef create_(
+        std::string stable_id,
+        termin::visual::GraphicItemPayload2D payload,
+        const std::optional<GraphicItemRef>& parent);
+    static HandleKey key_(termin::visual::GraphicItemHandle handle);
+    std::optional<Metadata> metadata_(
+        termin::visual::GraphicItemHandle handle) const;
+    bool update_metadata_(
+        termin::visual::GraphicItemHandle handle,
+        const Metadata& metadata);
+    void notify_changed_();
 
+    termin::visual::VisualScene2D scene_;
+    mutable std::mutex metadata_mutex_;
+    std::unordered_map<HandleKey, Metadata, HandleHash> metadata_by_handle_;
+    std::shared_ptr<void> lifetime_token_ = std::make_shared<int>(0);
+    Signal<GraphicsScene&> changed_;
+
+    friend class GraphicItemRef;
+    friend class SceneView;
 };
 
 } // namespace termin::gui_native
