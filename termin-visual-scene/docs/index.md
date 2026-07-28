@@ -41,6 +41,26 @@ All typed mutations validate before committing under the scene mutex. A failed
 path, paint, resource, transform, opacity or geometry update is logged and
 leaves the previous payload, state and revision unchanged.
 
+## Inspection and persistence
+
+`VisualScene2D::inspection()` returns a fully detached `SceneInspection2D`.
+Items use document-local record indices and separate monotonic `stable_id`
+values, never runtime slot/generation handles. The snapshot includes canonical
+payload type names, parent/ordered-child topology, local and effective
+transforms and flags, bounds, diagnostics and revisions. It remains valid
+after later mutation or destruction of the scene.
+
+`serialize()` emits the versioned `termin.visual_scene.2d` schema as
+`tc::trent`. It persists record topology, stable IDs, item state and all
+standard payload variants, including complete path and paint data. Runtime
+handles and transient hover, press, capture and dirty controller state are not
+part of the schema.
+
+`restore()` accepts only a supported schema and an empty destination scene. It
+parses and validates the complete document, builds a private staging scene and
+commits it atomically. Unknown type names, malformed topology or invalid
+payloads are logged and leave the destination empty and unchanged.
+
 ## Immutable render preparation
 
 `VisualScene2D::prepare_render_snapshot()` copies one coherent scene revision

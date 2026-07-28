@@ -14,6 +14,7 @@
 #include <termin/geom/vec2.hpp>
 #include <tgfx2/draw_list2d.hpp>
 #include <tgfx2/path2d.hpp>
+#include <tcbase/tc_trent.hpp>
 
 #include "termin_visual_scene/export.h"
 #include "termin_visual_scene/visual_scene.hpp"
@@ -22,6 +23,7 @@ namespace termin::visual {
 
 class SceneRenderResourceResolver2D;
 class SceneRenderSnapshot2D;
+struct SceneInspection2D;
 
 // Serializable resource identity. Runtime FontHandle/TextureHandle values are
 // produced only while preparing a render snapshot.
@@ -178,6 +180,13 @@ public:
 
     std::optional<GraphicItemSnapshot2D> snapshot(GraphicItemHandle item) const;
     std::vector<GraphicItemSnapshot2D> snapshots() const;
+    SceneInspection2D inspection() const;
+    tc::trent serialize() const;
+
+    // Restore accepts only the current versioned, handle-free schema and only
+    // into an empty scene. Parsing and construction happen off-scene; failure
+    // leaves the destination empty and unchanged.
+    bool restore(const tc::trent& serialized);
     std::optional<SceneRenderSnapshot2D> prepare_render_snapshot(
         SceneRenderResourceResolver2D& resolver) const;
 

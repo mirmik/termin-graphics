@@ -32,6 +32,8 @@ include(TerminRpath)
 add_library(termin_visual_scene SHARED
     src/tc_visual_scene.c
     src/scene2d.cpp
+    src/scene_inspection2d.cpp
+    src/scene_serialization2d.cpp
     src/render_snapshot2d.cpp
     src/interaction2d.cpp
 )
@@ -76,6 +78,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_visual_scene_item_test)
     add_test(NAME termin_visual_scene_item_test
         COMMAND termin_visual_scene_item_test)
+
+    add_executable(termin_visual_scene_serialization_test
+        tests/test_scene_serialization2d.cpp)
+    target_link_libraries(termin_visual_scene_serialization_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene_serialization_test)
+    add_test(NAME termin_visual_scene_serialization_test
+        COMMAND termin_visual_scene_serialization_test)
 
     add_executable(termin_visual_scene_render_snapshot_test
         tests/test_render_snapshot2d.cpp)
