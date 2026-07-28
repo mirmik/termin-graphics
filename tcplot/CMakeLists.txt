@@ -43,6 +43,7 @@ set(TCPLOT_SOURCES
     src/axes.cpp
     src/orbit_camera.cpp
     src/plot_data.cpp
+    src/plot_frame2d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
     src/plot_view3d.cpp
@@ -87,6 +88,17 @@ if(TERMIN_BUILD_PYTHON)
     add_subdirectory(python)
 endif()
 
+if(TERMIN_BUILD_TESTS)
+    enable_testing()
+    add_executable(tcplot_plot_frame2d_test
+        tests/test_plot_frame2d.cpp)
+    target_link_libraries(tcplot_plot_frame2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_frame2d_test)
+    add_test(NAME tcplot_plot_frame2d_test
+        COMMAND tcplot_plot_frame2d_test)
+endif()
+
 # --- Install ---
 include(GNUInstallDirs)
 
@@ -126,3 +138,7 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/tcplotConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tcplot
 )
+
+if(COMMAND termin_label_tests_in_directory)
+    termin_label_tests_in_directory("tcplot")
+endif()

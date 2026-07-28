@@ -18,6 +18,7 @@
 #include <tcbase/input_enums.hpp>
 #include <tgfx2/handles.hpp>
 
+#include "tcplot/plot_frame2d.hpp"
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
@@ -33,12 +34,11 @@ namespace tcplot {
 
 class TCPLOT_API PlotEngine2D {
 private:
-    struct Rect { float x, y, w, h; };
-    struct ViewRange { double x_min, x_max, y_min, y_max; };
     struct LineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; };
     struct StyledLineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; uint64_t data_version = 0; };
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
     float fbo_height_ = 0.0f;
+    float pixel_scale_ = 1.0f;
     std::optional<double> view_x_min_, view_x_max_, view_y_min_, view_y_max_;
     bool panning_ = false;
     float pan_start_mx_ = 0.0f, pan_start_my_ = 0.0f;
@@ -51,6 +51,7 @@ private:
     std::vector<StyledLineGpuState> styled_line_gpu_;
     uint64_t data_version_ = 1;
     std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
+    PlotRenderPhaseSink2D* render_phase_sink_ = nullptr;
 
 public:
     PlotData data;
@@ -108,6 +109,10 @@ public:
     // i.e. no flip is applied and behavior matches PlotView2D.
     void set_fbo_height(float h);
 
+    // Logical-to-physical pixel ratio captured by plot_frame(). Plot
+    // coordinates remain in physical viewport pixels.
+    void set_pixel_scale(float scale);
+
     // --- Series API ---
     void plot(std::vector<double> x, std::vector<double> y,
               LinePlotOptions options = {});
@@ -161,6 +166,18 @@ public:
     void set_view_x(double x_min, double x_max);
     void set_view_y(double y_min, double y_max);
 
+    // Immutable projection snapshot for this engine's current viewport and
+    // range. Auto-fits on first access when no explicit range was supplied.
+    PlotFrame2D plot_frame();
+
+    // Borrowed advanced render extension. Passing nullptr detaches it.
+    void set_render_phase_sink(PlotRenderPhaseSink2D* sink) {
+        render_phase_sink_ = sink;
+    }
+    PlotRenderPhaseSink2D* render_phase_sink() const {
+        return render_phase_sink_;
+    }
+
     // --- Rendering ---
     //
     // Host passes an active RenderContext2 (inside its own pass) plus
@@ -180,18 +197,17 @@ public:
     // Zoom X axis only (shared-X multi-panel UX: Ctrl+wheel).
     bool on_mouse_wheel_x(float x, float y, float dy);
 
-    // Plot area in viewport pixel coords.
-    Rect plot_area_() const;
-    // Current view range; auto-fits on first access if unset.
-    ViewRange view_range_();
-    // data ↔ pixel transforms.
-    void data_to_pixel_(double dx, double dy, float& out_x, float& out_y);
-    void pixel_to_data_(float wx, float wy, double& out_x, double& out_y);
+private:
     void ensure_line_shader_(tgfx::IRenderDevice& device);
     void ensure_styled_line_shader_(tgfx::IRenderDevice& device);
     void ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
     void ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
-    void compute_data_to_clip_(float out16[16]);
+    void compute_data_to_clip_(const PlotFrame2D& frame, float out16[16]);
+    void begin_render_phase_(
+        PlotRenderPhase2D phase,
+        const PlotFrame2D& frame,
+        tgfx::RenderContext2& context,
+        tgfx::FontAtlas* font);
 };
 
 }  // namespace tcplot

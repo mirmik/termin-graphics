@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <exception>
 #include <vector>
 
 #include <tgfx2/builtin_shader_sources.hpp>
@@ -99,6 +100,16 @@ void PlotEngine2D::set_viewport(float x, float y, float width, float height) {
 
 void PlotEngine2D::set_fbo_height(float h) {
     fbo_height_ = (h > 0.0f) ? h : 0.0f;
+}
+
+void PlotEngine2D::set_pixel_scale(float scale) {
+    if (!std::isfinite(scale) || scale <= 0.0f) {
+        tc::Log::error(
+            "PlotEngine2D: pixel scale must be finite and positive, got %g",
+            static_cast<double>(scale));
+        return;
+    }
+    pixel_scale_ = scale;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,40 +214,25 @@ void PlotEngine2D::set_view(double x_min, double x_max, double y_min, double y_m
 // Coord helpers
 // ---------------------------------------------------------------------------
 
-PlotEngine2D::Rect PlotEngine2D::plot_area_() const {
-    Rect r;
-    r.x = vx_ + margin_left;
-    r.y = vy_ + margin_top;
-    r.w = std::max(vw_ - margin_left - margin_right, 1.0f);
-    r.h = std::max(vh_ - margin_top - margin_bottom, 1.0f);
-    return r;
-}
-
-PlotEngine2D::ViewRange PlotEngine2D::view_range_() {
+PlotFrame2D PlotEngine2D::plot_frame() {
     if (!view_x_min_.has_value()) fit();
-    return {*view_x_min_, *view_x_max_, *view_y_min_, *view_y_max_};
-}
-
-void PlotEngine2D::data_to_pixel_(double dx, double dy,
-                                    float& out_x, float& out_y) {
-    const Rect pa = plot_area_();
-    const ViewRange v = view_range_();
-    const double sx = (v.x_max != v.x_min)
-        ? (dx - v.x_min) / (v.x_max - v.x_min) : 0.5;
-    const double sy = (v.y_max != v.y_min)
-        ? (dy - v.y_min) / (v.y_max - v.y_min) : 0.5;
-    out_x = pa.x + (float)sx * pa.w;
-    out_y = pa.y + (1.0f - (float)sy) * pa.h;  // Y flipped (data y+up → pixel y+down)
-}
-
-void PlotEngine2D::pixel_to_data_(float wx, float wy,
-                                    double& out_x, double& out_y) {
-    const Rect pa = plot_area_();
-    const ViewRange v = view_range_();
-    const double sx = (wx - pa.x) / pa.w;
-    const double sy = 1.0 - (wy - pa.y) / pa.h;
-    out_x = v.x_min + sx * (v.x_max - v.x_min);
-    out_y = v.y_min + sy * (v.y_max - v.y_min);
+    const PlotRect2D viewport(vx_, vy_, vw_, vh_);
+    const PlotRect2D plot_area(
+        vx_ + margin_left,
+        vy_ + margin_top,
+        std::max(vw_ - margin_left - margin_right, 1.0f),
+        std::max(vh_ - margin_top - margin_bottom, 1.0f));
+    const PlotRange2D range(
+        *view_x_min_,
+        *view_x_max_,
+        *view_y_min_,
+        *view_y_max_);
+    return PlotFrame2D(
+        viewport,
+        plot_area,
+        range,
+        plot_area,
+        pixel_scale_);
 }
 
 void PlotEngine2D::release_gpu_resources() {
@@ -428,7 +424,9 @@ void PlotEngine2D::ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t i
     gs.data_version = data_version_;
 }
 
-void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
+void PlotEngine2D::compute_data_to_clip_(
+    const PlotFrame2D& frame,
+    float out16[16]) {
     // Linear transform:
     //   x_clip = S_x * x_data + C_x
     //   y_clip = S_y * y_data + C_y
@@ -440,22 +438,23 @@ void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
     out16[10] = 1.0f;  // pass Z through
     out16[15] = 1.0f;
 
-    const Rect pa = plot_area_();
-    const ViewRange v = view_range_();
-    const double span_x = v.x_max - v.x_min;
-    const double span_y = v.y_max - v.y_min;
+    const PlotRect2D& pa = frame.plot_area();
+    const PlotRange2D& v = frame.range();
+    const double span_x = v.x_span();
+    const double span_y = v.y_span();
 
     const double vw = std::max(vw_, 1.0f);
     const double vh = std::max(vh_, 1.0f);
 
     // Pixel-coord of plot area relative to viewport origin.
-    const double pa_x_local = pa.x - vx_;
-    const double pa_y_local = pa.y - vy_;
+    const double pa_x_local = pa.x() - vx_;
+    const double pa_y_local = pa.y() - vy_;
 
     // Derivation: fx = 2/vw * (pa_x + (x - x_min)/span_x * pa_w) - 1.
     const double S_x = (span_x != 0.0)
-        ? 2.0 * pa.w / vw / span_x : 0.0;
-    const double C_x = 2.0 * pa_x_local / vw - 1.0 - S_x * v.x_min;
+        ? 2.0 * pa.width() / vw / span_x : 0.0;
+    const double C_x =
+        2.0 * pa_x_local / vw - 1.0 - S_x * v.x_min();
 
     // Y-down clip space: data y+up should map to clip y-down (top of
     // plot = y_max, bottom = y_min). Derivation:
@@ -466,9 +465,10 @@ void PlotEngine2D::compute_data_to_clip_(float out16[16]) {
     // Rewriting the constant in terms of y_min = y_max - span_y so we
     // stay symmetric with the X derivation above.
     const double S_y = (span_y != 0.0)
-        ? -2.0 * pa.h / vh / span_y : 0.0;
-    const double C_y = -1.0 + 2.0 * pa_y_local / vh + 2.0 * pa.h / vh
-                     - S_y * v.y_min;
+        ? -2.0 * pa.height() / vh / span_y : 0.0;
+    const double C_y =
+        -1.0 + 2.0 * pa_y_local / vh + 2.0 * pa.height() / vh
+        - S_y * v.y_min();
 
     // Column-major 4x4 storage: out16[col*4 + row].
     // (col 0, row 0) = S_x; (col 3, row 0) = C_x.
@@ -540,9 +540,10 @@ bool PlotEngine2D::set_line_colormap_reversed(size_t idx, bool reversed) {
 
 void PlotEngine2D::get_view(double& x_min, double& x_max,
                               double& y_min, double& y_max) {
-    const ViewRange v = view_range_();
-    x_min = v.x_min; x_max = v.x_max;
-    y_min = v.y_min; y_max = v.y_max;
+    const PlotFrame2D frame = plot_frame();
+    const PlotRange2D& v = frame.range();
+    x_min = v.x_min(); x_max = v.x_max();
+    y_min = v.y_min(); y_max = v.y_max();
 }
 
 void PlotEngine2D::set_view_x(double x_min, double x_max) {
@@ -560,6 +561,45 @@ void PlotEngine2D::set_view_y(double y_min, double y_max) {
 // Rendering
 // ---------------------------------------------------------------------------
 
+void PlotEngine2D::begin_render_phase_(
+    PlotRenderPhase2D phase,
+    const PlotFrame2D& frame,
+    tgfx::RenderContext2& context,
+    tgfx::FontAtlas* font) {
+    if (!render_phase_sink_) return;
+
+    const bool plot_clipped =
+        phase == PlotRenderPhase2D::AnnotationUnderlay
+        || phase == PlotRenderPhase2D::Series
+        || phase == PlotRenderPhase2D::AnnotationOverlay;
+    const PlotRect2D& clip =
+        plot_clipped ? frame.clip_rect() : frame.viewport();
+    context.set_viewport(
+        static_cast<int>(frame.viewport().x()),
+        static_cast<int>(frame.viewport().y()),
+        static_cast<int>(frame.viewport().width()),
+        static_cast<int>(frame.viewport().height()));
+    context.set_scissor(
+        static_cast<int>(clip.x()),
+        static_cast<int>(clip.y()),
+        static_cast<int>(clip.width()),
+        static_cast<int>(clip.height()));
+    try {
+        render_phase_sink_->begin_plot_phase(phase, frame, context, font);
+    } catch (const std::exception& error) {
+        tc::Log::error(
+            "PlotEngine2D: render phase sink failed in phase %d: %s",
+            static_cast<int>(phase),
+            error.what());
+        throw;
+    } catch (...) {
+        tc::Log::error(
+            "PlotEngine2D: render phase sink failed in phase %d",
+            static_cast<int>(phase));
+        throw;
+    }
+}
+
 void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     if (!ctx || vw_ <= 0 || vh_ <= 0) return;
 
@@ -567,35 +607,43 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     const float target_h = fbo_height_ > 0.0f ? fbo_height_ : (vy_ + vh_);
     const int canvas_h = static_cast<int>(std::ceil(std::max(vh_, target_h)));
 
+    const PlotFrame2D frame = plot_frame();
+    const PlotRect2D& pa = frame.plot_area();
+    const PlotRange2D& v = frame.range();
+
+    begin_render_phase_(PlotRenderPhase2D::Background, frame, *ctx, font);
     canvas_->set_default_font(font);
     canvas_->begin(*ctx, canvas_w, canvas_h);
-
-    const Rect pa = plot_area_();
-    const ViewRange v = view_range_();
     canvas_->draw_rect(vx_, vy_, vw_, vh_, canvas_color(bg_color));
-    canvas_->draw_rect(pa.x, pa.y, pa.w, pa.h, canvas_color(plot_bg_color));
+    canvas_->draw_rect(
+        pa.x(), pa.y(), pa.width(), pa.height(), canvas_color(plot_bg_color));
 
-    const int max_x_ticks = std::max(int(pa.w / 80.0f), 3);
-    const int max_y_ticks = std::max(int(pa.h / 50.0f), 3);
-    const std::vector<double> x_ticks = axes::nice_ticks(v.x_min, v.x_max, max_x_ticks);
-    const std::vector<double> y_ticks = axes::nice_ticks(v.y_min, v.y_max, max_y_ticks);
+    const int max_x_ticks = std::max(int(pa.width() / 80.0f), 3);
+    const int max_y_ticks = std::max(int(pa.height() / 50.0f), 3);
+    const std::vector<double> x_ticks =
+        axes::nice_ticks(v.x_min(), v.x_max(), max_x_ticks);
+    const std::vector<double> y_ticks =
+        axes::nice_ticks(v.y_min(), v.y_max(), max_y_ticks);
 
-    canvas_->begin_clip(pa.x, pa.y, pa.w, pa.h);
+    canvas_->begin_clip(pa.x(), pa.y(), pa.width(), pa.height());
     if (show_grid) {
         for (double tx : x_ticks) {
-            float sx, _sy;
-            data_to_pixel_(tx, 0.0, sx, _sy);
-            canvas_->draw_line(sx, pa.y, sx, pa.y + pa.h,
+            const PlotPixelPoint2D p = frame.data_to_pixel(tx, 0.0);
+            canvas_->draw_line(p.x, pa.y(), p.x, pa.bottom(),
                                canvas_color(grid_color));
         }
         for (double ty : y_ticks) {
-            float _sx, sy;
-            data_to_pixel_(0.0, ty, _sx, sy);
-            canvas_->draw_line(pa.x, sy, pa.x + pa.w, sy,
+            const PlotPixelPoint2D p = frame.data_to_pixel(0.0, ty);
+            canvas_->draw_line(pa.x(), p.y, pa.right(), p.y,
                                canvas_color(grid_color));
         }
     }
+    canvas_->end_clip();
     canvas_->end();
+
+    begin_render_phase_(
+        PlotRenderPhase2D::AnnotationUnderlay, frame, *ctx, font);
+    begin_render_phase_(PlotRenderPhase2D::Series, frame, *ctx, font);
 
     // Batch #3 — line series via persistent VBOs + VS-side data→clip.
     // Each series' points live in its own GPU buffer; append_to_line
@@ -605,8 +653,9 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     {
         ctx->set_viewport(static_cast<int>(vx_), static_cast<int>(vy_),
                           static_cast<int>(vw_), static_cast<int>(vh_));
-        ctx->set_scissor(static_cast<int>(pa.x), static_cast<int>(pa.y),
-                         static_cast<int>(pa.w), static_cast<int>(pa.h));
+        ctx->set_scissor(
+            static_cast<int>(pa.x()), static_cast<int>(pa.y()),
+            static_cast<int>(pa.width()), static_cast<int>(pa.height()));
         ctx->set_depth_test(false);
         ctx->set_blend(true);
         ctx->set_cull(tgfx::CullMode::None);
@@ -624,7 +673,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         ctx->use_shader_resource_layout(line_raw);
 
         Plot2DPushData pc_line{};
-        compute_data_to_clip_(pc_line.matrix);  // already column-major
+        compute_data_to_clip_(frame, pc_line.matrix);  // already column-major
 
         tgfx::VertexBufferLayout line_layout;
         line_layout.stride = 2 * sizeof(float);
@@ -667,8 +716,9 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     {
         ctx->set_viewport(static_cast<int>(vx_), static_cast<int>(vy_),
                           static_cast<int>(vw_), static_cast<int>(vh_));
-        ctx->set_scissor(static_cast<int>(pa.x), static_cast<int>(pa.y),
-                         static_cast<int>(pa.w), static_cast<int>(pa.h));
+        ctx->set_scissor(
+            static_cast<int>(pa.x()), static_cast<int>(pa.y()),
+            static_cast<int>(pa.width()), static_cast<int>(pa.height()));
         ctx->set_depth_test(false);
         ctx->set_blend(true);
         ctx->set_blend_func(tgfx::BlendFactor::SrcAlpha,
@@ -696,11 +746,11 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         ctx->set_topology(tgfx::PrimitiveTopology::TriangleStrip);
 
         StyledLinePushData pc{};
-        compute_data_to_clip_(pc.matrix);
-        const double span_x = std::max(v.x_max - v.x_min, 1e-12);
-        const double span_y = std::max(v.y_max - v.y_min, 1e-12);
-        const float sx_px = static_cast<float>(pa.w / span_x);
-        const float sy_px = static_cast<float>(pa.h / span_y);
+        compute_data_to_clip_(frame, pc.matrix);
+        const double span_x = std::max(v.x_span(), 1e-12);
+        const double span_y = std::max(v.y_span(), 1e-12);
+        const float sx_px = static_cast<float>(pa.width() / span_x);
+        const float sy_px = static_cast<float>(pa.height() / span_y);
         const float length_scale = std::sqrt((sx_px * sx_px + sy_px * sy_px) * 0.5f);
 
         for (size_t i = 0; i < data.lines.size(); ++i) {
@@ -738,7 +788,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     }
 
     canvas_->begin(*ctx, canvas_w, canvas_h);
-    canvas_->begin_clip(pa.x, pa.y, pa.w, pa.h);
+    canvas_->begin_clip(pa.x(), pa.y(), pa.width(), pa.height());
 
     // Scatter uses Canvas2DRenderer; line series stay on the
     // persistent-VBO path above.
@@ -749,16 +799,24 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
                 ? *s.color : styles::cycle_color(palette_i);
             const float half = (float)s.size * 0.5f;
             for (size_t i = 0; i < s.x.size(); i++) {
-                float sx, sy;
-                data_to_pixel_(s.x[i], s.y[i], sx, sy);
-                canvas_->draw_circle(sx, sy, half, canvas_color(c));
+                const PlotPixelPoint2D p =
+                    frame.data_to_pixel(s.x[i], s.y[i]);
+                canvas_->draw_circle(p.x, p.y, half, canvas_color(c));
             }
             palette_i++;
         }
     }
 
     canvas_->end_clip();
-    canvas_->draw_rect_outline(pa.x, pa.y, pa.w, pa.h,
+    canvas_->end();
+
+    begin_render_phase_(
+        PlotRenderPhase2D::AnnotationOverlay, frame, *ctx, font);
+    begin_render_phase_(
+        PlotRenderPhase2D::UnclippedChrome, frame, *ctx, font);
+
+    canvas_->begin(*ctx, canvas_w, canvas_h);
+    canvas_->draw_rect_outline(pa.x(), pa.y(), pa.width(), pa.height(),
                                canvas_color(axis_color));
 
     // --- Text: tick labels, title, axis labels ---
@@ -768,21 +826,19 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         const float tick_sz = font_size - 2.0f;
 
         for (double tx : x_ticks) {
-            float sx, _sy;
-            data_to_pixel_(tx, 0.0, sx, _sy);
+            const PlotPixelPoint2D p = frame.data_to_pixel(tx, 0.0);
             canvas_->draw_text(axes::format_tick(tx),
-                               sx, pa.y + pa.h + 14.0f,
+                               p.x, pa.bottom() + 14.0f,
                                tick_sz, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Center);
         }
         for (double ty : y_ticks) {
-            float _sx, sy;
-            data_to_pixel_(0.0, ty, _sx, sy);
+            const PlotPixelPoint2D p = frame.data_to_pixel(0.0, ty);
             const std::string lab = axes::format_tick(ty);
             const auto m = font->measure_text(lab, tick_sz);
             const float tw = m.width;
             canvas_->draw_text(lab,
-                               pa.x - tw - 6.0f, sy + 4.0f,
+                               pa.x() - tw - 6.0f, p.y + 4.0f,
                                tick_sz, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Left);
         }
@@ -810,23 +866,23 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             // Y — caller's cue to bump margin_top.
             const float title_top_y = std::max(
                 static_cast<float>(vy_),
-                pa.y - static_cast<float>(title_lh) - title_pad);
+                pa.y() - static_cast<float>(title_lh) - title_pad);
             canvas_->draw_text(data.title,
-                               pa.x, title_top_y,
+                               pa.x(), title_top_y,
                                title_font_size, canvas_color(tc),
                                font, tgfx::Text2DRenderer::Anchor::Left);
         }
         if (!data.x_label.empty()) {
             canvas_->draw_text(data.x_label,
-                               pa.x + pa.w * 0.5f,
-                               pa.y + pa.h + margin_bottom - 4.0f,
+                               pa.x() + pa.width() * 0.5f,
+                               pa.bottom() + margin_bottom - 4.0f,
                                font_size, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Center);
         }
         if (!data.y_label.empty()) {
             canvas_->draw_text(data.y_label,
                                vx_ + margin_left * 0.5f,
-                               pa.y + pa.h * 0.5f,
+                               pa.y() + pa.height() * 0.5f,
                                font_size, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Center);
         }
@@ -844,11 +900,12 @@ bool PlotEngine2D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
         panning_ = true;
         pan_start_mx_ = x;
         pan_start_my_ = y;
-        const ViewRange v = view_range_();
-        pan_start_view_[0] = v.x_min;
-        pan_start_view_[1] = v.x_max;
-        pan_start_view_[2] = v.y_min;
-        pan_start_view_[3] = v.y_max;
+        const PlotFrame2D frame = plot_frame();
+        const PlotRange2D& v = frame.range();
+        pan_start_view_[0] = v.x_min();
+        pan_start_view_[1] = v.x_max();
+        pan_start_view_[2] = v.y_min();
+        pan_start_view_[3] = v.y_max();
         return true;
     }
     return false;
@@ -856,7 +913,8 @@ bool PlotEngine2D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
 
 void PlotEngine2D::on_mouse_move(float x, float y) {
     if (!panning_) return;
-    const Rect pa = plot_area_();
+    const PlotFrame2D frame = plot_frame();
+    const PlotRect2D& pa = frame.plot_area();
     const double vx0 = pan_start_view_[0];
     const double vx1 = pan_start_view_[1];
     const double vy0 = pan_start_view_[2];
@@ -869,8 +927,8 @@ void PlotEngine2D::on_mouse_move(float x, float y) {
     // pixel_y = pa_y + (y_max - y)/span_y * pa_h grows downward as
     // data y shrinks — the opposite direction, so the Y sign is
     // positive here.
-    const double dx_data = -dx_px / pa.w * (vx1 - vx0);
-    const double dy_data =  dy_px / pa.h * (vy1 - vy0);
+    const double dx_data = -dx_px / pa.width() * (vx1 - vx0);
+    const double dy_data = dy_px / pa.height() * (vy1 - vy0);
     view_x_min_ = vx0 + dx_data;
     view_x_max_ = vx1 + dx_data;
     view_y_min_ = vy0 + dy_data;
@@ -883,34 +941,32 @@ void PlotEngine2D::on_mouse_up(float /*x*/, float /*y*/,
 }
 
 bool PlotEngine2D::on_mouse_wheel_x(float x, float y, float dy) {
-    const Rect pa = plot_area_();
-    if (x < pa.x || x > pa.x + pa.w || y < pa.y || y > pa.y + pa.h) return false;
+    const PlotFrame2D frame = plot_frame();
+    if (!frame.contains_plot_pixel(x, y)) return false;
 
     const float factor = (dy > 0) ? 0.85f : 1.0f / 0.85f;
 
-    double cx, cy;
-    pixel_to_data_(x, y, cx, cy);
-    const ViewRange v = view_range_();
+    const PlotPoint2D center = frame.pixel_to_data(x, y);
+    const PlotRange2D& v = frame.range();
 
-    view_x_min_ = cx + (v.x_min - cx) * factor;
-    view_x_max_ = cx + (v.x_max - cx) * factor;
+    view_x_min_ = center.x + (v.x_min() - center.x) * factor;
+    view_x_max_ = center.x + (v.x_max() - center.x) * factor;
     return true;
 }
 
 bool PlotEngine2D::on_mouse_wheel(float x, float y, float dy) {
-    const Rect pa = plot_area_();
-    if (x < pa.x || x > pa.x + pa.w || y < pa.y || y > pa.y + pa.h) return false;
+    const PlotFrame2D frame = plot_frame();
+    if (!frame.contains_plot_pixel(x, y)) return false;
 
     const float factor = (dy > 0) ? 0.85f : 1.0f / 0.85f;
 
-    double cx, cy;
-    pixel_to_data_(x, y, cx, cy);
-    const ViewRange v = view_range_();
+    const PlotPoint2D center = frame.pixel_to_data(x, y);
+    const PlotRange2D& v = frame.range();
 
-    view_x_min_ = cx + (v.x_min - cx) * factor;
-    view_x_max_ = cx + (v.x_max - cx) * factor;
-    view_y_min_ = cy + (v.y_min - cy) * factor;
-    view_y_max_ = cy + (v.y_max - cy) * factor;
+    view_x_min_ = center.x + (v.x_min() - center.x) * factor;
+    view_x_max_ = center.x + (v.x_max() - center.x) * factor;
+    view_y_min_ = center.y + (v.y_min() - center.y) * factor;
+    view_y_max_ = center.y + (v.y_max() - center.y) * factor;
     return true;
 }
 
