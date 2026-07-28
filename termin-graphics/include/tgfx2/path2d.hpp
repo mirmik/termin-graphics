@@ -21,7 +21,7 @@ struct Color4f {
 
     static constexpr Color4f white() noexcept { return {}; }
     static constexpr Color4f transparent() noexcept { return {0, 0, 0, 0}; }
-    bool is_finite() const noexcept;
+    TGFX2_API bool is_finite() const noexcept;
 };
 
 enum class FillRule : std::uint8_t { NonZero, EvenOdd };
@@ -32,7 +32,7 @@ struct FillPaint {
     Color4f color{};
     FillRule rule = FillRule::NonZero;
 
-    bool validate() const;
+    TGFX2_API bool validate() const;
 };
 
 struct StrokePaint {
@@ -44,7 +44,7 @@ struct StrokePaint {
     std::vector<float> dash_pattern;
     float dash_offset = 0.0f;
 
-    bool validate() const;
+    TGFX2_API bool validate() const;
 };
 
 enum class Path2Verb : std::uint8_t {
@@ -65,8 +65,10 @@ struct FlattenedPath2f {
     termin::Bounds2f bounds{};
     bool empty = true;
 
-    bool contains(termin::Vec2f point, FillRule rule) const noexcept;
-    bool stroke_contains(termin::Vec2f point, const StrokePaint& stroke) const noexcept;
+    TGFX2_API bool contains(termin::Vec2f point, FillRule rule) const noexcept;
+    TGFX2_API bool stroke_contains(
+        termin::Vec2f point,
+        const StrokePaint& stroke) const noexcept;
 };
 
 // Path2f owns all verb and point memory. Copies are deep and detached; no
