@@ -4,6 +4,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -26,6 +27,16 @@
 namespace tgfx {
 
 namespace {
+
+struct BuiltinShaderRootState {
+    std::mutex mutex;
+    std::filesystem::path explicit_root;
+};
+
+BuiltinShaderRootState& builtin_shader_root_state() {
+    static BuiltinShaderRootState state;
+    return state;
+}
 
 std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -91,8 +102,22 @@ void add_share_roots_from_ancestors(
 
 } // anonymous namespace
 
+void set_builtin_shader_root(const char* root) {
+    BuiltinShaderRootState& state = builtin_shader_root_state();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    state.explicit_root = root ? std::filesystem::path(root) : std::filesystem::path();
+}
+
+std::string get_builtin_shader_root() {
+    BuiltinShaderRootState& state = builtin_shader_root_state();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    return state.explicit_root.string();
+}
+
 std::vector<std::filesystem::path> builtin_shader_roots() {
     std::vector<std::filesystem::path> roots;
+
+    add_root(roots, get_builtin_shader_root());
 
     if (const char* explicit_root = std::getenv("TERMIN_BUILTIN_SHADER_ROOT")) {
         add_root(roots, explicit_root);

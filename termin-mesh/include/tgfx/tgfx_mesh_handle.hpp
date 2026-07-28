@@ -3,12 +3,10 @@
 // TcMesh - RAII wrapper with handle-based access to tc_mesh
 // Uses tc_mesh_handle with generation checking for safety
 
-extern "C" {
 #include <tgfx/resources/tc_mesh.h>
 #include <tgfx/resources/tc_mesh_registry.h>
 #include <tcbase/tc_value.h>
 #include <tcbase/tc_log.h>
-}
 
 #include <tgfx/tgfx_api.h>
 #include <string>
