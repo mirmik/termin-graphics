@@ -1,25 +1,25 @@
 """Shared host loop for tcplot examples.
 
-Spins up an WindowedGraphicsSession window + tcgui UI and runs a wait-for-event main
-loop until the user closes the window. Picks OpenGL or Vulkan based
-on the ``TERMIN_BACKEND`` env-var, same as other backend-neutral SDL
-hosts in the project.
+Spins up a WindowedGraphicsSession window + tcgui UI and runs a wait-for-event
+main loop until the user closes the window. Native Termin events keep the
+examples independent from the third-party PySDL2 package.
 """
 
 from __future__ import annotations
 
-import ctypes
 from typing import Callable
-
-import sdl2
 
 from tcbase import MouseButton
 from tcgui.widgets.ui import UI
-from termin.display.window import WindowedGraphicsSession, quit_sdl
+from termin.display.window import (
+    WindowedGraphicsSession,
+    quit_sdl,
+    wait_sdl_events_timeout,
+)
 from tgfx import Tgfx2Context, configure_default_shader_runtime
 
 
-_SDL_BUTTON_MAP = {1: MouseButton.LEFT, 2: MouseButton.MIDDLE, 3: MouseButton.RIGHT}
+_KEY_ESCAPE = 256
 
 
 def run_demo(title: str, make_widget: Callable[[], object],
@@ -35,37 +35,26 @@ def run_demo(title: str, make_widget: Callable[[], object],
     ui = UI(graphics=ctx)
     ui.root = make_widget()
 
-    event = sdl2.SDL_Event()
-
     def dispatch(ev):
-        t = ev.type
-        if t == sdl2.SDL_QUIT or (
-            t == sdl2.SDL_KEYDOWN
-            and ev.key.keysym.scancode == sdl2.SDL_SCANCODE_ESCAPE
+        event_type = ev["type"]
+        if event_type == "quit" or (
+            event_type == "key_down" and ev["key"] == _KEY_ESCAPE
         ):
             window.set_should_close(True)
-        elif t == sdl2.SDL_WINDOWEVENT:
-            if ev.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
-                window.set_should_close(True)
-        elif t == sdl2.SDL_MOUSEMOTION:
-            ui.mouse_move(float(ev.motion.x), float(ev.motion.y))
-        elif t == sdl2.SDL_MOUSEBUTTONDOWN:
-            ui.mouse_down(float(ev.button.x), float(ev.button.y),
-                          _SDL_BUTTON_MAP.get(ev.button.button, MouseButton.LEFT))
-        elif t == sdl2.SDL_MOUSEBUTTONUP:
-            ui.mouse_up(float(ev.button.x), float(ev.button.y),
-                        _SDL_BUTTON_MAP.get(ev.button.button, MouseButton.LEFT))
-        elif t == sdl2.SDL_MOUSEWHEEL:
-            mx, my = ctypes.c_int(), ctypes.c_int()
-            sdl2.SDL_GetMouseState(ctypes.byref(mx), ctypes.byref(my))
-            ui.mouse_wheel(float(ev.wheel.x), float(ev.wheel.y),
-                           float(mx.value), float(my.value))
+        elif event_type == "window_close":
+            window.set_should_close(True)
+        elif event_type == "mouse_move":
+            ui.mouse_move(ev["x"], ev["y"])
+        elif event_type == "mouse_down":
+            ui.mouse_down(ev["x"], ev["y"], MouseButton(ev["button"]))
+        elif event_type == "mouse_up":
+            ui.mouse_up(ev["x"], ev["y"], MouseButton(ev["button"]))
+        elif event_type == "mouse_wheel":
+            ui.mouse_wheel(ev["dx"], ev["dy"], ev["x"], ev["y"])
 
     while not window.should_close():
-        if sdl2.SDL_WaitEventTimeout(ctypes.byref(event), 500):
+        for event in wait_sdl_events_timeout(500):
             dispatch(event)
-            while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
-                dispatch(event)
 
         w, h = window.framebuffer_size()
         if w <= 0 or h <= 0:

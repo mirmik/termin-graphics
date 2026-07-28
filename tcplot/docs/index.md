@@ -65,3 +65,13 @@ caller.
 composition and synthetic input without duplicating plot margin or DPI math.
 No Python annotation or graphic-item wrapper owns the engine, layer or native
 item.
+
+The `Plot2D` widget forwards the marker API without exposing its engine.
+Run the interactive retained-marker example with:
+
+```bash
+sdk/bin/termin_python tcplot/examples/demo_marker.py
+```
+
+Its anchor snaps to the plotted curve while dragging, and the callout close
+button destroys the annotation through its generation handle.

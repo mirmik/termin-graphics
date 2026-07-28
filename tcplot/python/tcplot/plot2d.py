@@ -42,6 +42,27 @@ class Plot2D(Widget):
     def set_view(self, x_min: float, x_max: float, y_min: float, y_max: float):
         self.engine.set_view(x_min, x_max, y_min, y_max)
 
+    def create_data_marker(self, marker):
+        return self.engine.create_data_marker(marker)
+
+    def update_data_marker(self, handle, marker):
+        return self.engine.update_data_marker(handle, marker)
+
+    def data_marker_snapshot(self, handle):
+        return self.engine.data_marker_snapshot(handle)
+
+    def destroy_annotation(self, handle):
+        return self.engine.destroy_annotation(handle)
+
+    def set_marker_snap_handler(self, handle, callback):
+        return self.engine.set_marker_snap_handler(handle, callback)
+
+    def set_marker_action_handler(self, handle, callback):
+        return self.engine.set_marker_action_handler(handle, callback)
+
+    def take_annotation_action(self):
+        return self.engine.take_annotation_action()
+
     # -- Widget hooks --
 
     def render(self, renderer):
