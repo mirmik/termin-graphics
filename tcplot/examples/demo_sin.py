@@ -1,7 +1,8 @@
 """Basic sine/cosine plot demo.
 
-Run: python3 examples/demo_sin.py          (OpenGL, default)
-     TERMIN_BACKEND=vulkan python3 ...     (Vulkan)
+Run from the repository root:
+     ./run-python.sh tcplot/examples/demo_sin.py              (OpenGL, default)
+     TERMIN_BACKEND=vulkan ./run-python.sh tcplot/examples/demo_sin.py
 """
 
 import sys
