@@ -53,4 +53,15 @@ Python package:
 import tcplot
 ```
 
-Examples are the current practical entrypoint for expected Python usage.
+`PlotEngine2D.create_data_marker()` returns a value-only
+`PlotAnnotationHandle`. Marker updates, snapshots, destruction, snapping and
+semantic action callbacks all validate the complete
+`layer_id/index/generation` identity. `take_annotation_action()` provides the
+same actions as a polling queue for hosts that do not use callbacks. Python
+callback exceptions are logged at the native boundary and propagated to the
+caller.
+
+`annotation_anchor_pixel()` exposes the current projected anchor for overlay
+composition and synthetic input without duplicating plot margin or DPI math.
+No Python annotation or graphic-item wrapper owns the engine, layer or native
+item.

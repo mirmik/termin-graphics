@@ -10,6 +10,7 @@
 
 #include <tgfx2/handles.hpp>
 
+#include "tcplot/plot_annotations2d.hpp"
 #include "tcplot/plot_data.hpp"
 #include "tcplot/styles.hpp"
 #include "tcplot/tcplot_api.h"
@@ -25,8 +26,6 @@ namespace tcplot {
 
 class PlotEngine2D;
 class GpuHost;
-class PlotAnnotationLayer2D;
-
 class TCPLOT_API PlotView2D {
 private:
     tgfx::IRenderDevice*  device_ = nullptr;
@@ -63,6 +62,19 @@ public:
     void set_view(double x_min, double x_max, double y_min, double y_max);
     PlotAnnotationLayer2D& annotations();
     const PlotAnnotationLayer2D& annotations() const;
+
+    // Binding façade: handles are values and never retain this view.
+    PlotAnnotationHandle create_data_marker(
+        double x, double y, const char* text);
+    bool update_data_marker(
+        PlotAnnotationHandle handle,
+        double x,
+        double y,
+        const char* text);
+    PlotDataMarkerBindingSnapshot2D data_marker_binding_snapshot(
+        PlotAnnotationHandle handle) const;
+    bool destroy_annotation(PlotAnnotationHandle handle);
+    PlotAnnotationActionPoll2D take_annotation_action();
 
     void set_title(const char* title);
     void set_x_label(const char* label);

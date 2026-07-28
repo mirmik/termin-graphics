@@ -356,6 +356,9 @@ int main() {
         bubble_after_pan->world_transform.tx));
 
     int close_actions = 0;
+    while (marker_layer.take_action()) {
+        // Discard earlier activation events before checking close ordering.
+    }
     assert(marker_layer.set_action_handler(
         *marker_handle,
         [&](const PlotAnnotationAction2D& action) {
@@ -374,6 +377,11 @@ int main() {
     assert(marker_layer.route_pointer(panned, {
         22, PointerEventKind2D::Up, close_point, 0}));
     assert(close_actions == 1);
+    const auto close_action = marker_layer.take_action();
+    assert(close_action);
+    assert(close_action->annotation == *marker_handle);
+    assert(close_action->action == "close");
+    assert(!marker_layer.take_action());
     assert(!marker_layer.data_marker_snapshot(*marker_handle));
 
     PlotDataMarker2D clipped_marker;

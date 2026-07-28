@@ -50,6 +50,10 @@ target_link_libraries(termin_visual_scene PUBLIC
 )
 termin_set_rpath_lib(termin_visual_scene)
 
+if(TERMIN_BUILD_PYTHON)
+    add_subdirectory(python)
+endif()
+
 if(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES)
     add_executable(termin_visual_scene_draggable_example
         examples/draggable_primitives.cpp)

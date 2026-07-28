@@ -133,6 +133,66 @@ const PlotAnnotationLayer2D& PlotView2D::annotations() const {
     return engine_->annotations();
 }
 
+PlotAnnotationHandle PlotView2D::create_data_marker(
+    double x,
+    double y,
+    const char* text) {
+    PlotDataMarker2D marker;
+    marker.data_position = {x, y};
+    marker.text = text ? text : "";
+    const auto handle =
+        engine_->annotations().create_data_marker(std::move(marker));
+    if (!handle) return {};
+    engine_->annotations().project(engine_->plot_frame(), engine_->data);
+    return *handle;
+}
+
+bool PlotView2D::update_data_marker(
+    PlotAnnotationHandle handle,
+    double x,
+    double y,
+    const char* text) {
+    const auto current =
+        engine_->annotations().data_marker_snapshot(handle);
+    if (!current) return false;
+    PlotDataMarker2D marker = current->marker;
+    marker.data_position = {x, y};
+    marker.text = text ? text : "";
+    if (!engine_->annotations().update_data_marker(
+            handle, std::move(marker))) {
+        return false;
+    }
+    engine_->annotations().project(engine_->plot_frame(), engine_->data);
+    return true;
+}
+
+PlotDataMarkerBindingSnapshot2D
+PlotView2D::data_marker_binding_snapshot(
+    PlotAnnotationHandle handle) const {
+    const auto snapshot =
+        engine_->annotations().data_marker_snapshot(handle);
+    if (!snapshot) return {};
+    return {
+        true,
+        snapshot->annotation,
+        snapshot->marker.data_position.x,
+        snapshot->marker.data_position.y,
+        snapshot->marker.text,
+        snapshot->hovered,
+        snapshot->dragging,
+    };
+}
+
+bool PlotView2D::destroy_annotation(PlotAnnotationHandle handle) {
+    return engine_->annotations().destroy(handle);
+}
+
+PlotAnnotationActionPoll2D PlotView2D::take_annotation_action() {
+    const auto action = engine_->annotations().take_action();
+    if (!action) return {};
+    return {true, action->annotation, action->action};
+}
+
 void PlotView2D::set_title(const char* title) {
     engine_->data.title = title ? title : "";
 }

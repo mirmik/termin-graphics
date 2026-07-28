@@ -191,6 +191,7 @@ public:
         SceneRenderResourceResolver2D& resolver) const;
 
     std::size_t size() const;
+    bool contains(GraphicItemHandle item) const;
     std::uint64_t revision() const;
     std::uint64_t id() const;
 

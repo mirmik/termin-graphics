@@ -61,6 +61,20 @@ parses and validates the complete document, builds a private staging scene and
 commits it atomically. Unknown type names, malformed topology or invalid
 payloads are logged and leave the destination empty and unchanged.
 
+## Python bindings
+
+`termin.visual_scene.VisualScene2D` is an owning Python document wrapper.
+Creation returns `GraphicItemRef2D` values containing only a shared
+invalidation token and the native scene/index/generation handle. An item
+reference does not own its item and does not keep the scene alive; after item
+destruction or scene collection, `valid` becomes false and operations raise
+`ReferenceError`.
+
+The wrapper exposes retained primitive creation, state mutation, destruction,
+detached snapshots and inspection, plus the same versioned JSON persistence
+contract as the C++ API. A parent reference from another scene is rejected
+instead of being interpreted as a local slot.
+
 ## Immutable render preparation
 
 `VisualScene2D::prepare_render_snapshot()` copies one coherent scene revision

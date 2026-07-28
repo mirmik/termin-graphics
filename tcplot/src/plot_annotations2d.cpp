@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <deque>
 #include <exception>
 #include <limits>
 #include <stdexcept>
@@ -220,6 +221,7 @@ struct PlotAnnotationLayer2D::Impl {
     std::uint64_t id = g_next_annotation_layer_id.fetch_add(1);
     std::vector<Record> records;
     std::vector<std::uint32_t> free_indices;
+    std::deque<PlotAnnotationAction2D> pending_actions;
     std::array<Bucket, kBucketCount> buckets;
     tgfx::Canvas2DRenderer canvas;
     Resources resources;
@@ -414,6 +416,12 @@ struct PlotAnnotationLayer2D::Impl {
                     id, record_index, generation};
                 Record* record = resolve(annotation);
                 if (!record) return;
+                pending_actions.push_back({
+                    annotation,
+                    visual_index,
+                    event.pointer,
+                    action,
+                });
                 if (record->action_handler) {
                     try {
                         record->action_handler({
@@ -664,6 +672,7 @@ void PlotAnnotationLayer2D::clear() {
         if (!impl_->records[i].alive) continue;
         destroy(impl_->handle(i));
     }
+    impl_->pending_actions.clear();
 }
 
 std::optional<PlotAnnotationSnapshot2D> PlotAnnotationLayer2D::snapshot(
@@ -740,6 +749,15 @@ bool PlotAnnotationLayer2D::set_action_handler(
     if (!record) return false;
     record->action_handler = std::move(handler);
     return true;
+}
+
+std::optional<PlotAnnotationAction2D>
+PlotAnnotationLayer2D::take_action() {
+    if (impl_->pending_actions.empty()) return std::nullopt;
+    PlotAnnotationAction2D result =
+        std::move(impl_->pending_actions.front());
+    impl_->pending_actions.pop_front();
+    return result;
 }
 
 std::optional<PlotAnnotationHandle>

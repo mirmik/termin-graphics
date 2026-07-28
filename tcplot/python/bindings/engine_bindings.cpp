@@ -14,6 +14,7 @@
 #include "conversion_helpers.hpp"
 #include "tcplot/engine2d.hpp"
 #include "tcplot/engine3d.hpp"
+#include "tcplot/plot_annotations2d.hpp"
 
 namespace nb = nanobind;
 
@@ -150,7 +151,119 @@ void bind_engines(nb::module_& m) {
              },
              nb::arg("x"), nb::arg("y"), nb::arg("button"))
         .def("on_mouse_wheel", &tcplot::PlotEngine2D::on_mouse_wheel,
-             nb::arg("x"), nb::arg("y"), nb::arg("dy"));
+             nb::arg("x"), nb::arg("y"), nb::arg("dy"))
+
+        // Handles are complete layer/index/generation values. They never own
+        // an annotation or retain the engine.
+        .def(
+            "create_data_marker",
+            [](tcplot::PlotEngine2D& self,
+               tcplot::PlotDataMarker2D marker) {
+                const auto handle = self.annotations().create_data_marker(
+                    std::move(marker));
+                if (handle) {
+                    self.annotations().project(self.plot_frame(), self.data);
+                }
+                return handle;
+            },
+            nb::arg("marker"))
+        .def(
+            "update_data_marker",
+            [](tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle,
+               tcplot::PlotDataMarker2D marker) {
+                const bool updated =
+                    self.annotations().update_data_marker(
+                    handle, std::move(marker));
+                if (updated) {
+                    self.annotations().project(self.plot_frame(), self.data);
+                }
+                return updated;
+            },
+            nb::arg("handle"),
+            nb::arg("marker"))
+        .def(
+            "data_marker_snapshot",
+            [](const tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle) {
+                return self.annotations().data_marker_snapshot(handle);
+            },
+            nb::arg("handle"))
+        .def(
+            "annotation_anchor_pixel",
+            [](const tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle) -> nb::object {
+                const auto snapshot = self.annotations().snapshot(handle);
+                if (!snapshot || !snapshot->projected_anchor) {
+                    return nb::none();
+                }
+                return nb::make_tuple(
+                    snapshot->projected_anchor->x,
+                    snapshot->projected_anchor->y);
+            },
+            nb::arg("handle"))
+        .def(
+            "destroy_annotation",
+            [](tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle) {
+                return self.annotations().destroy(handle);
+            },
+            nb::arg("handle"))
+        .def(
+            "set_marker_snap_handler",
+            [](tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle,
+               nb::object callback) {
+                if (callback.is_none()) {
+                    return self.annotations().set_snap_hook(handle, {});
+                }
+                return self.annotations().set_snap_hook(
+                    handle,
+                    [callback = std::move(callback)](
+                        const tcplot::PlotPoint2D& point) {
+                        nb::gil_scoped_acquire gil;
+                        nb::object value = callback(point.x, point.y);
+                        nb::tuple pair = nb::cast<nb::tuple>(value);
+                        if (pair.size() != 2) {
+                            throw nb::value_error(
+                                "marker snap handler must return (x, y)");
+                        }
+                        return tcplot::PlotPoint2D{
+                            nb::cast<double>(pair[0]),
+                            nb::cast<double>(pair[1]),
+                        };
+                    });
+            },
+            nb::arg("handle"),
+            nb::arg("callback").none())
+        .def(
+            "set_marker_action_handler",
+            [](tcplot::PlotEngine2D& self,
+               tcplot::PlotAnnotationHandle handle,
+               nb::object callback) {
+                if (callback.is_none()) {
+                    return self.annotations().set_action_handler(handle, {});
+                }
+                return self.annotations().set_action_handler(
+                    handle,
+                    [callback = std::move(callback)](
+                        const tcplot::PlotAnnotationAction2D& action) {
+                        nb::gil_scoped_acquire gil;
+                        callback(action.annotation, action.action);
+                    });
+            },
+            nb::arg("handle"),
+            nb::arg("callback").none())
+        .def(
+            "take_annotation_action",
+            [](tcplot::PlotEngine2D& self) {
+                return self.annotations().take_action();
+            })
+        .def(
+            "annotation_count",
+            [](const tcplot::PlotEngine2D& self) {
+                return self.annotations().size();
+            });
 
     // ---- PlotEngine3D ----
     nb::enum_<tcplot::SurfaceColorMap>(m, "SurfaceColorMap")

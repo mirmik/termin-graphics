@@ -8,6 +8,7 @@ nanobind_add_module(_tcplot_native NB_SHARED
     bindings/tcplot_module.cpp
     bindings/colors_and_data_bindings.cpp
     bindings/camera_bindings.cpp
+    bindings/annotation_bindings.cpp
     bindings/engine_bindings.cpp
 )
 

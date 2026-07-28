@@ -507,6 +507,11 @@ std::size_t VisualScene2D::size() const {
     return records_.size();
 }
 
+bool VisualScene2D::contains(GraphicItemHandle item) const {
+    std::scoped_lock lock(mutex_);
+    return owns_locked_(item);
+}
+
 std::uint64_t VisualScene2D::revision() const {
     std::scoped_lock lock(mutex_);
     return revision_;

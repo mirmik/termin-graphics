@@ -63,7 +63,13 @@
     },
     {
       "path": "termin-visual-scene",
-      "distribution": "termin-visual-scene"
+      "distribution": "termin-visual-scene",
+      "native_extensions": [
+        {
+          "extension": "termin.visual_scene._visual_scene_native",
+          "target": "_visual_scene_native"
+        }
+      ]
     },
     {
       "path": "termin-voxels",

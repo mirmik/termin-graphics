@@ -143,6 +143,23 @@ struct PlotDataMarkerSnapshot2D {
     bool dragging = false;
 };
 
+// Detached, value-only forms used by foreign-language bindings.
+struct PlotDataMarkerBindingSnapshot2D {
+    bool available = false;
+    PlotAnnotationHandle annotation;
+    double x = 0.0;
+    double y = 0.0;
+    std::string text;
+    bool hovered = false;
+    bool dragging = false;
+};
+
+struct PlotAnnotationActionPoll2D {
+    bool available = false;
+    PlotAnnotationHandle annotation;
+    std::string action;
+};
+
 class TCPLOT_API PlotAnnotationLayer2D final {
 public:
     using SnapHook = std::function<PlotPoint2D(const PlotPoint2D&)>;
@@ -172,6 +189,7 @@ public:
     bool set_action_handler(
         PlotAnnotationHandle handle,
         ActionHandler handler);
+    std::optional<PlotAnnotationAction2D> take_action();
 
     std::optional<PlotAnnotationHandle> create_data_marker(
         PlotDataMarker2D marker);
