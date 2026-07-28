@@ -42,8 +42,9 @@ references, axes fractions и viewport pixels.
 Готовый `PlotDataMarker2D` создаётся через `create_data_marker()`. Он объединяет
 data-anchored точку, plot-clipped leader, pixel-sized callout и text, hover,
 captured drag с обновлением data position, optional snapping и semantic
-действие `close`. Anchor и leader клипуются plot area; callout остаётся
-доступным в viewport. Input annotation маршрутизируется перед plot navigation.
+действие `close`. Все visual-части маркера клипуются plot area; сама semantic
+annotation продолжает существовать и проецироваться за её пределами. Input
+annotation маршрутизируется перед plot navigation.
 
 ## Python API
 

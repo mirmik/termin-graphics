@@ -268,7 +268,7 @@ int main() {
     assert(marker_annotation->projected_graphics[2].phase
         == PlotAnnotationPhase2D::Chrome);
     assert(marker_annotation->projected_graphics[2].clip
-        == PlotAnnotationClip2D::Viewport);
+        == PlotAnnotationClip2D::PlotArea);
 
     const PlotPixelPoint2D marker_pixel =
         *marker_annotation->projected_anchor;
@@ -337,7 +337,7 @@ int main() {
         marker_layer.snapshot(*marker_handle)->projected_graphics[2].item;
     const auto bubble_before_pan = marker_layer.visual_scene(
         PlotAnnotationPhase2D::Chrome,
-        PlotAnnotationClip2D::Viewport).snapshot(bubble_item);
+        PlotAnnotationClip2D::PlotArea).snapshot(bubble_item);
     assert(bubble_before_pan);
     const auto* bubble_payload =
         std::get_if<RoundedRectItem2D>(&bubble_before_pan->payload);
@@ -346,7 +346,7 @@ int main() {
     marker_layer.project(panned, data);
     const auto bubble_after_pan = marker_layer.visual_scene(
         PlotAnnotationPhase2D::Chrome,
-        PlotAnnotationClip2D::Viewport).snapshot(bubble_item);
+        PlotAnnotationClip2D::PlotArea).snapshot(bubble_item);
     assert(bubble_after_pan);
     const auto* panned_bubble =
         std::get_if<RoundedRectItem2D>(&bubble_after_pan->payload);
@@ -408,6 +408,8 @@ int main() {
         clipped_bubble->world_transform.transform_point({0.0f, 0.0f});
     assert(marker_layer.hit_test(
         frame, clipped_bubble_center.x, clipped_bubble_center.y));
+    assert(!marker_layer.hit_test(
+        frame, frame.plot_area().x() - 1.0f, clipped_bubble_center.y));
 
     const PlotPixelPoint2D teardown_anchor =
         *marker_layer.snapshot(*clipped_marker_handle)->projected_anchor;

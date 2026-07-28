@@ -323,7 +323,7 @@ struct PlotAnnotationLayer2D::Impl {
         };
         bubble.pixel_offset = marker.callout_offset;
         bubble.phase = PlotAnnotationPhase2D::Chrome;
-        bubble.clip = PlotAnnotationClip2D::Viewport;
+        bubble.clip = PlotAnnotationClip2D::PlotArea;
         bubble.z_order = 30;
         record.annotation.visuals.push_back(std::move(bubble));
 
@@ -342,7 +342,7 @@ struct PlotAnnotationLayer2D::Impl {
         };
         text.pixel_offset = marker.callout_offset;
         text.phase = PlotAnnotationPhase2D::Chrome;
-        text.clip = PlotAnnotationClip2D::Viewport;
+        text.clip = PlotAnnotationClip2D::PlotArea;
         text.z_order = 31;
         text.enabled = false;
         record.annotation.visuals.push_back(std::move(text));
@@ -363,7 +363,7 @@ struct PlotAnnotationLayer2D::Impl {
                 marker.callout_offset.y,
             };
             close.phase = PlotAnnotationPhase2D::Chrome;
-            close.clip = PlotAnnotationClip2D::Viewport;
+            close.clip = PlotAnnotationClip2D::PlotArea;
             close.z_order = 32;
             close.action = "close";
             record.annotation.visuals.push_back(std::move(close));
