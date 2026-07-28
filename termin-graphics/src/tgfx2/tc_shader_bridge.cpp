@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -594,7 +595,11 @@ static std::string shader_compiler_fingerprint(
 
     ec.clear();
     const auto mtime = std::filesystem::last_write_time(stable_path, ec);
-    const auto mtime_ticks = ec ? 0 : mtime.time_since_epoch().count();
+    const int64_t mtime_ticks = ec
+        ? 0
+        : std::chrono::duration_cast<std::chrono::nanoseconds>(
+              mtime.time_since_epoch()
+          ).count();
 
     ec.clear();
     const uintmax_t size = std::filesystem::file_size(stable_path, ec);

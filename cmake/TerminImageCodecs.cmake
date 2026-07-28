@@ -21,7 +21,7 @@ set(
     CACHE INTERNAL "Termin bundled libwebp source directory"
 )
 
-if(WIN32)
+if(WIN32 OR CMAKE_CROSSCOMPILING)
     set(_TERMIN_USE_BUNDLED_IMAGE_CODECS_DEFAULT ON)
 else()
     set(_TERMIN_USE_BUNDLED_IMAGE_CODECS_DEFAULT OFF)
@@ -116,6 +116,28 @@ function(_termin_configure_bundled_image_codecs)
     )
     if(CMAKE_BUILD_TYPE)
         list(APPEND _termin_libjpeg_turbo_cmake_args "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+    endif()
+    if(CMAKE_CROSSCOMPILING)
+        if(NOT CMAKE_TOOLCHAIN_FILE)
+            message(FATAL_ERROR
+                "Bundled libjpeg-turbo cross-build requires CMAKE_TOOLCHAIN_FILE."
+            )
+        endif()
+        list(APPEND _termin_libjpeg_turbo_cmake_args
+            "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+        )
+        foreach(_termin_cross_variable IN ITEMS
+                ANDROID_ABI
+                ANDROID_PLATFORM
+                ANDROID_STL
+                CMAKE_ANDROID_ARCH_ABI
+                CMAKE_ANDROID_API)
+            if(DEFINED ${_termin_cross_variable} AND NOT "${${_termin_cross_variable}}" STREQUAL "")
+                list(APPEND _termin_libjpeg_turbo_cmake_args
+                    "-D${_termin_cross_variable}=${${_termin_cross_variable}}"
+                )
+            endif()
+        endforeach()
     endif()
     if(DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
         list(APPEND _termin_libjpeg_turbo_cmake_args
