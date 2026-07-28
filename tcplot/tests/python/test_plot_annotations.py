@@ -2,6 +2,7 @@ import pytest
 
 from tcplot import (
     MouseButton,
+    Plot2D,
     PlotDataMarker2D,
     PlotEngine2D,
 )
@@ -41,6 +42,18 @@ def test_marker_handle_mutation_snap_action_and_stale_safety():
     assert engine.destroy_annotation(handle)
     assert engine.data_marker_snapshot(handle) is None
     assert not engine.destroy_annotation(handle)
+
+
+def test_plot2d_widget_exposes_marker_api_without_engine_access():
+    plot = Plot2D()
+    plot.set_view(0.0, 10.0, 0.0, 10.0)
+    handle = plot.create_data_marker(marker_at())
+    assert handle
+    assert plot.data_marker_snapshot(handle).marker.text == "sample"
+    assert plot.set_marker_snap_handler(handle, lambda x, y: (x, y))
+    assert plot.set_marker_action_handler(handle, lambda _handle, _action: None)
+    assert plot.destroy_annotation(handle)
+    assert plot.data_marker_snapshot(handle) is None
 
 
 def test_marker_callbacks_propagate_and_semantic_close_is_pollable():

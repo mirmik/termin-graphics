@@ -1,6 +1,6 @@
 """Scatter plot demo with random data.
 
-Run: python3 examples/demo_scatter.py
+Run: ./run-python.sh tcplot/examples/demo_scatter.py
 """
 
 import sys
