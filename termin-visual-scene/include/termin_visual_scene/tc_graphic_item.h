@@ -18,6 +18,18 @@ typedef struct tc_visual_scene tc_visual_scene;
 typedef struct tc_graphic_item tc_graphic_item;
 typedef struct tc_graphic_item_snapshot_sink tc_graphic_item_snapshot_sink;
 
+typedef bool (*tc_graphic_item_snapshot_emit)(
+    tc_graphic_item_snapshot_sink* sink,
+    const char* type_name,
+    const void* immutable_type_state);
+
+// The type-state pointer is borrowed only for the duration of emit(). A sink
+// must copy the data it needs into its detached snapshot.
+struct tc_graphic_item_snapshot_sink {
+    tc_graphic_item_snapshot_emit emit;
+    void* body;
+};
+
 typedef struct tc_graphic_item_handle {
     uint64_t scene_id;
     uint32_t index;

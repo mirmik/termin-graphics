@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include <tcbase/tc_log.hpp>
@@ -178,10 +180,163 @@ GeometricClip2D transformed_clip(
     return {std::move(path), clip.rule};
 }
 
-bool same_handle(GraphicItemHandle a, GraphicItemHandle b) {
-    return a.scene_id == b.scene_id &&
-           a.index == b.index &&
-           a.generation == b.generation;
+template<typename T>
+constexpr const char* builtin_type_name() {
+    if constexpr (std::is_same_v<T, GroupItem2D>) {
+        return "termin.visual.Group2D";
+    } else if constexpr (std::is_same_v<T, RectItem2D>) {
+        return "termin.visual.Rect2D";
+    } else if constexpr (std::is_same_v<T, RoundedRectItem2D>) {
+        return "termin.visual.RoundedRect2D";
+    } else if constexpr (std::is_same_v<T, EllipseItem2D>) {
+        return "termin.visual.Ellipse2D";
+    } else if constexpr (std::is_same_v<T, PathItem2D>) {
+        return "termin.visual.Path2D";
+    } else if constexpr (std::is_same_v<T, PolylineItem2D>) {
+        return "termin.visual.Polyline2D";
+    } else if constexpr (std::is_same_v<T, TextItem2D>) {
+        return "termin.visual.Text2D";
+    } else if constexpr (std::is_same_v<T, ImageItem2D>) {
+        return "termin.visual.Image2D";
+    } else if constexpr (std::is_same_v<T, HitRegionItem2D>) {
+        return "termin.visual.HitRegion2D";
+    } else {
+        return "termin.visual.CustomBatch2D";
+    }
+}
+
+void ensure_runtime_type(const char* type_name, const char* parent_name) {
+    static std::mutex registry_mutex;
+    std::scoped_lock lock(registry_mutex);
+    if (tc_runtime_type_registry_has_type(type_name)) return;
+    auto* descriptor = tc_runtime_type_descriptor_create(
+        type_name, "termin-visual-scene", parent_name);
+    if (descriptor == nullptr ||
+        !tc_runtime_type_registry_commit_descriptor(descriptor)) {
+        throw std::runtime_error(
+            std::string("failed to register graphic item type ") +
+            type_name);
+    }
+}
+
+template<typename T>
+void ensure_builtin_type() {
+    ensure_runtime_type("termin.visual.GraphicItem", nullptr);
+    ensure_runtime_type(
+        builtin_type_name<T>(), "termin.visual.GraphicItem");
+}
+
+template<typename T>
+struct BuiltinGraphicItem2D {
+    tc_graphic_item base{};
+    std::optional<GeometricClip2D> clip;
+    T value;
+
+    BuiltinGraphicItem2D(T payload, std::optional<GeometricClip2D> item_clip)
+        : clip(std::move(item_clip)), value(std::move(payload)) {
+        ensure_builtin_type<T>();
+        tc_graphic_item_init_unowned(
+            &base, vtable(), TC_LANGUAGE_CXX, this);
+        base.clip_body = &clip;
+    }
+
+    static bool local_bounds(
+        const tc_graphic_item* item,
+        tc_bounds2f* out_bounds) {
+        const auto* self =
+            static_cast<const BuiltinGraphicItem2D*>(item->body);
+        const auto bounds =
+            payload_bounds(GraphicItemPayload2D{self->value});
+        if (!bounds) return false;
+        *out_bounds = *bounds;
+        return true;
+    }
+
+    static bool prepare_snapshot(
+        const tc_graphic_item* item,
+        tc_graphic_item_snapshot_sink* sink) {
+        if (sink == nullptr || sink->emit == nullptr) return false;
+        const auto* self =
+            static_cast<const BuiltinGraphicItem2D*>(item->body);
+        return sink->emit(
+            sink, builtin_type_name<T>(), &self->value);
+    }
+
+    static bool hit_test(
+        const tc_graphic_item* item,
+        tc_vec2f point,
+        float tolerance) {
+        tc_bounds2f bounds{};
+        if (!local_bounds(item, &bounds)) return false;
+        return point.x >= bounds.x0 - tolerance &&
+               point.x <= bounds.x1 + tolerance &&
+               point.y >= bounds.y0 - tolerance &&
+               point.y <= bounds.y1 + tolerance;
+    }
+
+    static const tc_graphic_item_vtable* vtable() {
+        static const tc_graphic_item_vtable result{
+            .type_name = builtin_type_name<T>(),
+            .local_bounds = local_bounds,
+            .prepare_snapshot = prepare_snapshot,
+            .hit_test = hit_test,
+        };
+        return &result;
+    }
+};
+
+template<typename T>
+void delete_builtin_item(tc_graphic_item* item) {
+    delete static_cast<BuiltinGraphicItem2D<T>*>(item->body);
+}
+
+struct BuiltinCandidate {
+    tc_graphic_item* item = nullptr;
+    tc_graphic_item_deleter deleter = nullptr;
+};
+
+BuiltinCandidate make_builtin(
+    GraphicItemPayload2D payload,
+    std::optional<GeometricClip2D> clip = std::nullopt) {
+    return std::visit(
+        [&](auto value) {
+            using T = std::decay_t<decltype(value)>;
+            auto* body = new BuiltinGraphicItem2D<T>(
+                std::move(value), std::move(clip));
+            return BuiltinCandidate{
+                &body->base,
+                delete_builtin_item<T>,
+            };
+        },
+        std::move(payload));
+}
+
+bool copy_builtin_payload(
+    tc_graphic_item_snapshot_sink* sink,
+    const char* type_name,
+    const void* state) {
+    if (sink == nullptr || sink->body == nullptr ||
+        type_name == nullptr || state == nullptr) {
+        return false;
+    }
+    auto& out = *static_cast<GraphicItemPayload2D*>(sink->body);
+#define TC_COPY_BUILTIN(TYPE)                                                \
+    if (std::string_view(type_name) == builtin_type_name<TYPE>()) {          \
+        out = *static_cast<const TYPE*>(state);                               \
+        return true;                                                          \
+    }
+    TC_COPY_BUILTIN(GroupItem2D)
+    TC_COPY_BUILTIN(RectItem2D)
+    TC_COPY_BUILTIN(RoundedRectItem2D)
+    TC_COPY_BUILTIN(EllipseItem2D)
+    TC_COPY_BUILTIN(PathItem2D)
+    TC_COPY_BUILTIN(PolylineItem2D)
+    TC_COPY_BUILTIN(TextItem2D)
+    TC_COPY_BUILTIN(ImageItem2D)
+    TC_COPY_BUILTIN(HitRegionItem2D)
+    TC_COPY_BUILTIN(CustomBatchItem2D)
+#undef TC_COPY_BUILTIN
+    return false;
 }
 
 }  // namespace
@@ -190,50 +345,72 @@ bool VisualScene2D::owns_locked_(GraphicItemHandle item) const {
     if (tc_graphic_item_handle_is_invalid(item) || item.scene_id != storage_.id()) {
         return false;
     }
-    const auto found = records_.find(item.index);
-    if (found == records_.end() || !same_handle(found->second.handle, item)) {
-        return false;
-    }
     GraphicItemView view{};
     return storage_.resolve(item, view);
 }
 
-VisualScene2D::Record* VisualScene2D::record_locked_(GraphicItemHandle item) {
+tc_graphic_item* VisualScene2D::item_locked_(GraphicItemHandle item) const {
     if (!owns_locked_(item)) return nullptr;
-    return &records_.find(item.index)->second;
+    return storage_.resolve_item(item);
 }
 
-const VisualScene2D::Record* VisualScene2D::record_locked_(
-    GraphicItemHandle item) const {
-    if (!owns_locked_(item)) return nullptr;
-    return &records_.find(item.index)->second;
+std::vector<GraphicItemHandle> VisualScene2D::handles_locked_() const {
+    return storage_.handles();
 }
 
-void VisualScene2D::sync_storage_item_locked_(
-    Record& record,
-    std::uint32_t dirty_flags) {
-    const tc_graphic_item_state state{
-        .local_transform = record.state.local_transform,
-        .visible = record.state.visible,
-        .enabled = record.state.enabled,
-        .opacity = record.state.opacity,
-        .z_order = record.state.z_order,
+bool VisualScene2D::payload_locked_(
+    GraphicItemHandle item,
+    GraphicItemPayload2D& out) const {
+    const auto* object = item_locked_(item);
+    if (object == nullptr || object->vtable == nullptr ||
+        object->vtable->prepare_snapshot == nullptr) {
+        return false;
+    }
+    tc_graphic_item_snapshot_sink sink{
+        .emit = copy_builtin_payload,
+        .body = &out,
     };
-    if (!storage_.set_state(record.handle, state)) {
-        tc::Log::error(
-            "VisualScene2D: failed to synchronize canonical tc_graphic_item");
-        return;
+    return object->vtable->prepare_snapshot(object, &sink);
+}
+
+bool VisualScene2D::state_locked_(
+    GraphicItemHandle item,
+    GraphicItemState2D& out) const {
+    tc_graphic_item_state common{};
+    auto* object = item_locked_(item);
+    if (object == nullptr || !storage_.get_state(item, common)) {
+        return false;
     }
-    const auto remaining =
-        dirty_flags &
-        ~(TC_GRAPHIC_ITEM_DIRTY_TRANSFORM |
-          TC_GRAPHIC_ITEM_DIRTY_VISUAL |
-          TC_GRAPHIC_ITEM_DIRTY_INTERACTION);
-    if (remaining != 0 &&
-        !storage_.mark_dirty(record.handle, remaining)) {
-        tc::Log::error(
-            "VisualScene2D: failed to synchronize graphic item dirty state");
+    out.local_transform = common.local_transform;
+    out.visible = common.visible;
+    out.enabled = common.enabled;
+    out.opacity = common.opacity;
+    out.z_order = common.z_order;
+    if (object->clip_body != nullptr) {
+        out.clip =
+            *static_cast<const std::optional<GeometricClip2D>*>(
+                object->clip_body);
+    } else {
+        out.clip.reset();
     }
+    return true;
+}
+
+bool VisualScene2D::replace_payload_locked_(
+    GraphicItemHandle item,
+    GraphicItemPayload2D payload,
+    std::optional<GeometricClip2D> clip) {
+    auto candidate = make_builtin(std::move(payload), std::move(clip));
+    return storage_.replace(item, candidate.item, candidate.deleter);
+}
+
+bool VisualScene2D::restore_metadata_locked_(
+    GraphicItemHandle item,
+    std::uint64_t stable_order,
+    std::uint64_t revision,
+    std::uint64_t topology_revision) {
+    return storage_.restore_metadata(
+        item, stable_order, revision, topology_revision);
 }
 
 std::optional<GraphicItemHandle> VisualScene2D::create(
@@ -248,32 +425,16 @@ std::optional<GraphicItemHandle> VisualScene2D::create(
         tc::Log::error("VisualScene2D::create: parent is stale or foreign");
         return std::nullopt;
     }
-    GraphicItemHandle handle{};
     try {
-        handle = storage_.create(parent);
-        auto [position, inserted] = records_.emplace(
-            handle.index,
-            Record{
-                handle,
-                GraphicItemState2D{},
-                std::move(payload),
-                next_stable_order_++,
-                ++revision_,
-                revision_,
-            });
-        if (!inserted) {
-            throw std::runtime_error("graphic item record index collision");
-        }
-        sync_storage_item_locked_(
-            position->second, TC_GRAPHIC_ITEM_DIRTY_ALL);
+        auto candidate = make_builtin(std::move(payload));
+        const auto handle =
+            storage_.adopt(candidate.item, candidate.deleter, parent);
+        ++revision_;
+        return handle;
     } catch (const std::exception& error) {
-        if (!tc_graphic_item_handle_is_invalid(handle)) {
-            storage_.destroy_leaf(handle);
-        }
         tc::Log::error("VisualScene2D::create: %s", error.what());
         return std::nullopt;
     }
-    return handle;
 }
 
 bool VisualScene2D::destroy_leaf(GraphicItemHandle item) {
@@ -283,43 +444,30 @@ bool VisualScene2D::destroy_leaf(GraphicItemHandle item) {
         return false;
     }
     if (!storage_.destroy_leaf(item)) return false;
-    records_.erase(item.index);
     ++revision_;
     return true;
 }
 
-void VisualScene2D::collect_subtree_locked_(
-    GraphicItemHandle root,
-    std::vector<GraphicItemHandle>& out) const {
-    out.push_back(root);
-    GraphicItemView view{};
-    if (!storage_.resolve(root, view)) return;
-    auto child = view.first_child;
-    while (!tc_graphic_item_handle_is_invalid(child)) {
-        GraphicItemView child_view{};
-        if (!storage_.resolve(child, child_view)) return;
-        collect_subtree_locked_(child, out);
-        child = child_view.next_sibling;
-    }
-}
-
 std::optional<termin::Bounds2f> VisualScene2D::subtree_local_bounds_locked_(
     GraphicItemHandle root) const {
-    const auto* record = record_locked_(root);
-    if (!record) return std::nullopt;
-    auto result = payload_bounds(record->payload);
+    GraphicItemPayload2D payload;
+    if (!payload_locked_(root, payload)) return std::nullopt;
+    auto result = payload_bounds(payload);
 
     GraphicItemView view{};
     if (!storage_.resolve(root, view)) return result;
     auto child = view.first_child;
     while (!tc_graphic_item_handle_is_invalid(child)) {
         GraphicItemView child_view{};
-        const auto* child_record = record_locked_(child);
-        if (!child_record || !storage_.resolve(child, child_view)) return result;
+        GraphicItemState2D child_state;
+        if (!state_locked_(child, child_state) ||
+            !storage_.resolve(child, child_view)) {
+            return result;
+        }
         const auto child_bounds = subtree_local_bounds_locked_(child);
         if (child_bounds) {
             const auto transformed =
-                child_record->state.local_transform.transform_bounds(*child_bounds);
+                child_state.local_transform.transform_bounds(*child_bounds);
             result = result ? std::optional<termin::Bounds2f>(
                                   merged(*result, transformed))
                             : std::optional<termin::Bounds2f>(transformed);
@@ -335,10 +483,7 @@ bool VisualScene2D::destroy_subtree(GraphicItemHandle item) {
         tc::Log::error("VisualScene2D::destroy_subtree: item is stale or foreign");
         return false;
     }
-    std::vector<GraphicItemHandle> removed;
-    collect_subtree_locked_(item, removed);
     if (!storage_.destroy_subtree(item)) return false;
-    for (const auto handle : removed) records_.erase(handle.index);
     ++revision_;
     return true;
 }
@@ -352,11 +497,7 @@ bool VisualScene2D::reparent(
         return false;
     }
     if (!storage_.reparent(item, parent)) return false;
-    auto* record = record_locked_(item);
-    record->revision = ++revision_;
-    record->topology_revision = revision_;
-    sync_storage_item_locked_(
-        *record, TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY);
+    ++revision_;
     return true;
 }
 
@@ -367,19 +508,14 @@ bool VisualScene2D::detach(GraphicItemHandle item) {
         return false;
     }
     if (!storage_.detach(item)) return false;
-    auto* record = record_locked_(item);
-    record->revision = ++revision_;
-    record->topology_revision = revision_;
-    sync_storage_item_locked_(
-        *record, TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY);
+    ++revision_;
     return true;
 }
 
 void VisualScene2D::clear() {
     std::scoped_lock lock(mutex_);
-    if (records_.empty()) return;
+    if (storage_.size() == 0) return;
     storage_.clear();
-    records_.clear();
     ++revision_;
 }
 
@@ -391,18 +527,24 @@ bool VisualScene2D::set_state(
         return false;
     }
     std::scoped_lock lock(mutex_);
-    auto* record = record_locked_(item);
-    if (!record) {
+    auto* object = item_locked_(item);
+    if (!object) {
         tc::Log::error("VisualScene2D::set_state: item is stale or foreign");
         return false;
     }
-    record->state = std::move(state);
-    record->revision = ++revision_;
-    sync_storage_item_locked_(
-        *record,
-        TC_GRAPHIC_ITEM_DIRTY_TRANSFORM |
-            TC_GRAPHIC_ITEM_DIRTY_VISUAL |
-            TC_GRAPHIC_ITEM_DIRTY_INTERACTION);
+    const tc_graphic_item_state common{
+        .local_transform = state.local_transform,
+        .visible = state.visible,
+        .enabled = state.enabled,
+        .opacity = state.opacity,
+        .z_order = state.z_order,
+    };
+    if (!storage_.set_state(item, common)) return false;
+    if (object->clip_body != nullptr) {
+        *static_cast<std::optional<GeometricClip2D>*>(object->clip_body) =
+            std::move(state.clip);
+    }
+    ++revision_;
     return true;
 }
 
@@ -414,15 +556,16 @@ bool VisualScene2D::set_payload(
         return false;
     }
     std::scoped_lock lock(mutex_);
-    auto* record = record_locked_(item);
-    if (!record) {
+    GraphicItemState2D state;
+    if (!state_locked_(item, state)) {
         tc::Log::error("VisualScene2D::set_payload: item is stale or foreign");
         return false;
     }
-    record->payload = std::move(payload);
-    record->revision = ++revision_;
-    sync_storage_item_locked_(
-        *record, TC_GRAPHIC_ITEM_DIRTY_VISUAL);
+    if (!replace_payload_locked_(
+            item, std::move(payload), std::move(state.clip))) {
+        return false;
+    }
+    ++revision_;
     return true;
 }
 
@@ -435,24 +578,37 @@ bool VisualScene2D::set_item(
         return false;
     }
     std::scoped_lock lock(mutex_);
-    auto* record = record_locked_(item);
-    if (!record) {
+    if (!owns_locked_(item)) {
         tc::Log::error("VisualScene2D::set_item: item is stale or foreign");
         return false;
     }
-    record->state = std::move(state);
-    record->payload = std::move(payload);
-    record->revision = ++revision_;
-    sync_storage_item_locked_(
-        *record, TC_GRAPHIC_ITEM_DIRTY_ALL);
+    const auto common = tc_graphic_item_state{
+        .local_transform = state.local_transform,
+        .visible = state.visible,
+        .enabled = state.enabled,
+        .opacity = state.opacity,
+        .z_order = state.z_order,
+    };
+    if (!replace_payload_locked_(
+            item, std::move(payload), std::move(state.clip)) ||
+        !storage_.set_state(item, common)) {
+        return false;
+    }
+    ++revision_;
     return true;
 }
 
 bool VisualScene2D::snapshot_locked_(
     GraphicItemHandle item,
     GraphicItemSnapshot2D& out) const {
-    const auto* record = record_locked_(item);
-    if (!record) return false;
+    auto* object = item_locked_(item);
+    if (!object) return false;
+    GraphicItemState2D item_state;
+    GraphicItemPayload2D item_payload;
+    if (!state_locked_(item, item_state) ||
+        !payload_locked_(item, item_payload)) {
+        return false;
+    }
 
     std::vector<GraphicItemHandle> ancestry;
     GraphicItemHandle cursor = item;
@@ -470,14 +626,15 @@ bool VisualScene2D::snapshot_locked_(
     float opacity = 1.0f;
     std::vector<GeometricClip2D> clips;
     for (const auto ancestor : ancestry) {
-        const auto* ancestor_record = record_locked_(ancestor);
-        if (!ancestor_record) return false;
-        world = world * ancestor_record->state.local_transform;
-        visible = visible && ancestor_record->state.visible;
-        enabled = enabled && ancestor_record->state.enabled;
-        opacity *= ancestor_record->state.opacity;
-        if (ancestor_record->state.clip) {
-            clips.push_back(transformed_clip(*ancestor_record->state.clip, world));
+        GraphicItemState2D ancestor_state;
+        if (!state_locked_(ancestor, ancestor_state)) return false;
+        world = world * ancestor_state.local_transform;
+        visible = visible && ancestor_state.visible;
+        enabled = enabled && ancestor_state.enabled;
+        opacity *= ancestor_state.opacity;
+        if (ancestor_state.clip) {
+            clips.push_back(
+                transformed_clip(*ancestor_state.clip, world));
         }
     }
 
@@ -485,22 +642,22 @@ bool VisualScene2D::snapshot_locked_(
     if (!storage_.resolve(item, topology)) return false;
     out.handle = item;
     out.parent = topology.parent;
-    out.state = record->state;
-    out.payload = record->payload;
+    out.state = std::move(item_state);
+    out.payload = std::move(item_payload);
     out.world_transform = world;
     out.effective_visible = visible;
     out.effective_enabled = enabled;
     out.effective_opacity = opacity;
-    out.stable_order = record->stable_order;
-    out.revision = record->revision;
-    out.topology_revision = record->topology_revision;
+    out.stable_order = object->stable_order;
+    out.revision = object->revision;
+    out.topology_revision = object->topology_revision;
     out.depth = static_cast<std::uint32_t>(ancestry.size() - 1);
     out.diagnostics = std::abs(world.determinant()) <= 1e-8f
         ? GraphicItemDiagnostic2D::SingularWorldTransform
         : GraphicItemDiagnostic2D::None;
-    out.local_bounds = std::holds_alternative<GroupItem2D>(record->payload)
+    out.local_bounds = std::holds_alternative<GroupItem2D>(out.payload)
         ? subtree_local_bounds_locked_(item)
-        : payload_bounds(record->payload);
+        : payload_bounds(out.payload);
     out.world_bounds = out.local_bounds
         ? std::optional<termin::Bounds2f>(
               world.transform_bounds(*out.local_bounds))
@@ -522,11 +679,11 @@ std::optional<GraphicItemSnapshot2D> VisualScene2D::snapshot(
 
 std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots_locked_() const {
     std::vector<GraphicItemSnapshot2D> result;
-    result.reserve(records_.size());
-    for (const auto& [index, record] : records_) {
-        (void)index;
+    const auto handles = handles_locked_();
+    result.reserve(handles.size());
+    for (const auto handle : handles) {
         GraphicItemSnapshot2D snapshot;
-        if (snapshot_locked_(record.handle, snapshot)) {
+        if (snapshot_locked_(handle, snapshot)) {
             result.push_back(std::move(snapshot));
         }
     }
@@ -549,7 +706,7 @@ std::vector<GraphicItemSnapshot2D> VisualScene2D::snapshots() const {
 
 std::size_t VisualScene2D::size() const {
     std::scoped_lock lock(mutex_);
-    return records_.size();
+    return storage_.size();
 }
 
 bool VisualScene2D::contains(GraphicItemHandle item) const {

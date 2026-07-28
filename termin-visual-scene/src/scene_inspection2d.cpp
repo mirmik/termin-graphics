@@ -43,28 +43,30 @@ SceneInspection2D VisualScene2D::inspection() const {
     std::scoped_lock lock(mutex_);
     SceneInspection2D result;
     result.scene_revision = revision_;
-    result.items.reserve(records_.size());
+    const auto handles = handles_locked_();
+    result.items.reserve(handles.size());
 
     std::vector<GraphicItemHandle> roots;
-    roots.reserve(records_.size());
-    for (const auto& [index, record] : records_) {
-        (void)index;
+    roots.reserve(handles.size());
+    for (const auto handle : handles) {
         GraphicItemView topology{};
-        if (!storage_.resolve(record.handle, topology)) {
+        if (!storage_.resolve(handle, topology)) {
             tc::Log::error(
                 "VisualScene2D::inspection: internal item resolution failed");
             continue;
         }
         if (tc_graphic_item_handle_is_invalid(topology.parent)) {
-            roots.push_back(record.handle);
+            roots.push_back(handle);
         }
     }
     std::stable_sort(
         roots.begin(),
         roots.end(),
         [&](GraphicItemHandle lhs, GraphicItemHandle rhs) {
-            return records_.at(lhs.index).stable_order
-                < records_.at(rhs.index).stable_order;
+            const auto* left = item_locked_(lhs);
+            const auto* right = item_locked_(rhs);
+            return left != nullptr && right != nullptr &&
+                   left->stable_order < right->stable_order;
         });
 
     std::unordered_map<std::uint32_t, std::uint32_t> record_indices;

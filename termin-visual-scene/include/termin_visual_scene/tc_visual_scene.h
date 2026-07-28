@@ -28,6 +28,12 @@ TERMIN_VISUAL_SCENE_API tc_visual_scene* tc_visual_scene_create(void);
 TERMIN_VISUAL_SCENE_API void tc_visual_scene_destroy(tc_visual_scene* scene);
 TERMIN_VISUAL_SCENE_API uint64_t tc_visual_scene_id(const tc_visual_scene* scene);
 TERMIN_VISUAL_SCENE_API size_t tc_visual_scene_item_count(tc_visual_scene* scene);
+// Copies up to capacity live handles in stable pool-index order and returns
+// the total number of live handles. Passing NULL/0 is a size query.
+TERMIN_VISUAL_SCENE_API size_t tc_visual_scene_copy_handles(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle* out_handles,
+    size_t capacity);
 
 TERMIN_VISUAL_SCENE_API bool tc_visual_scene_adopt(
     tc_visual_scene* scene,
@@ -39,6 +45,14 @@ TERMIN_VISUAL_SCENE_API bool tc_visual_scene_create_item(
     tc_visual_scene* scene,
     tc_graphic_item_handle parent,
     tc_graphic_item_handle* out_handle);
+// Replaces the concrete object behind an existing handle while preserving
+// canonical common state and topology. Ownership of an unattached replacement
+// transfers to the call; the previous object is destroyed outside the mutex.
+TERMIN_VISUAL_SCENE_API bool tc_visual_scene_replace_item(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle item,
+    tc_graphic_item* replacement,
+    tc_graphic_item_deleter deleter);
 
 // Returns a by-value topology snapshot. Item lifetime remains scene-owned;
 // callers needing lifetime across mutations must synchronize at their layer.
@@ -59,6 +73,14 @@ TERMIN_VISUAL_SCENE_API bool tc_visual_scene_mark_item_dirty(
     tc_visual_scene* scene,
     tc_graphic_item_handle item,
     uint32_t dirty_flags);
+// Restore-only metadata hook. Normal mutations maintain these fields
+// automatically.
+TERMIN_VISUAL_SCENE_API bool tc_visual_scene_restore_item_metadata(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle item,
+    uint64_t stable_order,
+    uint64_t revision,
+    uint64_t topology_revision);
 
 TERMIN_VISUAL_SCENE_API bool tc_visual_scene_reparent(
     tc_visual_scene* scene,

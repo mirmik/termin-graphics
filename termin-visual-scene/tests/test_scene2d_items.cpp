@@ -131,6 +131,28 @@ int main() {
            "asset://fonts/ui");
     assert(std::get<ImageItem2D>(scene.snapshot(*image)->payload).image.uri ==
            "asset://images/icon");
+    assert(tc_runtime_type_registry_instance_count(
+               "termin.visual.Group2D") == 1);
+    assert(tc_runtime_type_registry_instance_count(
+               "termin.visual.Rect2D") == 1);
+    assert(tc_runtime_type_registry_instance_count(
+               "termin.visual.RoundedRect2D") == 1);
+
+    // A payload type change swaps the concrete embedded-base object without
+    // changing the public handle or retaining the previous typed body.
+    const auto child_handle = *child;
+    assert(scene.set_payload(
+        *child,
+        RoundedRectItem2D{
+            rect.rect, 1.5f, rect.fill, rect.stroke}));
+    assert(scene.contains(child_handle));
+    assert(std::holds_alternative<RoundedRectItem2D>(
+        scene.snapshot(child_handle)->payload));
+    assert(tc_runtime_type_registry_instance_count(
+               "termin.visual.Rect2D") == 0);
+    assert(tc_runtime_type_registry_instance_count(
+               "termin.visual.RoundedRect2D") == 2);
+    assert(scene.set_payload(*child, rect));
 
     // Invalid updates are transactional and do not advance either revision.
     const auto before = scene.snapshot(*child);

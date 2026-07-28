@@ -4,7 +4,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -196,33 +195,33 @@ public:
     std::uint64_t id() const;
 
 private:
-    struct Record {
-        GraphicItemHandle handle = tc_graphic_item_handle_invalid();
-        GraphicItemState2D state;
-        GraphicItemPayload2D payload;
-        std::uint64_t stable_order = 0;
-        std::uint64_t revision = 0;
-        std::uint64_t topology_revision = 0;
-    };
-
     bool owns_locked_(GraphicItemHandle item) const;
-    Record* record_locked_(GraphicItemHandle item);
-    const Record* record_locked_(GraphicItemHandle item) const;
-    void sync_storage_item_locked_(Record& record, std::uint32_t dirty_flags);
+    tc_graphic_item* item_locked_(GraphicItemHandle item) const;
+    std::vector<GraphicItemHandle> handles_locked_() const;
+    bool payload_locked_(
+        GraphicItemHandle item,
+        GraphicItemPayload2D& out) const;
+    bool state_locked_(
+        GraphicItemHandle item,
+        GraphicItemState2D& out) const;
+    bool replace_payload_locked_(
+        GraphicItemHandle item,
+        GraphicItemPayload2D payload,
+        std::optional<GeometricClip2D> clip);
+    bool restore_metadata_locked_(
+        GraphicItemHandle item,
+        std::uint64_t stable_order,
+        std::uint64_t revision,
+        std::uint64_t topology_revision);
     bool snapshot_locked_(
         GraphicItemHandle item,
         GraphicItemSnapshot2D& out) const;
     std::vector<GraphicItemSnapshot2D> snapshots_locked_() const;
-    void collect_subtree_locked_(
-        GraphicItemHandle root,
-        std::vector<GraphicItemHandle>& out) const;
     std::optional<termin::Bounds2f> subtree_local_bounds_locked_(
         GraphicItemHandle root) const;
 
     mutable std::mutex mutex_;
     mutable VisualSceneStorage storage_;
-    std::unordered_map<std::uint32_t, Record> records_;
-    std::uint64_t next_stable_order_ = 1;
     std::uint64_t revision_ = 0;
 };
 

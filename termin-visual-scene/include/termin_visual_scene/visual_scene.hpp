@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "termin_visual_scene/tc_visual_scene.h"
 
@@ -51,6 +52,13 @@ public:
         }
         return result;
     }
+    bool replace(
+        GraphicItemHandle item,
+        tc_graphic_item* replacement,
+        tc_graphic_item_deleter deleter) {
+        return tc_visual_scene_replace_item(
+            scene_, item, replacement, deleter);
+    }
 
     bool resolve(GraphicItemHandle item, GraphicItemView& out) {
         return tc_visual_scene_resolve(scene_, item, &out);
@@ -70,6 +78,27 @@ public:
     bool mark_dirty(GraphicItemHandle item, std::uint32_t dirty_flags) {
         return tc_visual_scene_mark_item_dirty(
             scene_, item, dirty_flags);
+    }
+    bool restore_metadata(
+        GraphicItemHandle item,
+        std::uint64_t stable_order,
+        std::uint64_t revision,
+        std::uint64_t topology_revision) {
+        return tc_visual_scene_restore_item_metadata(
+            scene_, item, stable_order, revision, topology_revision);
+    }
+    std::vector<GraphicItemHandle> handles() {
+        std::vector<GraphicItemHandle> result(
+            tc_visual_scene_copy_handles(scene_, nullptr, 0));
+        for (;;) {
+            const auto current = tc_visual_scene_copy_handles(
+                scene_, result.data(), result.size());
+            if (current <= result.size()) {
+                result.resize(current);
+                return result;
+            }
+            result.resize(current);
+        }
     }
     bool reparent(GraphicItemHandle item, GraphicItemHandle parent) {
         return tc_visual_scene_reparent(scene_, item, parent);

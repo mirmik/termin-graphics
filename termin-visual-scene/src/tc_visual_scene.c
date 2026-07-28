@@ -259,6 +259,33 @@ size_t tc_visual_scene_item_count(tc_visual_scene* scene) {
     return count;
 }
 
+size_t tc_visual_scene_copy_handles(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle* out_handles,
+    size_t capacity)
+{
+    if (out_handles == NULL && capacity != 0) {
+        tc_log_error(
+            "tc_visual_scene_copy_handles: out_handles is NULL with non-zero capacity");
+        return 0;
+    }
+    if (!lock_scene(scene)) return 0;
+    const size_t count = tc_pool_count(&scene->items);
+    size_t written = 0;
+    for (uint32_t index = 0;
+         index < scene->items.capacity && written < capacity;
+         ++index) {
+        if (scene->items.states[index] != TC_SLOT_OCCUPIED) continue;
+        const tc_handle local = {
+            index,
+            scene->items.generations[index],
+        };
+        out_handles[written++] = public_handle(scene, local);
+    }
+    mtx_unlock(&scene->mutex);
+    return count;
+}
+
 bool tc_visual_scene_adopt(
     tc_visual_scene* scene,
     tc_graphic_item* item,
@@ -326,6 +353,23 @@ bool tc_visual_scene_adopt(
     item->revision = ++scene->revision;
     item->topology_revision = item->revision;
     item->dirty_flags = TC_GRAPHIC_ITEM_DIRTY_ALL;
+    const char* type_name = tc_graphic_item_type_name(item);
+    if (type_name != NULL &&
+        tc_runtime_type_registry_has_type(type_name) &&
+        !tc_runtime_type_registry_link_instance(
+            type_name, &item->runtime_type_link, item)) {
+        tc_log_error(
+            "tc_visual_scene_adopt: failed to link runtime type '%s'",
+            type_name);
+        slot->item = NULL;
+        item->deleter = NULL;
+        item->scene = NULL;
+        item->handle = tc_graphic_item_handle_invalid();
+        free_slot_locked(scene, local);
+        mtx_unlock(&scene->mutex);
+        deleter(item);
+        return false;
+    }
     if (has_parent) append_child_locked(scene, local_handle(parent), local);
     *out_handle = item->handle;
     mtx_unlock(&scene->mutex);
@@ -350,6 +394,97 @@ bool tc_visual_scene_create_item(
         item, &g_generic_item_vtable, TC_LANGUAGE_C, item);
     return tc_visual_scene_adopt(
         scene, item, delete_generic_item, parent, out_handle);
+}
+
+bool tc_visual_scene_replace_item(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle handle,
+    tc_graphic_item* replacement,
+    tc_graphic_item_deleter deleter)
+{
+    if (replacement == NULL || deleter == NULL) {
+        tc_log_error(
+            "tc_visual_scene_replace_item: replacement and deleter are required");
+        return false;
+    }
+    if (replacement->vtable == NULL || replacement->body == NULL) {
+        tc_log_error(
+            "tc_visual_scene_replace_item: replacement is not initialized");
+        deleter(replacement);
+        return false;
+    }
+    if (tc_graphic_item_is_attached(replacement) ||
+        replacement->deleter != NULL) {
+        tc_log_error(
+            "tc_visual_scene_replace_item: replacement is already attached");
+        return false;
+    }
+    if (!lock_scene(scene)) {
+        deleter(replacement);
+        return false;
+    }
+    if (scene->clearing ||
+        !valid_locked(scene, handle, "tc_visual_scene_replace_item")) {
+        mtx_unlock(&scene->mutex);
+        deleter(replacement);
+        return false;
+    }
+
+    tc_graphic_item_slot* slot =
+        slot_locked(scene, local_handle(handle));
+    tc_graphic_item* previous = slot->item;
+    const tc_delete_record previous_record = {
+        previous,
+        previous->deleter,
+    };
+
+    const char* type_name = tc_graphic_item_type_name(replacement);
+    if (type_name != NULL &&
+        tc_runtime_type_registry_has_type(type_name) &&
+        !tc_runtime_type_registry_link_instance(
+            type_name,
+            &replacement->runtime_type_link,
+            replacement)) {
+        tc_log_error(
+            "tc_visual_scene_replace_item: failed to link runtime type '%s'",
+            type_name);
+        mtx_unlock(&scene->mutex);
+        deleter(replacement);
+        return false;
+    }
+
+    replacement->deleter = deleter;
+    replacement->scene = scene;
+    replacement->handle = previous->handle;
+    replacement->parent = previous->parent;
+    replacement->first_child = previous->first_child;
+    replacement->next_sibling = previous->next_sibling;
+    replacement->previous_sibling = previous->previous_sibling;
+    replacement->local_transform = previous->local_transform;
+    replacement->visible = previous->visible;
+    replacement->enabled = previous->enabled;
+    replacement->opacity = previous->opacity;
+    replacement->z_order = previous->z_order;
+    replacement->stable_order = previous->stable_order;
+    replacement->revision = ++scene->revision;
+    replacement->topology_revision = previous->topology_revision;
+    replacement->dirty_flags =
+        previous->dirty_flags |
+        TC_GRAPHIC_ITEM_DIRTY_VISUAL |
+        TC_GRAPHIC_ITEM_DIRTY_INTERACTION;
+    slot->item = replacement;
+
+    previous->scene = NULL;
+    previous->handle = tc_graphic_item_handle_invalid();
+    previous->parent = tc_graphic_item_handle_invalid();
+    previous->first_child = tc_graphic_item_handle_invalid();
+    previous->next_sibling = tc_graphic_item_handle_invalid();
+    previous->previous_sibling = tc_graphic_item_handle_invalid();
+    previous->deleter = NULL;
+    previous->dirty_flags = TC_GRAPHIC_ITEM_DIRTY_ALL;
+    mtx_unlock(&scene->mutex);
+    run_delete_record(previous_record);
+    return true;
 }
 
 bool tc_visual_scene_resolve(
@@ -460,6 +595,36 @@ bool tc_visual_scene_mark_item_dirty(
     tc_graphic_item* item = item_locked(scene, local_handle(handle));
     item->dirty_flags |= dirty_flags;
     item->revision = ++scene->revision;
+    mtx_unlock(&scene->mutex);
+    return true;
+}
+
+bool tc_visual_scene_restore_item_metadata(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle handle,
+    uint64_t stable_order,
+    uint64_t revision,
+    uint64_t topology_revision)
+{
+    if (stable_order == 0) {
+        tc_log_error(
+            "tc_visual_scene_restore_item_metadata: zero stable order rejected");
+        return false;
+    }
+    if (!lock_scene(scene)) return false;
+    if (!valid_locked(
+            scene, handle,
+            "tc_visual_scene_restore_item_metadata")) {
+        mtx_unlock(&scene->mutex);
+        return false;
+    }
+    tc_graphic_item* item = item_locked(scene, local_handle(handle));
+    item->stable_order = stable_order;
+    item->revision = revision;
+    item->topology_revision = topology_revision;
+    if (scene->next_stable_order <= stable_order) {
+        scene->next_stable_order = stable_order + 1;
+    }
     mtx_unlock(&scene->mutex);
     return true;
 }

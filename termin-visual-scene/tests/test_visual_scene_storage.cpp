@@ -99,6 +99,28 @@ int main() {
     assert(!updated.visible);
     assert(updated.opacity == 0.5f);
     assert(updated.z_order == 17);
+    const auto handles = scene.handles();
+    assert(handles.size() == 3);
+    assert(handles[0].index == root.index);
+    assert(handles[1].index == child.index);
+    assert(handles[2].index == grandchild.index);
+
+    // Replacing a concrete body preserves identity, common state and topology,
+    // while releasing the previous body exactly once outside the scene lock.
+    auto* changed_payload = payload(20, deletes, destroys);
+    assert(scene.replace(
+        child, &changed_payload->item, delete_payload));
+    assert(deletes.load() == 1);
+    assert(destroys.load() == 1);
+    assert(scene.resolve(child, view));
+    assert(view.item == &changed_payload->item);
+    assert(view.parent.index == root.index);
+    assert(view.first_child.index == grandchild.index);
+    assert(scene.get_state(child, updated));
+    assert(updated.local_transform.tx == 12.0f);
+    assert(updated.opacity == 0.5f);
+    assert(updated.z_order == 17);
+
     state.opacity = 2.0f;
     assert(!scene.set_state(child, state));
     assert(!scene.destroy_leaf(root));
@@ -110,8 +132,8 @@ int main() {
     assert(scene.reparent(child, root));
 
     assert(scene.destroy_subtree(child));
-    assert(deletes.load() == 2);
-    assert(destroys.load() == 2);
+    assert(deletes.load() == 3);
+    assert(destroys.load() == 3);
     assert(!scene.resolve(child, view));
     assert(!scene.resolve(grandchild, view));
 
@@ -135,8 +157,8 @@ int main() {
     assert(!tc_visual_scene_adopt(
         scene.native_handle(), &rejected_payload->item, delete_payload,
         foreign_root, &rejected));
-    assert(deletes.load() == 3);
-    assert(destroys.load() == 2);
+    assert(deletes.load() == 4);
+    assert(destroys.load() == 3);
 
     // The scene mutex protects calls from multiple caller threads.
     constexpr int kThreads = 6;
@@ -157,12 +179,12 @@ int main() {
         });
     }
     for (auto& thread : threads) thread.join();
-    assert(deletes.load() == 3 + kThreads * kItems);
+    assert(deletes.load() == 4 + kThreads * kItems);
 
     scene.clear();
     foreign.clear();
     assert(scene.size() == 0);
     assert(foreign.size() == 0);
-    assert(deletes.load() == 6 + kThreads * kItems);
-    assert(destroys.load() == 5 + kThreads * kItems);
+    assert(deletes.load() == 7 + kThreads * kItems);
+    assert(destroys.load() == 6 + kThreads * kItems);
 }

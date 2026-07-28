@@ -675,7 +675,7 @@ bool VisualScene2D::restore(const tc::trent& serialized) {
     try {
         {
             std::scoped_lock lock(mutex_);
-            if (!records_.empty()) {
+            if (storage_.size() != 0) {
                 tc::Log::error(
                     "VisualScene2D::restore: destination scene is not empty");
                 return false;
@@ -697,28 +697,33 @@ bool VisualScene2D::restore(const tc::trent& serialized) {
                 return false;
             }
             handles.push_back(*handle);
-            auto& record = staging.records_.at(handle->index);
-            record.stable_order = item.stable_id;
-            record.revision = item.revision;
-            record.topology_revision = item.topology_revision;
+            {
+                std::scoped_lock staging_lock(staging.mutex_);
+                if (!staging.restore_metadata_locked_(
+                        *handle,
+                        item.stable_id,
+                        item.revision,
+                        item.topology_revision)) {
+                    tc::Log::error(
+                        "VisualScene2D::restore: staged metadata restore failed");
+                    return false;
+                }
+            }
             maximum_stable_id =
                 std::max(maximum_stable_id, item.stable_id);
         }
         if (maximum_stable_id == std::numeric_limits<std::uint64_t>::max()) {
             invalid("stable id space is exhausted");
         }
-        staging.next_stable_order_ = maximum_stable_id + 1;
         staging.revision_ = parsed.revision;
 
         std::scoped_lock lock(mutex_);
-        if (!records_.empty()) {
+        if (storage_.size() != 0) {
             tc::Log::error(
                 "VisualScene2D::restore: destination changed during restore");
             return false;
         }
         storage_ = std::move(staging.storage_);
-        records_ = std::move(staging.records_);
-        next_stable_order_ = staging.next_stable_order_;
         revision_ = staging.revision_;
         return true;
     } catch (const std::exception& error) {

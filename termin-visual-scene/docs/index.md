@@ -29,20 +29,17 @@ item object rather than a parallel slot payload.
 
 ## Typed retained items
 
-`VisualScene2D` layers inspectable retained state over the generation-handle
-storage. During the built-in-item migration it keeps a short-lived C++
-`Record + std::variant` bridge for type-specific payload data, while ownership,
-identity, topology and common state already resolve through the canonical
-`tc_graphic_item*`. Each item has an exact local `termin::Affine2f`, visibility, opacity,
-stable z/order, an optional geometric `tgfx::Path2f` clip, a dirty revision,
-and a typed payload bridge. Payloads cover groups, rectangles, rounded
-rectangles, ellipses, paths, polylines, text, images, hit regions and custom
-batch references.
+`VisualScene2D` layers inspectable retained behavior over generation-handle
+storage without a second scene tree. Every built-in is a registered concrete
+C++ body embedding `tc_graphic_item`; ownership, identity, topology, common
+state, stable order and revisions live in that canonical object. Bounds,
+immutable snapshot emission and hit preparation are type vtable operations.
+Payloads cover groups, rectangles, rounded rectangles, ellipses, paths,
+polylines, text, images, hit regions and custom batch references.
 
-That variant is not the target public extension model. The next migration ports
-the built-ins to concrete implementations embedding `tc_graphic_item`, moves
-their bounds/snapshot/hit/serialization hooks to item vtables and removes the
-bridge.
+`GraphicItemPayload2D` remains as a copied detached value used by the current
+C++ snapshot and serialization API. It is not retained canonical storage and
+is not the target cross-language extension mechanism.
 
 Text and image items keep only serializable `StableResourceRef2D` values.
 Runtime font and texture handles are deliberately absent from persistent scene
