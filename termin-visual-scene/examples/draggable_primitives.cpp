@@ -14,9 +14,11 @@
 #include <termin/platform/backend_window.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/descriptors.hpp>
+#include <tgfx2/device_factory.hpp>
 #include <tgfx2/graphics_host.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/standalone_shader_runtime.hpp>
 
 #include "termin_visual_scene/interaction2d.hpp"
 #include "termin_visual_scene/render_snapshot2d.hpp"
@@ -243,6 +245,75 @@ int headless_smoke() {
 tgfx::TextureHandle create_target(
     tgfx::IRenderDevice& device,
     int width,
+    int height);
+
+int shader_smoke() {
+    tc_shader_init();
+    try {
+        tgfx::BackendType backend = tgfx::BackendType::Null;
+        if (tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
+            backend = tgfx::BackendType::Vulkan;
+        } else if (tgfx::backend_is_compiled(tgfx::BackendType::D3D11)) {
+            backend = tgfx::BackendType::D3D11;
+        } else {
+            std::fprintf(
+                stderr,
+                "VisualScene2D shader smoke skipped: no headless backend\n");
+            tc_shader_shutdown();
+            return 77;
+        }
+
+        auto host = tgfx::GraphicsHost::create_isolated(backend);
+        if (!tgfx::configure_default_standalone_shader_runtime(
+                *host, "visual-scene-draggable-smoke")) {
+            throw std::runtime_error(
+                "standalone shader runtime configuration failed");
+        }
+
+        constexpr int width = 640;
+        constexpr int height = 480;
+        auto target = create_target(host->device(), width, height);
+        if (!target) {
+            throw std::runtime_error("failed to create shader smoke target");
+        }
+
+        DraggablePrimitiveScene example;
+        NoResources resources;
+        const auto prepared = example.prepare(resources);
+        if (!prepared) {
+            throw std::runtime_error("shader smoke scene preparation failed");
+        }
+
+        tgfx::Canvas2DRenderer canvas;
+        const float clear[] = {0.035f, 0.045f, 0.065f, 1.0f};
+        auto& context = host->context();
+        context.begin_frame();
+        context.begin_pass(target, {}, clear, 1.0f, false);
+        canvas.begin(context, width, height);
+        if (!canvas.execute(prepared->draw_list(), resources)) {
+            throw std::runtime_error("shader smoke DrawList2D execution failed");
+        }
+        canvas.end();
+        context.end_pass();
+        context.end_frame();
+        host->device().wait_idle();
+
+        canvas.release_gpu();
+        host->device().destroy(target);
+        host->close();
+        tc_shader_shutdown();
+        return 0;
+    } catch (const std::exception& error) {
+        std::fprintf(
+            stderr, "VisualScene2D shader smoke failed: %s\n", error.what());
+        tc_shader_shutdown();
+        return 1;
+    }
+}
+
+tgfx::TextureHandle create_target(
+    tgfx::IRenderDevice& device,
+    int width,
     int height) {
     tgfx::TextureDesc desc;
     desc.width = static_cast<std::uint32_t>(width);
@@ -260,6 +331,11 @@ int windowed_example() {
     tc_shader_init();
     try {
         auto runtime = termin::create_native_windowed_graphics();
+        if (!tgfx::configure_default_standalone_shader_runtime(
+                runtime->graphics(), "visual-scene-draggable")) {
+            throw std::runtime_error(
+                "standalone shader runtime configuration failed");
+        }
         auto window = runtime->create_window({
             "VisualScene2D draggable primitives", 800, 600});
         auto& host = runtime->graphics();
@@ -348,6 +424,9 @@ int windowed_example() {
 int main(int argc, char** argv) {
     if (argc > 1 && std::string_view(argv[1]) == "--headless-smoke") {
         return headless_smoke();
+    }
+    if (argc > 1 && std::string_view(argv[1]) == "--shader-smoke") {
+        return shader_smoke();
     }
     return windowed_example();
 }

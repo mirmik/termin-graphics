@@ -127,6 +127,11 @@ in the SDK. Launch it after `./build-sdk.sh`:
 ./sdk/bin/termin_visual_scene_draggable_example
 ```
 
+The standalone host discovers `termin_shaderc` and `slangc` from explicit
+`TERMIN_SHADERC` / `TERMIN_SLANGC` settings, the active SDK, or `PATH`.
+Generated Vulkan/D3D11 shader artifacts are kept in the platform user cache;
+set `TERMIN_SDK_SHADER_CACHE_ROOT` to override its base directory.
+
 The window contains an overlapping rectangle, ellipse and diamond path. Move
 the pointer to see hover feedback; press and drag any shape to exercise
 selection and per-pointer capture; release to end the drag. Later-created,
@@ -140,3 +145,12 @@ The same executable has a window-free CI mode:
 
 It verifies public scene creation, canonical DrawList lowering and captured
 dragging for all three primitives.
+
+The no-window GPU path used by CI is also available directly:
+
+```bash
+./sdk/bin/termin_visual_scene_draggable_example --shader-smoke
+```
+
+It creates an isolated Vulkan or D3D11 device, configures the standalone shader
+runtime and executes the example's actual Canvas2D draw list.
