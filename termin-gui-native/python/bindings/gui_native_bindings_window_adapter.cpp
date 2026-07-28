@@ -45,44 +45,7 @@ ColorPicker& require_color_picker(
 }
 
 int32_t python_key_code(termin::WindowKey key) {
-    if (key >= termin::WindowKey::A && key <= termin::WindowKey::Z) {
-        return 'A' + static_cast<int32_t>(key) -
-               static_cast<int32_t>(termin::WindowKey::A);
-    }
-    if (key >= termin::WindowKey::Digit0 && key <= termin::WindowKey::Digit9) {
-        return '0' + static_cast<int32_t>(key) -
-               static_cast<int32_t>(termin::WindowKey::Digit0);
-    }
-    if (key >= termin::WindowKey::F1 && key <= termin::WindowKey::F12) {
-        return 290 + static_cast<int32_t>(key) -
-               static_cast<int32_t>(termin::WindowKey::F1);
-    }
-    switch (key) {
-    case termin::WindowKey::Tab: return 9;
-    case termin::WindowKey::Enter: return 13;
-    case termin::WindowKey::Space: return 32;
-    case termin::WindowKey::Escape: return 256;
-    case termin::WindowKey::Backspace: return 259;
-    case termin::WindowKey::Delete: return 261;
-    case termin::WindowKey::Right: return 262;
-    case termin::WindowKey::Left: return 263;
-    case termin::WindowKey::Down: return 264;
-    case termin::WindowKey::Up: return 265;
-    case termin::WindowKey::Home: return 268;
-    case termin::WindowKey::End: return 269;
-    case termin::WindowKey::Apostrophe: return '\'';
-    case termin::WindowKey::Comma: return ',';
-    case termin::WindowKey::Minus: return '-';
-    case termin::WindowKey::Period: return '.';
-    case termin::WindowKey::Slash: return '/';
-    case termin::WindowKey::Semicolon: return ';';
-    case termin::WindowKey::Equals: return '=';
-    case termin::WindowKey::LeftBracket: return '[';
-    case termin::WindowKey::Backslash: return '\\';
-    case termin::WindowKey::RightBracket: return ']';
-    case termin::WindowKey::Grave: return '`';
-    default: return -1;
-    }
+    return termin::window_key_code(key);
 }
 
 nb::dict python_window_event(const termin::WindowEvent& event) {

@@ -14,47 +14,7 @@ int32_t translate_modifiers(uint32_t modifiers) {
 }
 
 int32_t translate_key(WindowKey key) {
-    if (key >= WindowKey::A && key <= WindowKey::Z) {
-        return TC_UI_KEY_A + static_cast<int32_t>(key) -
-            static_cast<int32_t>(WindowKey::A);
-    }
-    if (key >= WindowKey::Digit0 && key <= WindowKey::Digit9) {
-        return TC_UI_KEY_0 + static_cast<int32_t>(key) -
-            static_cast<int32_t>(WindowKey::Digit0);
-    }
-    if (key >= WindowKey::F1 && key <= WindowKey::F12) {
-        return TC_UI_KEY_F1 + static_cast<int32_t>(key) -
-            static_cast<int32_t>(WindowKey::F1);
-    }
-    switch (key) {
-        case WindowKey::Tab: return TC_UI_KEY_TAB;
-        case WindowKey::Enter: return TC_UI_KEY_ENTER;
-        case WindowKey::Space: return TC_UI_KEY_SPACE;
-        case WindowKey::Escape: return TC_UI_KEY_ESCAPE;
-        case WindowKey::Backspace: return TC_UI_KEY_BACKSPACE;
-        case WindowKey::Insert: return TC_UI_KEY_INSERT;
-        case WindowKey::Delete: return TC_UI_KEY_DELETE;
-        case WindowKey::Right: return TC_UI_KEY_RIGHT;
-        case WindowKey::Left: return TC_UI_KEY_LEFT;
-        case WindowKey::Down: return TC_UI_KEY_DOWN_ARROW;
-        case WindowKey::Up: return TC_UI_KEY_UP_ARROW;
-        case WindowKey::PageUp: return TC_UI_KEY_PAGE_UP;
-        case WindowKey::PageDown: return TC_UI_KEY_PAGE_DOWN;
-        case WindowKey::Home: return TC_UI_KEY_HOME;
-        case WindowKey::End: return TC_UI_KEY_END;
-        case WindowKey::Apostrophe: return '\'';
-        case WindowKey::Comma: return ',';
-        case WindowKey::Minus: return '-';
-        case WindowKey::Period: return '.';
-        case WindowKey::Slash: return '/';
-        case WindowKey::Semicolon: return ';';
-        case WindowKey::Equals: return '=';
-        case WindowKey::LeftBracket: return '[';
-        case WindowKey::Backslash: return '\\';
-        case WindowKey::RightBracket: return ']';
-        case WindowKey::Grave: return '`';
-        default: return TC_UI_KEY_UNKNOWN;
-    }
+    return window_key_code(key);
 }
 
 } // namespace

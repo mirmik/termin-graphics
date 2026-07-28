@@ -61,6 +61,53 @@ enum class WindowKey : uint16_t {
     Grave,
 };
 
+// Stable key code consumed by tcbase.Key, native UI, and runtime input
+// components. WindowKey intentionally remains a portable symbolic enum;
+// backend-native keycodes and scancodes stay available on WindowKeyEvent.
+constexpr int32_t window_key_code(WindowKey key) noexcept {
+    if (key >= WindowKey::A && key <= WindowKey::Z) {
+        return 'A' + static_cast<int32_t>(key) -
+            static_cast<int32_t>(WindowKey::A);
+    }
+    if (key >= WindowKey::Digit0 && key <= WindowKey::Digit9) {
+        return '0' + static_cast<int32_t>(key) -
+            static_cast<int32_t>(WindowKey::Digit0);
+    }
+    if (key >= WindowKey::F1 && key <= WindowKey::F12) {
+        return 290 + static_cast<int32_t>(key) -
+            static_cast<int32_t>(WindowKey::F1);
+    }
+    switch (key) {
+        case WindowKey::Tab: return 9;
+        case WindowKey::Enter: return 13;
+        case WindowKey::Space: return 32;
+        case WindowKey::Escape: return 256;
+        case WindowKey::Backspace: return 259;
+        case WindowKey::Insert: return 260;
+        case WindowKey::Delete: return 261;
+        case WindowKey::Right: return 262;
+        case WindowKey::Left: return 263;
+        case WindowKey::Down: return 264;
+        case WindowKey::Up: return 265;
+        case WindowKey::PageUp: return 266;
+        case WindowKey::PageDown: return 267;
+        case WindowKey::Home: return 268;
+        case WindowKey::End: return 269;
+        case WindowKey::Apostrophe: return '\'';
+        case WindowKey::Comma: return ',';
+        case WindowKey::Minus: return '-';
+        case WindowKey::Period: return '.';
+        case WindowKey::Slash: return '/';
+        case WindowKey::Semicolon: return ';';
+        case WindowKey::Equals: return '=';
+        case WindowKey::LeftBracket: return '[';
+        case WindowKey::Backslash: return '\\';
+        case WindowKey::RightBracket: return ']';
+        case WindowKey::Grave: return '`';
+        default: return -1;
+    }
+}
+
 enum WindowModifier : uint32_t {
     WindowModifierNone = 0,
     WindowModifierShift = 1u << 0,
