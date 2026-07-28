@@ -42,6 +42,7 @@ namespace tcplot {
 
 class GpuHost;
 class PlotEngine2D;
+class PlotAnnotationLayer2D;
 
 class TCPLOT_API PlotView2DMulti {
 private:
@@ -95,6 +96,8 @@ public:
     PlotView2DMulti& operator=(const PlotView2DMulti&) = delete;
 
     int panel_count() const;
+    PlotAnnotationLayer2D* annotations(int panel_idx);
+    const PlotAnnotationLayer2D* annotations(int panel_idx) const;
 
     // Resize `panels_` in place. Existing panels up to the new count
     // keep their state (data, Y ranges, titles). Extra panels are

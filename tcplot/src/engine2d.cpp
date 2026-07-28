@@ -25,6 +25,7 @@
 #include <tgfx2/tc_shader_bridge.hpp>
 
 #include "tcplot/axes.hpp"
+#include "tcplot/plot_annotations2d.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -85,7 +86,8 @@ tgfx::CanvasColor canvas_color(const Color4& c) {
 // ---------------------------------------------------------------------------
 
 PlotEngine2D::PlotEngine2D()
-    : canvas_(std::make_unique<tgfx::Canvas2DRenderer>()) {}
+    : canvas_(std::make_unique<tgfx::Canvas2DRenderer>()),
+      annotations_(std::make_unique<PlotAnnotationLayer2D>()) {}
 
 PlotEngine2D::~PlotEngine2D() {
     release_gpu_resources();
@@ -235,6 +237,14 @@ PlotFrame2D PlotEngine2D::plot_frame() {
         pixel_scale_);
 }
 
+PlotAnnotationLayer2D& PlotEngine2D::annotations() {
+    return *annotations_;
+}
+
+const PlotAnnotationLayer2D& PlotEngine2D::annotations() const {
+    return *annotations_;
+}
+
 void PlotEngine2D::release_gpu_resources() {
     if (line_shader_device_) {
         for (auto& gs : line_gpu_) {
@@ -256,6 +266,7 @@ void PlotEngine2D::release_gpu_resources() {
     styled_line_gpu_.clear();
 
     if (canvas_) canvas_->release_gpu();
+    if (annotations_) annotations_->release_gpu_resources();
 }
 
 // ---------------------------------------------------------------------------
@@ -566,26 +577,33 @@ void PlotEngine2D::begin_render_phase_(
     const PlotFrame2D& frame,
     tgfx::RenderContext2& context,
     tgfx::FontAtlas* font) {
-    if (!render_phase_sink_) return;
-
     const bool plot_clipped =
         phase == PlotRenderPhase2D::AnnotationUnderlay
         || phase == PlotRenderPhase2D::Series
         || phase == PlotRenderPhase2D::AnnotationOverlay;
     const PlotRect2D& clip =
         plot_clipped ? frame.clip_rect() : frame.viewport();
-    context.set_viewport(
-        static_cast<int>(frame.viewport().x()),
-        static_cast<int>(frame.viewport().y()),
-        static_cast<int>(frame.viewport().width()),
-        static_cast<int>(frame.viewport().height()));
-    context.set_scissor(
-        static_cast<int>(clip.x()),
-        static_cast<int>(clip.y()),
-        static_cast<int>(clip.width()),
-        static_cast<int>(clip.height()));
+    const auto restore_phase_state = [&]() {
+        context.set_viewport(
+            static_cast<int>(frame.viewport().x()),
+            static_cast<int>(frame.viewport().y()),
+            static_cast<int>(frame.viewport().width()),
+            static_cast<int>(frame.viewport().height()));
+        context.set_scissor(
+            static_cast<int>(clip.x()),
+            static_cast<int>(clip.y()),
+            static_cast<int>(clip.width()),
+            static_cast<int>(clip.height()));
+    };
     try {
-        render_phase_sink_->begin_plot_phase(phase, frame, context, font);
+        if (annotations_) {
+            annotations_->render_phase(phase, frame, context, font);
+        }
+        if (render_phase_sink_) {
+            restore_phase_state();
+            render_phase_sink_->begin_plot_phase(
+                phase, frame, context, font);
+        }
     } catch (const std::exception& error) {
         tc::Log::error(
             "PlotEngine2D: render phase sink failed in phase %d: %s",
@@ -611,6 +629,7 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     const PlotRect2D& pa = frame.plot_area();
     const PlotRange2D& v = frame.range();
 
+    annotations_->project(frame, data);
     begin_render_phase_(PlotRenderPhase2D::Background, frame, *ctx, font);
     canvas_->set_default_font(font);
     canvas_->begin(*ctx, canvas_w, canvas_h);
@@ -896,6 +915,17 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
 // ---------------------------------------------------------------------------
 
 bool PlotEngine2D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
+    if (button == tcbase::MouseButton::LEFT) {
+        const PlotFrame2D frame = plot_frame();
+        if (annotations_->route_pointer(frame, {
+                0,
+                termin::visual::PointerEventKind2D::Down,
+                {x, y},
+                static_cast<std::uint32_t>(button),
+            })) {
+            return true;
+        }
+    }
     if (button == tcbase::MouseButton::MIDDLE) {
         panning_ = true;
         pan_start_mx_ = x;
@@ -912,8 +942,16 @@ bool PlotEngine2D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
 }
 
 void PlotEngine2D::on_mouse_move(float x, float y) {
-    if (!panning_) return;
     const PlotFrame2D frame = plot_frame();
+    if (!panning_ && annotations_->route_pointer(frame, {
+            0,
+            termin::visual::PointerEventKind2D::Move,
+            {x, y},
+            0,
+        })) {
+        return;
+    }
+    if (!panning_) return;
     const PlotRect2D& pa = frame.plot_area();
     const double vx0 = pan_start_view_[0];
     const double vx1 = pan_start_view_[1];
@@ -935,28 +973,51 @@ void PlotEngine2D::on_mouse_move(float x, float y) {
     view_y_max_ = vy1 + dy_data;
 }
 
-void PlotEngine2D::on_mouse_up(float /*x*/, float /*y*/,
-                                 tcbase::MouseButton /*button*/) {
+void PlotEngine2D::on_mouse_up(float x, float y,
+                                 tcbase::MouseButton button) {
+    if (button == tcbase::MouseButton::LEFT) {
+        annotations_->route_pointer(plot_frame(), {
+            0,
+            termin::visual::PointerEventKind2D::Up,
+            {x, y},
+            static_cast<std::uint32_t>(button),
+        });
+    }
     panning_ = false;
 }
 
 bool PlotEngine2D::on_mouse_wheel_x(float x, float y, float dy) {
-    const PlotFrame2D frame = plot_frame();
-    if (!frame.contains_plot_pixel(x, y)) return false;
-
-    const float factor = (dy > 0) ? 0.85f : 1.0f / 0.85f;
-
-    const PlotPoint2D center = frame.pixel_to_data(x, y);
-    const PlotRange2D& v = frame.range();
-
-    view_x_min_ = center.x + (v.x_min() - center.x) * factor;
-    view_x_max_ = center.x + (v.x_max() - center.x) * factor;
-    return true;
+    return on_mouse_wheel_x_result(x, y, dy)
+        != PlotInputResult2D::Unhandled;
 }
 
 bool PlotEngine2D::on_mouse_wheel(float x, float y, float dy) {
+    return on_mouse_wheel_result(x, y, dy)
+        != PlotInputResult2D::Unhandled;
+}
+
+PlotInputResult2D PlotEngine2D::on_mouse_wheel_x_result(
+    float x, float y, float dy) {
+    return on_mouse_wheel_impl_(x, y, dy, true);
+}
+
+PlotInputResult2D PlotEngine2D::on_mouse_wheel_result(
+    float x, float y, float dy) {
+    return on_mouse_wheel_impl_(x, y, dy, false);
+}
+
+PlotInputResult2D PlotEngine2D::on_mouse_wheel_impl_(
+    float x,
+    float y,
+    float dy,
+    bool x_only) {
     const PlotFrame2D frame = plot_frame();
-    if (!frame.contains_plot_pixel(x, y)) return false;
+    if (annotations_->hit_test(frame, x, y)) {
+        return PlotInputResult2D::Annotation;
+    }
+    if (!frame.contains_plot_pixel(x, y)) {
+        return PlotInputResult2D::Unhandled;
+    }
 
     const float factor = (dy > 0) ? 0.85f : 1.0f / 0.85f;
 
@@ -965,9 +1026,11 @@ bool PlotEngine2D::on_mouse_wheel(float x, float y, float dy) {
 
     view_x_min_ = center.x + (v.x_min() - center.x) * factor;
     view_x_max_ = center.x + (v.x_max() - center.x) * factor;
-    view_y_min_ = center.y + (v.y_min() - center.y) * factor;
-    view_y_max_ = center.y + (v.y_max() - center.y) * factor;
-    return true;
+    if (!x_only) {
+        view_y_min_ = center.y + (v.y_min() - center.y) * factor;
+        view_y_max_ = center.y + (v.y_max() - center.y) * factor;
+    }
+    return PlotInputResult2D::Navigation;
 }
 
 }  // namespace tcplot

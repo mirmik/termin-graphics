@@ -62,6 +62,17 @@ int PlotView2DMulti::panel_count() const {
     return static_cast<int>(panels_.size());
 }
 
+PlotAnnotationLayer2D* PlotView2DMulti::annotations(int panel_idx) {
+    if (panel_idx < 0 || panel_idx >= panel_count()) return nullptr;
+    return &panels_[panel_idx]->annotations();
+}
+
+const PlotAnnotationLayer2D* PlotView2DMulti::annotations(
+    int panel_idx) const {
+    if (panel_idx < 0 || panel_idx >= panel_count()) return nullptr;
+    return &panels_[panel_idx]->annotations();
+}
+
 void PlotView2DMulti::set_panel_count(int n) {
     if (n < 1) n = 1;
     if ((int)panels_.size() == n) return;
@@ -574,8 +585,10 @@ bool PlotView2DMulti::on_mouse_wheel(float x, float y, float dy) {
     const int idx = panel_at_(y);
     if (idx < 0) return false;
     PlotEngine2D& eng = *panels_[idx];
-    const bool handled = eng.on_mouse_wheel(x, y, dy);
-    if (!handled) return false;
+    const PlotInputResult2D result =
+        eng.on_mouse_wheel_result(x, y, dy);
+    if (result == PlotInputResult2D::Unhandled) return false;
+    if (result == PlotInputResult2D::Annotation) return true;
 
     // Wheel is zoom-around-cursor; the engine updated its view X.
     // Broadcast shared X to siblings so they stay locked.
@@ -598,8 +611,10 @@ bool PlotView2DMulti::on_mouse_wheel_x(float x, float y, float dy) {
     const int idx = panel_at_(y);
     if (idx < 0) return false;
     PlotEngine2D& eng = *panels_[idx];
-    const bool handled = eng.on_mouse_wheel_x(x, y, dy);
-    if (!handled) return false;
+    const PlotInputResult2D result =
+        eng.on_mouse_wheel_x_result(x, y, dy);
+    if (result == PlotInputResult2D::Unhandled) return false;
+    if (result == PlotInputResult2D::Annotation) return true;
 
     double x_min, x_max, y_min, y_max;
     eng.get_view(x_min, x_max, y_min, y_max);

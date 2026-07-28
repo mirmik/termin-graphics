@@ -22,6 +22,13 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_graphics REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(
+        termin_visual_scene
+        termin_visual_scene::termin_visual_scene)
+else()
+    find_package(termin_visual_scene REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -44,6 +51,7 @@ set(TCPLOT_SOURCES
     src/orbit_camera.cpp
     src/plot_data.cpp
     src/plot_frame2d.cpp
+    src/plot_annotations2d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
     src/plot_view3d.cpp
@@ -75,6 +83,7 @@ target_link_libraries(tcplot PUBLIC
     tcbase::termin_base
     tmesh::termin_mesh
     tgfx::termin_graphics2
+    termin_visual_scene::termin_visual_scene
 )
 
 set_target_properties(tcplot PROPERTIES
@@ -97,6 +106,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(tcplot_plot_frame2d_test)
     add_test(NAME tcplot_plot_frame2d_test
         COMMAND tcplot_plot_frame2d_test)
+
+    add_executable(tcplot_plot_annotations2d_test
+        tests/test_plot_annotations2d.cpp)
+    target_link_libraries(tcplot_plot_annotations2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_annotations2d_test)
+    add_test(NAME tcplot_plot_annotations2d_test
+        COMMAND tcplot_plot_annotations2d_test)
 endif()
 
 # --- Install ---

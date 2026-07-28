@@ -25,6 +25,7 @@ namespace tcplot {
 
 class PlotEngine2D;
 class GpuHost;
+class PlotAnnotationLayer2D;
 
 class TCPLOT_API PlotView2D {
 private:
@@ -60,6 +61,8 @@ public:
     void clear();
     void fit();
     void set_view(double x_min, double x_max, double y_min, double y_max);
+    PlotAnnotationLayer2D& annotations();
+    const PlotAnnotationLayer2D& annotations() const;
 
     void set_title(const char* title);
     void set_x_label(const char* label);

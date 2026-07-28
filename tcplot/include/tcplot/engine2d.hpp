@@ -32,6 +32,14 @@ class Canvas2DRenderer;
 
 namespace tcplot {
 
+class PlotAnnotationLayer2D;
+
+enum class PlotInputResult2D {
+    Unhandled,
+    Annotation,
+    Navigation,
+};
+
 class TCPLOT_API PlotEngine2D {
 private:
     struct LineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; };
@@ -51,6 +59,7 @@ private:
     std::vector<StyledLineGpuState> styled_line_gpu_;
     uint64_t data_version_ = 1;
     std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
+    std::unique_ptr<PlotAnnotationLayer2D> annotations_;
     PlotRenderPhaseSink2D* render_phase_sink_ = nullptr;
 
 public:
@@ -169,6 +178,8 @@ public:
     // Immutable projection snapshot for this engine's current viewport and
     // range. Auto-fits on first access when no explicit range was supplied.
     PlotFrame2D plot_frame();
+    PlotAnnotationLayer2D& annotations();
+    const PlotAnnotationLayer2D& annotations() const;
 
     // Borrowed advanced render extension. Passing nullptr detaches it.
     void set_render_phase_sink(PlotRenderPhaseSink2D* sink) {
@@ -196,6 +207,10 @@ public:
     bool on_mouse_wheel(float x, float y, float dy);
     // Zoom X axis only (shared-X multi-panel UX: Ctrl+wheel).
     bool on_mouse_wheel_x(float x, float y, float dy);
+    PlotInputResult2D on_mouse_wheel_result(
+        float x, float y, float dy);
+    PlotInputResult2D on_mouse_wheel_x_result(
+        float x, float y, float dy);
 
 private:
     void ensure_line_shader_(tgfx::IRenderDevice& device);
@@ -208,6 +223,8 @@ private:
         const PlotFrame2D& frame,
         tgfx::RenderContext2& context,
         tgfx::FontAtlas* font);
+    PlotInputResult2D on_mouse_wheel_impl_(
+        float x, float y, float dy, bool x_only);
 };
 
 }  // namespace tcplot

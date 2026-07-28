@@ -125,6 +125,14 @@ void PlotView2D::set_view(double x_min, double x_max,
     engine_->set_view(x_min, x_max, y_min, y_max);
 }
 
+PlotAnnotationLayer2D& PlotView2D::annotations() {
+    return engine_->annotations();
+}
+
+const PlotAnnotationLayer2D& PlotView2D::annotations() const {
+    return engine_->annotations();
+}
+
 void PlotView2D::set_title(const char* title) {
     engine_->data.title = title ? title : "";
 }
