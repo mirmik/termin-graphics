@@ -149,10 +149,6 @@ void RenderContext2::begin_pass(
     const float* clear_color, float clear_depth,
     bool clear_depth_enabled
 ) {
-    if (in_pass_) {
-        end_pass();
-    }
-
     RenderPassDesc pass;
 
     // Only push the color attachment when caller supplied a valid
@@ -180,57 +176,166 @@ void RenderContext2::begin_pass(
         pass.has_depth = true;
     }
 
-    // Sync the pipeline-key formats with what the pass actually carries.
-    // Without this the cache keeps whatever format was set earlier (or
-    // the D32F default for depth) and builds a VkRenderPass that doesn't
-    // match begin_render_pass — Vulkan then fails with
-    //   vkCmdDraw: RenderPasses incompatible (attachment count mismatch).
-    PixelFormat new_color = color
-        ? device_.texture_desc(color).format
-        : PixelFormat::Undefined;
-    PixelFormat new_depth = depth
-        ? device_.texture_desc(depth).format
-        : PixelFormat::Undefined;
-    if (color_format_ != new_color) {
-        color_format_ = new_color;
+    (void)begin_pass(pass);
+}
+
+bool RenderContext2::begin_pass(const RenderPassDesc& pass) {
+    if (in_pass_) {
+        end_pass();
+    }
+
+    const BackendCapabilities caps = device_.capabilities();
+    if (pass.colors.size() > TGFX2_MAX_COLOR_ATTACHMENTS ||
+        pass.colors.size() > caps.max_color_attachments) {
+        tc_log(
+            TC_LOG_ERROR,
+            "RenderContext2::begin_pass: %zu color attachments exceed limits "
+            "(engine=%u backend=%u)",
+            pass.colors.size(),
+            TGFX2_MAX_COLOR_ATTACHMENTS,
+            caps.max_color_attachments);
+        return false;
+    }
+    if (pass.colors.empty() && (!pass.has_depth || !pass.depth.texture)) {
+        tc_log(
+            TC_LOG_ERROR,
+            "RenderContext2::begin_pass: pass has no color or depth attachment");
+        return false;
+    }
+
+    std::array<PixelFormat, TGFX2_MAX_COLOR_ATTACHMENTS> new_color_formats{};
+    uint32_t expected_width = 0;
+    uint32_t expected_height = 0;
+    uint32_t expected_samples = 0;
+
+    auto accept_extent = [&](const TextureDesc& desc, const char* kind, size_t index) {
+        if (desc.width == 0 || desc.height == 0 || desc.sample_count == 0 ||
+            desc.format == PixelFormat::Undefined) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: %s attachment %zu has an invalid descriptor",
+                kind,
+                index);
+            return false;
+        }
+        if (expected_width == 0) {
+            expected_width = desc.width;
+            expected_height = desc.height;
+            expected_samples = desc.sample_count;
+            return true;
+        }
+        if (desc.width != expected_width || desc.height != expected_height ||
+            desc.sample_count != expected_samples) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: %s attachment %zu extent/sample mismatch "
+                "(got=%ux%u@%u expected=%ux%u@%u)",
+                kind,
+                index,
+                desc.width,
+                desc.height,
+                desc.sample_count,
+                expected_width,
+                expected_height,
+                expected_samples);
+            return false;
+        }
+        return true;
+    };
+
+    for (size_t i = 0; i < pass.colors.size(); ++i) {
+        const ColorAttachmentDesc& color = pass.colors[i];
+        if (!color.texture) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: color attachment %zu has a null texture",
+                i);
+            return false;
+        }
+        for (size_t previous = 0; previous < i; ++previous) {
+            if (pass.colors[previous].texture == color.texture) {
+                tc_log(
+                    TC_LOG_ERROR,
+                    "RenderContext2::begin_pass: color attachment %zu duplicates attachment %zu",
+                    i,
+                    previous);
+                return false;
+            }
+        }
+        const TextureDesc desc = device_.texture_desc(color.texture);
+        if (!has_flag(desc.usage, TextureUsage::ColorAttachment)) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: color attachment %zu lacks ColorAttachment usage",
+                i);
+            return false;
+        }
+        if (!accept_extent(desc, "color", i)) {
+            return false;
+        }
+        new_color_formats[i] = desc.format;
+    }
+
+    PixelFormat new_depth_format = PixelFormat::Undefined;
+    if (pass.has_depth) {
+        if (!pass.depth.texture) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: depth attachment is enabled but has a null texture");
+            return false;
+        }
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            if (pass.colors[i].texture == pass.depth.texture) {
+                tc_log(
+                    TC_LOG_ERROR,
+                    "RenderContext2::begin_pass: depth attachment duplicates color attachment %zu",
+                    i);
+                return false;
+            }
+        }
+        const TextureDesc desc = device_.texture_desc(pass.depth.texture);
+        if (!has_flag(desc.usage, TextureUsage::DepthStencilAttachment)) {
+            tc_log(
+                TC_LOG_ERROR,
+                "RenderContext2::begin_pass: depth attachment lacks DepthStencilAttachment usage");
+            return false;
+        }
+        if (!accept_extent(desc, "depth", 0)) {
+            return false;
+        }
+        new_depth_format = desc.format;
+    } else if (pass.depth.texture) {
+        tc_log(
+            TC_LOG_ERROR,
+            "RenderContext2::begin_pass: depth texture is set while has_depth is false");
+        return false;
+    }
+
+    bool formats_changed = color_format_count_ != pass.colors.size();
+    if (!formats_changed) {
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            if (color_formats_[i] != new_color_formats[i]) {
+                formats_changed = true;
+                break;
+            }
+        }
+    }
+    if (formats_changed) {
+        color_formats_ = new_color_formats;
+        color_format_count_ = static_cast<uint32_t>(pass.colors.size());
         pipeline_dirty_ = true;
     }
-    if (depth_format_ != new_depth) {
-        depth_format_ = new_depth;
+    if (depth_format_ != new_depth_format) {
+        depth_format_ = new_depth_format;
+        pipeline_dirty_ = true;
+    }
+    if (sample_count_ != expected_samples) {
+        sample_count_ = expected_samples;
         pipeline_dirty_ = true;
     }
 
-    // Keep RenderContext2's high-level viewport cache in sync with the
-    // render target selected by this pass. Some backends set the native
-    // viewport inside begin_render_pass(), but renderers such as Text3D
-    // also need the size on the CPU side for pixel-space expansion.
-    if (color) {
-        const TextureDesc desc = device_.texture_desc(color);
-        viewport_w_ = std::max(1, static_cast<int>(desc.width));
-        viewport_h_ = std::max(1, static_cast<int>(desc.height));
-    } else if (depth) {
-        const TextureDesc desc = device_.texture_desc(depth);
-        viewport_w_ = std::max(1, static_cast<int>(desc.width));
-        viewport_h_ = std::max(1, static_cast<int>(desc.height));
-    }
-
-    // Sync the pipeline's multisample state with the attachment's actual
-    // sample count. FBOPool may allocate MSAA textures (e.g. scene color
-    // at 4x) while the pipeline cache key defaults to sample_count=1 -
-    // Vulkan then refuses vkCreateFramebuffer with SAMPLE_COUNT_4 vs
-    // SAMPLE_COUNT_1 mismatch. Pick the attachment that's present; if
-    // both are, trust the color (depth should match by construction).
-    uint32_t new_samples = 1;
-    if (color) {
-        new_samples = device_.texture_desc(color).sample_count;
-    } else if (depth) {
-        new_samples = device_.texture_desc(depth).sample_count;
-    }
-    if (new_samples == 0) new_samples = 1;
-    if (sample_count_ != new_samples) {
-        sample_count_ = new_samples;
-        pipeline_dirty_ = true;
-    }
+    viewport_w_ = std::max(1, static_cast<int>(expected_width));
+    viewport_h_ = std::max(1, static_cast<int>(expected_height));
 
     cmd_->begin_render_pass(pass);
     in_pass_ = true;
@@ -249,6 +354,7 @@ void RenderContext2::begin_pass(
     last_bound_pipeline_ = {};
     last_bound_resource_layout_token_ = 0;
     pipeline_dirty_ = true;
+    return true;
 }
 
 void RenderContext2::end_pass() {
@@ -905,13 +1011,20 @@ void RenderContext2::bind_uniform_data(const tc_shader_resource_binding* rb,
         buffer.id != 0 && device_.ring_ubo_write(data, size, ring_offset);
     uint64_t offset = ring_offset;
     if (!ring_write_succeeded) {
-        BufferDesc bd;
-        bd.size = size;
-        bd.usage = BufferUsage::Uniform;
-        bd.cpu_visible = true;
-        buffer = device_.create_buffer(bd);
-        device_.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), size});
-        defer_destroy(buffer);
+        uint32_t transient_offset = 0;
+        if (device_.transient_uniform_write(
+                data, size, buffer, transient_offset)) {
+            offset = transient_offset;
+        } else {
+            BufferDesc bd;
+            bd.size = size;
+            bd.usage = BufferUsage::Uniform;
+            bd.cpu_visible = true;
+            buffer = device_.create_buffer(bd);
+            device_.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), size});
+            defer_destroy(buffer);
+            offset = 0;
+        }
     }
 
     BoundResourceValue value;
@@ -1017,7 +1130,8 @@ bool RenderContext2::flush_pipeline() {
     }
     key.blend = blend_;
     key.color_mask = color_mask_;
-    key.color_format = color_format_;
+    key.color_formats = color_formats_;
+    key.color_format_count = color_format_count_;
     key.depth_format = depth_format_;
     key.sample_count = sample_count_;
 

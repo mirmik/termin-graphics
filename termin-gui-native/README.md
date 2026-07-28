@@ -186,6 +186,10 @@ The current foundation includes:
   Capture mode freezes animated values at their initial state, reads back one
   presented-size frame, writes binary PPM and exits, making the desktop backend
   path suitable for repeatable screenshot comparison;
+- native window examples configure the shared standalone shader runtime before
+  constructing their renderers. They discover `termin_shaderc` and `slangc`
+  from the active SDK/build tree or explicit environment settings and keep
+  generated artifacts in the writable platform user cache;
 - `tc_ui_document` accepts a non-owning C text-measure callback with explicit
   UTF-8 byte lengths. `UiDrawListRenderer::bind_text_measurer` adapts its
   `FontAtlas`; the renderer must outlive document layout/paint using that

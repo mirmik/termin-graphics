@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -12,8 +13,7 @@
 #include <termin/tc_scene.hpp>
 #include <core/tc_entity_pool.h>
 
-#include <tgfx2/handles.hpp>
-#include <tgfx2/enums.hpp>
+#include <tgfx2/descriptors.hpp>
 
 namespace tgfx {
 class RenderContext2;
@@ -34,6 +34,23 @@ using Tex2Map = std::unordered_map<std::string, tgfx::TextureHandle>;
 // only populated for shadow_map_array resources — ShadowPass writes
 // into one, ColorPass reads from one.
 using ShadowArrayMap = std::unordered_map<std::string, ShadowMapArrayResource*>;
+
+// Pass-local declaration of one named framegraph color output. Array order is
+// shader-visible: entry N maps to fragment output location N.
+struct FrameGraphColorAttachment {
+    const char* resource_name = nullptr;
+    tgfx::LoadOp load = tgfx::LoadOp::Clear;
+    tgfx::StoreOp store = tgfx::StoreOp::Store;
+    float clear_color[4] = {0, 0, 0, 0};
+};
+
+struct FrameGraphDepthAttachment {
+    const char* resource_name = nullptr;
+    tgfx::LoadOp load = tgfx::LoadOp::Clear;
+    tgfx::StoreOp store = tgfx::StoreOp::Store;
+    float clear_depth = 1.0f;
+    uint32_t clear_stencil = 0;
+};
 
 struct ExecuteContext {
 public:
@@ -74,6 +91,16 @@ public:
         int height = 0,
         tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm
     );
+
+    // Resolves independent named framegraph resources into the backend-neutral
+    // ordered attachment contract consumed by RenderContext2. This does not
+    // create or cache an FBO-like aggregate; the composition exists only for
+    // the pass invocation.
+    RENDER_API bool build_render_pass(
+        std::span<const FrameGraphColorAttachment> colors,
+        const FrameGraphDepthAttachment* depth,
+        tgfx::RenderPassDesc& out_pass
+    ) const;
 };
 
 } // namespace termin

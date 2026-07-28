@@ -11,6 +11,11 @@
 
 namespace tgfx {
 
+// Portable engine limit for ordered color attachments. Backends may expose a
+// lower runtime limit through BackendCapabilities::max_color_attachments.
+// Keeping the pipeline identity bounded avoids heap allocation on every draw.
+constexpr uint32_t TGFX2_MAX_COLOR_ATTACHMENTS = 8;
+
 // --- Resource descriptors ---
 
 struct BufferDesc {

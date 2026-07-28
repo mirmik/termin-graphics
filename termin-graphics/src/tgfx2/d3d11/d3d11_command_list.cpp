@@ -83,69 +83,70 @@ bool validate_d3d11_slot(
     return false;
 }
 
-void set_constant_buffers(
-    ID3D11DeviceContext* ctx,
+} // namespace
+
+D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
+    : device_(device), ctx_(device.immediate_context()) {
+}
+
+void D3D11CommandList::set_constant_buffer(
     uint32_t stage_mask,
     UINT slot,
-    ID3D11Buffer* const* buffer
-) {
+    ID3D11Buffer* buffer) {
     if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx->VSSetConstantBuffers(slot, 1, buffer);
+        ctx_->VSSetConstantBuffers(slot, 1, &buffer);
     }
     if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx->PSSetConstantBuffers(slot, 1, buffer);
+        ctx_->PSSetConstantBuffers(slot, 1, &buffer);
     }
     if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx->GSSetConstantBuffers(slot, 1, buffer);
+        ctx_->GSSetConstantBuffers(slot, 1, &buffer);
     }
 }
 
-void set_shader_resources(
-    ID3D11DeviceContext* ctx,
+void D3D11CommandList::set_shader_resource(
     uint32_t stage_mask,
     UINT slot,
-    ID3D11ShaderResourceView* const* srv
-) {
+    ID3D11ShaderResourceView* srv) {
     if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx->VSSetShaderResources(slot, 1, srv);
+        ctx_->VSSetShaderResources(slot, 1, &srv);
     }
     if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx->PSSetShaderResources(slot, 1, srv);
+        ctx_->PSSetShaderResources(slot, 1, &srv);
     }
     if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx->GSSetShaderResources(slot, 1, srv);
+        ctx_->GSSetShaderResources(slot, 1, &srv);
     }
 }
 
-void set_samplers(
-    ID3D11DeviceContext* ctx,
+void D3D11CommandList::set_sampler(
     uint32_t stage_mask,
     UINT slot,
-    ID3D11SamplerState* const* sampler
-) {
+    ID3D11SamplerState* sampler) {
     if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx->VSSetSamplers(slot, 1, sampler);
+        ctx_->VSSetSamplers(slot, 1, &sampler);
     }
     if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx->PSSetSamplers(slot, 1, sampler);
+        ctx_->PSSetSamplers(slot, 1, &sampler);
     }
     if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx->GSSetSamplers(slot, 1, sampler);
+        ctx_->GSSetSamplers(slot, 1, &sampler);
     }
 }
 
-void clear_shader_resources(ID3D11DeviceContext* ctx) {
-    std::array<ID3D11ShaderResourceView*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> null_srvs{};
-    ctx->VSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
-    ctx->PSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
-    ctx->GSSetShaderResources(0, static_cast<UINT>(null_srvs.size()), null_srvs.data());
+void D3D11CommandList::clear_shader_resources() {
+    std::array<
+        ID3D11ShaderResourceView*,
+        D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
+    > null_srvs{};
+    const UINT count = static_cast<UINT>(null_srvs.size());
+    ctx_->VSSetShaderResources(0, count, null_srvs.data());
+    ctx_->PSSetShaderResources(0, count, null_srvs.data());
+    ctx_->GSSetShaderResources(0, count, null_srvs.data());
 }
 
-void bind_bound_resource_binding(
-    D3D11RenderDevice& device,
-    ID3D11DeviceContext* ctx,
-    const BoundResourceBinding& binding
-) {
+void D3D11CommandList::bind_bound_resource_binding(
+    const BoundResourceBinding& binding) {
     const UINT slot = d3d11_slot(binding);
     const uint32_t stage_mask = effective_stage_mask(binding);
     if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
@@ -159,12 +160,8 @@ void bind_bound_resource_binding(
     switch (binding.value.kind) {
         case BoundResourceKind::UniformBuffer: {
             if (!validate_d3d11_placement(
-                    binding,
-                    D3D11RegisterClass::B,
-                    "uniform buffer")) {
-                break;
-            }
-            if (!validate_d3d11_slot(
+                    binding, D3D11RegisterClass::B, "uniform buffer") ||
+                !validate_d3d11_slot(
                     binding,
                     slot,
                     D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
@@ -179,28 +176,24 @@ void bind_bound_resource_binding(
                     static_cast<unsigned long long>(binding.value.offset));
                 break;
             }
-            auto* buf = device.get_buffer(binding.value.buffer);
-            ID3D11Buffer* native = buf ? buf->buffer.Get() : nullptr;
-            set_constant_buffers(ctx, stage_mask, slot, &native);
+            D3D11Buffer* buf = device_.get_buffer(binding.value.buffer);
+            set_constant_buffer(
+                stage_mask, slot, buf ? buf->buffer.Get() : nullptr);
             break;
         }
         case BoundResourceKind::SampledTexture: {
             if (!validate_d3d11_placement(
-                    binding,
-                    D3D11RegisterClass::T,
-                    "sampled texture")) {
-                break;
-            }
-            if (!validate_d3d11_slot(
+                    binding, D3D11RegisterClass::T, "sampled texture") ||
+                !validate_d3d11_slot(
                     binding,
                     slot,
                     D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
                     "sampled texture")) {
                 break;
             }
-            auto* tex = device.get_texture(binding.value.texture);
-            ID3D11ShaderResourceView* srv = tex ? tex->srv.Get() : nullptr;
-            set_shader_resources(ctx, stage_mask, slot, &srv);
+            D3D11Texture* tex = device_.get_texture(binding.value.texture);
+            set_shader_resource(
+                stage_mask, slot, tex ? tex->srv.Get() : nullptr);
             const UINT sampler_slot =
                 d3d11_sampler_slot_for_sampled_texture(binding);
             if (!validate_d3d11_slot(
@@ -210,40 +203,35 @@ void bind_bound_resource_binding(
                     "sampled texture sampler")) {
                 break;
             }
-            auto* sampler = device.get_sampler(binding.value.sampler);
-            ID3D11SamplerState* native_sampler = sampler
-                ? sampler->sampler.Get()
-                : device.default_sampler_state();
-            set_samplers(ctx, stage_mask, sampler_slot, &native_sampler);
+            D3D11Sampler* sampler =
+                device_.get_sampler(binding.value.sampler);
+            set_sampler(
+                stage_mask,
+                sampler_slot,
+                sampler ? sampler->sampler.Get()
+                        : device_.default_sampler_state());
             break;
         }
         case BoundResourceKind::Sampler: {
             if (!validate_d3d11_placement(
-                    binding,
-                    D3D11RegisterClass::S,
-                    "sampler")) {
-                break;
-            }
-            if (!validate_d3d11_slot(
+                    binding, D3D11RegisterClass::S, "sampler") ||
+                !validate_d3d11_slot(
                     binding,
                     slot,
                     D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
                     "sampler")) {
                 break;
             }
-            auto* sampler = device.get_sampler(binding.value.sampler);
-            ID3D11SamplerState* native = sampler ? sampler->sampler.Get() : nullptr;
-            set_samplers(ctx, stage_mask, slot, &native);
+            D3D11Sampler* sampler =
+                device_.get_sampler(binding.value.sampler);
+            set_sampler(
+                stage_mask, slot, sampler ? sampler->sampler.Get() : nullptr);
             break;
         }
         case BoundResourceKind::StorageBuffer: {
             if (!validate_d3d11_placement(
-                    binding,
-                    D3D11RegisterClass::T,
-                    "storage buffer")) {
-                break;
-            }
-            if (!validate_d3d11_slot(
+                    binding, D3D11RegisterClass::T, "storage buffer") ||
+                !validate_d3d11_slot(
                     binding,
                     slot,
                     D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
@@ -257,7 +245,7 @@ void bind_bound_resource_binding(
                     static_cast<unsigned long long>(binding.value.offset));
                 break;
             }
-            auto* buf = device.get_buffer(binding.value.buffer);
+            D3D11Buffer* buf = device_.get_buffer(binding.value.buffer);
             ID3D11ShaderResourceView* srv = buf ? buf->srv.Get() : nullptr;
             if (buf && !srv) {
                 tc::Log::error(
@@ -265,26 +253,24 @@ void bind_bound_resource_binding(
                     bound_resource_debug_name(binding));
                 break;
             }
-            set_shader_resources(ctx, stage_mask, slot, &srv);
+            set_shader_resource(stage_mask, slot, srv);
             break;
         }
     }
 }
 
-} // namespace
-
-D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
-    : device_(device), ctx_(device.immediate_context()) {
-}
-
 void D3D11CommandList::begin() {
+    device_.reset_transient_uploads();
 }
 
 void D3D11CommandList::end() {
 }
 
 void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
-    clear_shader_resources(ctx_);
+    // D3D11 may implicitly null an SRV when the same resource becomes an
+    // output. Re-establish a known state at every pass boundary instead of
+    // trusting the software cache across those runtime-managed hazards.
+    clear_shader_resources();
 
     std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
     UINT rtv_count = 0;
@@ -336,9 +322,15 @@ void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
 }
 
 void D3D11CommandList::end_render_pass() {
-    std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> null_rtvs{};
-    ctx_->OMSetRenderTargets(static_cast<UINT>(null_rtvs.size()), null_rtvs.data(), nullptr);
-    clear_shader_resources(ctx_);
+    std::array<
+        ID3D11RenderTargetView*,
+        D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT
+    > null_rtvs{};
+    ctx_->OMSetRenderTargets(
+        static_cast<UINT>(null_rtvs.size()),
+        null_rtvs.data(),
+        nullptr);
+    clear_shader_resources();
 }
 
 void D3D11CommandList::bind_pipeline(PipelineHandle pipeline) {
@@ -376,7 +368,7 @@ void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
     if (!rs) return;
 
     for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& binding) {
-        bind_bound_resource_binding(device_, ctx_, binding);
+        bind_bound_resource_binding(binding);
     });
 }
 
@@ -455,7 +447,10 @@ void D3D11CommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, ui
 void D3D11CommandList::bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset) {
     auto* buf = device_.get_buffer(buffer);
     if (!buf || !buf->buffer) return;
-    ctx_->IASetIndexBuffer(buf->buffer.Get(), d3d11::to_dxgi_index_format(type), static_cast<UINT>(offset));
+    ctx_->IASetIndexBuffer(
+        buf->buffer.Get(),
+        d3d11::to_dxgi_index_format(type),
+        static_cast<UINT>(offset));
 }
 
 void D3D11CommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {

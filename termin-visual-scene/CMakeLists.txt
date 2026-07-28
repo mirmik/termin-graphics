@@ -50,6 +50,11 @@ add_library(termin_visual_scene SHARED
     src/scene2d.cpp
     src/interaction2d.cpp
 )
+if(MSVC)
+    set_source_files_properties(src/tc_visual_scene.c PROPERTIES
+        COMPILE_OPTIONS "/experimental:c11atomics"
+    )
+endif()
 add_library(termin_visual_scene::termin_visual_scene ALIAS termin_visual_scene)
 target_compile_definitions(termin_visual_scene PRIVATE
     TERMIN_VISUAL_SCENE_EXPORTS)
@@ -119,10 +124,33 @@ if(TERMIN_BUILD_TESTS)
     if(TARGET termin_visual_scene_draggable_example)
         add_test(NAME termin_visual_scene_draggable_example_smoke
             COMMAND termin_visual_scene_draggable_example --headless-smoke)
+        add_test(NAME termin_visual_scene_draggable_example_shader_smoke
+            COMMAND termin_visual_scene_draggable_example --shader-smoke)
+        set_tests_properties(
+            termin_visual_scene_draggable_example_shader_smoke
+            PROPERTIES
+                TIMEOUT 30
+                SKIP_RETURN_CODE 77
+                SKIP_REGULAR_EXPRESSION
+                    "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
         if(COMMAND termin_set_test_build_target)
             termin_set_test_build_target(
                 termin_visual_scene_draggable_example_smoke
                 termin_visual_scene_draggable_example)
+            termin_set_test_build_target(
+                termin_visual_scene_draggable_example_shader_smoke
+                termin_visual_scene_draggable_example)
+        endif()
+        if(COMMAND termin_add_test_labels)
+            if(TGFX2_ENABLE_VULKAN)
+                termin_add_test_labels(
+                    termin_visual_scene_draggable_example_shader_smoke
+                    "termin:capability:vulkan")
+            elseif(TGFX2_ENABLE_D3D11)
+                termin_add_test_labels(
+                    termin_visual_scene_draggable_example_shader_smoke
+                    "termin:capability:d3d11")
+            endif()
         endif()
     endif()
 endif()

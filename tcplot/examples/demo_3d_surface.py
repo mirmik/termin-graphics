@@ -1,6 +1,6 @@
 """3D surface plot demo.
 
-Run: python3 examples/demo_3d_surface.py
+Run: ./run-python.sh tcplot/examples/demo_3d_surface.py
 """
 
 import sys

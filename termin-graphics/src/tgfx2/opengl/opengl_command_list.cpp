@@ -3,6 +3,7 @@
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 
 #include <algorithm>
+#include <array>
 
 #include <tcbase/tc_log.hpp>
 
@@ -35,11 +36,31 @@ void OpenGLCommandList::end() {
 // --- Render pass ---
 
 void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
-    in_render_pass_ = true;
-
     // Bind FBO (0 = default framebuffer if no textures specified)
     current_fbo_ = device_.get_or_create_fbo(pass);
     glBindFramebuffer(GL_FRAMEBUFFER, current_fbo_);
+    in_render_pass_ = true;
+
+    // FBO draw-buffer selection is persistent object state in OpenGL, but
+    // embedding hosts and direct GL users may modify it between passes.
+    // Reassert the ordered mapping on every begin: fragment location N writes
+    // GL_COLOR_ATTACHMENT0 + N.
+    if (!pass.colors.empty()) {
+        std::array<GLenum, TGFX2_MAX_COLOR_ATTACHMENTS> draw_buffers{};
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            draw_buffers[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
+        }
+        glDrawBuffers(
+            static_cast<GLsizei>(pass.colors.size()),
+            draw_buffers.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+    } else if (current_fbo_ != 0) {
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+    } else {
+        glDrawBuffer(GL_BACK);
+        glReadBuffer(GL_BACK);
+    }
 
     // Re-apply clip-control at the start of every pass. Our ortho
     // matrices (engine2d, text2d_renderer) assume y-down clip space
@@ -79,30 +100,27 @@ void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
         }
     }
 
-    // Clear based on load ops
-    GLbitfield clear_mask = 0;
-
-    for (const auto& color : pass.colors) {
+    // Clear each color attachment independently. glClearColor + glClear would
+    // apply one final clear value to every active draw buffer.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    for (size_t i = 0; i < pass.colors.size(); ++i) {
+        const auto& color = pass.colors[i];
         if (color.load == LoadOp::Clear) {
-            glClearColor(color.clear_color[0], color.clear_color[1],
-                         color.clear_color[2], color.clear_color[3]);
-            clear_mask |= GL_COLOR_BUFFER_BIT;
+            glClearBufferfv(
+                GL_COLOR,
+                static_cast<GLint>(i),
+                color.clear_color);
         }
     }
 
-    if (pass.has_depth) {
-        if (pass.depth.load == LoadOp::Clear) {
-            glClearDepth(pass.depth.clear_depth);
-            clear_mask |= GL_DEPTH_BUFFER_BIT;
-        }
+    if (pass.has_depth && pass.depth.load == LoadOp::Clear) {
+        glDepthMask(GL_TRUE);
+        glClearBufferfv(GL_DEPTH, 0, &pass.depth.clear_depth);
     }
 
-    if (clear_mask) {
-        if (clear_mask & GL_DEPTH_BUFFER_BIT) {
-            glDepthMask(GL_TRUE);
-        }
-        glClear(clear_mask);
-    }
+    // StoreOp::DontCare permits storing the result. Desktop GL does not
+    // guarantee a core invalidate entry on every context version supported by
+    // Termin, so no store-side action is required for correctness.
 }
 
 void OpenGLCommandList::end_render_pass() {

@@ -24,6 +24,7 @@
 #include <termin/window/window_manager.hpp>
 
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/standalone_shader_runtime.hpp>
 
 namespace termin::gui_native::examples {
 namespace {
@@ -111,6 +112,11 @@ int run_document_window(
                 "termin-gui-native example requires a document builder");
         }
         auto session = create_native_windowed_graphics();
+        if (!tgfx::configure_default_standalone_shader_runtime(
+                session->graphics(), "gui-native-window-examples")) {
+            throw std::runtime_error(
+                "standalone shader runtime configuration failed");
+        }
         WindowManager windows(*session);
         const WindowHandle handle = windows.create_window(WindowConfig{
             title ? title : "termin-gui-native showcase", 800, 600});

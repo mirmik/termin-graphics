@@ -81,7 +81,8 @@ private:
     // `Undefined` means "no attachment of this kind in the current
     // pass" — the pipeline cache builds a VkRenderPass with matching
     // attachment count, so vkCmdDraw's compatibility check passes.
-    PixelFormat color_format_ = PixelFormat::Undefined;
+    std::array<PixelFormat, TGFX2_MAX_COLOR_ATTACHMENTS> color_formats_{};
+    uint32_t color_format_count_ = 0;
     PixelFormat depth_format_ = PixelFormat::Undefined;
     uint32_t sample_count_ = 1;
 
@@ -219,6 +220,10 @@ public:
                     const float* clear_color = nullptr,
                     float clear_depth = 1.0f,
                     bool clear_depth_enabled = true);
+    // Begin a pass with an ordered attachment set. Color attachment N maps to
+    // fragment output SV_TargetN. Returns false when validation rejects the
+    // descriptor; no backend render pass is opened in that case.
+    bool begin_pass(const RenderPassDesc& pass);
     void end_pass();
 
     // --- Mutable render state (applied at draw time) ---

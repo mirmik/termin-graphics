@@ -1,6 +1,6 @@
 """Interactive retained data-marker example.
 
-Run: python3 examples/demo_marker.py
+Run: ./run-python.sh tcplot/examples/demo_marker.py
 
 Drag the orange anchor to snap it to the nearest curve sample. Click the
 callout's close button to destroy the semantic annotation.

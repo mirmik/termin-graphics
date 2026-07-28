@@ -18,6 +18,12 @@ device resources. Every cache entry records the resolver revision. Reconfiguring
 one device increments its resolver revision, so an old entry is discarded on
 the next use instead of reusing a shader compiled from the previous root.
 
+Standalone C++ applications that create a `GraphicsHost` directly can call
+`tgfx::configure_default_standalone_shader_runtime`. It discovers
+`termin_shaderc` and `slangc` from explicit environment settings, the active
+SDK/build tree, or `PATH`, then configures a host-scoped resolver backed by the
+platform user cache. `TERMIN_SDK_SHADER_CACHE_ROOT` overrides that cache base.
+
 The old process-global tgfx2 setters remain as a compatibility boundary for
 standalone graphics tools and tests that do not own a `RenderEngine`. Engine,
 editor and packaged runtime paths must not use them.

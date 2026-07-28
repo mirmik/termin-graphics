@@ -1,4 +1,6 @@
 // Test: RenderContext2 + PipelineCache draw a triangle and verify pixels.
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -69,6 +71,19 @@ in vec2 v_uv;
 out vec4 FragColor;
 void main() {
     FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+)";
+
+static const char* MRT_FRAG_SRC = R"(
+#version 330 core
+in vec2 v_uv;
+layout(location = 0) out vec4 Target0;
+layout(location = 1) out vec4 Target1;
+layout(location = 2) out vec4 Target2;
+void main() {
+    Target0 = vec4(0.0, 1.0, 1.0, 1.0);
+    Target1 = vec4(1.0, 0.0, 1.0, 1.0);
+    Target2 = vec4(1.0, 1.0, 0.0, 1.0);
 }
 )";
 
@@ -422,6 +437,110 @@ static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCach
     device.destroy(rt);
 }
 
+static bool pixel_near(
+    const float pixel[4],
+    float r,
+    float g,
+    float b
+) {
+    constexpr float epsilon = 0.05f;
+    return std::abs(pixel[0] - r) < epsilon &&
+        std::abs(pixel[1] - g) < epsilon &&
+        std::abs(pixel[2] - b) < epsilon &&
+        pixel[3] > 0.9f;
+}
+
+static void test_ordered_mrt_clear_and_draw(
+    tgfx::IRenderDevice& device,
+    tgfx::PipelineCache& cache
+) {
+    printf("\n--- Ordered MRT clear and draw via RenderContext2 ---\n");
+
+    constexpr uint32_t W = 16;
+    constexpr uint32_t H = 16;
+    tgfx::TextureDesc target_desc;
+    target_desc.width = W;
+    target_desc.height = H;
+    target_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    target_desc.usage =
+        tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+
+    std::array<tgfx::TextureHandle, 3> targets = {
+        device.create_texture(target_desc),
+        device.create_texture(target_desc),
+        device.create_texture(target_desc),
+    };
+    CHECK(targets[0] && targets[1] && targets[2], "three MRT targets created");
+
+    tgfx::RenderPassDesc pass;
+    pass.colors.resize(3);
+    const float clear_colors[3][4] = {
+        {1.0f, 0.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f, 1.0f, 1.0f},
+    };
+    for (size_t i = 0; i < targets.size(); ++i) {
+        pass.colors[i].texture = targets[i];
+        pass.colors[i].load = tgfx::LoadOp::Clear;
+        std::memcpy(
+            pass.colors[i].clear_color,
+            clear_colors[i],
+            sizeof(clear_colors[i]));
+    }
+
+    tgfx::RenderContext2 context(device, cache);
+    context.begin_frame();
+    CHECK(context.begin_pass(pass), "ordered MRT clear pass accepted");
+    context.end_pass();
+    context.end_frame();
+
+    float pixels[3][4]{};
+    bool read_clears = true;
+    for (size_t i = 0; i < targets.size(); ++i) {
+        read_clears =
+            device.read_pixel_rgba8(targets[i], W / 2, H / 2, pixels[i]) &&
+            read_clears;
+    }
+    CHECK(read_clears, "MRT clear results readable");
+    CHECK(pixel_near(pixels[0], 1, 0, 0), "attachment 0 keeps its red clear");
+    CHECK(pixel_near(pixels[1], 0, 1, 0), "attachment 1 keeps its green clear");
+    CHECK(pixel_near(pixels[2], 0, 0, 1), "attachment 2 keeps its blue clear");
+
+    tgfx::ShaderDesc fs_desc;
+    fs_desc.stage = tgfx::ShaderStage::Fragment;
+    fs_desc.source = MRT_FRAG_SRC;
+    const tgfx::ShaderHandle fragment = device.create_shader(fs_desc);
+    CHECK(fragment, "MRT fragment shader created");
+
+    for (auto& color : pass.colors) {
+        color.load = tgfx::LoadOp::Load;
+    }
+    context.begin_frame();
+    CHECK(context.begin_pass(pass), "ordered MRT draw pass accepted");
+    context.set_depth_test(false);
+    context.set_cull(tgfx::CullMode::None);
+    context.bind_shader({}, fragment);
+    context.draw_fullscreen_quad();
+    context.end_pass();
+    context.end_frame();
+
+    bool read_draw = true;
+    for (size_t i = 0; i < targets.size(); ++i) {
+        read_draw =
+            device.read_pixel_rgba8(targets[i], W / 2, H / 2, pixels[i]) &&
+            read_draw;
+    }
+    CHECK(read_draw, "MRT draw results readable");
+    CHECK(pixel_near(pixels[0], 0, 1, 1), "SV_Target0 routes to attachment 0");
+    CHECK(pixel_near(pixels[1], 1, 0, 1), "SV_Target1 routes to attachment 1");
+    CHECK(pixel_near(pixels[2], 1, 1, 0), "SV_Target2 routes to attachment 2");
+
+    device.destroy(fragment);
+    for (const tgfx::TextureHandle target : targets) {
+        device.destroy(target);
+    }
+}
+
 static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Pipeline Cache Reuse ---\n");
 
@@ -696,6 +815,11 @@ int main() {
         tgfx::OpenGLRenderDevice device;
         tgfx::PipelineCache cache(device);
         test_clear_scissor_uses_current_render_extent(device, cache);
+    }
+    {
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
+        test_ordered_mrt_clear_and_draw(device, cache);
     }
 
     printf("\n=== Results: %d/%d passed ===\n", pass_count, test_count);

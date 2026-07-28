@@ -1,6 +1,6 @@
 """Multi-plot demo showing polynomials and damped oscillations side-by-side.
 
-Run: python3 examples/demo_multi.py
+Run: ./run-python.sh tcplot/examples/demo_multi.py
 """
 
 import sys

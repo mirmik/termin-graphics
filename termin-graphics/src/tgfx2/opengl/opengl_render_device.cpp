@@ -4,6 +4,7 @@
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
+#include <array>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -1218,6 +1219,18 @@ void OpenGLRenderDevice::present() {
 // --- FBO cache ---
 
 GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
+    const uint32_t color_limit = std::min(
+        TGFX2_MAX_COLOR_ATTACHMENTS,
+        caps_.max_color_attachments);
+    if (pass.colors.size() > color_limit) {
+        tc::Log::error(
+            "OpenGLRenderDevice::get_or_create_fbo: %zu color attachments exceed limit %u",
+            pass.colors.size(),
+            color_limit);
+        throw std::invalid_argument(
+            "OpenGL framebuffer color attachment count exceeds backend limit");
+    }
+
     // Build cache key from attachment textures
     FBOKey key;
 
@@ -1273,6 +1286,15 @@ GLuint OpenGLRenderDevice::get_or_create_fbo(const RenderPassDesc& pass) {
     if (!has_color) {
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
+    } else {
+        std::array<GLenum, TGFX2_MAX_COLOR_ATTACHMENTS> draw_buffers{};
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            draw_buffers[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
+        }
+        glDrawBuffers(
+            static_cast<GLsizei>(pass.colors.size()),
+            draw_buffers.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
     }
 
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);

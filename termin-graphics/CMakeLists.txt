@@ -126,6 +126,7 @@ set(TGFX2_SOURCES
     src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/path2d.cpp
     src/tgfx2/screen_space_line_renderer.cpp
+    src/tgfx2/standalone_shader_runtime.cpp
     src/tgfx2/world_space_line_renderer.cpp
     src/tgfx2/world_tube_line_renderer.cpp
     src/tgfx2/text2d_renderer.cpp

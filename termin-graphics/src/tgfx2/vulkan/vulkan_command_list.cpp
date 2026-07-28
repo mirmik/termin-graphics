@@ -8,6 +8,8 @@
 #include <chrono>
 #include <cstdio>
 
+#include <tcbase/tc_log.hpp>
+
 namespace tgfx {
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
@@ -59,29 +61,104 @@ void VulkanCommandList::end() {
 // --- Render pass ---
 
 void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
-    in_render_pass_ = true;
+    if (pass.colors.size() > TGFX2_MAX_COLOR_ATTACHMENTS ||
+        pass.colors.size() > device_.capabilities().max_color_attachments) {
+        tc::Log::error(
+            "VulkanCommandList::begin_render_pass: color attachment count exceeds backend limit");
+        return;
+    }
+
+    uint32_t expected_width = 0;
+    uint32_t expected_height = 0;
+    uint32_t expected_samples = 0;
+    auto validate_extent = [&](
+        const TextureDesc& desc,
+        const char* attachment_kind
+    ) -> bool {
+        if (expected_width == 0) {
+            expected_width = desc.width;
+            expected_height = desc.height;
+            expected_samples = desc.sample_count == 0 ? 1 : desc.sample_count;
+            return true;
+        }
+        const uint32_t samples = desc.sample_count == 0 ? 1 : desc.sample_count;
+        if (desc.width != expected_width ||
+            desc.height != expected_height ||
+            samples != expected_samples) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: %s attachment extent/sample mismatch",
+                attachment_kind);
+            return false;
+        }
+        return true;
+    };
+
+    for (const auto& color : pass.colors) {
+        if (!color.texture) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: null color attachment in ordered MRT set");
+            return;
+        }
+        const auto* texture = device_.get_texture(color.texture);
+        if (!texture) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: unknown color attachment handle");
+            return;
+        }
+        if (!has_flag(texture->desc.usage, TextureUsage::ColorAttachment)) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: texture lacks ColorAttachment usage");
+            return;
+        }
+        if (!validate_extent(texture->desc, "color")) {
+            return;
+        }
+    }
+    if (pass.has_depth) {
+        if (!pass.depth.texture) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: depth pass has no depth texture");
+            return;
+        }
+        const auto* texture = device_.get_texture(pass.depth.texture);
+        if (!texture) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: unknown depth attachment handle");
+            return;
+        }
+        if (!has_flag(texture->desc.usage, TextureUsage::DepthStencilAttachment)) {
+            tc::Log::error(
+                "VulkanCommandList::begin_render_pass: texture lacks DepthStencilAttachment usage");
+            return;
+        }
+        if (!validate_extent(texture->desc, "depth")) {
+            return;
+        }
+    }
+    if (expected_width == 0) {
+        tc::Log::error(
+            "VulkanCommandList::begin_render_pass: pass has no attachments");
+        return;
+    }
 
     // Determine formats and get render pass
     std::vector<PixelFormat> color_fmts;
+    std::vector<LoadOp> color_loads;
+    std::vector<StoreOp> color_stores;
     std::vector<VkImageView> views;
     uint32_t width = 0, height = 0;
 
-    LoadOp color_load = LoadOp::Clear;
     uint32_t sample_count = 1;
     current_pass_color_attachments_.clear();
-    // Collect real color attachments. Entries with a null texture or a
-    // missing device-side record are dropped — pushing a placeholder
-    // format for them made the render-pass cache build a 1-color RP
-    // that then mismatched a framebuffer carrying zero color views
-    // (depth-only passes like ShadowPass/DepthPass). The pass description
-    // `colors` list is authoritative for the attachment count.
+    // The ordered color list is authoritative: entry N maps to fragment
+    // output location N. Validation above deliberately rejects missing
+    // entries instead of compacting and silently renumbering later outputs.
     for (const auto& c : pass.colors) {
-        if (!c.texture) continue;
         auto* tex = device_.get_texture(c.texture);
-        if (!tex) continue;
 
-        color_load = c.load;
         color_fmts.push_back(tex->desc.format);
+        color_loads.push_back(c.load);
+        color_stores.push_back(c.store);
         views.push_back(tex->view);
         width = tex->desc.width;
         height = tex->desc.height;
@@ -100,59 +177,64 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
     PixelFormat depth_fmt = PixelFormat::D24_UNorm_S8_UInt;
     LoadOp depth_load = LoadOp::Clear;
     current_pass_depth_attachment_ = {};
-    if (pass.has_depth && pass.depth.texture) {
+    if (pass.has_depth) {
         auto* tex = device_.get_texture(pass.depth.texture);
-        if (tex) {
-            depth_fmt = tex->desc.format;
-            depth_load = pass.depth.load;
-            views.push_back(tex->view);
-            if (width == 0) { width = tex->desc.width; height = tex->desc.height; }
-            // Depth attachment must match the color sample count. If we
-            // have no color, take it from here.
-            if (sample_count == 1 && tex->desc.sample_count > 1) {
-                sample_count = tex->desc.sample_count;
-            }
-            // Transition depth to DEPTH_STENCIL_ATTACHMENT_OPTIMAL before
-            // the pass starts. Without this, a shadow-depth texture left
-            // in SHADER_READ_ONLY_OPTIMAL by a previous sampler use
-            // survives into the next shadow pass's render-pass load op.
-            VkImageAspectFlags dep_aspect = vk::format_aspect_flags(tex->desc.format);
-            if (tex->current_layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-                device_.transition_image_layout(cmd_, tex->image,
-                    tex->current_layout,
-                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    dep_aspect);
-                tex->current_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            }
-            current_pass_depth_attachment_ = pass.depth.texture;
+        depth_fmt = tex->desc.format;
+        depth_load = pass.depth.load;
+        views.push_back(tex->view);
+        if (width == 0) { width = tex->desc.width; height = tex->desc.height; }
+        // Depth attachment must match the color sample count. If we
+        // have no color, take it from here.
+        if (sample_count == 1 && tex->desc.sample_count > 1) {
+            sample_count = tex->desc.sample_count;
         }
+        // Transition depth to DEPTH_STENCIL_ATTACHMENT_OPTIMAL before
+        // the pass starts. Without this, a shadow-depth texture left
+        // in SHADER_READ_ONLY_OPTIMAL by a previous sampler use
+        // survives into the next shadow pass's render-pass load op.
+        VkImageAspectFlags dep_aspect = vk::format_aspect_flags(tex->desc.format);
+        if (tex->current_layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            device_.transition_image_layout(cmd_, tex->image,
+                tex->current_layout,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                dep_aspect);
+            tex->current_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        }
+        current_pass_depth_attachment_ = pass.depth.texture;
     }
     if (sample_count == 0) sample_count = 1;
 
-    auto rp = device_.get_or_create_render_pass(color_fmts, depth_fmt, pass.has_depth,
-                                                  sample_count, color_load, depth_load);
+    auto rp = device_.get_or_create_render_pass(
+        color_fmts,
+        color_loads,
+        color_stores,
+        depth_fmt,
+        pass.has_depth,
+        sample_count,
+        depth_load,
+        pass.depth.store);
+    if (rp == VK_NULL_HANDLE) {
+        tc::Log::error(
+            "VulkanCommandList::begin_render_pass: failed to resolve render-pass contract");
+        return;
+    }
     auto fb = device_.get_or_create_framebuffer(rp, views, width, height);
+    if (fb == VK_NULL_HANDLE) {
+        tc::Log::error(
+            "VulkanCommandList::begin_render_pass: failed to resolve framebuffer");
+        return;
+    }
 
     // Clear values: one per attachment in the same order as the render
-    // pass was built. Colors first (only those actually attached —
-    // entries dropped above must not push a clear), then the optional
-    // depth slot.
+    // pass was built. Colors first, then the optional depth slot.
     std::vector<VkClearValue> clears;
-    {
-        size_t color_idx = 0;
-        for (const auto& c : pass.colors) {
-            if (!c.texture) continue;
-            if (!device_.get_texture(c.texture)) continue;
-            if (color_idx >= color_fmts.size()) break;
-            VkClearValue cv{};
-            cv.color = {{c.clear_color[0], c.clear_color[1],
-                         c.clear_color[2], c.clear_color[3]}};
-            clears.push_back(cv);
-            ++color_idx;
-        }
+    for (const auto& c : pass.colors) {
+        VkClearValue cv{};
+        cv.color = {{c.clear_color[0], c.clear_color[1],
+                     c.clear_color[2], c.clear_color[3]}};
+        clears.push_back(cv);
     }
-    if (pass.has_depth && pass.depth.texture &&
-        device_.get_texture(pass.depth.texture)) {
+    if (pass.has_depth) {
         VkClearValue cv{};
         cv.depthStencil = {pass.depth.clear_depth, pass.depth.clear_stencil};
         clears.push_back(cv);
@@ -167,6 +249,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
     rp_bi.pClearValues = clears.data();
 
     vkCmdBeginRenderPass(cmd_, &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
+    in_render_pass_ = true;
 
     // Auto-set viewport. No Y-flip trick here: it makes the render-pass
     // output memory read-compatible with OpenGL conventions for on-screen

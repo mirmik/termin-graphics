@@ -35,6 +35,26 @@ extern "C" {
 
 namespace termin {
 
+namespace {
+
+std::string discover_installed_shader_artifact_root() {
+    for (const std::filesystem::path& builtin_root : tgfx::builtin_shader_roots()) {
+        const std::filesystem::path candidate = builtin_root.parent_path();
+        std::error_code directory_error;
+        if (!std::filesystem::is_directory(candidate / "shaders", directory_error)) {
+            continue;
+        }
+
+        std::error_code canonical_error;
+        const std::filesystem::path canonical =
+            std::filesystem::weakly_canonical(candidate, canonical_error);
+        return (canonical_error ? candidate.lexically_normal() : canonical).string();
+    }
+    return {};
+}
+
+} // anonymous namespace
+
 ShaderArtifactResolver::ShaderArtifactResolver(
     std::string artifact_root,
     std::string cache_root,
@@ -51,7 +71,11 @@ ShaderArtifactResolver::ShaderArtifactResolver(
 const std::string& ShaderArtifactResolver::artifact_root() const {
     if (!artifact_root_.empty() || !environment_fallback_) return artifact_root_;
     const char* value = std::getenv("TERMIN_SHADER_ARTIFACT_ROOT");
-    environment_artifact_root_ = value ? value : "";
+    if (value && value[0] != '\0') {
+        environment_artifact_root_ = value;
+        return environment_artifact_root_;
+    }
+    environment_artifact_root_ = discover_installed_shader_artifact_root();
     return environment_artifact_root_;
 }
 

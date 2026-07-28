@@ -54,6 +54,17 @@ Python package:
 import tcplot
 ```
 
+Examples запускаются bundled Python с checkout overlay из корня репозитория:
+
+```bash
+./run-python.sh tcplot/examples/demo_sin.py
+# Windows:
+.\run-python.ps1 tcplot\examples\demo_sin.py
+```
+
+Перед первым запуском или после изменения состава SDK нужно выполнить
+`setup-sdk-python-env.sh` (на Windows — `setup-sdk-python-env.ps1`).
+
 `PlotEngine2D.create_data_marker()` returns a value-only
 `PlotAnnotationHandle`. Marker updates, snapshots, destruction, snapping and
 semantic action callbacks all validate the complete

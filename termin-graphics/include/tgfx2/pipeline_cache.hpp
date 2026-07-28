@@ -3,6 +3,7 @@
 // to the pipeline-object model (tgfx::PipelineHandle).
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <unordered_map>
@@ -41,7 +42,10 @@ struct PipelineCacheKeyState {
     BlendState blend;
     ColorMask color_mask;
 
-    PixelFormat color_format = PixelFormat::RGBA8_UNorm;
+    std::array<PixelFormat, TGFX2_MAX_COLOR_ATTACHMENTS> color_formats = {
+        PixelFormat::RGBA8_UNorm,
+    };
+    uint32_t color_format_count = 1;
     PixelFormat depth_format = PixelFormat::D32F;
     uint32_t sample_count = 1;
 };

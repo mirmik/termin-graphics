@@ -1,6 +1,6 @@
 """3D helix plot demo.
 
-Run: python3 examples/demo_3d_helix.py
+Run: ./run-python.sh tcplot/examples/demo_3d_helix.py
 """
 
 import sys
