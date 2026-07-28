@@ -2,14 +2,64 @@
 
 #include <memory>
 #include <span>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
+#include <tgfx2/render_context.hpp>
 #include <tgfx2/texture_pool.hpp>
 
 namespace {
+
+class RecordingCommandList final : public tgfx::ICommandList {
+public:
+    void begin() override { ++begin_count; }
+    void end() override { ++end_count; }
+    void begin_render_pass(const tgfx::RenderPassDesc& pass) override {
+        ++begin_render_pass_count;
+        last_render_pass = pass;
+    }
+    void end_render_pass() override { ++end_render_pass_count; }
+    void bind_pipeline(tgfx::PipelineHandle) override {}
+    void bind_resource_set(
+        tgfx::ResourceSetHandle,
+        uint32_t = 0,
+        const uint32_t* = nullptr,
+        uint32_t = 0) override {}
+    void set_push_constants(const void*, uint32_t) override {}
+    void bind_vertex_buffer(uint32_t, tgfx::BufferHandle, uint64_t = 0) override {}
+    void bind_index_buffer(
+        tgfx::BufferHandle,
+        tgfx::IndexType,
+        uint64_t = 0) override {}
+    void draw(uint32_t, uint32_t = 0) override {}
+    void draw_instanced(uint32_t, uint32_t, uint32_t = 0, uint32_t = 0) override {}
+    void draw_indexed(uint32_t, uint32_t = 0, int32_t = 0) override {}
+    void draw_indexed_instanced(
+        uint32_t,
+        uint32_t,
+        uint32_t = 0,
+        int32_t = 0,
+        uint32_t = 0) override {}
+    void dispatch(uint32_t, uint32_t, uint32_t) override {}
+    void copy_buffer(
+        tgfx::BufferHandle,
+        tgfx::BufferHandle,
+        uint64_t,
+        uint64_t = 0,
+        uint64_t = 0) override {}
+    void copy_texture(tgfx::TextureHandle, tgfx::TextureHandle) override {}
+    void set_viewport(int, int, int, int) override {}
+    void set_scissor(int, int, int, int) override {}
+
+    uint32_t begin_count = 0;
+    uint32_t end_count = 0;
+    uint32_t begin_render_pass_count = 0;
+    uint32_t end_render_pass_count = 0;
+    tgfx::RenderPassDesc last_render_pass;
+};
 
 class PipelineCacheStatsDevice final : public tgfx::IRenderDevice {
 public:
@@ -27,13 +77,15 @@ public:
         return {};
     }
 
-    tgfx::TextureHandle create_texture(const tgfx::TextureDesc&) override {
+    tgfx::TextureHandle create_texture(const tgfx::TextureDesc& desc) override {
         ++create_texture_count;
         if (texture_failures_remaining > 0) {
             --texture_failures_remaining;
             return {};
         }
-        return tgfx::TextureHandle{next_texture_id_++};
+        const tgfx::TextureHandle handle{next_texture_id_++};
+        texture_descs_[handle.id] = desc;
+        return handle;
     }
 
     tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
@@ -44,8 +96,9 @@ public:
         return {};
     }
 
-    tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override {
+    tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc& desc) override {
         ++create_pipeline_count;
+        created_pipeline_descs.push_back(desc);
         if (pipeline_failures_remaining > 0) {
             --pipeline_failures_remaining;
             return {};
@@ -58,7 +111,9 @@ public:
     }
 
     void destroy(tgfx::BufferHandle) override {}
-    void destroy(tgfx::TextureHandle) override {}
+    void destroy(tgfx::TextureHandle handle) override {
+        texture_descs_.erase(handle.id);
+    }
     void destroy(tgfx::SamplerHandle) override {}
     void destroy(tgfx::ShaderHandle) override {}
     void destroy(tgfx::PipelineHandle) override {}
@@ -76,13 +131,16 @@ public:
         uint32_t = 0) override {}
     void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
 
-    tgfx::TextureDesc texture_desc(tgfx::TextureHandle) const override {
-        return {};
+    tgfx::TextureDesc texture_desc(tgfx::TextureHandle handle) const override {
+        const auto it = texture_descs_.find(handle.id);
+        return it == texture_descs_.end() ? tgfx::TextureDesc{} : it->second;
     }
 
     std::unique_ptr<tgfx::ICommandList> create_command_list(
         tgfx::QueueType = tgfx::QueueType::Graphics) override {
-        return nullptr;
+        auto command_list = std::make_unique<RecordingCommandList>();
+        last_command_list = command_list.get();
+        return command_list;
     }
 
     void submit(tgfx::ICommandList&) override {}
@@ -92,10 +150,13 @@ public:
     int pipeline_failures_remaining = 0;
     uint32_t create_texture_count = 0;
     uint32_t create_pipeline_count = 0;
+    std::vector<tgfx::PipelineDesc> created_pipeline_descs;
+    RecordingCommandList* last_command_list = nullptr;
 
 private:
     uint32_t next_texture_id_ = 1;
     uint32_t next_pipeline_id_ = 1;
+    std::unordered_map<uint32_t, tgfx::TextureDesc> texture_descs_;
 };
 
 tgfx::VertexLayoutDesc make_layout(uint32_t stride, const char* semantic) {
@@ -270,6 +331,146 @@ TEST_CASE("PipelineCache compares complete layouts when lookup hashes collide") 
     CHECK(cache.get(key) == normal_pipeline);
     CHECK(device.create_pipeline_count == 2u);
     CHECK(cache.size() == 2u);
+}
+
+TEST_CASE("PipelineCache identity preserves ordered MRT color formats") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    key.color_format_count = 3;
+    key.color_formats[0] = tgfx::PixelFormat::RGBA16F;
+    key.color_formats[1] = tgfx::PixelFormat::RG16F;
+    key.color_formats[2] = tgfx::PixelFormat::RGBA8_UNorm;
+
+    const tgfx::PipelineHandle first = cache.get(key);
+    REQUIRE(first);
+    REQUIRE(device.created_pipeline_descs.size() == 1u);
+    const std::vector<tgfx::PixelFormat> expected_formats = {
+        tgfx::PixelFormat::RGBA16F,
+        tgfx::PixelFormat::RG16F,
+        tgfx::PixelFormat::RGBA8_UNorm,
+    };
+    CHECK(device.created_pipeline_descs[0].color_formats == expected_formats);
+
+    CHECK(cache.get(key) == first);
+    CHECK(device.create_pipeline_count == 1u);
+
+    std::swap(key.color_formats[0], key.color_formats[1]);
+    const tgfx::PipelineHandle reordered = cache.get(key);
+    CHECK(reordered);
+    CHECK(reordered != first);
+    CHECK(device.create_pipeline_count == 2u);
+
+    key.color_formats[3] = tgfx::PixelFormat::R32F;
+    CHECK(cache.get(key) == reordered);
+    CHECK(device.create_pipeline_count == 2u);
+
+    key.color_format_count = 2;
+    CHECK(cache.get(key));
+    CHECK(device.create_pipeline_count == 3u);
+}
+
+TEST_CASE("PipelineCache rejects invalid MRT color format identity") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+
+    key.color_format_count = tgfx::TGFX2_MAX_COLOR_ATTACHMENTS + 1;
+    CHECK_FALSE(cache.get(key));
+    CHECK(device.create_pipeline_count == 0u);
+
+    key.color_format_count = 1;
+    key.color_formats[0] = tgfx::PixelFormat::Undefined;
+    CHECK_FALSE(cache.get(key));
+    CHECK(device.create_pipeline_count == 0u);
+}
+
+TEST_CASE("RenderContext2 forwards a validated ordered MRT attachment set") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+    tgfx::RenderContext2 context(device, cache);
+
+    tgfx::TextureDesc color_desc;
+    color_desc.width = 64;
+    color_desc.height = 32;
+    color_desc.usage = tgfx::TextureUsage::ColorAttachment;
+
+    color_desc.format = tgfx::PixelFormat::RGBA16F;
+    const tgfx::TextureHandle color0 = device.create_texture(color_desc);
+    color_desc.format = tgfx::PixelFormat::RG16F;
+    const tgfx::TextureHandle color1 = device.create_texture(color_desc);
+    color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    const tgfx::TextureHandle color2 = device.create_texture(color_desc);
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = 64;
+    depth_desc.height = 32;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment;
+    const tgfx::TextureHandle depth = device.create_texture(depth_desc);
+
+    tgfx::RenderPassDesc pass;
+    pass.colors.resize(3);
+    pass.colors[0].texture = color0;
+    pass.colors[1].texture = color1;
+    pass.colors[2].texture = color2;
+    pass.depth.texture = depth;
+    pass.has_depth = true;
+
+    context.begin_frame();
+    REQUIRE(device.last_command_list != nullptr);
+    CHECK(context.begin_pass(pass));
+    REQUIRE(device.last_command_list->begin_render_pass_count == 1u);
+    REQUIRE(device.last_command_list->last_render_pass.colors.size() == 3u);
+    CHECK(device.last_command_list->last_render_pass.colors[0].texture == color0);
+    CHECK(device.last_command_list->last_render_pass.colors[1].texture == color1);
+    CHECK(device.last_command_list->last_render_pass.colors[2].texture == color2);
+    CHECK(device.last_command_list->last_render_pass.depth.texture == depth);
+    context.end_pass();
+    context.end_frame();
+}
+
+TEST_CASE("RenderContext2 rejects incompatible MRT attachments before backend recording") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+    tgfx::RenderContext2 context(device, cache);
+
+    tgfx::TextureDesc desc;
+    desc.width = 64;
+    desc.height = 32;
+    desc.format = tgfx::PixelFormat::RGBA16F;
+    desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const tgfx::TextureHandle color0 = device.create_texture(desc);
+    desc.width = 32;
+    const tgfx::TextureHandle wrong_extent = device.create_texture(desc);
+
+    tgfx::RenderPassDesc pass;
+    pass.colors.resize(2);
+    pass.colors[0].texture = color0;
+    pass.colors[1].texture = wrong_extent;
+
+    context.begin_frame();
+    REQUIRE(device.last_command_list != nullptr);
+    CHECK_FALSE(context.begin_pass(pass));
+    CHECK(device.last_command_list->begin_render_pass_count == 0u);
+
+    pass.colors[1].texture = color0;
+    CHECK_FALSE(context.begin_pass(pass));
+    CHECK(device.last_command_list->begin_render_pass_count == 0u);
+
+    pass.colors.resize(device.capabilities().max_color_attachments + 1);
+    for (tgfx::ColorAttachmentDesc& color : pass.colors) {
+        color.texture = color0;
+    }
+    CHECK_FALSE(context.begin_pass(pass));
+    CHECK(device.last_command_list->begin_render_pass_count == 0u);
+    context.end_frame();
 }
 
 TEST_CASE("texture pools retry failed allocations using the same key and descriptor") {

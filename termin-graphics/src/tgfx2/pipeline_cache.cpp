@@ -32,6 +32,15 @@ static bool layout_ranges_equal(std::span<const VertexLayoutDesc> a,
 
 static bool pipeline_cache_key_state_equal(const PipelineCacheKeyState& a,
                                            const PipelineCacheKeyState& b) {
+    if (a.color_format_count != b.color_format_count) {
+        return false;
+    }
+    for (uint32_t i = 0; i < a.color_format_count; ++i) {
+        if (a.color_formats[i] != b.color_formats[i]) {
+            return false;
+        }
+    }
+
     return a.vertex_shader == b.vertex_shader
         && a.fragment_shader == b.fragment_shader
         && a.geometry_shader == b.geometry_shader
@@ -57,7 +66,6 @@ static bool pipeline_cache_key_state_equal(const PipelineCacheKeyState& a,
         && a.color_mask.g == b.color_mask.g
         && a.color_mask.b == b.color_mask.b
         && a.color_mask.a == b.color_mask.a
-        && a.color_format == b.color_format
         && a.depth_format == b.depth_format
         && a.sample_count == b.sample_count;
 }
@@ -116,7 +124,10 @@ static size_t pipeline_cache_key_hash(const PipelineCacheKeyState& k) {
     hash_combine(h, std::hash<bool>{}(k.blend.enabled));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.blend.src_color)));
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.blend.dst_color)));
-    hash_combine(h, std::hash<int>{}(static_cast<int>(k.color_format)));
+    hash_combine(h, std::hash<uint32_t>{}(k.color_format_count));
+    for (uint32_t i = 0; i < k.color_format_count; ++i) {
+        hash_combine(h, std::hash<int>{}(static_cast<int>(k.color_formats[i])));
+    }
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.depth_format)));
     hash_combine(h, std::hash<uint32_t>{}(k.sample_count));
 
@@ -147,6 +158,24 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
                "PipelineCache: graphics pipeline requires valid vertex and fragment shaders; "
                "backend call skipped");
         return {};
+    }
+    if (key.color_format_count > TGFX2_MAX_COLOR_ATTACHMENTS) {
+        tc_log(
+            TC_LOG_ERROR,
+            "PipelineCache: color attachment count %u exceeds engine limit %u; "
+            "backend call skipped",
+            key.color_format_count,
+            TGFX2_MAX_COLOR_ATTACHMENTS);
+        return {};
+    }
+    for (uint32_t i = 0; i < key.color_format_count; ++i) {
+        if (key.color_formats[i] == PixelFormat::Undefined) {
+            tc_log(
+                TC_LOG_ERROR,
+                "PipelineCache: color format %u is undefined; backend call skipped",
+                i);
+            return {};
+        }
     }
 
     auto it = cache_.find(key);
@@ -185,7 +214,9 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
     desc.depth_stencil = key.depth_stencil;
     desc.blend = key.blend;
     desc.color_mask = key.color_mask;
-    desc.color_formats = {key.color_format};
+    desc.color_formats.assign(
+        key.color_formats.begin(),
+        key.color_formats.begin() + key.color_format_count);
     desc.depth_format = key.depth_format;
     desc.sample_count = key.sample_count;
 
