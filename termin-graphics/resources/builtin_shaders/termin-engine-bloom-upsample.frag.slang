@@ -28,8 +28,9 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
-    // Three bilinear taps per axis reproduce [1 4 6 4 1] / 16 while
-    // retaining the cost of the old 3x3 tent.
+    // Use the same separable binomial reconstruction kernel as the prefilter.
+    // Unity's HQ path uses bicubic sampling here; this low-pass equivalent is
+    // cheaper in our shader abstraction and avoids exposing the mip grid.
     float2 offset = u_params.texel_size * 1.2;
     float3 a = u_low.Sample(input.uv + float2(-offset.x, -offset.y)).rgb;
     float3 b = u_low.Sample(input.uv + float2( 0.0,      -offset.y)).rgb;
@@ -40,12 +41,11 @@ FragmentOutput fs_main(FragmentInput input) {
     float3 g = u_low.Sample(input.uv + float2(-offset.x,  offset.y)).rgb;
     float3 h = u_low.Sample(input.uv + float2( 0.0,       offset.y)).rgb;
     float3 i = u_low.Sample(input.uv + float2( offset.x,  offset.y)).rgb;
-    float3 upsampled = (a + c + g + i) * (25.0 / 256.0);
-    upsampled += (b + d + f + h) * (30.0 / 256.0);
-    upsampled += e * (36.0 / 256.0);
-
+    float3 low = (a + c + g + i) * (25.0 / 256.0);
+    low += (b + d + f + h) * (30.0 / 256.0);
+    low += e * (36.0 / 256.0);
     FragmentOutput output;
     float3 high = u_high.Sample(input.uv).rgb;
-    output.color = float4(lerp(high, upsampled, u_params.scatter), 1.0);
+    output.color = float4(lerp(high, low, u_params.scatter), 1.0);
     return output;
 }

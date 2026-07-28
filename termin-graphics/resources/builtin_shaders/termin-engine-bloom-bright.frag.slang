@@ -27,13 +27,9 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
-    // The prefilter also performs the first 2x downsample. A filtered
-    // half-resolution start avoids feeding grid-aligned single-pixel impulses
-    // into the bloom pyramid.
-    // Nine bilinear taps exactly reproduce a separable 5x5 binomial kernel:
-    // [1 4 6 4 1] / 16 on each axis. Every texel in the footprint
-    // contributes, so an isolated emissive pixel cannot turn into the sparse
-    // 3x3 constellation produced by the former 13-tap pattern.
+    // The prefilter also performs the first 2x downsample. Nine bilinear taps
+    // reproduce a separable [1 4 6 4 1] / 16 binomial kernel exactly and keep
+    // point sources symmetric across the half-resolution sampling grid.
     float2 offset = u_params.texel_size * 1.2;
     float3 a = u_texture.Sample(input.uv + float2(-offset.x, -offset.y)).rgb;
     float3 b = u_texture.Sample(input.uv + float2( 0.0,      -offset.y)).rgb;
@@ -48,13 +44,14 @@ FragmentOutput fs_main(FragmentInput input) {
     color += (b + d + f + h) * (30.0 / 256.0);
     color += e * (36.0 / 256.0);
 
-    float brightness = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float brightness = max(color.r, max(color.g, color.b));
     float knee = u_params.threshold * u_params.soft_threshold;
     float soft = brightness - u_params.threshold + knee;
     soft = clamp(soft, 0.0, 2.0 * knee);
     soft = soft * soft / (4.0 * knee + 0.00001);
     float contribution = max(soft, brightness - u_params.threshold) / max(brightness, 0.00001);
     contribution = max(contribution, 0.0);
+    color = max(color, float3(0.0, 0.0, 0.0));
 
     FragmentOutput output;
     output.color = float4(color * contribution, 1.0);

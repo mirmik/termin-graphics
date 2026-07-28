@@ -694,6 +694,17 @@
       }
     },
     {
+      "uuid": "termin-engine-bloom-blur-vertical",
+      "name": "BloomBlurVerticalFS",
+      "language": "slang",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-bloom-blur-vertical.frag.slang",
+          "entry": "fs_main"
+        }
+      }
+    },
+    {
       "uuid": "termin-engine-bloom-upsample",
       "name": "BloomUpsampleFS",
       "language": "slang",

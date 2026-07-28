@@ -1,4 +1,4 @@
-// Bloom downsample pass — optimized 5x5 binomial filter for mip chain.
+// Bloom horizontal downsample — optimized nine-tap-equivalent Gaussian.
 //
 
 import termin_prelude;
@@ -24,19 +24,25 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
-    float2 offset = u_params.texel_size * 1.2;
-    float3 a = u_texture.Sample(input.uv + float2(-offset.x, -offset.y)).rgb;
-    float3 b = u_texture.Sample(input.uv + float2( 0.0,      -offset.y)).rgb;
-    float3 c = u_texture.Sample(input.uv + float2( offset.x, -offset.y)).rgb;
-    float3 d = u_texture.Sample(input.uv + float2(-offset.x,  0.0)).rgb;
-    float3 e = u_texture.Sample(input.uv).rgb;
-    float3 f = u_texture.Sample(input.uv + float2( offset.x,  0.0)).rgb;
-    float3 g = u_texture.Sample(input.uv + float2(-offset.x,  offset.y)).rgb;
-    float3 h = u_texture.Sample(input.uv + float2( 0.0,       offset.y)).rgb;
-    float3 i = u_texture.Sample(input.uv + float2( offset.x,  offset.y)).rgb;
-    float3 result = (a + c + g + i) * (25.0 / 256.0);
-    result += (b + d + f + h) * (30.0 / 256.0);
-    result += e * (36.0 / 256.0);
+    // Pass code supplies the sampling step in destination-pixel units. It is
+    // one source texel for same-resolution filtering and two source texels
+    // when this pass also downsamples.
+    float offset = u_params.texel_size.x;
+    // Bilinear sampling combines adjacent pairs of the same nine-tap kernel
+    // used by the vertical pass, keeping both axes mathematically identical.
+    float3 result =
+        u_texture.Sample(input.uv + float2(-3.23076923 * offset, 0.0)).rgb *
+        0.07027027;
+    result +=
+        u_texture.Sample(input.uv + float2(-1.38461538 * offset, 0.0)).rgb *
+        0.31621622;
+    result += u_texture.Sample(input.uv).rgb * 0.22702703;
+    result +=
+        u_texture.Sample(input.uv + float2(1.38461538 * offset, 0.0)).rgb *
+        0.31621622;
+    result +=
+        u_texture.Sample(input.uv + float2(3.23076923 * offset, 0.0)).rgb *
+        0.07027027;
 
     FragmentOutput output;
     output.color = float4(result, 1.0);
