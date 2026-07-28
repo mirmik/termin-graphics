@@ -1,158 +1,110 @@
 # Termin Visual Scene
 
-`termin-visual-scene` owns retained 2D item identity, topology and interaction.
-It depends on the canonical geometry and drawing vocabulary in `termin-base`
-and `termin-graphics`; those lower-level modules do not depend on it.
+`termin-visual-scene` is a small retained 2D object tree. It owns graphic
+items, composes their affine transforms, paints them into the canonical
+`tgfx::DrawList2DBuilder`, performs geometric hit testing and provides
+optional pointer/selection/drag controllers.
 
-The C storage API uses per-scene index/generation handles. A handle includes
-the scene lifetime-domain ID, so stale and cross-scene references are rejected.
-Each language implementation embeds the common `tc_graphic_item` C base and
-supplies its vtable, native language, body and creator-owned deleter.
-`tc_visual_scene_adopt` transfers that item to one scene and requires a
-non-null deleter. Failed adoption rolls ownership back through the same
-deleter; explicit item destruction and scene teardown invoke `on_destroy` and
-the deleter exactly once after invalidating the generation handle. The C++
-facade is move-only and does not use shared ownership for items.
+The module is deliberately modeled after the native widget object model:
 
-All operations on a live scene are internally synchronized. A topology view is
-a momentary snapshot and its `tc_graphic_item*` is borrowed; callers must provide
-higher-level synchronization if they keep that pointer across mutations.
-Destroying a scene requires exclusive lifetime ownership: no operation may race
-with `tc_visual_scene_destroy`, and an item deleter must not destroy its
-owning scene recursively.
+- every implementation embeds one `tc_graphic_item` C base;
+- type-specific behavior is dispatched through one vtable;
+- `tc_visual_scene` adopts the object with its creator-supplied deleter;
+- parent and ordered children are direct object pointers;
+- generation handles are non-owning external references;
+- destruction invalidates the handle and destroys the whole child subtree.
 
-Lifecycle callbacks and deleters run outside the storage mutex. The common
-state API validates and mutates local `Affine2f`, visibility, enabled state,
-opacity and z-order under that mutex; direct writes to an attached base are not
-a synchronized mutation path. Topology and dirty revisions live in the common
-item object rather than a parallel slot payload.
+There is no parallel record model, concrete-type sum, registry dispatch,
+visitor or renderer knowledge of built-in item classes. `GroupItem2D`,
+`RectItem2D`, `PathItem2D`, `TextItem2D` and the other built-ins are ordinary
+implementations of the same virtual contract available to custom items.
 
-## Typed retained items
+## Ownership and threading
 
-`VisualScene2D` layers inspectable retained behavior over generation-handle
-storage without a second scene tree. Every built-in is a registered concrete
-C++ body embedding `tc_graphic_item`; ownership, identity, topology, common
-state, stable order and revisions live in that canonical object. Bounds,
-immutable snapshot emission and hit preparation are type vtable operations.
-Payloads cover groups, rectangles, rounded rectangles, ellipses, paths,
-polylines, text, images, hit regions and custom batch references.
+A scene is the only owner of every adopted item. C++ callers normally transfer
+a `std::unique_ptr<GraphicItem2D>` to `TcVisualScene::adopt`; C and language
+bindings pass an embedded base plus exactly one deleter. Item references do not
+keep either the item or scene alive. A stale or cross-scene generation handle
+does not resolve.
 
-`GraphicItemPayload2D` remains as a copied detached value used by the current
-C++ snapshot and serialization API. It is not retained canonical storage and
-is not the target cross-language extension mechanism.
+The scene is thread-confined and contains no mutex. Calls on one scene must not
+overlap. If visual scenes later need cross-thread mutation or rendering, that
+contract will be designed separately.
 
-Text and image items keep only serializable `StableResourceRef2D` values.
-Runtime font and texture handles are deliberately absent from persistent scene
-state and are resolved when an immutable render snapshot is prepared. Custom
-batches likewise keep a stable key and bounds rather than large vertex arrays
-or a GPU allocation.
+## State and topology
 
-Snapshots compose the full affine matrix without TRS decomposition, multiply
-inherited opacity and visibility, and retain every inherited clip as transformed
-geometry. `Rect2f` remains local origin/extent geometry; `Bounds2f` is the
-axis-aligned local or transformed result. Equal-z snapshots are ordered by a
-monotonic scene-owned insertion order.
+`tc_graphic_item` stores the shared state:
 
-All typed mutations validate before committing under the scene mutex. A failed
-path, paint, resource, transform, opacity or geometry update is logged and
-leaves the previous payload, state and revision unchanged.
+- local `Affine2f`;
+- visibility, enabled state and opacity;
+- sibling z-order and stable adoption order;
+- parent and ordered children;
+- language body, vtable, deleter and runtime-type link.
 
-## Inspection and persistence
+Concrete objects store their own geometry, paint and resource references.
+`GraphicItem2D` exposes ordinary setters and child operations. The scene
+computes world transform, effective visibility/enabled/opacity, local subtree
+bounds and world bounds directly from the live tree.
 
-`VisualScene2D::inspection()` returns a fully detached `SceneInspection2D`.
-Items use document-local record indices and separate monotonic `stable_id`
-values, never runtime slot/generation handles. The snapshot includes canonical
-payload type names, parent/ordered-child topology, local and effective
-transforms and flags, bounds, diagnostics and revisions. It remains valid
-after later mutation or destruction of the scene.
+`TcVisualScene::replace` exists for projections that must retain an external
+handle while changing their concrete implementation. It preserves identity,
+topology and common placement state and destroys the old object exactly once.
 
-`serialize()` emits the versioned `termin.visual_scene.2d` schema as
-`tc::trent`. It persists record topology, stable IDs, item state and all
-standard payload variants, including complete path and paint data. Runtime
-handles and transient hover, press, capture and dirty controller state are not
-part of the schema.
+## Painting
 
-`restore()` accepts only a supported schema and an empty destination scene. It
-parses and validates the complete document, builds a private staging scene and
-commits it atomically. Unknown type names, malformed topology or invalid
-payloads are logged and leave the destination empty and unchanged.
+Painting is immediate scene traversal:
 
-## Python bindings
+```cpp
+tgfx::DrawList2DBuilder builder;
+if (!scene.paint(builder, resources)) {
+    // The item or resource resolver logged the failure.
+}
+```
 
-`termin.visual_scene.VisualScene2D` is an owning Python document wrapper.
-Creation returns `GraphicItemRef2D` values containing only a shared
-invalidation token and the native scene/index/generation handle. An item
-reference does not own its item and does not keep the scene alive; after item
-destruction or scene collection, `valid` becomes false and operations raise
-`ReferenceError`.
+Traversal sorts roots and siblings by z-order and stable order, pushes each
+item's local transform, opacity and optional geometric clip, then calls the
+item paint vtable. The item emits canonical draw commands through
+`GraphicItemPaintContext2D`; the scene renderer never branches on its concrete
+type.
 
-The wrapper exposes retained primitive creation, state mutation, destruction,
-detached snapshots and inspection, plus the same versioned JSON persistence
-contract as the C++ API. A parent reference from another scene is rejected
-instead of being interpreted as a local slot.
-
-## Immutable render preparation
-
-`VisualScene2D::prepare_render_snapshot()` copies one coherent scene revision
-under the scene mutex, releases that mutex, and only then calls the
-host-supplied `SceneRenderResourceResolver2D`. The resolver maps persistent
-font/image references and custom-batch keys to canonical `tgfx` runtime
-handles and vertices. User resolver code therefore never runs under the scene
-lock.
-
-The result owns its item values and frozen `tgfx::DrawList2D`; it remains
-structurally valid after the source scene changes or is destroyed. Runtime
-font and texture handles are borrowed, however: the host's resource lease must
-keep them live through `Canvas2DRenderer::execute()`. The snapshot stores no
-device, pass, backend context or raw `FontAtlas*`.
-
-Standard payloads lower directly to the single `tgfx::DrawCommand2D`
-vocabulary. Effective affine transforms, opacity and all inherited clips are
-preserved; clips are emitted as world-space geometry and never pre-reduced to
-scissors. Missing resources or a rejected command abort the whole preparation
-with an error log, so no partial snapshot is published.
+Text, image and custom-batch items resolve their runtime resources
+synchronously during this traversal. The scene does not create a detached
+render snapshot, retain a render context or defer item callbacks. A host may
+freeze or execute the builder according to the surrounding render pipeline.
 
 ## Hit testing and interaction
 
-`hit_test()` evaluates front-to-back visual items using the prepared world
-`Affine2f`, its fallible inverse, every inherited geometric clip and the
-canonical `Path2f` fill/stroke predicates. Singular effective transforms are
-diagnosed in item snapshots and are non-hittable; pointer movement does not
-repeat the diagnostic or substitute identity. Descendants win over their
-ancestors at equal z, while unrelated equal-z items use stable scene order.
+`hit_test` traverses the same live visual tree front-to-back. It composes the
+exact affine hierarchy, rejects singular inverse transforms, checks inherited
+geometric clips and calls the item's hit-test vtable in local coordinates.
+Children win over their parent at the same visual level.
 
-`SceneInteraction2D` is an explicit controller rather than item policy. It
-tracks hover, press and capture independently per pointer, auto-captures a
-pressed target, emits semantic `ActionEvent2D` activation on a matching
-release, and offers a host fallback for unclaimed plot/view input. Callbacks
-run outside controller and scene locks. Reconciliation removes destroyed or
-disabled targets and invalidates capture when topology changes.
+`SceneInteraction2D` stores hover, press and capture as generation handles.
+`SelectionController2D` and `DragController2D` are optional policies rather
+than behavior embedded in items. Detaching an item merely makes it a root and
+does not invalidate identity; disabling or destroying it reconciles active
+interaction state.
 
-`SelectionController2D` and `DragController2D` are reusable policies layered
-over routed events. Dragging maps the world-space pointer delta through the
-exact inverse parent transform and left-multiplies a parent-space translation,
-so rotation, non-uniform scale and shear remain intact.
+## Bindings
 
-## Draggable primitive example
+Python `GraphicItemRef2D` is a thin scene-lifetime-plus-handle reference.
+Common properties read and mutate the live object. Explicit destruction
+invalidates the reference. GUI-native does not define a second graphic-item
+reference or scene wrapper: `SceneView` accepts the same shared
+`TcVisualScene` directly.
 
-The supported example target is built with
-`TERMIN_VISUAL_SCENE_BUILD_EXAMPLES=ON` (the repository default) and installed
-in the SDK. Launch it after `./build-sdk.sh`:
+Serialization, detached inspection, state RPC and scene snapshots are not
+responsibilities of this module. A domain that needs a serializable document
+or immutable data snapshot owns that representation above the visual scene.
+
+## Example
+
+After building the SDK:
 
 ```bash
 ./sdk/bin/termin_visual_scene_draggable_example
-```
-
-The window contains an overlapping rectangle, ellipse and diamond path. Move
-the pointer to see hover feedback; press and drag any shape to exercise
-selection and per-pointer capture; release to end the drag. Later-created,
-higher-z items win overlap picking deterministically.
-
-The same executable has a window-free CI mode:
-
-```bash
 ./sdk/bin/termin_visual_scene_draggable_example --headless-smoke
 ```
 
-It verifies public scene creation, canonical DrawList lowering and captured
-dragging for all three primitives.
+The example creates three ordinary item objects, paints them through direct
+scene traversal and exercises hit testing, capture, selection and dragging.

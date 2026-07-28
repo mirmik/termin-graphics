@@ -5,7 +5,11 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <string>
+
+#include <termin_visual_scene/builtin_items2d.hpp>
 
 #include "tcplot/engine2d.hpp"
 #include "tcplot/plot_annotations2d.hpp"
@@ -29,11 +33,10 @@ PlotAnnotationVisual2D target_visual(
     PlotAnnotationPhase2D phase = PlotAnnotationPhase2D::Overlay,
     PlotAnnotationClip2D clip = PlotAnnotationClip2D::PlotArea) {
     PlotAnnotationVisual2D visual;
-    visual.payload = RectItem2D{
-        {-5.0f, -5.0f, 10.0f, 10.0f},
-        tgfx::FillPaint{},
-        std::nullopt,
-    };
+    visual.item = std::make_unique<RectItem2D>(
+            termin::Rect2f{-5.0f, -5.0f, 10.0f, 10.0f},
+            tgfx::FillPaint{},
+            std::nullopt);
     visual.phase = phase;
     visual.clip = clip;
     return visual;
@@ -45,6 +48,17 @@ PlotPixelPoint2D projected(
     const auto value = layer.snapshot(handle);
     assert(value && value->projected_anchor);
     return *value->projected_anchor;
+}
+
+const tc_graphic_item& projected_item(
+    const PlotAnnotationLayer2D& layer,
+    PlotAnnotationPhase2D phase,
+    PlotAnnotationClip2D clip,
+    GraphicItemHandle handle) {
+    const auto& scene = layer.visual_scene(phase, clip);
+    const tc_graphic_item* item = scene.resolve(handle);
+    assert(item);
+    return *item;
 }
 
 }  // namespace
@@ -63,25 +77,25 @@ int main() {
     PlotAnnotationLayer2D layer;
     const auto data_handle = layer.create({
         DataAnchor2D{5.0, 10.0},
-        {target_visual()},
+        target_visual(),
     });
     const auto line_handle = layer.create({
         SeriesPointRef2D{PlotSeriesKind2D::Line, 0, 1},
-        {target_visual(PlotAnnotationPhase2D::Underlay)},
+        target_visual(PlotAnnotationPhase2D::Underlay),
     });
     const auto scatter_handle = layer.create({
         SeriesPointRef2D{PlotSeriesKind2D::Scatter, 0, 1},
-        {target_visual()},
+        target_visual(),
     });
     const auto axes_handle = layer.create({
         AxesFractionAnchor2D{0.25, 0.75},
-        {target_visual()},
+        target_visual(),
     });
     const auto viewport_handle = layer.create({
         ViewportPixelAnchor2D{12.0f, 18.0f},
-        {target_visual(
+        target_visual(
             PlotAnnotationPhase2D::Chrome,
-            PlotAnnotationClip2D::Viewport)},
+            PlotAnnotationClip2D::Viewport),
     });
     assert(data_handle && line_handle && scatter_handle
            && axes_handle && viewport_handle);
@@ -122,14 +136,17 @@ int main() {
     assert(near(after_pan->projected_anchor->x, 60.0));
     assert(near(after_pan->projected_anchor->y, 240.0));
 
-    const auto visual_snapshot =
-        layer.visual_scene(
-            PlotAnnotationPhase2D::Overlay,
-            PlotAnnotationClip2D::PlotArea)
-        .snapshot(stable_item);
-    assert(visual_snapshot);
+    const auto& stable_scene = layer.visual_scene(
+        PlotAnnotationPhase2D::Overlay,
+        PlotAnnotationClip2D::PlotArea);
+    const auto& visual_item = projected_item(
+        layer,
+        PlotAnnotationPhase2D::Overlay,
+        PlotAnnotationClip2D::PlotArea,
+        stable_item);
     const auto world_origin =
-        visual_snapshot->world_transform.transform_point({0.0f, 0.0f});
+        stable_scene.world_transform(visual_item)
+            .transform_point({0.0f, 0.0f});
     assert(near(world_origin.x, 60.0));
     assert(near(world_origin.y, 240.0));
 
@@ -166,15 +183,15 @@ int main() {
     // projected local geometry would otherwise hit.
     const auto clipped = layer.create({
         ViewportPixelAnchor2D{0.0f, 0.0f},
-        {target_visual(
+        target_visual(
             PlotAnnotationPhase2D::Overlay,
-            PlotAnnotationClip2D::PlotArea)},
+            PlotAnnotationClip2D::PlotArea),
     });
     const auto unclipped = layer.create({
         ViewportPixelAnchor2D{0.0f, 0.0f},
-        {target_visual(
+        target_visual(
             PlotAnnotationPhase2D::Chrome,
-            PlotAnnotationClip2D::Viewport)},
+            PlotAnnotationClip2D::Viewport),
     });
     assert(clipped && unclipped);
     layer.project(frame, data);
@@ -182,19 +199,35 @@ int main() {
     assert(layer.destroy(*unclipped));
     assert(!layer.hit_test(frame, 10.0f, 20.0f));
 
-    // Invalid series references drop only projected graphics. Restoring the
-    // source recreates graphics without changing the semantic handle.
+    // Invalid series references hide their live graphic. Restoring the source
+    // reuses both semantic and graphic handles.
+    const GraphicItemHandle line_item =
+        layer.snapshot(*line_handle)->projected_graphics.front().item;
     data.lines[0].x.resize(1);
     data.lines[0].y.resize(1);
     layer.project(frame, data);
     const auto missing_series_point = layer.snapshot(*line_handle);
     assert(missing_series_point);
     assert(!missing_series_point->projected_anchor);
-    assert(missing_series_point->projected_graphics.empty());
+    assert(missing_series_point->projected_graphics.size() == 1);
+    assert(same(
+        missing_series_point->projected_graphics.front().item,
+        line_item));
+    const auto& hidden_scene = layer.visual_scene(
+        PlotAnnotationPhase2D::Underlay,
+        PlotAnnotationClip2D::PlotArea);
+    assert(!hidden_scene.effective_visible(
+        projected_item(
+            layer,
+            PlotAnnotationPhase2D::Underlay,
+            PlotAnnotationClip2D::PlotArea,
+            line_item)));
     data.lines[0].x = {1.0, 4.0};
     data.lines[0].y = {2.0, 10.0};
     layer.project(frame, data);
-    assert(layer.snapshot(*line_handle)->projected_graphics.size() == 1);
+    assert(same(
+        layer.snapshot(*line_handle)->projected_graphics.front().item,
+        line_item));
 
     const PlotFrame2D resized(
         PlotRect2D(30.0f, 50.0f, 800.0f, 600.0f),
@@ -217,7 +250,7 @@ int main() {
     assert(!layer.snapshot(old));
     const auto replacement = layer.create({
         AxesFractionAnchor2D{0.5, 0.5},
-        {target_visual()},
+        target_visual(),
     });
     assert(replacement);
     assert(replacement->index == old.index);
@@ -274,14 +307,21 @@ int main() {
         *marker_annotation->projected_anchor;
     const GraphicItemHandle marker_item =
         marker_annotation->projected_graphics[0].item;
-    const auto normal_item = marker_layer.visual_scene(
+    const auto& marker_scene = marker_layer.visual_scene(
         PlotAnnotationPhase2D::Overlay,
-        PlotAnnotationClip2D::PlotArea).snapshot(marker_item);
-    assert(normal_item);
-    const auto* normal_ellipse =
-        std::get_if<EllipseItem2D>(&normal_item->payload);
-    assert(normal_ellipse);
-    assert(near(normal_ellipse->bounds.width, 12.0));
+        PlotAnnotationClip2D::PlotArea);
+    const auto& normal_item = projected_item(
+        marker_layer,
+        PlotAnnotationPhase2D::Overlay,
+        PlotAnnotationClip2D::PlotArea,
+        marker_item);
+    assert(std::string(tc_graphic_item_type_name(&normal_item))
+           == "termin.visual.Ellipse2D");
+    const auto normal_bounds = marker_scene.local_bounds(normal_item);
+    assert(normal_bounds);
+    const double normal_width =
+        normal_bounds->x1 - normal_bounds->x0;
+    assert(normal_width > 0.0);
 
     assert(marker_layer.route_pointer(frame, {
         20,
@@ -290,13 +330,18 @@ int main() {
         0,
     }));
     assert(marker_layer.data_marker_snapshot(*marker_handle)->hovered);
-    const auto hovered_item = marker_layer.visual_scene(
+    const auto& hovered_item = projected_item(
+        marker_layer,
         PlotAnnotationPhase2D::Overlay,
-        PlotAnnotationClip2D::PlotArea).snapshot(marker_item);
-    const auto* hovered_ellipse =
-        std::get_if<EllipseItem2D>(&hovered_item->payload);
-    assert(hovered_ellipse);
-    assert(hovered_ellipse->bounds.width > normal_ellipse->bounds.width);
+        PlotAnnotationClip2D::PlotArea,
+        marker_item);
+    assert(std::string(tc_graphic_item_type_name(&hovered_item))
+           == "termin.visual.Ellipse2D");
+    const auto hovered_bounds = marker_scene.local_bounds(hovered_item);
+    assert(hovered_bounds);
+    const double hovered_width =
+        hovered_bounds->x1 - hovered_bounds->x0;
+    assert(hovered_width > normal_width);
 
     assert(marker_layer.set_snap_hook(
         *marker_handle,
@@ -335,25 +380,40 @@ int main() {
 
     const GraphicItemHandle bubble_item =
         marker_layer.snapshot(*marker_handle)->projected_graphics[2].item;
-    const auto bubble_before_pan = marker_layer.visual_scene(
+    const auto& bubble_scene = marker_layer.visual_scene(
         PlotAnnotationPhase2D::Chrome,
-        PlotAnnotationClip2D::PlotArea).snapshot(bubble_item);
-    assert(bubble_before_pan);
-    const auto* bubble_payload =
-        std::get_if<RoundedRectItem2D>(&bubble_before_pan->payload);
-    assert(bubble_payload);
-    const float bubble_width = bubble_payload->rect.width;
+        PlotAnnotationClip2D::PlotArea);
+    const auto& bubble_before_pan = projected_item(
+        marker_layer,
+        PlotAnnotationPhase2D::Chrome,
+        PlotAnnotationClip2D::PlotArea,
+        bubble_item);
+    assert(std::string(tc_graphic_item_type_name(&bubble_before_pan))
+           == "termin.visual.RoundedRect2D");
+    const auto bubble_bounds =
+        bubble_scene.local_bounds(bubble_before_pan);
+    assert(bubble_bounds);
+    const double bubble_width =
+        bubble_bounds->x1 - bubble_bounds->x0;
+    const auto bubble_transform_before =
+        bubble_scene.world_transform(bubble_before_pan);
     marker_layer.project(panned, data);
-    const auto bubble_after_pan = marker_layer.visual_scene(
+    const auto& bubble_after_pan = projected_item(
+        marker_layer,
         PlotAnnotationPhase2D::Chrome,
-        PlotAnnotationClip2D::PlotArea).snapshot(bubble_item);
-    assert(bubble_after_pan);
-    const auto* panned_bubble =
-        std::get_if<RoundedRectItem2D>(&bubble_after_pan->payload);
-    assert(panned_bubble && near(panned_bubble->rect.width, bubble_width));
+        PlotAnnotationClip2D::PlotArea,
+        bubble_item);
+    assert(std::string(tc_graphic_item_type_name(&bubble_after_pan))
+           == "termin.visual.RoundedRect2D");
+    const auto bubble_bounds_after =
+        bubble_scene.local_bounds(bubble_after_pan);
+    assert(bubble_bounds_after);
+    assert(near(
+        bubble_bounds_after->x1 - bubble_bounds_after->x0,
+        bubble_width));
     assert(!near(
-        bubble_before_pan->world_transform.tx,
-        bubble_after_pan->world_transform.tx));
+        bubble_transform_before.tx,
+        bubble_scene.world_transform(bubble_after_pan).tx));
 
     int close_actions = 0;
     while (marker_layer.take_action()) {
@@ -366,12 +426,17 @@ int main() {
         }));
     const auto close_projection =
         marker_layer.snapshot(*marker_handle)->projected_graphics[4];
-    const auto close_item = marker_layer.visual_scene(
+    const auto& close_scene = marker_layer.visual_scene(
         close_projection.phase,
-        close_projection.clip).snapshot(close_projection.item);
-    assert(close_item);
+        close_projection.clip);
+    const auto& close_item = projected_item(
+        marker_layer,
+        close_projection.phase,
+        close_projection.clip,
+        close_projection.item);
     const termin::Vec2f close_point =
-        close_item->world_transform.transform_point({0.0f, 0.0f});
+        close_scene.world_transform(close_item)
+            .transform_point({0.0f, 0.0f});
     assert(marker_layer.route_pointer(panned, {
         22, PointerEventKind2D::Down, close_point, 0}));
     assert(marker_layer.route_pointer(panned, {
@@ -400,12 +465,17 @@ int main() {
         frame, clipped_anchor.x, clipped_anchor.y));
     const auto clipped_bubble_projection =
         clipped_marker_snapshot->projected_graphics[2];
-    const auto clipped_bubble = marker_layer.visual_scene(
+    const auto& clipped_bubble_scene = marker_layer.visual_scene(
         clipped_bubble_projection.phase,
-        clipped_bubble_projection.clip)
-        .snapshot(clipped_bubble_projection.item);
+        clipped_bubble_projection.clip);
+    const auto& clipped_bubble = projected_item(
+        marker_layer,
+        clipped_bubble_projection.phase,
+        clipped_bubble_projection.clip,
+        clipped_bubble_projection.item);
     const termin::Vec2f clipped_bubble_center =
-        clipped_bubble->world_transform.transform_point({0.0f, 0.0f});
+        clipped_bubble_scene.world_transform(clipped_bubble)
+            .transform_point({0.0f, 0.0f});
     assert(marker_layer.hit_test(
         frame, clipped_bubble_center.x, clipped_bubble_center.y));
     assert(!marker_layer.hit_test(
@@ -442,7 +512,7 @@ int main() {
     engine.set_view(0.0, 10.0, 0.0, 10.0);
     const auto engine_annotation = engine.annotations().create({
         DataAnchor2D{5.0, 5.0},
-        {target_visual()},
+        target_visual(),
     });
     assert(engine_annotation);
     const PlotFrame2D engine_frame = engine.plot_frame();

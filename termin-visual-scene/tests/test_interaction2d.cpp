@@ -4,7 +4,9 @@
 #include <cassert>
 
 #include <cmath>
+#include <memory>
 
+#include "termin_visual_scene/builtin_items2d.hpp"
 #include "termin_visual_scene/interaction2d.hpp"
 
 namespace {
@@ -34,64 +36,73 @@ bool near(float a, float b) {
 }  // namespace
 
 int main() {
-    VisualScene2D scene;
-    const auto parent = scene.create(RectItem2D{
-        {0.0f, 0.0f, 40.0f, 40.0f}, {}, std::nullopt});
+    const auto scene_handle = tc_visual_scene_create();
+    TcVisualScene scene{scene_handle};
+    auto parent_object = std::make_unique<RectItem2D>(
+            termin::Rect2f{0.0f, 0.0f, 40.0f, 40.0f},
+            tgfx::FillPaint{},
+            std::nullopt);
+    RectItem2D* parent_ptr = parent_object.get();
+    const auto parent = scene.adopt(std::move(parent_object));
     assert(parent);
-    GraphicItemState2D parent_state;
-    parent_state.local_transform =
+    const auto parent_transform =
         termin::Affine2f::translation(30.0f, 20.0f) *
         termin::Affine2f::shear(0.4f, -0.2f);
-    parent_state.clip = GeometricClip2D{
-        box(0.0f, 0.0f, 30.0f, 30.0f), tgfx::FillRule::NonZero};
-    parent_state.z_order = 3;
-    assert(scene.set_state(*parent, parent_state));
+    parent_ptr->set_local_transform(parent_transform);
+    parent_ptr->set_clip(GeometricClip2D{
+        box(0.0f, 0.0f, 30.0f, 30.0f), tgfx::FillRule::NonZero});
+    parent_ptr->set_z_order(3);
 
-    const auto child = scene.create(EllipseItem2D{
-        {0.0f, 0.0f, 20.0f, 20.0f}, {}, std::nullopt}, *parent);
+    auto child_object = std::make_unique<EllipseItem2D>(
+            termin::Rect2f{0.0f, 0.0f, 20.0f, 20.0f},
+            tgfx::FillPaint{},
+            std::nullopt);
+    EllipseItem2D* child_ptr = child_object.get();
+    const auto child =
+        scene.adopt(std::move(child_object), parent_ptr);
     assert(child);
-    GraphicItemState2D child_state;
-    child_state.local_transform =
+    child_ptr->set_local_transform(
         termin::Affine2f::rotation(0.35f) *
-        termin::Affine2f::scaling(1.5f, 0.75f);
-    child_state.clip = GeometricClip2D{
-        box(0.0f, 0.0f, 15.0f, 20.0f), tgfx::FillRule::EvenOdd};
-    child_state.z_order = 3;
-    assert(scene.set_state(*child, child_state));
+        termin::Affine2f::scaling(1.5f, 0.75f));
+    child_ptr->set_clip(GeometricClip2D{
+        box(0.0f, 0.0f, 15.0f, 20.0f), tgfx::FillRule::EvenOdd});
+    child_ptr->set_z_order(3);
 
-    const auto child_snapshot = scene.snapshot(*child);
     const auto inside_world =
-        child_snapshot->world_transform.transform_point({10.0f, 10.0f});
+        scene.world_transform(*child_ptr->c_item())
+            .transform_point({10.0f, 10.0f});
     const auto picked = hit_test(scene, inside_world);
     assert(picked && same(*picked, *child));  // deepest target beats its parent
 
     const auto clipped_world =
-        child_snapshot->world_transform.transform_point({18.0f, 10.0f});
+        scene.world_transform(*child_ptr->c_item())
+            .transform_point({18.0f, 10.0f});
     const auto clipped_pick = hit_test(scene, clipped_world);
     assert(!clipped_pick || !same(*clipped_pick, *child));
 
     // Equal-z unrelated overlap follows stable scene order.
-    const auto back = scene.create(RectItem2D{
-        {100.0f, 0.0f, 20.0f, 20.0f}, {}, std::nullopt});
-    const auto front = scene.create(PathItem2D{
-        box(100.0f, 0.0f, 20.0f, 20.0f),
-        tgfx::FillPaint{},
-        std::nullopt});
+    const auto back = scene.adopt(
+        std::make_unique<RectItem2D>(
+            termin::Rect2f{100.0f, 0.0f, 20.0f, 20.0f},
+            tgfx::FillPaint{},
+            std::nullopt));
+    const auto front = scene.adopt(
+        std::make_unique<PathItem2D>(
+            box(100.0f, 0.0f, 20.0f, 20.0f),
+            tgfx::FillPaint{},
+            std::nullopt));
     assert(back && front);
-    GraphicItemState2D equal_z;
-    equal_z.z_order = 9;
-    assert(scene.set_state(*back, equal_z));
-    assert(scene.set_state(*front, equal_z));
+    scene.resolve(*back)->z_order = 9;
+    scene.resolve(*front)->z_order = 9;
     const auto overlap = hit_test(scene, {110.0f, 10.0f});
     assert(overlap && same(*overlap, *front));
 
     // Singular transforms are diagnosed during scene preparation and are
     // deterministically non-hittable without an identity fallback.
-    auto singular = equal_z;
-    singular.z_order = 20;
-    singular.local_transform = termin::Affine2f::scaling(0.0f, 1.0f);
-    assert(scene.set_state(*front, singular));
-    assert(scene.snapshot(*front)->diagnostics ==
+    scene.resolve(*front)->z_order = 20;
+    scene.resolve(*front)->local_transform =
+        termin::Affine2f::scaling(0.0f, 1.0f);
+    assert(scene.diagnostics(*scene.resolve(*front)) ==
            GraphicItemDiagnostic2D::SingularWorldTransform);
     const auto after_singular = hit_test(scene, {110.0f, 10.0f});
     assert(after_singular && same(*after_singular, *back));
@@ -136,9 +147,9 @@ int main() {
     });
     assert(same(move.target, *child));
     assert(drag.handle(scene, move));
-    const auto moved = scene.snapshot(*child);
     const auto moved_world =
-        moved->world_transform.transform_point({10.0f, 10.0f});
+        scene.world_transform(*child_ptr->c_item())
+            .transform_point({10.0f, 10.0f});
     assert(near(moved_world.x, inside_world.x + delta.x));
     assert(near(moved_world.y, inside_world.y + delta.y));
 
@@ -151,27 +162,27 @@ int main() {
     assert(tc_graphic_item_handle_is_invalid(interaction.captured(1)));
     drag.handle(scene, up);
 
-    // Capture is invalidated by topology change, disabling and destruction.
+    // Detaching only makes an item a root; it does not invalidate identity or
+    // capture. Disabling and destruction do invalidate capture.
     assert(interaction.capture(scene, 3, *child));
-    assert(scene.detach(*child));
+    assert(child_ptr->detach());
     auto after_detach = interaction.route(scene, {
         3, PointerEventKind2D::Move, moved_world, 0});
-    assert(tc_graphic_item_handle_is_invalid(after_detach.captured));
+    assert(same(after_detach.captured, *child));
+    interaction.release(3);
     selection.reconcile(scene);
-    assert(selection.selection().empty());
+    assert(selection.selection().size() == 1);
+    selection.clear();
 
     assert(interaction.capture(scene, 4, *back));
-    auto disabled = scene.snapshot(*back)->state;
-    disabled.enabled = false;
-    assert(scene.set_state(*back, disabled));
+    scene.resolve(*back)->enabled = false;
     interaction.route(scene, {
         4, PointerEventKind2D::Move, {105.0f, 5.0f}, 0});
     assert(tc_graphic_item_handle_is_invalid(interaction.captured(4)));
 
-    disabled.enabled = true;
-    assert(scene.set_state(*back, disabled));
+    scene.resolve(*back)->enabled = true;
     assert(interaction.capture(scene, 5, *back));
-    assert(scene.destroy_leaf(*back));
+    assert(scene.destroy(*back));
     interaction.route(scene, {
         5, PointerEventKind2D::Move, {105.0f, 5.0f}, 0});
     assert(tc_graphic_item_handle_is_invalid(interaction.captured(5)));
@@ -183,11 +194,13 @@ int main() {
     assert(fallbacks >= 1);
 
     const auto detached_world =
-        scene.snapshot(*child)->world_transform.transform_point({10.0f, 10.0f});
+        scene.world_transform(*child_ptr->c_item())
+            .transform_point({10.0f, 10.0f});
     selection.handle(scene, interaction.route(scene, {
         8, PointerEventKind2D::Down, detached_world, 0}));
     assert(selection.selection().size() == 1);
-    assert(scene.destroy_leaf(*child));
+    assert(scene.destroy(*child));
     selection.reconcile(scene);
     assert(selection.selection().empty());
+    tc_visual_scene_destroy(scene_handle);
 }

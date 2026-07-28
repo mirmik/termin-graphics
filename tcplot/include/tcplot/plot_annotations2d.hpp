@@ -8,10 +8,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include <termin/geom/vec2.hpp>
+#include <termin_visual_scene/graphic_item2d.hpp>
 #include <termin_visual_scene/interaction2d.hpp>
 
 #include "tcplot/plot_data.hpp"
@@ -82,8 +84,7 @@ enum class PlotAnnotationClip2D : std::uint8_t {
 };
 
 struct PlotAnnotationVisual2D {
-    termin::visual::GraphicItemPayload2D payload =
-        termin::visual::GroupItem2D{};
+    std::unique_ptr<termin::visual::GraphicItem2D> item;
     termin::Vec2f pixel_offset{};
     PlotAnnotationPhase2D phase = PlotAnnotationPhase2D::Overlay;
     PlotAnnotationClip2D clip = PlotAnnotationClip2D::PlotArea;
@@ -96,6 +97,14 @@ struct PlotAnnotationVisual2D {
 struct PlotAnnotation2D {
     PlotAnchor2D anchor = DataAnchor2D{};
     std::vector<PlotAnnotationVisual2D> visuals;
+
+    PlotAnnotation2D() = default;
+    PlotAnnotation2D(
+        PlotAnchor2D anchor_value,
+        PlotAnnotationVisual2D visual)
+        : anchor(std::move(anchor_value)) {
+        visuals.push_back(std::move(visual));
+    }
 };
 
 struct ProjectedPlotGraphic2D {
@@ -108,7 +117,7 @@ struct ProjectedPlotGraphic2D {
 
 struct PlotAnnotationSnapshot2D {
     PlotAnnotationHandle handle;
-    PlotAnnotation2D annotation;
+    PlotAnchor2D anchor;
     std::optional<PlotPixelPoint2D> projected_anchor;
     std::vector<ProjectedPlotGraphic2D> projected_graphics;
 };
@@ -199,9 +208,8 @@ public:
     std::optional<PlotDataMarkerSnapshot2D> data_marker_snapshot(
         PlotAnnotationHandle handle) const;
 
-    // Reprojects in-place whenever phase/clip topology is unchanged.
-    // Invalid SeriesPointRef anchors deterministically remove their projected
-    // items while preserving the semantic annotation handle.
+    // Reprojects live items in place. Invalid SeriesPointRef anchors hide the
+    // existing items while preserving both semantic and graphic handles.
     void project(const PlotFrame2D& frame, const PlotData& data);
 
     // Routes through the annotation scenes front-to-back. Call before plot
@@ -219,7 +227,7 @@ public:
         tgfx::FontAtlas* font);
     void release_gpu_resources();
 
-    const termin::visual::VisualScene2D& visual_scene(
+    const termin::visual::TcVisualScene& visual_scene(
         PlotAnnotationPhase2D phase,
         PlotAnnotationClip2D clip) const;
 

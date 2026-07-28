@@ -5,10 +5,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 #include <termin/platform/backend_window.hpp>
@@ -18,8 +18,9 @@
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
 
+#include "termin_visual_scene/builtin_items2d.hpp"
 #include "termin_visual_scene/interaction2d.hpp"
-#include "termin_visual_scene/render_snapshot2d.hpp"
+#include "termin_visual_scene/scene_render2d.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader_registry.h>
@@ -50,15 +51,16 @@ class NoResources final
       public tgfx::DrawResourceResolver2D {
 public:
     std::optional<tgfx::FontHandle> resolve_font(
-        const StableResourceRef2D&) override {
+        std::string_view) override {
         return std::nullopt;
     }
     std::optional<tgfx::TextureHandle> resolve_image(
-        const StableResourceRef2D&) override {
+        std::string_view) override {
         return std::nullopt;
     }
     std::optional<ResolvedCustomBatch2D> resolve_custom_batch(
-        const CustomBatchItem2D&) override {
+        std::string_view,
+        termin::Bounds2f) override {
         return std::nullopt;
     }
     tgfx::FontAtlas* resolve_font(tgfx::FontHandle) override {
@@ -68,22 +70,31 @@ public:
 
 class DraggablePrimitiveScene {
 public:
-    DraggablePrimitiveScene() {
-        rectangle_ = require_(scene_.create(RectItem2D{
-            {0.0f, 0.0f, 150.0f, 100.0f},
-            {{0.20f, 0.50f, 0.92f, 1.0f}},
-            tgfx::StrokePaint{{0.08f, 0.15f, 0.28f, 1.0f}, 3.0f},
-        }));
-        ellipse_ = require_(scene_.create(EllipseItem2D{
-            {0.0f, 0.0f, 120.0f, 120.0f},
-            {{0.92f, 0.35f, 0.30f, 0.95f}},
-            tgfx::StrokePaint{{0.35f, 0.08f, 0.06f, 1.0f}, 3.0f},
-        }));
-        path_ = require_(scene_.create(PathItem2D{
+    DraggablePrimitiveScene()
+        : scene_(tc_visual_scene_create()) {
+        auto rectangle = std::make_unique<RectItem2D>(
+            termin::Rect2f{0.0f, 0.0f, 150.0f, 100.0f},
+            tgfx::FillPaint{{0.20f, 0.50f, 0.92f, 1.0f}},
+            tgfx::StrokePaint{
+                {0.08f, 0.15f, 0.28f, 1.0f}, 3.0f});
+        rectangle_item_ = rectangle.get();
+        rectangle_ = require_(scene_.adopt(std::move(rectangle)));
+
+        auto ellipse = std::make_unique<EllipseItem2D>(
+            termin::Rect2f{0.0f, 0.0f, 120.0f, 120.0f},
+            tgfx::FillPaint{{0.92f, 0.35f, 0.30f, 0.95f}},
+            tgfx::StrokePaint{
+                {0.35f, 0.08f, 0.06f, 1.0f}, 3.0f});
+        ellipse_item_ = ellipse.get();
+        ellipse_ = require_(scene_.adopt(std::move(ellipse)));
+
+        auto path = std::make_unique<PathItem2D>(
             diamond(130.0f, 100.0f),
             tgfx::FillPaint{{0.30f, 0.78f, 0.48f, 0.95f}},
-            tgfx::StrokePaint{{0.06f, 0.28f, 0.12f, 1.0f}, 3.0f},
-        }));
+            tgfx::StrokePaint{
+                {0.06f, 0.28f, 0.12f, 1.0f}, 3.0f});
+        path_item_ = path.get();
+        path_ = require_(scene_.adopt(std::move(path)));
 
         place_(rectangle_, {110.0f, 110.0f}, 1);
         place_(ellipse_, {210.0f, 170.0f}, 2);
@@ -94,6 +105,9 @@ public:
             BaseColor{path_, {0.30f, 0.78f, 0.48f, 0.95f}},
         };
     }
+    ~DraggablePrimitiveScene() {
+        tc_visual_scene_destroy(scene_.handle());
+    }
 
     PointerDispatch2D pointer(const PointerEvent2D& event) {
         auto dispatch = interaction_.route(scene_, event);
@@ -103,12 +117,17 @@ public:
         return dispatch;
     }
 
-    std::optional<SceneRenderSnapshot2D> prepare(NoResources& resources) const {
-        return scene_.prepare_render_snapshot(resources);
+    std::optional<tgfx::DrawList2D> render(
+        NoResources& resources) const {
+        tgfx::DrawList2DBuilder builder;
+        if (!scene_.paint(builder, resources)) {
+            return std::nullopt;
+        }
+        return builder.freeze();
     }
 
-    VisualScene2D& scene() { return scene_; }
-    const VisualScene2D& scene() const { return scene_; }
+    TcVisualScene& scene() { return scene_; }
+    const TcVisualScene& scene() const { return scene_; }
     GraphicItemHandle rectangle() const { return rectangle_; }
     GraphicItemHandle ellipse() const { return ellipse_; }
     GraphicItemHandle path() const { return path_; }
@@ -129,20 +148,18 @@ private:
         GraphicItemHandle item,
         termin::Vec2f position,
         std::int64_t z) {
-        auto state = scene_.snapshot(item)->state;
-        state.local_transform = termin::Affine2f::translation(position);
-        state.z_order = z;
-        if (!scene_.set_state(item, state)) {
+        tc_graphic_item* object = scene_.resolve(item);
+        if (!object) {
             throw std::runtime_error("failed to place example item");
         }
+        object->local_transform = termin::Affine2f::translation(position);
+        object->z_order = z;
     }
 
     void apply_feedback_() {
         const auto hovered = interaction_.hovered(0);
         const auto selected = selection_.selection();
         for (const auto& entry : base_colors_) {
-            auto item = scene_.snapshot(entry.handle);
-            if (!item) continue;
             const bool is_selected = std::any_of(
                 selected.begin(), selected.end(),
                 [&](GraphicItemHandle value) {
@@ -154,41 +171,39 @@ private:
                 : is_hovered
                     ? tgfx::Color4f{0.35f, 0.90f, 1.0f, 1.0f}
                     : entry.color;
-            std::visit(
-                [&](auto& payload) {
-                    using T = std::decay_t<decltype(payload)>;
-                    if constexpr (
-                        std::is_same_v<T, RectItem2D> ||
-                        std::is_same_v<T, EllipseItem2D>) {
-                        payload.fill.color = color;
-                    } else if constexpr (std::is_same_v<T, PathItem2D>) {
-                        if (payload.fill) payload.fill->color = color;
-                    }
-                },
-                item->payload);
-            if (!scene_.set_payload(entry.handle, std::move(item->payload))) {
-                throw std::runtime_error(
-                    "failed to update example item feedback");
+            const tgfx::FillPaint fill{color};
+            if (same(entry.handle, rectangle_)) {
+                rectangle_item_->set_fill(fill);
+            } else if (same(entry.handle, ellipse_)) {
+                ellipse_item_->set_fill(fill);
+            } else if (same(entry.handle, path_)) {
+                path_item_->set_fill(fill);
             }
         }
     }
 
-    VisualScene2D scene_;
+    TcVisualScene scene_;
     SceneInteraction2D interaction_;
     SelectionController2D selection_;
     DragController2D drag_;
     GraphicItemHandle rectangle_ = tc_graphic_item_handle_invalid();
     GraphicItemHandle ellipse_ = tc_graphic_item_handle_invalid();
     GraphicItemHandle path_ = tc_graphic_item_handle_invalid();
+    RectItem2D* rectangle_item_ = nullptr;
+    EllipseItem2D* ellipse_item_ = nullptr;
+    PathItem2D* path_item_ = nullptr;
     std::array<BaseColor, 3> base_colors_{};
 };
 
 termin::Vec2f world_center(
-    const VisualScene2D& scene,
+    const TcVisualScene& scene,
     GraphicItemHandle item) {
-    const auto snapshot = scene.snapshot(item);
-    const auto bounds = snapshot->local_bounds.value();
-    return snapshot->world_transform.transform_point({
+    const tc_graphic_item* object = scene.resolve(item);
+    if (!object) {
+        throw std::runtime_error("example item is stale");
+    }
+    const auto bounds = scene.local_bounds(*object).value();
+    return scene.world_transform(*object).transform_point({
         (bounds.x0 + bounds.x1) * 0.5f,
         (bounds.y0 + bounds.y1) * 0.5f,
     });
@@ -197,13 +212,13 @@ termin::Vec2f world_center(
 int headless_smoke() {
     DraggablePrimitiveScene example;
     NoResources resources;
-    const auto prepared = example.prepare(resources);
-    if (!prepared || prepared->items().size() != 3) return 2;
+    const auto rendered = example.render(resources);
+    if (!rendered || example.scene().size() != 3) return 2;
 
     bool rect = false;
     bool ellipse = false;
     bool path = false;
-    for (const auto& command : prepared->draw_list().commands()) {
+    for (const auto& command : rendered->commands()) {
         rect = rect ||
                std::holds_alternative<tgfx::DrawRect2D>(command) ||
                std::holds_alternative<tgfx::DrawRoundedRect2D>(command);
@@ -261,7 +276,7 @@ int windowed_example() {
     try {
         auto runtime = termin::create_native_windowed_graphics();
         auto window = runtime->create_window({
-            "VisualScene2D draggable primitives", 800, 600});
+            "TcVisualScene draggable primitives", 800, 600});
         auto& host = runtime->graphics();
         auto& device = host.device();
         auto& context = host.context();
@@ -314,13 +329,13 @@ int windowed_example() {
                 target_height = height;
             }
 
-            const auto prepared = example.prepare(resources);
-            if (!prepared) throw std::runtime_error("scene render preparation failed");
+            const auto rendered = example.render(resources);
+            if (!rendered) throw std::runtime_error("scene rendering failed");
             const float clear[] = {0.035f, 0.045f, 0.065f, 1.0f};
             context.begin_frame();
             context.begin_pass(target, {}, clear, 1.0f, false);
             canvas.begin(context, width, height);
-            if (!canvas.execute(prepared->draw_list(), resources)) {
+            if (!canvas.execute(*rendered, resources)) {
                 throw std::runtime_error("DrawList2D execution failed");
             }
             canvas.end();
@@ -337,7 +352,7 @@ int windowed_example() {
         tc_shader_shutdown();
         return 0;
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "VisualScene2D example failed: %s\n", error.what());
+        std::fprintf(stderr, "TcVisualScene example failed: %s\n", error.what());
         tc_shader_shutdown();
         return 1;
     }

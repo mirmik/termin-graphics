@@ -23,7 +23,6 @@ from termin.gui_native import (
     FileDialogFilter,
     FileDialogMode,
     FileDialogModel,
-    GraphicsScene,
     KeyCode,
     KeyEvent,
     KeyEventType,
@@ -50,6 +49,10 @@ from termin.gui_native import (
     ViewportExternalDragEvent,
     ViewportExternalDragPhase,
     ViewportSurfaceHost,
+)
+from termin.visual_scene import (
+    tc_visual_scene_create,
+    tc_visual_scene_destroy,
 )
 
 def _collection_item(index, *, enabled=True, subtitle=""):
@@ -1210,26 +1213,22 @@ def test_display_is_the_viewport_surface_and_input_protocol():
         assert callable(getattr(Display, method_name))
 
 
-def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
-    scene = GraphicsScene()
+def test_native_scene_view_transform_forwarding_and_embedding():
+    scene = tc_visual_scene_create()
     node = scene.create_rect(
-        "node-a",
-        Rect(0.0, 0.0, 120.0, 70.0),
-        Color(0.8, 0.2, 0.1, 1.0),
+        (0.0, 0.0, 120.0, 70.0),
+        (0.8, 0.2, 0.1, 1.0),
     )
-    node.position = Point(10.0, 20.0)
-    node.draggable = True
-    assert scene.hit_test(20.0, 30.0).stable_id == "node-a"
+    node.position = (10.0, 20.0)
+    assert scene.hit_test(20.0, 30.0) == node
 
     edge = scene.create_polyline(
-        "edge",
-        [Point(0.0, 0.0), Point(200.0, 0.0)],
-        Color(0.6, 0.7, 0.9, 1.0),
+        [(0.0, 0.0), (200.0, 0.0)],
+        (0.6, 0.7, 0.9, 1.0),
         10.0,
     )
-    edge.selectable = False
     edge.z_order = -10
-    assert scene.hit_test(50.0, 2.0).stable_id == "edge"
+    assert scene.hit_test(50.0, 2.0) == edge
 
     document = tc_ui_document_create()
     view = document.create_scene_view(scene)
@@ -1242,22 +1241,21 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     assert any(command.type == DrawCommandType.FillRect for command in draw_list.commands)
     assert any(command.type == DrawCommandType.Canvas2DList for command in draw_list.commands)
 
-    moved = []
-    view.connect_item_moved(lambda item: moved.append(item.stable_id))
+    forwarded = []
+    view.set_pointer_handler(
+        lambda world, event: (
+            forwarded.append((world.x, world.y)) or True
+        )
+        if event.type == PointerEventType.Down
+        else False
+    )
     pointer = PointerEvent()
     pointer.type = PointerEventType.Down
     pointer.button = 0
     pointer.x = 120.0
     pointer.y = 80.0
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
-    assert [item.stable_id for item in view.selected_items] == ["node-a"]
-    pointer.type = PointerEventType.Move
-    pointer.x = 150.0
-    pointer.y = 110.0
-    assert document.dispatch_pointer_event(pointer) == EventResult.Handled
-    assert node.position.x == pytest.approx(40.0)
-    assert node.position.y == pytest.approx(50.0)
-    assert moved == ["node-a"]
+    assert forwarded == [(20.0, 30.0)]
     pointer.type = PointerEventType.Up
     assert document.dispatch_pointer_event(pointer) == EventResult.Handled
 
@@ -1277,14 +1275,13 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     view.set_zoom(1.0, Point(100.0, 50.0))
     view.offset = Point(0.0, 0.0)
     editor_item = scene.create_rect(
-        "editor",
-        Rect(0.0, 0.0, 100.0, 30.0),
-        Color(0.2, 0.2, 0.25, 1.0),
+        (0.0, 0.0, 100.0, 30.0),
+        (0.2, 0.2, 0.25, 1.0),
     )
-    editor_item.position = Point(5.0, 6.0)
-    assert view.set_widget_portal(editor_item, embedded.handle)
+    editor_item.position = (5.0, 6.0)
+    assert view.set_widget_portal(editor_item.handle, embedded.handle)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
-    screen = view.world_to_screen(editor_item.position)
+    screen = view.world_to_screen(Point(*editor_item.position))
     assert document.hit_test(screen.x + 2.0, screen.y + 2.0) == embedded.handle
     assert scene.destroy(editor_item)
     document.layout_roots(Rect(100.0, 50.0, 400.0, 300.0))
@@ -1292,6 +1289,7 @@ def test_native_scene_view_model_transform_drag_callbacks_and_embedding():
     view.set_pointer_handler(None)
     view.set_key_handler(None)
     view.set_text_handler(None)
+    tc_visual_scene_destroy(scene)
 
 
 def test_native_scene_transform_and_scene_view_handler_errors_propagate():

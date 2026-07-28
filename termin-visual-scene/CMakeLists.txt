@@ -34,10 +34,20 @@ include(TerminRpath)
 add_library(termin_visual_scene SHARED
     src/tc_graphic_item.c
     src/tc_visual_scene.c
+    src/graphic_item2d.cpp
+    src/native_graphic_item2d.cpp
+    src/graphic_item_paint_context2d.cpp
+    src/items/group_item2d.cpp
+    src/items/rect_item2d.cpp
+    src/items/rounded_rect_item2d.cpp
+    src/items/ellipse_item2d.cpp
+    src/items/path_item2d.cpp
+    src/items/polyline_item2d.cpp
+    src/items/text_item2d.cpp
+    src/items/image_item2d.cpp
+    src/items/hit_region_item2d.cpp
+    src/items/custom_batch_item2d.cpp
     src/scene2d.cpp
-    src/scene_inspection2d.cpp
-    src/scene_serialization2d.cpp
-    src/render_snapshot2d.cpp
     src/interaction2d.cpp
 )
 add_library(termin_visual_scene::termin_visual_scene ALIAS termin_visual_scene)
@@ -46,6 +56,9 @@ target_compile_definitions(termin_visual_scene PRIVATE
 target_include_directories(termin_visual_scene PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+)
+target_include_directories(termin_visual_scene PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(termin_visual_scene PUBLIC
     tcbase::termin_base
@@ -87,21 +100,13 @@ if(TERMIN_BUILD_TESTS)
     add_test(NAME termin_visual_scene_item_test
         COMMAND termin_visual_scene_item_test)
 
-    add_executable(termin_visual_scene_serialization_test
-        tests/test_scene_serialization2d.cpp)
-    target_link_libraries(termin_visual_scene_serialization_test PRIVATE
+    add_executable(termin_visual_scene_render_test
+        tests/test_scene_render2d.cpp)
+    target_link_libraries(termin_visual_scene_render_test PRIVATE
         termin_visual_scene)
-    termin_set_rpath_test(termin_visual_scene_serialization_test)
-    add_test(NAME termin_visual_scene_serialization_test
-        COMMAND termin_visual_scene_serialization_test)
-
-    add_executable(termin_visual_scene_render_snapshot_test
-        tests/test_render_snapshot2d.cpp)
-    target_link_libraries(termin_visual_scene_render_snapshot_test PRIVATE
-        termin_visual_scene)
-    termin_set_rpath_test(termin_visual_scene_render_snapshot_test)
-    add_test(NAME termin_visual_scene_render_snapshot_test
-        COMMAND termin_visual_scene_render_snapshot_test)
+    termin_set_rpath_test(termin_visual_scene_render_test)
+    add_test(NAME termin_visual_scene_render_test
+        COMMAND termin_visual_scene_render_test)
 
     add_executable(termin_visual_scene_interaction_test
         tests/test_interaction2d.cpp)

@@ -9,7 +9,7 @@ int main(int argc, char** argv) {
         return run_visual_scene_composition_headless_smoke();
     }
     return run_document_window(
-        "termin-gui-native: widgets + VisualScene2D",
+        "termin-gui-native: widgets + TcVisualScene",
         [](termin::gui_native::TcDocument document) {
             build_visual_scene_composition(document);
         });

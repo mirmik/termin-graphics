@@ -7,7 +7,11 @@
 #include <memory>
 #include <vector>
 
+#include <termin_visual_scene/builtin_items2d.hpp>
+#include <termin_visual_scene/interaction2d.hpp>
+
 using namespace termin::gui_native;
+using namespace termin::visual;
 
 namespace {
 
@@ -29,51 +33,69 @@ tgfx::FillPaint fill(float r, float g, float b, float a = 1.0f) {
     return {{r, g, b, a}};
 }
 
-void test_scene_uses_generation_handles_and_canonical_hit_testing() {
-    auto scene = std::make_shared<GraphicsScene>();
-    auto back = scene->create_rect(
-        "back", {0.0f, 0.0f, 100.0f, 80.0f},
-        fill(0.2f, 0.3f, 0.4f));
-    auto child = scene->create_rect(
-        "child", {0.0f, 0.0f, 20.0f, 10.0f},
-        fill(0.7f, 0.2f, 0.2f), std::nullopt, back);
-    auto front = scene->create_rect(
-        "front", {0.0f, 0.0f, 100.0f, 80.0f},
-        fill(0.3f, 0.6f, 0.4f));
-    assert(back && child && front);
-    assert(back.set_position({10.0f, 20.0f}));
-    assert(child.set_position({5.0f, 7.0f}));
-    assert(child.set_z_order(10));
-    assert(front.set_position({20.0f, 30.0f}));
-    assert(front.set_z_order(20));
-
-    const auto front_hit = scene->hit_test(25.0f, 35.0f);
-    assert(front_hit && *front_hit == front);
-    assert(front.set_enabled(false));
-    const auto child_hit = scene->hit_test(16.0f, 28.0f);
-    assert(child_hit && *child_hit == child);
-    assert(scene->destroy(back));
-    assert(!back.valid());
-    assert(!child.valid());
-    assert(front.valid());
-
-    auto replacement = scene->create_rect(
-        "replacement", {0.0f, 0.0f, 20.0f, 20.0f},
-        fill(0.8f, 0.8f, 0.2f));
-    assert(replacement);
-    assert(replacement.handle().generation != back.handle().generation ||
-           replacement.handle().index != back.handle().index);
+bool handle_eq(GraphicItemHandle left, GraphicItemHandle right) {
+    return left.scene_id == right.scene_id &&
+           left.index == right.index &&
+           left.generation == right.generation;
 }
 
-void test_view_transform_drag_pan_zoom_and_draw_list_bridge() {
+template <typename Item, typename... Args>
+Item* adopt(
+    TcVisualScene& scene,
+    GraphicItem2D* parent,
+    Args&&... args) {
+    auto item = std::make_unique<Item>(
+        std::forward<Args>(args)...);
+    auto* result = item.get();
+    assert(scene.adopt(std::move(item), parent));
+    return result;
+}
+
+void test_scene_uses_generation_handles_and_canonical_hit_testing() {
+    const auto scene_handle = tc_visual_scene_create();
+    TcVisualScene scene{scene_handle};
+    auto* back = adopt<RectItem2D>(
+        scene, nullptr, termin::Rect2f{0.0f, 0.0f, 100.0f, 80.0f},
+        fill(0.2f, 0.3f, 0.4f));
+    auto* child = adopt<RectItem2D>(
+        scene, back, termin::Rect2f{0.0f, 0.0f, 20.0f, 10.0f},
+        fill(0.7f, 0.2f, 0.2f));
+    auto* front = adopt<RectItem2D>(
+        scene, nullptr, termin::Rect2f{0.0f, 0.0f, 100.0f, 80.0f},
+        fill(0.3f, 0.6f, 0.4f));
+    back->set_local_transform(termin::Affine2f::translation({10.0f, 20.0f}));
+    child->set_local_transform(termin::Affine2f::translation({5.0f, 7.0f}));
+    child->set_z_order(10);
+    front->set_local_transform(termin::Affine2f::translation({20.0f, 30.0f}));
+    front->set_z_order(20);
+    const auto back_handle = back->handle();
+
+    const auto front_hit = hit_test(scene, {25.0f, 35.0f});
+    assert(front_hit && handle_eq(*front_hit, front->handle()));
+    front->set_enabled(false);
+    const auto child_hit = hit_test(scene, {16.0f, 28.0f});
+    assert(child_hit && handle_eq(*child_hit, child->handle()));
+    assert(scene.destroy(back_handle));
+    assert(!scene.contains(back_handle));
+    assert(scene.contains(front->handle()));
+
+    auto* replacement = adopt<RectItem2D>(
+        scene, nullptr, termin::Rect2f{0.0f, 0.0f, 20.0f, 20.0f},
+        fill(0.8f, 0.8f, 0.2f));
+    assert(replacement->handle().generation != back_handle.generation ||
+           replacement->handle().index != back_handle.index);
+    tc_visual_scene_destroy(scene_handle);
+}
+
+void test_view_transform_forwarding_pan_zoom_and_draw_list_bridge() {
     const auto document_handle = tc_ui_document_create();
     TcDocument document(document_handle);
-    auto scene = std::make_shared<GraphicsScene>();
-    auto item = scene->create_rect(
-        "node", {0.0f, 0.0f, 80.0f, 40.0f},
+    const auto scene_handle = tc_visual_scene_create();
+    TcVisualScene scene{scene_handle};
+    auto* item = adopt<RectItem2D>(
+        scene, nullptr, termin::Rect2f{0.0f, 0.0f, 80.0f, 40.0f},
         fill(0.8f, 0.2f, 0.1f));
-    assert(item.set_position({10.0f, 20.0f}));
-    assert(item.set_draggable(true));
+    item->set_local_transform(termin::Affine2f::translation({10.0f, 20.0f}));
     auto* view = new SceneView(scene);
     const auto view_handle = document.adopt(view);
     assert(document.add_root(*view));
@@ -88,24 +110,21 @@ void test_view_transform_drag_pan_zoom_and_draw_list_bridge() {
                TC_UI_DRAW_CANVAS2D_LIST).size() == 1);
     assert(!commands_of_type(draw_list, TC_UI_DRAW_LINE).empty());
 
-    std::size_t moved = 0;
-    view->item_moved().connect(
-        [&](SceneView&, GraphicItemRef moved_item) {
-            assert(moved_item == item);
-            ++moved;
+    bool forwarded = false;
+    view->set_pointer_handler(
+        [&](SceneView&, tc_ui_point world, const tc_ui_pointer_event& event) {
+            forwarded =
+                event.type == TC_UI_POINTER_DOWN &&
+                std::isfinite(world.x);
+            return forwarded;
         });
     assert(document.dispatch_pointer_event(
                {TC_UI_POINTER_DOWN, 120.0f, 80.0f, 0, 1, 0, 0.0f, 0.0f}) ==
            TC_UI_EVENT_HANDLED);
-    assert(view->selected_items() == std::vector<GraphicItemRef>{item});
-    assert(document.dispatch_pointer_event(
-               {TC_UI_POINTER_MOVE, 150.0f, 110.0f, 0, 0, 0, 0.0f, 0.0f}) ==
-           TC_UI_EVENT_HANDLED);
-    assert(item.position().x == 40.0f && item.position().y == 50.0f);
-    assert(moved == 1);
-    assert(document.dispatch_pointer_event(
-               {TC_UI_POINTER_UP, 150.0f, 110.0f, 0, 1, 0, 0.0f, 0.0f}) ==
-           TC_UI_EVENT_HANDLED);
+    assert(forwarded);
+    view->set_pointer_handler({});
+    document.dispatch_pointer_event(
+        {TC_UI_POINTER_UP, 120.0f, 80.0f, 0, 1, 0, 0.0f, 0.0f});
 
     assert(document.dispatch_pointer_event(
                {TC_UI_POINTER_DOWN, 300.0f, 200.0f, 2, 1, 0, 0.0f, 0.0f}) ==
@@ -126,37 +145,27 @@ void test_view_transform_drag_pan_zoom_and_draw_list_bridge() {
     assert(std::fabs(before.x - after.x) < 0.001f);
     assert(std::fabs(before.y - after.y) < 0.001f);
 
-    bool forwarded = false;
-    view->set_pointer_handler(
-        [&](SceneView&, tc_ui_point world, const tc_ui_pointer_event& event) {
-            forwarded =
-                event.type == TC_UI_POINTER_DOWN &&
-                std::isfinite(world.x);
-            return forwarded;
-        });
-    document.dispatch_pointer_event(
-        {TC_UI_POINTER_DOWN, 200.0f, 120.0f, 1, 1, 0, 0.0f, 0.0f});
-    assert(forwarded);
-
     tc_ui_paint_context_destroy(context);
     tc_ui_draw_list_destroy(draw_list);
     assert(tc_ui_document_destroy_widget(document.get(), view_handle));
     tc_ui_document_destroy(document_handle);
+    tc_visual_scene_destroy(scene_handle);
 }
 
 void test_widget_portal_has_separate_document_lifetime() {
     const auto document_handle = tc_ui_document_create();
     TcDocument document(document_handle);
-    auto scene = std::make_shared<GraphicsScene>();
-    auto item = scene->create_rect(
-        "editor", {0.0f, 0.0f, 100.0f, 30.0f},
+    const auto scene_handle = tc_visual_scene_create();
+    TcVisualScene scene{scene_handle};
+    auto* item = adopt<RectItem2D>(
+        scene, nullptr, termin::Rect2f{0.0f, 0.0f, 100.0f, 30.0f},
         fill(0.2f, 0.2f, 0.25f));
-    assert(item.set_position({15.0f, 12.0f}));
+    item->set_local_transform(termin::Affine2f::translation({15.0f, 12.0f}));
     auto* button = new Button("Embedded");
     const auto button_handle = document.adopt(button);
     auto* view = new SceneView(scene);
     const auto view_handle = document.adopt(view);
-    assert(view->set_widget_portal(item, button_handle));
+    assert(view->set_widget_portal(item->handle(), button_handle));
     assert(document.add_root(*view));
     document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
 
@@ -167,7 +176,7 @@ void test_widget_portal_has_separate_document_lifetime() {
         document.hit_test(30.0f, 40.0f),
         button_handle));
 
-    assert(scene->destroy(item));
+    assert(scene.destroy(item->handle()));
     document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
     assert(button->parent_widget() == nullptr);
     assert(tc_ui_document_is_alive(document.get(), button_handle));
@@ -176,13 +185,14 @@ void test_widget_portal_has_separate_document_lifetime() {
     assert(tc_ui_document_is_alive(document.get(), button_handle));
     assert(tc_ui_document_destroy_widget(document.get(), button_handle));
     tc_ui_document_destroy(document_handle);
+    tc_visual_scene_destroy(scene_handle);
 }
 
 } // namespace
 
 int main() {
     test_scene_uses_generation_handles_and_canonical_hit_testing();
-    test_view_transform_drag_pan_zoom_and_draw_list_bridge();
+    test_view_transform_forwarding_pan_zoom_and_draw_list_bridge();
     test_widget_portal_has_separate_document_lifetime();
     return EXIT_SUCCESS;
 }

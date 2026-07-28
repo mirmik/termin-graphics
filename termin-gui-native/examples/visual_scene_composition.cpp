@@ -7,8 +7,11 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <tcbase/tc_log.h>
+#include <termin_visual_scene/interaction2d.hpp>
 
 namespace termin::gui_native::examples {
 namespace {
@@ -43,6 +46,35 @@ bool same_widget(tc_widget_handle left, tc_widget_handle right) {
 
 bool near(float left, float right) {
     return std::fabs(left - right) < 0.001f;
+}
+
+template <typename Item, typename... Args>
+Item* adopt(
+    termin::visual::TcVisualScene& scene,
+    termin::visual::GraphicItem2D* parent,
+    Args&&... args) {
+    auto item = std::make_unique<Item>(
+        std::forward<Args>(args)...);
+    auto* result = item.get();
+    require(
+        scene.adopt(std::move(item), parent).has_value(),
+        "failed to adopt visual item");
+    return result;
+}
+
+tc_ui_point position(
+    const termin::visual::GraphicItem2D& item) {
+    const auto& transform = item.local_transform();
+    return {transform.tx, transform.ty};
+}
+
+void set_position(
+    termin::visual::GraphicItem2D& item,
+    tc_ui_point value) {
+    auto transform = item.local_transform();
+    transform.tx = value.x;
+    transform.ty = value.y;
+    item.set_local_transform(transform);
 }
 
 bool measure_headless_text(
@@ -129,7 +161,9 @@ VisualSceneCompositionRefs build_visual_scene_composition(
     DocumentBuilder ui(document);
     VisualSceneCompositionRefs refs;
     refs.state = std::make_shared<VisualSceneCompositionState>();
-    refs.scene = std::make_shared<GraphicsScene>();
+    refs.state->scene = tc_visual_scene_create();
+    refs.scene =
+        termin::visual::TcVisualScene{refs.state->scene};
 
     refs.root = &ui.make_root<BoxLayout>(
         Orientation::Horizontal, "VisualSceneCompositionRoot");
@@ -144,7 +178,7 @@ VisualSceneCompositionRefs build_visual_scene_composition(
         .set_background({0.105f, 0.120f, 0.155f, 1.0f})
         .set_border({0.24f, 0.29f, 0.39f, 1.0f})
         .set_corner_radius(8.0f);
-    auto& title = ui.make<Label>("Widgets + VisualScene2D", 18.0f);
+    auto& title = ui.make<Label>("Widgets + TcVisualScene", 18.0f);
     auto& hint = ui.make<Label>(
         "Drag shapes. The green control is a widget portal.", 13.0f);
     refs.status = &ui.make<Label>("Ready", 14.0f);
@@ -163,91 +197,79 @@ VisualSceneCompositionRefs build_visual_scene_composition(
     refs.root->add_fixed_child(*refs.controls, 230.0f);
     refs.root->add_flex_child(*refs.view);
 
-    refs.card = refs.scene->create_rounded_rect(
-        "draggable-card",
-        {0.0f, 0.0f, 180.0f, 110.0f},
+    refs.card = adopt<termin::visual::RoundedRectItem2D>(
+        refs.scene,
+        nullptr,
+        termin::Rect2f{0.0f, 0.0f, 180.0f, 110.0f},
         12.0f,
         fill(0.19f, 0.45f, 0.82f),
         stroke(0.55f, 0.76f, 1.0f, 3.0f));
-    require(refs.card.set_position({55.0f, 55.0f}), "failed to place card");
-    require(refs.card.set_z_order(2), "failed to order card");
-    require(refs.card.set_draggable(true), "failed to make card draggable");
+    set_position(*refs.card, {55.0f, 55.0f});
+    refs.card->set_z_order(2);
 
-    auto card_title = refs.scene->create_text(
-        "card-title",
+    adopt<termin::visual::TextItem2D>(
+        refs.scene,
+        refs.card,
         "shared scene item",
-        {16.0f, 34.0f},
+        "ui://default-font",
+        termin::Vec2f{16.0f, 34.0f},
         17.0f,
-        {0.94f, 0.97f, 1.0f, 1.0f},
-        {0.0f, 0.0f, 160.0f, 48.0f},
-        refs.card);
-    require(
-        card_title.set_selectable(false),
-        "failed to delegate child selection to card");
+        tgfx::Color4f{0.94f, 0.97f, 1.0f, 1.0f},
+        tgfx::TextAnchor2D::Left,
+        termin::Bounds2f{0.0f, 0.0f, 160.0f, 48.0f});
 
-    refs.ellipse = refs.scene->create_ellipse(
-        "draggable-ellipse",
-        {0.0f, 0.0f, 112.0f, 112.0f},
+    refs.ellipse = adopt<termin::visual::EllipseItem2D>(
+        refs.scene,
+        nullptr,
+        termin::Rect2f{0.0f, 0.0f, 112.0f, 112.0f},
         fill(0.91f, 0.38f, 0.24f),
         stroke(1.0f, 0.70f, 0.48f, 3.0f));
-    require(
-        refs.ellipse.set_position({300.0f, 145.0f}),
-        "failed to place ellipse");
-    require(refs.ellipse.set_z_order(3), "failed to order ellipse");
-    require(
-        refs.ellipse.set_draggable(true),
-        "failed to make ellipse draggable");
+    set_position(*refs.ellipse, {300.0f, 145.0f});
+    refs.ellipse->set_z_order(3);
 
-    auto connector = refs.scene->create_polyline(
-        "connector",
-        {{145.0f, 110.0f}, {255.0f, 110.0f}, {300.0f, 200.0f}},
+    auto* connector = adopt<termin::visual::PolylineItem2D>(
+        refs.scene,
+        nullptr,
+        std::vector<termin::Vec2f>{
+            {145.0f, 110.0f},
+            {255.0f, 110.0f},
+            {300.0f, 200.0f}},
         stroke(0.52f, 0.61f, 0.78f, 3.0f));
-    require(
-        connector.set_selectable(false),
-        "failed to make connector passive");
-    require(connector.set_z_order(1), "failed to order connector");
+    connector->set_z_order(1);
 
-    auto clipped = refs.scene->create_rounded_rect(
-        "clipped-at-right-edge",
-        {0.0f, 0.0f, 220.0f, 70.0f},
+    auto* clipped = adopt<termin::visual::RoundedRectItem2D>(
+        refs.scene,
+        nullptr,
+        termin::Rect2f{0.0f, 0.0f, 220.0f, 70.0f},
         10.0f,
         fill(0.44f, 0.29f, 0.72f),
         stroke(0.76f, 0.62f, 1.0f, 2.0f));
-    require(
-        clipped.set_position({505.0f, 315.0f}),
-        "failed to place clipped item");
-    require(clipped.set_z_order(0), "failed to order clipped item");
+    set_position(*clipped, {505.0f, 315.0f});
+    clipped->set_z_order(0);
 
-    refs.portal = refs.scene->create_hit_region(
-        "widget-portal",
+    refs.portal = adopt<termin::visual::HitRegionItem2D>(
+        refs.scene,
+        nullptr,
         rectangle_path(175.0f, 42.0f));
-    require(
-        refs.portal.set_position({82.0f, 245.0f}),
-        "failed to place widget portal");
-    require(refs.portal.set_z_order(10), "failed to order widget portal");
-    require(
-        refs.portal.set_selectable(false),
-        "failed to make widget portal passive");
+    set_position(*refs.portal, {82.0f, 245.0f});
+    refs.portal->set_z_order(10);
     refs.portal_button = &ui.make<Button>("Portal action");
     refs.portal_button->set_accent({0.20f, 0.74f, 0.48f, 1.0f});
     require(
         refs.view->set_widget_portal(
-            refs.portal, refs.portal_button->handle()),
+            refs.portal->handle(), refs.portal_button->handle()),
         "failed to attach widget portal");
 
     const auto state = refs.state;
     Label* const status = refs.status;
-    auto card = refs.card;
-    auto ellipse = refs.ellipse;
+    auto* card = refs.card;
+    auto* ellipse = refs.ellipse;
+    auto* view = refs.view;
     refs.reset->clicked().connect(
-        [state, status, card, ellipse](Button&) mutable {
-            if (!card.set_position({55.0f, 55.0f}) ||
-                !ellipse.set_position({300.0f, 145.0f})) {
-                tc_log_error(
-                    "[visual-scene-example] failed to reset scene items");
-                status->set_text("Reset failed; see log");
-                return;
-            }
+        [state, status, card, ellipse, view](Button&) {
+            set_position(*card, {55.0f, 55.0f});
+            set_position(*ellipse, {300.0f, 145.0f});
+            view->invalidate_scene();
             ++state->reset_clicks;
             status->set_text("Scene reset by an ordinary widget");
         });
@@ -258,10 +280,56 @@ VisualSceneCompositionRefs build_visual_scene_composition(
                 "Portal clicked " + std::to_string(state->portal_clicks));
             status->set_text("Portal widget handled the pointer");
         });
-    refs.view->item_moved().connect(
-        [state, status](SceneView&, GraphicItemRef item) {
-            ++state->item_moves;
-            status->set_text("Dragged: " + item.stable_id());
+    auto scene = refs.scene;
+    refs.view->set_pointer_handler(
+        [state, status, scene, card, ellipse](
+            SceneView& view,
+            tc_ui_point world,
+            const tc_ui_pointer_event& event) {
+            if (event.type == TC_UI_POINTER_DOWN &&
+                event.button == 0) {
+                const auto hit = termin::visual::hit_test(
+                    scene, {world.x, world.y});
+                auto* item = hit ? scene.resolve(*hit) : nullptr;
+                while (item && item != card->c_item() &&
+                       item != ellipse->c_item()) {
+                    item = item->parent;
+                }
+                state->drag_item =
+                    item == card->c_item()
+                        ? static_cast<termin::visual::GraphicItem2D*>(card)
+                        : item == ellipse->c_item()
+                            ? static_cast<termin::visual::GraphicItem2D*>(
+                                  ellipse)
+                            : nullptr;
+                if (!state->drag_item) return false;
+                state->drag_start_world = world;
+                state->drag_start_position =
+                    position(*state->drag_item);
+                return true;
+            }
+            if (event.type == TC_UI_POINTER_MOVE &&
+                state->drag_item) {
+                set_position(
+                    *state->drag_item,
+                    {
+                        state->drag_start_position.x +
+                            world.x - state->drag_start_world.x,
+                        state->drag_start_position.y +
+                            world.y - state->drag_start_world.y,
+                    });
+                ++state->item_moves;
+                status->set_text("Dragged scene item");
+                view.invalidate_scene();
+                return true;
+            }
+            if ((event.type == TC_UI_POINTER_UP ||
+                 event.type == TC_UI_POINTER_CANCEL) &&
+                state->drag_item) {
+                state->drag_item = nullptr;
+                return true;
+            }
+            return false;
         });
 
     return refs;
@@ -347,12 +415,12 @@ int run_visual_scene_composition_headless_smoke() {
                 document.hit_test(portal_center.x, portal_center.y),
                 refs.portal_button->handle()),
             "portal widget did not win over its graphic hit region");
-        const auto portal_position = refs.portal.position();
+        const auto portal_position = position(*refs.portal);
         click(document, portal_center);
         require(
             refs.state->portal_clicks == 1 &&
-            near(refs.portal.position().x, portal_position.x) &&
-            near(refs.portal.position().y, portal_position.y),
+            near(position(*refs.portal).x, portal_position.x) &&
+            near(position(*refs.portal).y, portal_position.y),
             "portal click leaked into scene dragging");
 
         const tc_ui_point card_start =
@@ -376,14 +444,13 @@ int run_visual_scene_composition_headless_smoke() {
             "scene drag up was not handled");
         require(
             refs.state->item_moves == 1 &&
-            near(refs.card.position().x, 92.0f) &&
-            near(refs.card.position().y, 78.0f),
+            near(position(*refs.card).x, 92.0f) &&
+            near(position(*refs.card).y, 78.0f),
             "scene item did not follow captured drag");
 
         refs.view->clear_dirty(TC_WIDGET_DIRTY_MASK);
-        require(
-            refs.ellipse.set_position({325.0f, 165.0f}),
-            "scene mutation failed");
+        set_position(*refs.ellipse, {325.0f, 165.0f});
+        refs.view->invalidate_scene();
         require(
             refs.view->has_dirty_flags(
                 TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT),
@@ -396,7 +463,7 @@ int run_visual_scene_composition_headless_smoke() {
             "SceneView did not resize with the document");
         const tc_ui_rect resized_portal = refs.portal_button->bounds();
         const tc_ui_point expected_portal =
-            refs.view->world_to_screen(refs.portal.position());
+            refs.view->world_to_screen(position(*refs.portal));
         require(
             near(resized_portal.x, expected_portal.x) &&
             near(resized_portal.y, expected_portal.y),
@@ -410,8 +477,8 @@ int run_visual_scene_composition_headless_smoke() {
             });
         require(
             refs.state->reset_clicks == 1 &&
-            near(refs.card.position().x, 55.0f) &&
-            near(refs.ellipse.position().x, 300.0f),
+            near(position(*refs.card).x, 55.0f) &&
+            near(position(*refs.ellipse).x, 300.0f),
             "ordinary widget did not update scene state");
 
         tc_ui_paint_context_destroy(context);

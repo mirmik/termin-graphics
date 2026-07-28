@@ -15,7 +15,8 @@
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/render_context.hpp>
 #include <termin/geom/affine2.hpp>
-#include <termin_visual_scene/render_snapshot2d.hpp>
+#include <termin_visual_scene/builtin_items2d.hpp>
+#include <termin_visual_scene/scene_render2d.hpp>
 
 namespace tcplot {
 namespace {
@@ -152,6 +153,7 @@ PlotAnnotationPhase2D annotation_phase(PlotRenderPhase2D phase) {
 struct PlotAnnotationLayer2D::Impl {
     struct Projection {
         GraphicItemHandle item = tc_graphic_item_handle_invalid();
+        termin::visual::GraphicItem2D* object = nullptr;
         std::size_t visual_index = 0;
         std::size_t bucket = 0;
     };
@@ -181,30 +183,31 @@ struct PlotAnnotationLayer2D::Impl {
         tgfx::FontAtlas* font = nullptr;
 
         std::optional<tgfx::FontHandle> resolve_font(
-            const termin::visual::StableResourceRef2D& reference) override {
-            if (reference.uri != kPlotDefaultFontResource2D || !font) {
+            std::string_view uri) override {
+            if (uri != kPlotDefaultFontResource2D || !font) {
                 tc::Log::error(
                     "PlotAnnotationLayer2D: unresolved font resource '%s'",
-                    reference.uri.c_str());
+                    std::string(uri).c_str());
                 return std::nullopt;
             }
             return tgfx::FontHandle{1};
         }
 
         std::optional<tgfx::TextureHandle> resolve_image(
-            const termin::visual::StableResourceRef2D& reference) override {
+            std::string_view uri) override {
             tc::Log::error(
                 "PlotAnnotationLayer2D: unresolved image resource '%s'",
-                reference.uri.c_str());
+                std::string(uri).c_str());
             return std::nullopt;
         }
 
         std::optional<termin::visual::ResolvedCustomBatch2D>
         resolve_custom_batch(
-            const termin::visual::CustomBatchItem2D& reference) override {
+            std::string_view key,
+            termin::Bounds2f) override {
             tc::Log::error(
                 "PlotAnnotationLayer2D: unresolved custom batch '%s'",
-                reference.key.c_str());
+                std::string(key).c_str());
             return std::nullopt;
         }
 
@@ -214,7 +217,12 @@ struct PlotAnnotationLayer2D::Impl {
     };
 
     struct Bucket {
-        termin::visual::VisualScene2D scene;
+        Bucket()
+            : scene(tc_visual_scene_create()) {}
+        ~Bucket() {
+            tc_visual_scene_destroy(scene.handle());
+        }
+        termin::visual::TcVisualScene scene;
         termin::visual::SceneInteraction2D interaction;
     };
 
@@ -255,7 +263,7 @@ struct PlotAnnotationLayer2D::Impl {
             Bucket& bucket = buckets[projection.bucket];
             bucket.interaction.cancel_all();
             bucket.interaction.clear_action_handler(projection.item);
-            if (!bucket.scene.destroy_leaf(projection.item)) {
+            if (!bucket.scene.destroy(projection.item)) {
                 tc::Log::error(
                     "PlotAnnotationLayer2D: failed to destroy projected item");
             }
@@ -283,25 +291,28 @@ struct PlotAnnotationLayer2D::Impl {
         record.annotation.visuals.clear();
 
         PlotAnnotationVisual2D anchor;
-        anchor.payload = termin::visual::EllipseItem2D{
-            {-radius, -radius, radius * 2.0f, radius * 2.0f},
-            tgfx::FillPaint{accent},
-            tgfx::StrokePaint{
-                marker.border_color,
-                highlighted ? 2.5f : 1.5f,
-            },
-        };
+        anchor.item =
+            std::make_unique<termin::visual::EllipseItem2D>(
+                termin::Rect2f{
+                    -radius, -radius, radius * 2.0f, radius * 2.0f},
+                tgfx::FillPaint{accent},
+                tgfx::StrokePaint{
+                    marker.border_color,
+                    highlighted ? 2.5f : 1.5f,
+                });
         anchor.phase = PlotAnnotationPhase2D::Overlay;
         anchor.clip = PlotAnnotationClip2D::PlotArea;
         anchor.z_order = 20;
         record.annotation.visuals.push_back(std::move(anchor));
 
         PlotAnnotationVisual2D leader;
-        leader.payload = termin::visual::PolylineItem2D{
-            {{0.0f, 0.0f}, marker.callout_offset},
-            tgfx::StrokePaint{accent, highlighted ? 2.5f : 1.5f},
-            false,
-        };
+        leader.item =
+            std::make_unique<termin::visual::PolylineItem2D>(
+                std::vector<termin::Vec2f>{
+                    {0.0f, 0.0f}, marker.callout_offset},
+                tgfx::StrokePaint{
+                    accent, highlighted ? 2.5f : 1.5f},
+                false);
         leader.phase = PlotAnnotationPhase2D::Overlay;
         leader.clip = PlotAnnotationClip2D::PlotArea;
         leader.z_order = 10;
@@ -309,18 +320,19 @@ struct PlotAnnotationLayer2D::Impl {
         record.annotation.visuals.push_back(std::move(leader));
 
         PlotAnnotationVisual2D bubble;
-        bubble.payload = termin::visual::RoundedRectItem2D{
-            {-half_width,
-             -half_height,
-             marker.callout_width,
-             marker.callout_height},
-            8.0f,
-            tgfx::FillPaint{marker.callout_color},
-            tgfx::StrokePaint{
-                highlighted ? accent : marker.border_color,
-                highlighted ? 2.0f : 1.0f,
-            },
-        };
+        bubble.item =
+            std::make_unique<termin::visual::RoundedRectItem2D>(
+                termin::Rect2f{
+                 -half_width,
+                 -half_height,
+                 marker.callout_width,
+                 marker.callout_height},
+                8.0f,
+                tgfx::FillPaint{marker.callout_color},
+                tgfx::StrokePaint{
+                    highlighted ? accent : marker.border_color,
+                    highlighted ? 2.0f : 1.0f,
+                });
         bubble.pixel_offset = marker.callout_offset;
         bubble.phase = PlotAnnotationPhase2D::Chrome;
         bubble.clip = PlotAnnotationClip2D::PlotArea;
@@ -328,18 +340,19 @@ struct PlotAnnotationLayer2D::Impl {
         record.annotation.visuals.push_back(std::move(bubble));
 
         PlotAnnotationVisual2D text;
-        text.payload = termin::visual::TextItem2D{
-            marker.text,
-            {std::string(kPlotDefaultFontResource2D)},
-            {-half_width + 12.0f, 5.0f},
-            marker.text_size,
-            marker.text_color,
-            tgfx::TextAnchor2D::Left,
-            {-half_width + 12.0f,
-             -half_height + 7.0f,
-             half_width - 30.0f,
-             half_height - 7.0f},
-        };
+        text.item =
+            std::make_unique<termin::visual::TextItem2D>(
+                marker.text,
+                std::string(kPlotDefaultFontResource2D),
+                termin::Vec2f{-half_width + 12.0f, 5.0f},
+                marker.text_size,
+                marker.text_color,
+                tgfx::TextAnchor2D::Left,
+                termin::Bounds2f{
+                 -half_width + 12.0f,
+                 -half_height + 7.0f,
+                 half_width - 30.0f,
+                 half_height - 7.0f});
         text.pixel_offset = marker.callout_offset;
         text.phase = PlotAnnotationPhase2D::Chrome;
         text.clip = PlotAnnotationClip2D::PlotArea;
@@ -349,15 +362,15 @@ struct PlotAnnotationLayer2D::Impl {
 
         if (marker.close_button) {
             PlotAnnotationVisual2D close;
-            close.payload = termin::visual::RoundedRectItem2D{
-                {-8.0f, -8.0f, 16.0f, 16.0f},
-                4.0f,
-                tgfx::FillPaint{
-                    highlighted
-                        ? tgfx::Color4f{0.85f, 0.25f, 0.22f, 1.0f}
-                        : tgfx::Color4f{0.48f, 0.20f, 0.20f, 1.0f}},
-                std::nullopt,
-            };
+            close.item =
+                std::make_unique<termin::visual::RoundedRectItem2D>(
+                    termin::Rect2f{-8.0f, -8.0f, 16.0f, 16.0f},
+                    4.0f,
+                    tgfx::FillPaint{
+                        highlighted
+                            ? tgfx::Color4f{0.85f, 0.25f, 0.22f, 1.0f}
+                            : tgfx::Color4f{0.48f, 0.20f, 0.20f, 1.0f}},
+                    std::nullopt);
             close.pixel_offset = {
                 marker.callout_offset.x + half_width - 14.0f,
                 marker.callout_offset.y,
@@ -463,6 +476,69 @@ struct PlotAnnotationLayer2D::Impl {
         return true;
     }
 
+    bool materialize_visuals(
+        std::uint32_t record_index)
+    {
+        Record& record = records[record_index];
+        if (!projection_topology_matches(record)) {
+            clear_projection(record);
+        }
+        if (record.projections.empty()) {
+            record.projections.reserve(
+                record.annotation.visuals.size());
+            for (std::size_t i = 0;
+                 i < record.annotation.visuals.size();
+                 ++i) {
+                auto& visual =
+                    record.annotation.visuals[i];
+                if (!visual.item) {
+                    tc::Log::error(
+                        "PlotAnnotationLayer2D: visual has no item");
+                    clear_projection(record);
+                    return false;
+                }
+                const std::size_t bucket =
+                    bucket_index(visual.phase, visual.clip);
+                auto* object = visual.item.get();
+                const auto handle =
+                    buckets[bucket].scene.adopt(
+                        std::move(visual.item));
+                if (!handle) {
+                    tc::Log::error(
+                        "PlotAnnotationLayer2D: failed to adopt projected item");
+                    clear_projection(record);
+                    return false;
+                }
+                record.projections.push_back(
+                    {*handle, object, i, bucket});
+                bind_action(
+                    record_index,
+                    record.projections.back(),
+                    visual);
+            }
+            return true;
+        }
+
+        for (std::size_t i = 0;
+             i < record.projections.size();
+             ++i) {
+            auto& visual = record.annotation.visuals[i];
+            if (!visual.item) continue;
+            auto* object = visual.item.get();
+            auto& projection = record.projections[i];
+            if (!buckets[projection.bucket].scene.replace(
+                    projection.item,
+                    std::move(visual.item))) {
+                tc::Log::error(
+                    "PlotAnnotationLayer2D: failed to replace projected item");
+                clear_projection(record);
+                return false;
+            }
+            projection.object = object;
+        }
+        return true;
+    }
+
     void project_record(
         std::uint32_t record_index,
         const PlotFrame2D& frame,
@@ -470,53 +546,24 @@ struct PlotAnnotationLayer2D::Impl {
         Record& record = records[record_index];
         const auto anchor =
             resolve_anchor(record.annotation.anchor, frame, data);
-        if (!anchor) {
-            clear_projection(record);
+        if (!materialize_visuals(record_index)) {
             return;
-        }
-
-        if (!projection_topology_matches(record)) {
-            clear_projection(record);
-            record.projections.reserve(record.annotation.visuals.size());
-            for (std::size_t i = 0;
-                 i < record.annotation.visuals.size();
-                 ++i) {
-                const PlotAnnotationVisual2D& visual =
-                    record.annotation.visuals[i];
-                const std::size_t bucket =
-                    bucket_index(visual.phase, visual.clip);
-                const auto item =
-                    buckets[bucket].scene.create(visual.payload);
-                if (!item) {
-                    tc::Log::error(
-                        "PlotAnnotationLayer2D: failed to create projected item");
-                    clear_projection(record);
-                    return;
-                }
-                record.projections.push_back({*item, i, bucket});
-                bind_action(
-                    record_index, record.projections.back(), visual);
-            }
         }
 
         for (const Projection& projection : record.projections) {
             const PlotAnnotationVisual2D& visual =
                 record.annotation.visuals[projection.visual_index];
-            termin::visual::GraphicItemState2D state;
-            state.local_transform = termin::Affine2f::translation(
-                anchor->x + visual.pixel_offset.x,
-                anchor->y + visual.pixel_offset.y);
-            state.z_order = visual.z_order;
-            state.visible = visual.visible;
-            state.enabled = visual.enabled;
-            Bucket& bucket = buckets[projection.bucket];
-            if (!bucket.scene.set_item(
-                    projection.item, state, visual.payload)) {
-                tc::Log::error(
-                    "PlotAnnotationLayer2D: failed to update projected item");
-                clear_projection(record);
-                return;
+            termin::Affine2f transform{};
+            if (anchor) {
+                transform = termin::Affine2f::translation(
+                    anchor->x + visual.pixel_offset.x,
+                    anchor->y + visual.pixel_offset.y);
             }
+            projection.object->set_local_transform(transform);
+            projection.object->set_z_order(visual.z_order);
+            projection.object->set_visible(
+                visual.visible && anchor.has_value());
+            projection.object->set_enabled(visual.enabled);
         }
         record.projected_anchor = anchor;
     }
@@ -681,7 +728,7 @@ std::optional<PlotAnnotationSnapshot2D> PlotAnnotationLayer2D::snapshot(
     if (!record) return std::nullopt;
     PlotAnnotationSnapshot2D result;
     result.handle = handle;
-    result.annotation = record->annotation;
+    result.anchor = record->annotation.anchor;
     result.projected_anchor = record->projected_anchor;
     result.projected_graphics.reserve(record->projections.size());
     for (const Impl::Projection& projection : record->projections) {
@@ -885,14 +932,6 @@ void PlotAnnotationLayer2D::render_phase(
         Impl::Bucket& bucket =
             impl_->buckets[bucket_index(annotation, clip)];
         if (bucket.scene.size() == 0) continue;
-        const auto prepared =
-            bucket.scene.prepare_render_snapshot(impl_->resources);
-        if (!prepared) {
-            tc::Log::error(
-                "PlotAnnotationLayer2D: failed to prepare render snapshot");
-            continue;
-        }
-
         const PlotRect2D& viewport = frame.viewport();
         impl_->canvas.set_default_font(font);
         impl_->canvas.begin(
@@ -910,8 +949,13 @@ void PlotAnnotationLayer2D::render_phase(
             static_cast<int>(scissor.y()),
             static_cast<int>(scissor.width()),
             static_cast<int>(scissor.height()));
-        if (!impl_->canvas.execute(
-                prepared->draw_list(), impl_->resources)) {
+        tgfx::DrawList2DBuilder builder;
+        const bool painted =
+            bucket.scene.paint(builder, impl_->resources);
+        const auto draw_list =
+            painted ? builder.freeze() : std::nullopt;
+        if (!draw_list
+            || !impl_->canvas.execute(*draw_list, impl_->resources)) {
             tc::Log::error(
                 "PlotAnnotationLayer2D: DrawList2D execution failed");
         }
@@ -923,7 +967,7 @@ void PlotAnnotationLayer2D::release_gpu_resources() {
     impl_->canvas.release_gpu();
 }
 
-const termin::visual::VisualScene2D& PlotAnnotationLayer2D::visual_scene(
+const termin::visual::TcVisualScene& PlotAnnotationLayer2D::visual_scene(
     PlotAnnotationPhase2D phase,
     PlotAnnotationClip2D clip) const {
     return impl_->buckets[bucket_index(phase, clip)].scene;

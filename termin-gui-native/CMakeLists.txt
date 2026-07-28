@@ -68,7 +68,6 @@ add_library(termin_gui_native SHARED
     src/overlay_layout.cpp
     src/box_layout.cpp
     src/grid_layout.cpp
-    src/graphics_scene.cpp
     src/group_box.cpp
     src/splitter.cpp
     src/scroll_area.cpp

@@ -14,6 +14,13 @@ preload_sdk_libs(
     "termin_gui_native_offscreen",
 )
 
+from termin.visual_scene import (  # noqa: E402
+    GraphicItemHandle,
+    GraphicItemRef2D,
+    PolylineItemRef2D,
+    TcVisualScene,
+)
+
 from termin.gui_native._gui_native import (  # noqa: E402
     BoxLayout,
     Button,
@@ -63,8 +70,6 @@ from termin.gui_native._gui_native import (  # noqa: E402
     FrameTimelineModel,
     FrameTimelineSample,
     FrameTimelineWidget,
-    GraphicItemRef,
-    GraphicsScene,
     GroupBox,
     GridLayout,
     HStack,
@@ -399,8 +404,10 @@ __all__ = [
     "FrameTimelineModel",
     "FrameTimelineSample",
     "FrameTimelineWidget",
-    "GraphicItemRef",
-    "GraphicsScene",
+    "GraphicItemHandle",
+    "GraphicItemRef2D",
+    "PolylineItemRef2D",
+    "TcVisualScene",
     "GroupBox",
     "GridLayout",
     "HStack",

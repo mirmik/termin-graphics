@@ -9,11 +9,19 @@ preload_sdk_libs(
 )
 
 from termin.visual_scene._visual_scene_native import (
+    GraphicItemHandle,
     GraphicItemRef2D,
-    VisualScene2D,
+    PolylineItemRef2D,
+    TcVisualScene,
+    tc_visual_scene_create,
+    tc_visual_scene_destroy,
 )
 
 __all__ = [
+    "GraphicItemHandle",
     "GraphicItemRef2D",
-    "VisualScene2D",
+    "PolylineItemRef2D",
+    "TcVisualScene",
+    "tc_visual_scene_create",
+    "tc_visual_scene_destroy",
 ]

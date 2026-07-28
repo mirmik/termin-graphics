@@ -2,15 +2,23 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <vector>
 
-#include <termin/gui_native/graphics_scene.hpp>
 #include <termin/gui_native/native_widget.hpp>
+#include <termin/gui_native/signal.hpp>
 #include <termin/gui_native/widget_types.hpp>
-#include <termin_visual_scene/interaction2d.hpp>
+#include <termin_visual_scene/scene2d.hpp>
 
 namespace termin::gui_native {
+
+struct SceneTransform {
+    float origin_x = 0.0f;
+    float origin_y = 0.0f;
+    float zoom = 1.0f;
+
+    tc_ui_point world_to_screen(tc_ui_point point) const;
+    tc_ui_point screen_to_world(tc_ui_point point) const;
+};
 
 class SceneView : public NativeWidget {
 public:
@@ -31,8 +39,8 @@ private:
         tc_widget_handle widget = tc_widget_handle_invalid();
     };
 
-    std::shared_ptr<GraphicsScene> scene_;
-    std::size_t scene_connection_ = 0;
+    tc_visual_scene_handle scene_ =
+        tc_visual_scene_handle_invalid();
     float zoom_ = 1.0f;
     float min_zoom_ = 0.1f;
     float max_zoom_ = 4.0f;
@@ -46,22 +54,22 @@ private:
     bool panning_ = false;
     tc_ui_point pan_start_{};
     tc_ui_point pan_start_offset_{};
-    termin::visual::SceneInteraction2D interaction_;
-    termin::visual::SelectionController2D selection_;
-    termin::visual::DragController2D drag_;
     std::vector<WidgetPortal> portals_;
     PointerHandler pointer_handler_;
     KeyHandler key_handler_;
     TextHandler text_handler_;
-    Signal<SceneView&, GraphicItemRef> item_moved_;
     Signal<SceneView&, const SceneTransform&> transform_changed_;
 
 public:
-    explicit SceneView(std::shared_ptr<GraphicsScene> scene = nullptr);
-    ~SceneView() override;
+    explicit SceneView(
+        termin::visual::TcVisualScene scene = {});
+    ~SceneView() override = default;
 
-    std::shared_ptr<GraphicsScene> scene() const { return scene_; }
-    void set_scene(std::shared_ptr<GraphicsScene> scene);
+    termin::visual::TcVisualScene scene() const {
+        return termin::visual::TcVisualScene{scene_};
+    }
+    void set_scene(termin::visual::TcVisualScene scene);
+    void invalidate_scene();
 
     float zoom() const { return zoom_; }
     void set_zoom(float zoom, tc_ui_point anchor);
@@ -83,12 +91,11 @@ public:
     tc_ui_point screen_to_world(tc_ui_point point) const;
 
     bool set_widget_portal(
-        const GraphicItemRef& item,
+        termin::visual::GraphicItemHandle item,
         tc_widget_handle widget);
-    bool clear_widget_portal(const GraphicItemRef& item);
+    bool clear_widget_portal(
+        termin::visual::GraphicItemHandle item);
     void clear_widget_portals();
-    std::vector<GraphicItemRef> selected_items();
-    std::optional<GraphicItemRef> hovered_item();
 
     void set_pointer_handler(PointerHandler handler) {
         pointer_handler_ = std::move(handler);
@@ -100,9 +107,6 @@ public:
         text_handler_ = std::move(handler);
     }
 
-    Signal<SceneView&, GraphicItemRef>& item_moved() {
-        return item_moved_;
-    }
     Signal<SceneView&, const SceneTransform&>& transform_changed() {
         return transform_changed_;
     }
@@ -132,9 +136,6 @@ public:
     void on_destroy(tc_ui_document_handle document) override;
 
 private:
-    void connect_scene();
-    void disconnect_scene();
-    void on_scene_changed();
     void reconcile_portals(tc_ui_document_handle document);
     void layout_portals(tc_ui_document_handle document);
     void paint_portals(
@@ -144,10 +145,6 @@ private:
         tc_ui_document_handle document,
         float x,
         float y) const;
-    termin::visual::GraphicItemHandle selectable_ancestor(
-        termin::visual::GraphicItemHandle item) const;
-    termin::visual::GraphicItemHandle draggable_ancestor(
-        termin::visual::GraphicItemHandle item) const;
     void emit_transform_changed();
 };
 

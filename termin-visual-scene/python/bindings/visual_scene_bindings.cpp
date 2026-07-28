@@ -1,101 +1,72 @@
-#include <functional>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
-#include <nanobind/stl/vector.h>
 
-#include <tcbase/tc_log.hpp>
-#include <tcbase/tc_trent_json.hpp>
-
-#include "termin_visual_scene/scene_inspection2d.hpp"
+#include "termin_visual_scene/builtin_items2d.hpp"
+#include "termin_visual_scene/interaction2d.hpp"
 
 namespace nb = nanobind;
 
 namespace {
 
+using termin::visual::GraphicItem2D;
 using termin::visual::GraphicItemHandle;
-using termin::visual::GraphicItemSnapshot2D;
-using termin::visual::GraphicItemState2D;
-using termin::visual::VisualScene2D;
-
-struct SceneLifetime2D {
-    VisualScene2D* scene = nullptr;
-};
+using termin::visual::PolylineItem2D;
+using termin::visual::TcVisualScene;
 
 [[noreturn]] void stale_reference(const char* message) {
     PyErr_SetString(PyExc_ReferenceError, message);
     throw nb::python_error();
 }
 
+bool same_handle(
+    GraphicItemHandle left,
+    GraphicItemHandle right)
+{
+    return left.scene_id == right.scene_id &&
+        left.index == right.index &&
+        left.generation == right.generation;
+}
+
 struct GraphicItemRef2D {
-    std::shared_ptr<SceneLifetime2D> lifetime;
-    GraphicItemHandle handle = tc_graphic_item_handle_invalid();
+    TcVisualScene scene;
+    GraphicItemHandle handle =
+        tc_graphic_item_handle_invalid();
+
+    TcVisualScene owner() const {
+        if (!scene.valid()) {
+            stale_reference("TcVisualScene has been destroyed");
+        }
+        return scene;
+    }
+
+    tc_graphic_item& item() const {
+        auto value = owner();
+        tc_graphic_item* item = value.resolve(handle);
+        if (!item) {
+            stale_reference("GraphicItemRef2D is stale");
+        }
+        return *item;
+    }
+
+    GraphicItem2D& object() const {
+        tc_graphic_item& value = item();
+        return *static_cast<GraphicItem2D*>(value.body);
+    }
 
     bool valid() const {
-        return lifetime && lifetime->scene
-            && lifetime->scene->contains(handle);
-    }
-
-    VisualScene2D& scene() const {
-        if (!lifetime || !lifetime->scene) {
-            stale_reference("VisualScene2D has been destroyed");
-        }
-        if (!lifetime->scene->contains(handle)) {
-            stale_reference("GraphicItemRef2D is stale");
-        }
-        return *lifetime->scene;
-    }
-
-    GraphicItemSnapshot2D snapshot() const {
-        auto value = scene().snapshot(handle);
-        if (!value) {
-            stale_reference("GraphicItemRef2D is stale");
-        }
-        return std::move(*value);
+        return scene.valid() && scene.contains(handle);
     }
 };
 
-class PythonVisualScene2D {
-public:
-    PythonVisualScene2D()
-        : scene_(std::make_unique<VisualScene2D>()),
-          lifetime_(std::make_shared<SceneLifetime2D>()) {
-        lifetime_->scene = scene_.get();
-    }
-
-    ~PythonVisualScene2D() {
-        lifetime_->scene = nullptr;
-        scene_.reset();
-    }
-
-    PythonVisualScene2D(const PythonVisualScene2D&) = delete;
-    PythonVisualScene2D& operator=(const PythonVisualScene2D&) = delete;
-
-    VisualScene2D& scene() { return *scene_; }
-    const VisualScene2D& scene() const { return *scene_; }
-    const std::shared_ptr<SceneLifetime2D>& lifetime() const {
-        return lifetime_;
-    }
-
-private:
-    std::unique_ptr<VisualScene2D> scene_;
-    std::shared_ptr<SceneLifetime2D> lifetime_;
-};
-
-GraphicItemHandle parent_handle(
-    const PythonVisualScene2D& owner,
-    nb::object parent) {
-    if (parent.is_none()) return tc_graphic_item_handle_invalid();
-    const auto& ref = nb::cast<const GraphicItemRef2D&>(parent);
-    if (ref.lifetime != owner.lifetime()) {
-        throw nb::value_error("parent belongs to another VisualScene2D");
-    }
-    if (!ref.valid()) stale_reference("parent item is stale");
-    return ref.handle;
-}
+struct PolylineItemRef2D : GraphicItemRef2D {};
 
 tgfx::Color4f parse_color(nb::tuple value) {
     if (value.size() != 4) {
@@ -113,248 +84,483 @@ tgfx::Color4f parse_color(nb::tuple value) {
     return result;
 }
 
-GraphicItemRef2D wrap_created(
-    PythonVisualScene2D& owner,
-    std::optional<GraphicItemHandle> handle) {
-    if (!handle) throw nb::value_error("graphic item was rejected");
-    return {owner.lifetime(), *handle};
+termin::Vec2f parse_point(nb::tuple value) {
+    if (value.size() != 2) {
+        throw nb::value_error("point must contain (x, y)");
+    }
+    return {
+        nb::cast<float>(value[0]),
+        nb::cast<float>(value[1]),
+    };
+}
+
+termin::Rect2f parse_rect(nb::tuple value) {
+    if (value.size() != 4) {
+        throw nb::value_error(
+            "rect must contain (x, y, width, height)");
+    }
+    return {
+        nb::cast<float>(value[0]),
+        nb::cast<float>(value[1]),
+        nb::cast<float>(value[2]),
+        nb::cast<float>(value[3]),
+    };
+}
+
+std::vector<termin::Vec2f> parse_points(
+    nb::sequence values)
+{
+    std::vector<termin::Vec2f> result;
+    result.reserve(nb::len(values));
+    for (nb::handle value : values) {
+        result.push_back(
+            parse_point(nb::cast<nb::tuple>(value)));
+    }
+    return result;
+}
+
+GraphicItem2D* parent_object(
+    TcVisualScene scene,
+    nb::object parent)
+{
+    if (parent.is_none()) return nullptr;
+    const auto& ref =
+        nb::cast<const GraphicItemRef2D&>(parent);
+    auto parent_scene = ref.owner();
+    if (parent_scene.handle().index != scene.handle().index ||
+        parent_scene.handle().generation != scene.handle().generation) {
+        throw nb::value_error(
+            "parent belongs to another TcVisualScene");
+    }
+    return &ref.object();
+}
+
+GraphicItemRef2D wrap(
+    TcVisualScene scene,
+    std::optional<GraphicItemHandle> handle)
+{
+    if (!handle) {
+        throw nb::value_error("graphic item was rejected");
+    }
+    return {scene, *handle};
 }
 
 nb::tuple affine_tuple(const termin::Affine2f& value) {
     return nb::make_tuple(
-        value.m00,
-        value.m01,
-        value.m10,
-        value.m11,
-        value.tx,
-        value.ty);
+        value.m00, value.m01,
+        value.m10, value.m11,
+        value.tx, value.ty);
 }
 
 nb::object bounds_value(
-    const std::optional<termin::Bounds2f>& value) {
+    const std::optional<termin::Bounds2f>& value)
+{
     if (!value) return nb::none();
-    return nb::make_tuple(value->x0, value->y0, value->x1, value->y1);
+    return nb::make_tuple(
+        value->x0, value->y0,
+        value->x1, value->y1);
 }
 
-nb::dict detached_snapshot(const GraphicItemSnapshot2D& value) {
-    nb::dict result;
-    result["type"] = termin::visual::payload_type_name(value.payload);
-    result["stable_order"] = value.stable_order;
-    result["local_transform"] = affine_tuple(value.state.local_transform);
-    result["world_transform"] = affine_tuple(value.world_transform);
-    result["visible"] = value.state.visible;
-    result["enabled"] = value.state.enabled;
-    result["opacity"] = value.state.opacity;
-    result["z_order"] = value.state.z_order;
-    result["effective_visible"] = value.effective_visible;
-    result["effective_enabled"] = value.effective_enabled;
-    result["effective_opacity"] = value.effective_opacity;
-    result["revision"] = value.revision;
-    result["topology_revision"] = value.topology_revision;
-    result["depth"] = value.depth;
-    result["diagnostics"] =
-        static_cast<std::uint32_t>(value.diagnostics);
-    result["local_bounds"] = bounds_value(value.local_bounds);
-    result["world_bounds"] = bounds_value(value.world_bounds);
-    return result;
-}
-
-nb::dict detached_inspection(const PythonVisualScene2D& owner) {
-    const auto inspected = owner.scene().inspection();
-    nb::dict result;
-    result["schema_version"] = inspected.schema_version;
-    result["scene_revision"] = inspected.scene_revision;
-    nb::list items;
-    for (const auto& item : inspected.items) {
-        nb::dict encoded;
-        encoded["record_index"] = item.record_index;
-        encoded["parent_index"] = item.parent_index
-            ? nb::cast(*item.parent_index)
-            : nb::none();
-        encoded["children"] = nb::cast(item.children);
-        encoded["type"] = item.type_name;
-        encoded["stable_id"] = item.stable_id;
-        encoded["local_transform"] =
-            affine_tuple(item.state.local_transform);
-        encoded["world_transform"] =
-            affine_tuple(item.world_transform);
-        encoded["visible"] = item.state.visible;
-        encoded["enabled"] = item.state.enabled;
-        encoded["opacity"] = item.state.opacity;
-        encoded["z_order"] = item.state.z_order;
-        encoded["effective_visible"] = item.effective_visible;
-        encoded["effective_enabled"] = item.effective_enabled;
-        encoded["effective_opacity"] = item.effective_opacity;
-        encoded["revision"] = item.revision;
-        encoded["topology_revision"] = item.topology_revision;
-        encoded["depth"] = item.depth;
-        encoded["diagnostics"] =
-            static_cast<std::uint32_t>(item.diagnostics);
-        encoded["local_bounds"] = bounds_value(item.local_bounds);
-        encoded["world_bounds"] = bounds_value(item.world_bounds);
-        items.append(std::move(encoded));
-    }
-    result["items"] = std::move(items);
-    return result;
-}
-
-void update_state(
-    const GraphicItemRef2D& ref,
-    const std::function<void(GraphicItemState2D&)>& mutation) {
-    GraphicItemState2D state = ref.snapshot().state;
-    mutation(state);
-    if (!ref.scene().set_state(ref.handle, std::move(state))) {
-        throw nb::value_error("graphic item state was rejected");
-    }
+std::optional<tgfx::StrokePaint> stroke(
+    nb::object color,
+    float width)
+{
+    if (color.is_none()) return std::nullopt;
+    return tgfx::StrokePaint{
+        parse_color(nb::cast<nb::tuple>(color)),
+        width,
+    };
 }
 
 }  // namespace
 
 NB_MODULE(_visual_scene_native, m) {
-    m.doc() = "Handle-safe retained 2D visual scene bindings";
+    m.doc() = "Direct retained 2D visual scene bindings";
+
+    nb::class_<GraphicItemHandle>(m, "GraphicItemHandle")
+        .def_prop_ro("scene_id", [](GraphicItemHandle value) {
+            return value.scene_id;
+        })
+        .def_prop_ro("index", [](GraphicItemHandle value) {
+            return value.index;
+        })
+        .def_prop_ro("generation", [](GraphicItemHandle value) {
+            return value.generation;
+        })
+        .def("__eq__", &same_handle);
 
     nb::class_<GraphicItemRef2D>(m, "GraphicItemRef2D")
         .def_prop_ro("valid", &GraphicItemRef2D::valid)
-        .def("snapshot", [](const GraphicItemRef2D& self) {
-            return detached_snapshot(self.snapshot());
+        .def_prop_ro("handle", [](const GraphicItemRef2D& self) {
+            return self.handle;
+        })
+        .def_prop_ro("type_name", [](const GraphicItemRef2D& self) {
+            const char* value =
+                tc_graphic_item_type_name(&self.item());
+            return value ? value : "";
+        })
+        .def_prop_ro(
+            "parent",
+            [](const GraphicItemRef2D& self) -> nb::object {
+                tc_graphic_item* parent = self.item().parent;
+                if (!parent) return nb::none();
+                return nb::cast(GraphicItemRef2D{
+                    self.scene, parent->handle});
+            })
+        .def_prop_ro("children", [](const GraphicItemRef2D& self) {
+            nb::list result;
+            const tc_graphic_item& item = self.item();
+            for (std::size_t index = 0;
+                 index < item.child_count;
+                 ++index) {
+                result.append(GraphicItemRef2D{
+                    self.scene,
+                    item.children[index]->handle,
+                });
+            }
+            return result;
+        })
+        .def_prop_rw(
+            "position",
+            [](const GraphicItemRef2D& self) {
+                const auto& transform =
+                    self.object().local_transform();
+                return nb::make_tuple(
+                    transform.tx, transform.ty);
+            },
+            [](const GraphicItemRef2D& self, nb::tuple value) {
+                const auto point = parse_point(value);
+                auto transform =
+                    self.object().local_transform();
+                transform.tx = point.x;
+                transform.ty = point.y;
+                self.object().set_local_transform(transform);
+            })
+        .def_prop_ro("local_transform", [](const GraphicItemRef2D& self) {
+            return affine_tuple(
+                self.object().local_transform());
+        })
+        .def_prop_ro("world_transform", [](const GraphicItemRef2D& self) {
+            return affine_tuple(
+                self.owner().world_transform(self.item()));
+        })
+        .def_prop_rw(
+            "visible",
+            [](const GraphicItemRef2D& self) {
+                return self.object().visible();
+            },
+            [](const GraphicItemRef2D& self, bool value) {
+                self.object().set_visible(value);
+            })
+        .def_prop_rw(
+            "enabled",
+            [](const GraphicItemRef2D& self) {
+                return self.object().enabled();
+            },
+            [](const GraphicItemRef2D& self, bool value) {
+                self.object().set_enabled(value);
+            })
+        .def_prop_rw(
+            "opacity",
+            [](const GraphicItemRef2D& self) {
+                return self.object().opacity();
+            },
+            [](const GraphicItemRef2D& self, float value) {
+                self.object().set_opacity(value);
+            })
+        .def_prop_rw(
+            "z_order",
+            [](const GraphicItemRef2D& self) {
+                return self.object().z_order();
+            },
+            [](const GraphicItemRef2D& self, std::int64_t value) {
+                self.object().set_z_order(value);
+            })
+        .def_prop_ro("effective_visible", [](const GraphicItemRef2D& self) {
+            return self.owner().effective_visible(self.item());
+        })
+        .def_prop_ro("local_bounds", [](const GraphicItemRef2D& self) {
+            return bounds_value(
+                self.owner().local_bounds(self.item()));
+        })
+        .def_prop_ro("world_bounds", [](const GraphicItemRef2D& self) {
+            return bounds_value(
+                self.owner().world_bounds(self.item()));
         })
         .def("set_transform",
              [](const GraphicItemRef2D& self,
-                float m00,
-                float m01,
-                float m10,
-                float m11,
-                float tx,
-                float ty) {
-                 update_state(
-                     self,
-                     [&](GraphicItemState2D& state) {
-                         state.local_transform =
-                             {m00, m01, m10, m11, tx, ty};
-                     });
+                float m00, float m01,
+                float m10, float m11,
+                float tx, float ty) {
+                 self.object().set_local_transform(
+                     {m00, m01, m10, m11, tx, ty});
              })
-        .def("set_visible",
-             [](const GraphicItemRef2D& self, bool value) {
-                 update_state(
-                     self,
-                     [&](GraphicItemState2D& state) {
-                         state.visible = value;
-                     });
-             })
-        .def("set_enabled",
-             [](const GraphicItemRef2D& self, bool value) {
-                 update_state(
-                     self,
-                     [&](GraphicItemState2D& state) {
-                         state.enabled = value;
-                     });
-             })
-        .def("set_opacity",
-             [](const GraphicItemRef2D& self, float value) {
-                 update_state(
-                     self,
-                     [&](GraphicItemState2D& state) {
-                         state.opacity = value;
-                     });
-             })
-        .def("destroy_leaf", [](const GraphicItemRef2D& self) {
-            return self.scene().destroy_leaf(self.handle);
-        })
-        .def("destroy_subtree", [](const GraphicItemRef2D& self) {
-            return self.scene().destroy_subtree(self.handle);
+        .def("reparent",
+             [](const GraphicItemRef2D& self, nb::object parent) {
+                 if (parent.is_none()) {
+                     return self.object().detach();
+                 }
+                 const auto& parent_ref =
+                     nb::cast<const GraphicItemRef2D&>(parent);
+                 const auto parent_scene =
+                     parent_ref.owner().handle();
+                 const auto own_scene =
+                     self.owner().handle();
+                 if (parent_scene.index != own_scene.index ||
+                     parent_scene.generation != own_scene.generation) {
+                     throw nb::value_error(
+                         "parent belongs to another TcVisualScene");
+                 }
+                 return parent_ref.object().append_child(
+                     self.object());
+             },
+             nb::arg("parent").none() = nb::none())
+        .def("destroy", [](const GraphicItemRef2D& self) {
+            return self.owner().destroy(self.handle);
         })
         .def("__bool__", &GraphicItemRef2D::valid)
         .def("__eq__",
              [](const GraphicItemRef2D& self,
                 const GraphicItemRef2D& other) {
-                 return self.lifetime == other.lifetime
-                     && self.handle.scene_id == other.handle.scene_id
-                     && self.handle.index == other.handle.index
-                     && self.handle.generation == other.handle.generation;
+                 const auto left = self.scene.handle();
+                 const auto right = other.scene.handle();
+                 return left.index == right.index &&
+                     left.generation == right.generation &&
+                     same_handle(self.handle, other.handle);
              });
 
-    nb::class_<PythonVisualScene2D>(m, "VisualScene2D")
-        .def(nb::init<>())
-        .def_prop_ro("size", [](const PythonVisualScene2D& self) {
-            return self.scene().size();
-        })
-        .def_prop_ro("revision", [](const PythonVisualScene2D& self) {
-            return self.scene().revision();
-        })
+    nb::class_<PolylineItemRef2D, GraphicItemRef2D>(
+        m, "PolylineItemRef2D")
+        .def(
+            "set",
+            [](const PolylineItemRef2D& self,
+               nb::sequence points,
+               nb::tuple color,
+               float width,
+               bool closed) {
+                tc_graphic_item& item = self.item();
+                const char* type_name =
+                    tc_graphic_item_type_name(&item);
+                if (!type_name ||
+                    std::string_view(type_name) !=
+                        "termin.visual.Polyline2D") {
+                    throw nb::type_error(
+                        "item is no longer a Polyline2D");
+                }
+                static_cast<PolylineItem2D*>(
+                    item.body)->set(
+                    parse_points(points),
+                    tgfx::StrokePaint{
+                        parse_color(color), width},
+                    closed);
+            },
+            nb::arg("points"),
+            nb::arg("color"),
+            nb::arg("width") = 1.0f,
+            nb::arg("closed") = false);
+
+    m.def("tc_visual_scene_create", [] {
+        const auto handle = tc_visual_scene_create();
+        if (tc_visual_scene_handle_is_invalid(handle)) {
+            throw std::runtime_error(
+                "failed to create visual scene");
+        }
+        return TcVisualScene{handle};
+    });
+    m.def("tc_visual_scene_destroy",
+          [](TcVisualScene& scene) {
+              tc_visual_scene_destroy(scene.handle());
+              scene = TcVisualScene{};
+          });
+
+    nb::class_<TcVisualScene>(m, "TcVisualScene")
+        .def_prop_ro("valid", &TcVisualScene::valid)
+        .def_prop_ro("size", &TcVisualScene::size)
+        .def_prop_ro("items",
+             [](TcVisualScene self) {
+                 nb::list result;
+                 for (auto* item : self.items()) {
+                     result.append(GraphicItemRef2D{
+                         self, item->handle});
+                 }
+                 return result;
+             })
         .def("create_group",
-             [](PythonVisualScene2D& self, nb::object parent) {
-                 return wrap_created(
+             [](TcVisualScene self,
+                nb::object parent) {
+                 return wrap(
                      self,
-                     self.scene().create(
-                         termin::visual::GroupItem2D{},
-                         parent_handle(self, parent)));
+                     self.adopt(
+                         std::make_unique<
+                             termin::visual::GroupItem2D>(),
+                         parent_object(self, parent)));
              },
              nb::arg("parent").none() = nb::none())
         .def("create_rect",
-             [](PythonVisualScene2D& self,
-                float x,
-                float y,
-                float width,
-                float height,
-                nb::tuple color,
+             [](TcVisualScene self,
+                nb::tuple rect,
+                nb::tuple fill,
+                nb::object stroke_color,
+                float stroke_width,
                 nb::object parent) {
-                 return wrap_created(
+                 return wrap(
                      self,
-                     self.scene().create(
-                         termin::visual::RectItem2D{
-                             {x, y, width, height},
-                             {parse_color(color), tgfx::FillRule::NonZero},
-                             std::nullopt,
-                         },
-                         parent_handle(self, parent)));
+                     self.adopt(
+                         std::make_unique<
+                             termin::visual::RectItem2D>(
+                                 parse_rect(rect),
+                                 tgfx::FillPaint{
+                                     parse_color(fill)},
+                                 stroke(
+                                     stroke_color,
+                                     stroke_width)),
+                         parent_object(self, parent)));
              },
-             nb::arg("x"),
-             nb::arg("y"),
-             nb::arg("width"),
-             nb::arg("height"),
-             nb::arg("color") = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+             nb::arg("rect"),
+             nb::arg("fill"),
+             nb::arg("stroke") = nb::none(),
+             nb::arg("stroke_width") = 1.0f,
+             nb::arg("parent").none() = nb::none())
+        .def("create_rounded_rect",
+             [](TcVisualScene self,
+                nb::tuple rect,
+                float radius,
+                nb::tuple fill,
+                nb::object stroke_color,
+                float stroke_width,
+                nb::object parent) {
+                 return wrap(
+                     self,
+                     self.adopt(
+                         std::make_unique<
+                             termin::visual::RoundedRectItem2D>(
+                                 parse_rect(rect),
+                                 radius,
+                                 tgfx::FillPaint{
+                                     parse_color(fill)},
+                                 stroke(
+                                     stroke_color,
+                                     stroke_width)),
+                         parent_object(self, parent)));
+             },
+             nb::arg("rect"),
+             nb::arg("radius"),
+             nb::arg("fill"),
+             nb::arg("stroke") = nb::none(),
+             nb::arg("stroke_width") = 1.0f,
              nb::arg("parent").none() = nb::none())
         .def("create_ellipse",
-             [](PythonVisualScene2D& self,
-                float x,
-                float y,
-                float width,
-                float height,
-                nb::tuple color,
+             [](TcVisualScene self,
+                nb::tuple rect,
+                nb::tuple fill,
+                nb::object stroke_color,
+                float stroke_width,
                 nb::object parent) {
-                 return wrap_created(
+                 return wrap(
                      self,
-                     self.scene().create(
-                         termin::visual::EllipseItem2D{
-                             {x, y, width, height},
-                             {parse_color(color), tgfx::FillRule::NonZero},
-                             std::nullopt,
-                         },
-                         parent_handle(self, parent)));
+                     self.adopt(
+                         std::make_unique<
+                             termin::visual::EllipseItem2D>(
+                                 parse_rect(rect),
+                                 tgfx::FillPaint{
+                                     parse_color(fill)},
+                                 stroke(
+                                     stroke_color,
+                                     stroke_width)),
+                         parent_object(self, parent)));
              },
-             nb::arg("x"),
-             nb::arg("y"),
-             nb::arg("width"),
-             nb::arg("height"),
-             nb::arg("color") = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+             nb::arg("bounds"),
+             nb::arg("fill"),
+             nb::arg("stroke") = nb::none(),
+             nb::arg("stroke_width") = 1.0f,
              nb::arg("parent").none() = nb::none())
-        .def("clear", [](PythonVisualScene2D& self) {
-            self.scene().clear();
-        })
-        .def("inspection", &detached_inspection)
-        .def("serialize_json", [](const PythonVisualScene2D& self) {
-            return tc::json::dump(self.scene().serialize());
-        })
-        .def("restore_json",
-             [](PythonVisualScene2D& self, const std::string& text) {
-                 try {
-                     return self.scene().restore(tc::json::parse(text));
-                 } catch (const std::exception& error) {
-                     tc::Log::error(
-                         "VisualScene2D Python restore_json failed: %s",
-                         error.what());
-                     throw;
+        .def("create_polyline",
+             [](TcVisualScene self,
+                nb::sequence points,
+                nb::tuple color,
+                float width,
+                bool closed,
+                nb::object parent) {
+                 auto object =
+                     std::make_unique<PolylineItem2D>(
+                         parse_points(points),
+                         tgfx::StrokePaint{
+                             parse_color(color), width},
+                         closed);
+                 const auto handle = self.adopt(
+                     std::move(object),
+                     parent_object(self, parent));
+                 if (!handle) {
+                     throw nb::value_error(
+                         "graphic item was rejected");
                  }
+                 PolylineItemRef2D result;
+                 result.scene = self;
+                 result.handle = *handle;
+                 return result;
              },
-             nb::arg("text"));
+             nb::arg("points"),
+             nb::arg("color"),
+             nb::arg("width") = 1.0f,
+             nb::arg("closed") = false,
+             nb::arg("parent").none() = nb::none())
+        .def("create_text",
+             [](TcVisualScene self,
+                std::string text,
+                nb::tuple origin,
+                float size_px,
+                nb::tuple color,
+                nb::tuple layout_bounds,
+                nb::object parent) {
+                 const auto bounds =
+                     parse_rect(layout_bounds);
+                 return wrap(
+                     self,
+                     self.adopt(
+                         std::make_unique<
+                             termin::visual::TextItem2D>(
+                                 std::move(text),
+                                 "ui://default-font",
+                                 parse_point(origin),
+                                 size_px,
+                                 parse_color(color),
+                                 tgfx::TextAnchor2D::Left,
+                                 termin::Bounds2f{
+                                     bounds.x,
+                                     bounds.y,
+                                     bounds.x + bounds.width,
+                                     bounds.y + bounds.height}),
+                         parent_object(self, parent)));
+             },
+             nb::arg("text"),
+             nb::arg("origin"),
+             nb::arg("size_px"),
+             nb::arg("color"),
+             nb::arg("layout_bounds"),
+             nb::arg("parent").none() = nb::none())
+        .def("clear", &TcVisualScene::clear)
+        .def("destroy",
+             [](TcVisualScene self,
+                const GraphicItemRef2D& item) {
+                 const auto owner = item.owner().handle();
+                 const auto current = self.handle();
+                 if (owner.index != current.index ||
+                     owner.generation != current.generation) {
+                     return false;
+                 }
+                 return self.destroy(item.handle);
+             },
+             nb::arg("item"))
+        .def("hit_test",
+             [](TcVisualScene self,
+                float x,
+                float y) -> nb::object {
+                 const auto hit =
+                     termin::visual::hit_test(self, {x, y});
+                 return hit
+                     ? nb::cast(GraphicItemRef2D{
+                           self, *hit})
+                     : nb::none();
+             },
+             nb::arg("x"), nb::arg("y"));
 }

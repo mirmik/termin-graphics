@@ -546,11 +546,11 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def(
           "create_scene_view",
           [](termin::gui_native::TcDocument &self,
-             std::shared_ptr<termin::gui_native::GraphicsScene> scene) {
+             termin::visual::TcVisualScene scene) {
             return SceneViewRef{document_make_native<termin::gui_native::SceneView>(self,
                 std::move(scene))};
           },
-          nb::arg("scene") = nullptr)
+          nb::arg("scene") = termin::visual::TcVisualScene{})
       .def(
           "create_spin_box",
           [](termin::gui_native::TcDocument &self, float value) {

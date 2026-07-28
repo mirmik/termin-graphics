@@ -2,9 +2,7 @@
 
 #include <cstdint>
 #include <functional>
-#include <mutex>
 #include <optional>
-#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,43 +29,53 @@ struct PointerEvent2D {
 };
 
 struct ActionEvent2D {
-    GraphicItemHandle target = tc_graphic_item_handle_invalid();
+    GraphicItemHandle target =
+        tc_graphic_item_handle_invalid();
     PointerId2D pointer = 0;
     std::string action = "activate";
 };
 
 struct PointerDispatch2D {
     PointerEvent2D event;
-    GraphicItemHandle target = tc_graphic_item_handle_invalid();
-    GraphicItemHandle hit_target = tc_graphic_item_handle_invalid();
-    GraphicItemHandle hovered = tc_graphic_item_handle_invalid();
-    GraphicItemHandle pressed = tc_graphic_item_handle_invalid();
-    GraphicItemHandle captured = tc_graphic_item_handle_invalid();
+    GraphicItemHandle target =
+        tc_graphic_item_handle_invalid();
+    GraphicItemHandle hit_target =
+        tc_graphic_item_handle_invalid();
+    GraphicItemHandle hovered =
+        tc_graphic_item_handle_invalid();
+    GraphicItemHandle pressed =
+        tc_graphic_item_handle_invalid();
+    GraphicItemHandle captured =
+        tc_graphic_item_handle_invalid();
     bool used_fallback = false;
     std::optional<ActionEvent2D> action;
 };
 
-TERMIN_VISUAL_SCENE_API std::optional<GraphicItemHandle> hit_test(
-    const VisualScene2D& scene,
+TERMIN_VISUAL_SCENE_API
+std::optional<GraphicItemHandle> hit_test(
+    const TcVisualScene& scene,
     termin::Vec2f world_point);
 
 class TERMIN_VISUAL_SCENE_API SceneInteraction2D {
 public:
-    using ActionHandler = std::function<void(const ActionEvent2D&)>;
-    using FallbackHandler = std::function<void(const PointerEvent2D&)>;
+    using ActionHandler =
+        std::function<void(const ActionEvent2D&)>;
+    using FallbackHandler =
+        std::function<void(const PointerEvent2D&)>;
 
     PointerDispatch2D route(
-        const VisualScene2D& scene,
+        const TcVisualScene& scene,
         const PointerEvent2D& event);
-
     bool capture(
-        const VisualScene2D& scene,
+        const TcVisualScene& scene,
         PointerId2D pointer,
         GraphicItemHandle target);
     void release(PointerId2D pointer);
     void cancel_all();
 
-    void set_action_handler(GraphicItemHandle item, ActionHandler handler);
+    void set_action_handler(
+        GraphicItemHandle item,
+        ActionHandler handler);
     void clear_action_handler(GraphicItemHandle item);
     void set_fallback_handler(FallbackHandler handler);
 
@@ -80,62 +88,77 @@ private:
         std::uint64_t scene_id = 0;
         std::uint32_t index = 0;
         std::uint32_t generation = 0;
-        friend bool operator==(const HandleKey&, const HandleKey&) = default;
+        friend bool operator==(
+            const HandleKey&,
+            const HandleKey&) = default;
     };
     struct HandleHash {
-        std::size_t operator()(const HandleKey& value) const noexcept;
-    };
-    struct Tracked {
-        GraphicItemHandle handle = tc_graphic_item_handle_invalid();
-        std::uint64_t topology_revision = 0;
+        std::size_t operator()(
+            const HandleKey& value) const noexcept;
     };
 
     static HandleKey key_(GraphicItemHandle handle);
     static GraphicItemHandle handle_(
-        const std::unordered_map<PointerId2D, Tracked>& values,
+        const std::unordered_map<
+            PointerId2D,
+            GraphicItemHandle>& values,
         PointerId2D pointer);
-    void reconcile_locked_(
-        const std::vector<GraphicItemSnapshot2D>& snapshots);
+    void reconcile_(const TcVisualScene& scene);
 
-    mutable std::mutex mutex_;
-    std::unordered_map<PointerId2D, Tracked> hovered_;
-    std::unordered_map<PointerId2D, Tracked> pressed_;
-    std::unordered_map<PointerId2D, Tracked> captured_;
-    std::unordered_map<HandleKey, ActionHandler, HandleHash> action_handlers_;
+    std::unordered_map<PointerId2D, GraphicItemHandle>
+        hovered_;
+    std::unordered_map<PointerId2D, GraphicItemHandle>
+        pressed_;
+    std::unordered_map<PointerId2D, GraphicItemHandle>
+        captured_;
+    std::unordered_map<
+        HandleKey,
+        ActionHandler,
+        HandleHash> action_handlers_;
     FallbackHandler fallback_handler_;
 };
 
 class TERMIN_VISUAL_SCENE_API SelectionController2D {
 public:
     void handle(
-        const VisualScene2D& scene,
+        const TcVisualScene& scene,
         const PointerDispatch2D& dispatch);
     void clear();
-    bool select(const VisualScene2D& scene, GraphicItemHandle item);
-    bool toggle(const VisualScene2D& scene, GraphicItemHandle item);
-    void reconcile(const VisualScene2D& scene);
-    std::vector<GraphicItemHandle> selection() const;
+    bool select(
+        const TcVisualScene& scene,
+        GraphicItemHandle item);
+    bool toggle(
+        const TcVisualScene& scene,
+        GraphicItemHandle item);
+    void reconcile(const TcVisualScene& scene);
+    const std::vector<GraphicItemHandle>& selection()
+        const noexcept {
+        return selection_;
+    }
 
 private:
-    struct Entry {
-        GraphicItemHandle handle = tc_graphic_item_handle_invalid();
-        std::uint64_t topology_revision = 0;
-    };
-    std::vector<Entry> selection_;
+    std::vector<GraphicItemHandle> selection_;
 };
 
 class TERMIN_VISUAL_SCENE_API DragController2D {
 public:
-    bool handle(VisualScene2D& scene, const PointerDispatch2D& dispatch);
+    bool handle(
+        TcVisualScene& scene,
+        const PointerDispatch2D& dispatch);
     void cancel() noexcept;
-    GraphicItemHandle target() const noexcept { return target_; }
+    GraphicItemHandle target() const noexcept {
+        return target_;
+    }
 
 private:
-    GraphicItemHandle target_ = tc_graphic_item_handle_invalid();
+    GraphicItemHandle target_ =
+        tc_graphic_item_handle_invalid();
     PointerId2D pointer_ = 0;
     termin::Vec2f start_world_{};
-    GraphicItemState2D start_state_;
-    termin::Affine2f world_to_parent_ = termin::Affine2f::identity();
+    termin::Affine2f start_transform_ =
+        termin::Affine2f::identity();
+    termin::Affine2f world_to_parent_ =
+        termin::Affine2f::identity();
 };
 
 }  // namespace termin::visual

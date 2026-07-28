@@ -291,14 +291,16 @@ The current foundation includes:
   pointer transport.
   External drag/drop is a separate typed host callback so OS payload ownership
   never leaks into the core pointer-event ABI;
-- `GraphicsScene` is a thin GUI metadata/invalidation adapter around the one
-  `termin::visual::VisualScene2D`; `SceneView` renders its frozen `DrawList2D`
-  and routes interaction through the canonical scene controllers
-  used by node-graph-style editors. Graphic items use generation handles,
-  typed canonical payloads, stable z-order, selection, captured drag/pan and
-  anchored zoom. Embedded native widgets remain generation-checked canonical
-  document children in a separate portal table and detach without implicit
-  destruction. Plot annotations intentionally remain owned by `tcplot`;
+- `SceneView` accepts a shared `termin::visual::TcVisualScene` directly and
+  paints it without a GUI-side scene model or knowledge of concrete item
+  types. It owns only viewport behavior (pan, anchored zoom and coordinate
+  conversion), forwards raw input with world coordinates and exposes explicit
+  invalidation after external scene mutations. Selection, dragging and stable
+  domain IDs belong to the node graph or other scene owner. Embedded native
+  widgets remain generation-checked canonical document children in a
+  temporary portal table keyed by graphic-item handles and detach without
+  implicit destruction. Plot annotations intentionally remain owned by
+  `tcplot`;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds native window examples on the
@@ -344,11 +346,11 @@ The current foundation includes:
   are rejected rather than reflected or stringified;
 - `examples/ui_rect_window.py` mirrors the C++ rectangle-window example.
 
-## Widgets + VisualScene2D example
+## Widgets + TcVisualScene example
 
 `examples/visual_scene_composition.cpp` builds one canonical document
 containing an ordinary control panel, a `SceneView` backed by
-`VisualScene2D`, several draggable typed graphic items and a document-owned
+`TcVisualScene`, several draggable typed graphic items and a document-owned
 button attached through the public widget-portal API. The same builder is used
 by the windowed application and its automated headless smoke.
 
