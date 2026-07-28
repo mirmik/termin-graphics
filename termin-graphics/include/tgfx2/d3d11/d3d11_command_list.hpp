@@ -47,6 +47,12 @@ public:
     void set_scissor(int x, int y, int width, int height) override;
 
 private:
+    void bind_bound_resource_binding(const BoundResourceBinding& binding);
+    void set_constant_buffer(uint32_t stage_mask, UINT slot, ID3D11Buffer* buffer);
+    void set_shader_resource(uint32_t stage_mask, UINT slot, ID3D11ShaderResourceView* srv);
+    void set_sampler(uint32_t stage_mask, UINT slot, ID3D11SamplerState* sampler);
+    void clear_shader_resources();
+
     D3D11RenderDevice& device_;
     ID3D11DeviceContext* ctx_ = nullptr;
     PipelineHandle current_pipeline_;

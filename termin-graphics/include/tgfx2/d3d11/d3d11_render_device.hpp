@@ -150,6 +150,15 @@ public:
     void flush() override;
     void finish() override;
 
+    BufferHandle transient_vertex_buffer() override;
+    uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+    bool transient_uniform_write(
+        const void* data,
+        uint32_t size,
+        BufferHandle& out_buffer,
+        uint32_t& out_offset) override;
+    void reset_transient_uploads();
+
     bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
     void invalidate_tc_shader_cache(uint32_t pool_index) override;
     TextureHandle ensure_tc_texture(tc_texture* tex) override;
@@ -225,6 +234,18 @@ private:
     D3D11HandlePool<D3D11ShaderModule> shaders_;
     D3D11HandlePool<D3D11Pipeline> pipelines_;
     D3D11HandlePool<D3D11ResourceSet> resource_sets_;
+
+    static constexpr uint32_t kTransientVertexBufferSize = 2 * 1024 * 1024;
+    BufferHandle transient_vertex_buffer_{};
+    uint32_t transient_vertex_offset_ = 0;
+    bool transient_vertex_discard_ = true;
+
+    struct TransientUniformBuffer {
+        BufferHandle handle{};
+        uint32_t capacity = 0;
+    };
+    std::vector<TransientUniformBuffer> transient_uniform_buffers_;
+    size_t transient_uniform_cursor_ = 0;
 
     struct CachedTcShaderEntry {
         ShaderHandle vs;

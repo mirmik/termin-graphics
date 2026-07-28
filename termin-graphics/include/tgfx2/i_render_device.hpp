@@ -172,6 +172,23 @@ public:
         return UINT64_MAX;
     }
 
+    // --- Transient uniform upload (optional) ---
+    // Backends that cannot bind offsets into one uniform ring can still
+    // recycle a high-water pool of whole uniform buffers. A successful
+    // write returns a backend-owned buffer and the binding offset; callers
+    // must not destroy the returned handle.
+    virtual bool transient_uniform_write(
+        const void* data,
+        uint32_t size,
+        BufferHandle& out_buffer,
+        uint32_t& out_offset) {
+        (void)data;
+        (void)size;
+        out_buffer = {};
+        out_offset = 0;
+        return false;
+    }
+
     // Copy a source tgfx2 color texture into a rect of a destination
     // tgfx2 color texture (both owned by this device). Presentation
     // surfaces must expose their composite target as a TextureHandle;

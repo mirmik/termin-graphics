@@ -242,6 +242,63 @@ int main() {
             return 1;
         }
 
+        const std::array<float, 8> transient_vertices = {
+            0.0f, 0.0f, 1.0f, 1.0f,
+            1.0f, 0.0f, 0.0f, 1.0f,
+        };
+        auto transient_cmd = device->create_command_list();
+        transient_cmd->begin();
+        const uint64_t first_vertex_offset = device->transient_vertex_write(
+            transient_vertices.data(),
+            static_cast<uint32_t>(sizeof(transient_vertices)));
+        const uint64_t second_vertex_offset = device->transient_vertex_write(
+            transient_vertices.data(),
+            static_cast<uint32_t>(sizeof(transient_vertices)));
+        tgfx::BufferHandle first_uniform;
+        tgfx::BufferHandle second_uniform;
+        uint32_t first_uniform_offset = UINT32_MAX;
+        uint32_t second_uniform_offset = UINT32_MAX;
+        if (first_vertex_offset != 0 ||
+            second_vertex_offset <= first_vertex_offset ||
+            !device->transient_uniform_write(
+                transient_vertices.data(),
+                static_cast<uint32_t>(sizeof(transient_vertices)),
+                first_uniform,
+                first_uniform_offset) ||
+            !device->transient_uniform_write(
+                transient_vertices.data(),
+                static_cast<uint32_t>(sizeof(transient_vertices)),
+                second_uniform,
+                second_uniform_offset) ||
+            !first_uniform ||
+            !second_uniform ||
+            first_uniform == second_uniform ||
+            first_uniform_offset != 0 ||
+            second_uniform_offset != 0) {
+            std::fprintf(stderr, "D3D11 smoke: transient upload pool initialization failed\n");
+            return 1;
+        }
+        transient_cmd->end();
+
+        transient_cmd = device->create_command_list();
+        transient_cmd->begin();
+        tgfx::BufferHandle reused_uniform;
+        uint32_t reused_uniform_offset = UINT32_MAX;
+        if (device->transient_vertex_write(
+                transient_vertices.data(),
+                static_cast<uint32_t>(sizeof(transient_vertices))) != 0 ||
+            !device->transient_uniform_write(
+                transient_vertices.data(),
+                static_cast<uint32_t>(sizeof(transient_vertices)),
+                reused_uniform,
+                reused_uniform_offset) ||
+            reused_uniform != first_uniform ||
+            reused_uniform_offset != 0) {
+            std::fprintf(stderr, "D3D11 smoke: transient upload pool did not reset and reuse\n");
+            return 1;
+        }
+        transient_cmd->end();
+
         tgfx::TextureDesc unsupported_rgb_desc;
         unsupported_rgb_desc.width = 2;
         unsupported_rgb_desc.height = 2;

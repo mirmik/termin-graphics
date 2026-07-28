@@ -37,6 +37,11 @@ add_library(termin_visual_scene SHARED
     src/render_snapshot2d.cpp
     src/interaction2d.cpp
 )
+if(MSVC)
+    set_source_files_properties(src/tc_visual_scene.c PROPERTIES
+        COMPILE_OPTIONS "/experimental:c11atomics"
+    )
+endif()
 add_library(termin_visual_scene::termin_visual_scene ALIAS termin_visual_scene)
 target_compile_definitions(termin_visual_scene PRIVATE
     TERMIN_VISUAL_SCENE_EXPORTS)

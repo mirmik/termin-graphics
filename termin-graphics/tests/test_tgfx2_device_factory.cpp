@@ -18,21 +18,46 @@
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/resources/tc_shader_registry.h"
 
-static void set_backend_env(const char* value) {
+static void set_process_env(const char* name, const char* value) {
 #ifdef _WIN32
     if (value) {
-        _putenv_s("TERMIN_BACKEND", value);
+        _putenv_s(name, value);
     } else {
-        _putenv_s("TERMIN_BACKEND", "");
+        _putenv_s(name, "");
     }
 #else
     if (value) {
-        setenv("TERMIN_BACKEND", value, 1);
+        setenv(name, value, 1);
     } else {
-        unsetenv("TERMIN_BACKEND");
+        unsetenv(name);
     }
 #endif
 }
+
+static void set_backend_env(const char* value) {
+    set_process_env("TERMIN_BACKEND", value);
+}
+
+struct ScopedTestEnvironmentVariable {
+    explicit ScopedTestEnvironmentVariable(const char* variable_name)
+        : name(variable_name) {
+        const char* value = std::getenv(name.c_str());
+        had_value = value != nullptr;
+        if (value) previous_value = value;
+    }
+
+    ~ScopedTestEnvironmentVariable() {
+        set_process_env(name.c_str(), had_value ? previous_value.c_str() : nullptr);
+    }
+
+    void set(const char* value) {
+        set_process_env(name.c_str(), value);
+    }
+
+    std::string name;
+    std::string previous_value;
+    bool had_value = false;
+};
 
 static std::string read_test_text_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -215,6 +240,39 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
     CHECK(bytes[0] == static_cast<uint8_t>('S'));
     CHECK(bytes[1] == static_cast<uint8_t>('P'));
     CHECK(bytes[2] == static_cast<uint8_t>('V'));
+
+    termin::tgfx2_set_shader_artifact_root("");
+    fs::remove_all(root);
+}
+
+TEST_CASE("legacy shader resolver discovers installed artifacts beside built-in sources") {
+    namespace fs = std::filesystem;
+
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const fs::path root = fs::temp_directory_path()
+        / ("termin_tgfx2_installed_artifacts_" + std::to_string(unique));
+    const fs::path artifact_root = root / "share" / "termin";
+    const fs::path builtin_root = artifact_root / "builtin_shaders";
+    fs::create_directories(builtin_root);
+    fs::create_directories(artifact_root / "shaders");
+
+    ScopedTestEnvironmentVariable explicit_artifact_root(
+        "TERMIN_SHADER_ARTIFACT_ROOT");
+    ScopedTestEnvironmentVariable explicit_builtin_root(
+        "TERMIN_BUILTIN_SHADER_ROOT");
+    explicit_artifact_root.set(nullptr);
+    explicit_builtin_root.set(builtin_root.string().c_str());
+    termin::tgfx2_set_shader_artifact_root("");
+
+    std::string path;
+    CHECK(termin::tgfx2_shader_artifact_path(
+        "installed-shader",
+        tgfx::BackendType::D3D11,
+        tgfx::ShaderStage::Vertex,
+        path));
+    CHECK(
+        fs::path(path) ==
+        artifact_root / "shaders" / "d3d11" / "installed-shader.vs.cso");
 
     termin::tgfx2_set_shader_artifact_root("");
     fs::remove_all(root);
