@@ -7,6 +7,8 @@
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_swapchain.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+
+#include <tcbase/tc_log.hpp>
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
 #include "vulkan_spirv_reflection.hpp"
 #include "vulkan_stats.hpp"
@@ -1388,20 +1390,57 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     uint32_t sample_count,
     LoadOp color_load, LoadOp depth_load)
 {
-    // Build key — formats + sample_count + load ops. LoadOp must be part
-    // of the key: for LoadOp::Load the render pass is built with
-    // initialLayout = COLOR/DEPTH_ATTACHMENT_OPTIMAL (the layout
-    // begin_render_pass transitions the attachment into); for Clear/
-    // DontCare we keep initialLayout = UNDEFINED. Collapsing Load and
-    // Clear into one cache entry would either cause a "loadOp=LOAD with
-    // initialLayout=UNDEFINED" validation error or silently clear
-    // content the caller wanted preserved.
+    std::vector<LoadOp> color_loads(color_formats.size(), color_load);
+    std::vector<StoreOp> color_stores(
+        color_formats.size(),
+        StoreOp::Store);
+    return get_or_create_render_pass(
+        color_formats,
+        color_loads,
+        color_stores,
+        depth_format,
+        has_depth,
+        sample_count,
+        depth_load,
+        StoreOp::Store);
+}
+
+VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
+    const std::vector<PixelFormat>& color_formats,
+    std::span<const LoadOp> color_loads,
+    std::span<const StoreOp> color_stores,
+    PixelFormat depth_format,
+    bool has_depth,
+    uint32_t sample_count,
+    LoadOp depth_load,
+    StoreOp depth_store)
+{
+    if (color_loads.size() != color_formats.size() ||
+        color_stores.size() != color_formats.size()) {
+        tc::Log::error(
+            "VulkanRenderDevice::get_or_create_render_pass: color format/load/store counts differ");
+        return VK_NULL_HANDLE;
+    }
+
+    // Build key — formats + sample count + every ordered load/store op.
+    // LoadOp controls initialLayout, and StoreOp is observable by later
+    // passes, so both are render-pass identity.
     std::vector<VkFormat> key;
     for (auto f : color_formats) key.push_back(vk::to_vk_format(f));
     if (has_depth) key.push_back(vk::to_vk_format(depth_format));
     key.push_back(static_cast<VkFormat>(sample_count));
-    key.push_back(static_cast<VkFormat>(static_cast<int>(color_load) + 0x10000));
-    key.push_back(static_cast<VkFormat>(static_cast<int>(depth_load) + 0x20000));
+    for (size_t i = 0; i < color_formats.size(); ++i) {
+        key.push_back(static_cast<VkFormat>(
+            static_cast<int>(color_loads[i]) + 0x10000));
+        key.push_back(static_cast<VkFormat>(
+            static_cast<int>(color_stores[i]) + 0x20000));
+    }
+    if (has_depth) {
+        key.push_back(static_cast<VkFormat>(
+            static_cast<int>(depth_load) + 0x30000));
+        key.push_back(static_cast<VkFormat>(
+            static_cast<int>(depth_store) + 0x40000));
+    }
 
     auto it = render_pass_cache_.find(key);
     if (it != render_pass_cache_.end()) return it->second;
@@ -1418,16 +1457,23 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         }
         return VK_ATTACHMENT_LOAD_OP_CLEAR;
     };
+    auto to_vk_store = [](StoreOp op) -> VkAttachmentStoreOp {
+        switch (op) {
+            case StoreOp::Store: return VK_ATTACHMENT_STORE_OP_STORE;
+            case StoreOp::DontCare: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        }
+        return VK_ATTACHMENT_STORE_OP_STORE;
+    };
 
     for (size_t i = 0; i < color_formats.size(); ++i) {
         VkAttachmentDescription att{};
         att.format = vk::to_vk_format(color_formats[i]);
         att.samples = static_cast<VkSampleCountFlagBits>(sample_count);
-        att.loadOp = to_vk_load(color_load);
-        att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        att.loadOp = to_vk_load(color_loads[i]);
+        att.storeOp = to_vk_store(color_stores[i]);
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout = (color_load == LoadOp::Load)
+        att.initialLayout = (color_loads[i] == LoadOp::Load)
             ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
             : VK_IMAGE_LAYOUT_UNDEFINED;
         att.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1442,7 +1488,7 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         att.format = vk::to_vk_format(depth_format);
         att.samples = static_cast<VkSampleCountFlagBits>(sample_count);
         att.loadOp = to_vk_load(depth_load);
-        att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        att.storeOp = to_vk_store(depth_store);
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         att.initialLayout = (depth_load == LoadOp::Load)

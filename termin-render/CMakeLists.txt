@@ -249,6 +249,19 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_material_pipeline_contracts_test PRIVATE termin_render)
     add_test(NAME termin_render_material_pipeline_contracts_test COMMAND termin_render_material_pipeline_contracts_test)
 
+    add_executable(
+        termin_render_execute_context_render_pass_test
+        tests/test_execute_context_render_pass.cpp)
+    target_include_directories(
+        termin_render_execute_context_render_pass_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard)
+    target_link_libraries(
+        termin_render_execute_context_render_pass_test
+        PRIVATE termin_render)
+    add_test(
+        NAME termin_render_execute_context_render_pass_test
+        COMMAND termin_render_execute_context_render_pass_test)
+
     add_executable(termin_render_material_ubo_apply_test tests/test_material_ubo_apply.cpp)
     target_include_directories(termin_render_material_ubo_apply_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard

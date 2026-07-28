@@ -14,6 +14,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 #include <map>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <unordered_map>
 #include <vector>
 #include <functional>
@@ -527,6 +528,15 @@ public:
         PixelFormat depth_format, bool has_depth,
         uint32_t sample_count,
         LoadOp color_load, LoadOp depth_load);
+    VkRenderPass get_or_create_render_pass(
+        const std::vector<PixelFormat>& color_formats,
+        std::span<const LoadOp> color_loads,
+        std::span<const StoreOp> color_stores,
+        PixelFormat depth_format,
+        bool has_depth,
+        uint32_t sample_count,
+        LoadOp depth_load,
+        StoreOp depth_store);
 
     // Get or create a VkFramebuffer
     VkFramebuffer get_or_create_framebuffer(
