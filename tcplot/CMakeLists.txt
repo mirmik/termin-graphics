@@ -114,6 +114,27 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(tcplot_plot_annotations2d_test)
     add_test(NAME tcplot_plot_annotations2d_test
         COMMAND tcplot_plot_annotations2d_test)
+
+    if(TARGET termin_shaderc)
+        add_executable(tcplot_plot_marker_offscreen_test
+            tests/test_plot_marker_offscreen.cpp)
+        target_link_libraries(tcplot_plot_marker_offscreen_test PRIVATE
+            tcplot)
+        target_compile_definitions(tcplot_plot_marker_offscreen_test PRIVATE
+            TCPLOT_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+        add_dependencies(tcplot_plot_marker_offscreen_test termin_shaderc)
+        termin_set_rpath_test(tcplot_plot_marker_offscreen_test)
+        add_test(NAME tcplot_plot_marker_offscreen_test
+            COMMAND tcplot_plot_marker_offscreen_test)
+        set_tests_properties(tcplot_plot_marker_offscreen_test PROPERTIES
+            SKIP_RETURN_CODE 77
+            TIMEOUT 20
+            ENVIRONMENT
+                "TERMIN_SHADERC=$<TARGET_FILE:termin_shaderc>;TERMIN_BUILTIN_SHADER_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../termin-graphics/resources/builtin_shaders")
+        termin_add_test_labels(
+            tcplot_plot_marker_offscreen_test
+            "termin:capability:vulkan")
+    endif()
 endif()
 
 # --- Install ---

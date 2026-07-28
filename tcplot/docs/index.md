@@ -1,6 +1,9 @@
 # tcplot
 
-`tcplot` - lightweight plotting library поверх `tgfx2` и `tcgui`.
+`tcplot` — lightweight plotting library поверх `termin-graphics`. Retained
+plot annotations используют `termin-visual-scene` как внутреннюю
+транзитивную зависимость; приложение по-прежнему линкует только
+`tcplot::tcplot`.
 
 Связанные документы:
 
@@ -16,7 +19,33 @@
 - Python package в `python/tcplot/`.
 - Examples в `examples/`.
 
-## Публичный API
+## C++ API
+
+Минимальный consumer подключает один target:
+
+```cmake
+find_package(tcplot CONFIG REQUIRED)
+target_link_libraries(my_plot PRIVATE tcplot::tcplot)
+```
+
+`PlotEngine2D::plot_frame()` возвращает immutable `PlotFrame2D`: detached
+snapshot viewport, plot area, data range, clip и прямого/обратного
+data-to-pixel преобразования. Снимок не меняется после последующих pan, zoom,
+resize или синхронизации общей оси X.
+
+`PlotAnnotationLayer2D` принадлежит plot engine и хранит semantic annotations
+через generation handles. Одна annotation может проецироваться в несколько
+visual items с независимыми фазами `Underlay`, `Overlay`, `Chrome` и clipping
+к plot area либо viewport. Поддерживаются data anchors, series-point
+references, axes fractions и viewport pixels.
+
+Готовый `PlotDataMarker2D` создаётся через `create_data_marker()`. Он объединяет
+data-anchored точку, plot-clipped leader, pixel-sized callout и text, hover,
+captured drag с обновлением data position, optional snapping и semantic
+действие `close`. Anchor и leader клипуются plot area; callout остаётся
+доступным в viewport. Input annotation маршрутизируется перед plot navigation.
+
+## Python API
 
 Python package:
 
@@ -24,4 +53,4 @@ Python package:
 import tcplot
 ```
 
-Examples are the current practical entrypoint for expected usage.
+Examples are the current practical entrypoint for expected Python usage.

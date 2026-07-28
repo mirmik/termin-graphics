@@ -50,6 +50,26 @@ bool finite(PlotPixelPoint2D point) {
     return std::isfinite(point.x) && std::isfinite(point.y);
 }
 
+bool valid_data_marker(const PlotDataMarker2D& marker) {
+    return std::isfinite(marker.data_position.x)
+        && std::isfinite(marker.data_position.y)
+        && std::isfinite(marker.callout_offset.x)
+        && std::isfinite(marker.callout_offset.y)
+        && std::isfinite(marker.callout_width)
+        && std::isfinite(marker.callout_height)
+        && std::isfinite(marker.anchor_radius)
+        && std::isfinite(marker.text_size)
+        && marker.callout_width > 0.0f
+        && marker.callout_height > 0.0f
+        && marker.anchor_radius > 0.0f
+        && marker.text_size > 0.0f
+        && marker.anchor_color.is_finite()
+        && marker.hover_color.is_finite()
+        && marker.callout_color.is_finite()
+        && marker.border_color.is_finite()
+        && marker.text_color.is_finite();
+}
+
 std::optional<PlotPixelPoint2D> resolve_anchor(
     const PlotAnchor2D& anchor,
     const PlotFrame2D& frame,
@@ -136,6 +156,13 @@ struct PlotAnnotationLayer2D::Impl {
     };
 
     struct Record {
+        struct MarkerRuntime {
+            PlotDataMarker2D marker;
+            bool hovered = false;
+            bool dragging = false;
+            termin::visual::PointerId2D drag_pointer = 0;
+        };
+
         std::uint32_t generation = 1;
         bool alive = false;
         PlotAnnotation2D annotation;
@@ -143,6 +170,7 @@ struct PlotAnnotationLayer2D::Impl {
         std::vector<Projection> projections;
         SnapHook snap_hook;
         ActionHandler action_handler;
+        std::optional<MarkerRuntime> marker;
     };
 
     class Resources final
@@ -234,6 +262,142 @@ struct PlotAnnotationLayer2D::Impl {
         record.projected_anchor.reset();
     }
 
+    void rebuild_marker_visuals(Record& record) {
+        if (!record.marker) return;
+        const PlotDataMarker2D& marker = record.marker->marker;
+        const bool highlighted =
+            record.marker->hovered || record.marker->dragging;
+        const tgfx::Color4f accent =
+            highlighted ? marker.hover_color : marker.anchor_color;
+        const float radius =
+            marker.anchor_radius + (highlighted ? 1.5f : 0.0f);
+        const float half_width = marker.callout_width * 0.5f;
+        const float half_height = marker.callout_height * 0.5f;
+
+        record.annotation.anchor = DataAnchor2D{
+            marker.data_position.x,
+            marker.data_position.y,
+        };
+        record.annotation.visuals.clear();
+
+        PlotAnnotationVisual2D anchor;
+        anchor.payload = termin::visual::EllipseItem2D{
+            {-radius, -radius, radius * 2.0f, radius * 2.0f},
+            tgfx::FillPaint{accent},
+            tgfx::StrokePaint{
+                marker.border_color,
+                highlighted ? 2.5f : 1.5f,
+            },
+        };
+        anchor.phase = PlotAnnotationPhase2D::Overlay;
+        anchor.clip = PlotAnnotationClip2D::PlotArea;
+        anchor.z_order = 20;
+        record.annotation.visuals.push_back(std::move(anchor));
+
+        PlotAnnotationVisual2D leader;
+        leader.payload = termin::visual::PolylineItem2D{
+            {{0.0f, 0.0f}, marker.callout_offset},
+            tgfx::StrokePaint{accent, highlighted ? 2.5f : 1.5f},
+            false,
+        };
+        leader.phase = PlotAnnotationPhase2D::Overlay;
+        leader.clip = PlotAnnotationClip2D::PlotArea;
+        leader.z_order = 10;
+        leader.enabled = false;
+        record.annotation.visuals.push_back(std::move(leader));
+
+        PlotAnnotationVisual2D bubble;
+        bubble.payload = termin::visual::RoundedRectItem2D{
+            {-half_width,
+             -half_height,
+             marker.callout_width,
+             marker.callout_height},
+            8.0f,
+            tgfx::FillPaint{marker.callout_color},
+            tgfx::StrokePaint{
+                highlighted ? accent : marker.border_color,
+                highlighted ? 2.0f : 1.0f,
+            },
+        };
+        bubble.pixel_offset = marker.callout_offset;
+        bubble.phase = PlotAnnotationPhase2D::Chrome;
+        bubble.clip = PlotAnnotationClip2D::Viewport;
+        bubble.z_order = 30;
+        record.annotation.visuals.push_back(std::move(bubble));
+
+        PlotAnnotationVisual2D text;
+        text.payload = termin::visual::TextItem2D{
+            marker.text,
+            {std::string(kPlotDefaultFontResource2D)},
+            {-half_width + 12.0f, 5.0f},
+            marker.text_size,
+            marker.text_color,
+            tgfx::TextAnchor2D::Left,
+            {-half_width + 12.0f,
+             -half_height + 7.0f,
+             half_width - 30.0f,
+             half_height - 7.0f},
+        };
+        text.pixel_offset = marker.callout_offset;
+        text.phase = PlotAnnotationPhase2D::Chrome;
+        text.clip = PlotAnnotationClip2D::Viewport;
+        text.z_order = 31;
+        text.enabled = false;
+        record.annotation.visuals.push_back(std::move(text));
+
+        if (marker.close_button) {
+            PlotAnnotationVisual2D close;
+            close.payload = termin::visual::RoundedRectItem2D{
+                {-8.0f, -8.0f, 16.0f, 16.0f},
+                4.0f,
+                tgfx::FillPaint{
+                    highlighted
+                        ? tgfx::Color4f{0.85f, 0.25f, 0.22f, 1.0f}
+                        : tgfx::Color4f{0.48f, 0.20f, 0.20f, 1.0f}},
+                std::nullopt,
+            };
+            close.pixel_offset = {
+                marker.callout_offset.x + half_width - 14.0f,
+                marker.callout_offset.y,
+            };
+            close.phase = PlotAnnotationPhase2D::Chrome;
+            close.clip = PlotAnnotationClip2D::Viewport;
+            close.z_order = 32;
+            close.action = "close";
+            record.annotation.visuals.push_back(std::move(close));
+        }
+    }
+
+    std::optional<std::pair<std::uint32_t, std::size_t>>
+    find_projection(GraphicItemHandle item) const {
+        if (invalid_graphic_handle(item)) return std::nullopt;
+        for (std::uint32_t i = 0; i < records.size(); ++i) {
+            const Record& record = records[i];
+            if (!record.alive) continue;
+            for (const Projection& projection : record.projections) {
+                if (same_graphic_handle(projection.item, item)) {
+                    return std::pair{i, projection.visual_index};
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool destroy_record(PlotAnnotationHandle handle) {
+        Record* record = resolve(handle);
+        if (!record) return false;
+        clear_projection(*record);
+        record->alive = false;
+        record->annotation = {};
+        record->snap_hook = {};
+        record->action_handler = {};
+        record->marker.reset();
+        ++record->generation;
+        if (record->generation == 0) ++record->generation;
+        free_indices.push_back(handle.index);
+        return true;
+    }
+
     void bind_action(
         std::uint32_t record_index,
         const Projection& projection,
@@ -249,23 +413,29 @@ struct PlotAnnotationLayer2D::Impl {
                 const PlotAnnotationHandle annotation{
                     id, record_index, generation};
                 Record* record = resolve(annotation);
-                if (!record || !record->action_handler) return;
-                try {
-                    record->action_handler({
-                        annotation,
-                        visual_index,
-                        event.pointer,
-                        action,
-                    });
-                } catch (const std::exception& error) {
-                    tc::Log::error(
-                        "PlotAnnotationLayer2D: action handler failed: %s",
-                        error.what());
-                    throw;
-                } catch (...) {
-                    tc::Log::error(
-                        "PlotAnnotationLayer2D: action handler failed");
-                    throw;
+                if (!record) return;
+                if (record->action_handler) {
+                    try {
+                        record->action_handler({
+                            annotation,
+                            visual_index,
+                            event.pointer,
+                            action,
+                        });
+                    } catch (const std::exception& error) {
+                        tc::Log::error(
+                            "PlotAnnotationLayer2D: action handler failed: %s",
+                            error.what());
+                        throw;
+                    } catch (...) {
+                        tc::Log::error(
+                            "PlotAnnotationLayer2D: action handler failed");
+                        throw;
+                    }
+                }
+                record = resolve(annotation);
+                if (record && record->marker && action == "close") {
+                    destroy_record(annotation);
                 }
             });
     }
@@ -343,6 +513,78 @@ struct PlotAnnotationLayer2D::Impl {
         record.projected_anchor = anchor;
     }
 
+    void set_marker_hover(
+        std::optional<std::uint32_t> hovered,
+        const PlotFrame2D& frame) {
+        static const PlotData empty_data;
+        for (std::uint32_t i = 0; i < records.size(); ++i) {
+            Record& record = records[i];
+            if (!record.alive || !record.marker) continue;
+            const bool value = hovered && *hovered == i;
+            if (record.marker->hovered == value) continue;
+            record.marker->hovered = value;
+            rebuild_marker_visuals(record);
+            project_record(i, frame, empty_data);
+        }
+    }
+
+    void process_marker_dispatch(
+        const PlotFrame2D& frame,
+        const PointerDispatch2D& dispatch) {
+        const auto hovered = find_projection(dispatch.hovered);
+        std::optional<std::uint32_t> hovered_marker;
+        if (hovered && records[hovered->first].marker) {
+            hovered_marker = hovered->first;
+        }
+        set_marker_hover(hovered_marker, frame);
+
+        const auto target = find_projection(dispatch.target);
+        if (!target) return;
+        Record& record = records[target->first];
+        if (!record.marker) return;
+        auto& marker = *record.marker;
+
+        if (dispatch.event.kind == PointerEventKind2D::Down
+            && target->second == 0) {
+            marker.dragging = true;
+            marker.drag_pointer = dispatch.event.pointer;
+            rebuild_marker_visuals(record);
+        } else if (dispatch.event.kind == PointerEventKind2D::Move
+                   && marker.dragging
+                   && marker.drag_pointer == dispatch.event.pointer) {
+            PlotPoint2D candidate = frame.pixel_to_data(
+                dispatch.event.position.x,
+                dispatch.event.position.y);
+            if (record.snap_hook) {
+                try {
+                    candidate = record.snap_hook(candidate);
+                } catch (const std::exception& error) {
+                    tc::Log::error(
+                        "PlotAnnotationLayer2D: marker snap hook failed: %s",
+                        error.what());
+                    throw;
+                } catch (...) {
+                    tc::Log::error(
+                        "PlotAnnotationLayer2D: marker snap hook failed");
+                    throw;
+                }
+            }
+            marker.marker.data_position = candidate;
+            rebuild_marker_visuals(record);
+        } else if ((dispatch.event.kind == PointerEventKind2D::Up
+                    || dispatch.event.kind == PointerEventKind2D::Cancel)
+                   && marker.dragging
+                   && marker.drag_pointer == dispatch.event.pointer) {
+            marker.dragging = false;
+            rebuild_marker_visuals(record);
+        }
+
+        static const PlotData empty_data;
+        if (record.alive) {
+            project_record(target->first, frame, empty_data);
+        }
+    }
+
     std::vector<std::size_t> front_to_back_buckets() const {
         return {
             bucket_index(
@@ -394,6 +636,7 @@ std::optional<PlotAnnotationHandle> PlotAnnotationLayer2D::create(
     record.projections.clear();
     record.snap_hook = {};
     record.action_handler = {};
+    record.marker.reset();
     return impl_->handle(index);
 }
 
@@ -402,23 +645,18 @@ bool PlotAnnotationLayer2D::update(
     PlotAnnotation2D annotation) {
     Impl::Record* record = impl_->resolve(handle);
     if (!record) return false;
+    if (record->marker) {
+        tc::Log::error(
+            "PlotAnnotationLayer2D: generic update rejected for data marker");
+        return false;
+    }
     impl_->clear_projection(*record);
     record->annotation = std::move(annotation);
     return true;
 }
 
 bool PlotAnnotationLayer2D::destroy(PlotAnnotationHandle handle) {
-    Impl::Record* record = impl_->resolve(handle);
-    if (!record) return false;
-    impl_->clear_projection(*record);
-    record->alive = false;
-    record->annotation = {};
-    record->snap_hook = {};
-    record->action_handler = {};
-    ++record->generation;
-    if (record->generation == 0) ++record->generation;
-    impl_->free_indices.push_back(handle.index);
-    return true;
+    return impl_->destroy_record(handle);
 }
 
 void PlotAnnotationLayer2D::clear() {
@@ -504,6 +742,50 @@ bool PlotAnnotationLayer2D::set_action_handler(
     return true;
 }
 
+std::optional<PlotAnnotationHandle>
+PlotAnnotationLayer2D::create_data_marker(PlotDataMarker2D marker) {
+    if (!valid_data_marker(marker)) {
+        tc::Log::error(
+            "PlotAnnotationLayer2D: rejected invalid data marker");
+        return std::nullopt;
+    }
+
+    const auto handle = create({});
+    if (!handle) return std::nullopt;
+    Impl::Record* record = impl_->resolve(*handle);
+    record->marker = Impl::Record::MarkerRuntime{std::move(marker)};
+    impl_->rebuild_marker_visuals(*record);
+    return handle;
+}
+
+bool PlotAnnotationLayer2D::update_data_marker(
+    PlotAnnotationHandle handle,
+    PlotDataMarker2D marker) {
+    Impl::Record* record = impl_->resolve(handle);
+    if (!record || !record->marker) return false;
+    if (!valid_data_marker(marker)) {
+        tc::Log::error(
+            "PlotAnnotationLayer2D: rejected invalid data marker update");
+        return false;
+    }
+    record->marker->marker = std::move(marker);
+    impl_->rebuild_marker_visuals(*record);
+    return true;
+}
+
+std::optional<PlotDataMarkerSnapshot2D>
+PlotAnnotationLayer2D::data_marker_snapshot(
+    PlotAnnotationHandle handle) const {
+    const Impl::Record* record = impl_->resolve(handle);
+    if (!record || !record->marker) return std::nullopt;
+    return PlotDataMarkerSnapshot2D{
+        handle,
+        record->marker->marker,
+        record->marker->hovered,
+        record->marker->dragging,
+    };
+}
+
 void PlotAnnotationLayer2D::project(
     const PlotFrame2D& frame,
     const PlotData& data) {
@@ -526,6 +808,7 @@ bool PlotAnnotationLayer2D::route_pointer(
             const PointerDispatch2D dispatch =
                 impl_->buckets[bucket].interaction.route(
                     impl_->buckets[bucket].scene, event);
+            impl_->process_marker_dispatch(frame, dispatch);
             return !invalid_graphic_handle(dispatch.target);
         }
     }
@@ -539,8 +822,12 @@ bool PlotAnnotationLayer2D::route_pointer(
         const PointerDispatch2D dispatch =
             impl_->buckets[bucket].interaction.route(
                 impl_->buckets[bucket].scene, event);
-        if (!invalid_graphic_handle(dispatch.target)) return true;
+        if (!invalid_graphic_handle(dispatch.target)) {
+            impl_->process_marker_dispatch(frame, dispatch);
+            return true;
+        }
     }
+    impl_->set_marker_hover(std::nullopt, frame);
     return false;
 }
 

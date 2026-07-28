@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "tcplot/engine2d.hpp"
@@ -247,6 +248,182 @@ int main() {
             assert(layer.visual_scene(phase, clip).size() == 0);
         }
     }
+
+    PlotAnnotationLayer2D marker_layer;
+    PlotDataMarker2D marker;
+    marker.data_position = {5.0, 10.0};
+    marker.text = "peak 10.0";
+    const auto marker_handle =
+        marker_layer.create_data_marker(marker);
+    assert(marker_handle);
+    marker_layer.project(frame, data);
+    const auto marker_annotation =
+        marker_layer.snapshot(*marker_handle);
+    assert(marker_annotation);
+    assert(marker_annotation->projected_graphics.size() == 5);
+    assert(marker_annotation->projected_graphics[0].phase
+        == PlotAnnotationPhase2D::Overlay);
+    assert(marker_annotation->projected_graphics[0].clip
+        == PlotAnnotationClip2D::PlotArea);
+    assert(marker_annotation->projected_graphics[2].phase
+        == PlotAnnotationPhase2D::Chrome);
+    assert(marker_annotation->projected_graphics[2].clip
+        == PlotAnnotationClip2D::Viewport);
+
+    const PlotPixelPoint2D marker_pixel =
+        *marker_annotation->projected_anchor;
+    const GraphicItemHandle marker_item =
+        marker_annotation->projected_graphics[0].item;
+    const auto normal_item = marker_layer.visual_scene(
+        PlotAnnotationPhase2D::Overlay,
+        PlotAnnotationClip2D::PlotArea).snapshot(marker_item);
+    assert(normal_item);
+    const auto* normal_ellipse =
+        std::get_if<EllipseItem2D>(&normal_item->payload);
+    assert(normal_ellipse);
+    assert(near(normal_ellipse->bounds.width, 12.0));
+
+    assert(marker_layer.route_pointer(frame, {
+        20,
+        PointerEventKind2D::Move,
+        {marker_pixel.x, marker_pixel.y},
+        0,
+    }));
+    assert(marker_layer.data_marker_snapshot(*marker_handle)->hovered);
+    const auto hovered_item = marker_layer.visual_scene(
+        PlotAnnotationPhase2D::Overlay,
+        PlotAnnotationClip2D::PlotArea).snapshot(marker_item);
+    const auto* hovered_ellipse =
+        std::get_if<EllipseItem2D>(&hovered_item->payload);
+    assert(hovered_ellipse);
+    assert(hovered_ellipse->bounds.width > normal_ellipse->bounds.width);
+
+    assert(marker_layer.set_snap_hook(
+        *marker_handle,
+        [](const PlotPoint2D& value) {
+            return PlotPoint2D{
+                std::round(value.x),
+                std::round(value.y),
+            };
+        }));
+    assert(marker_layer.route_pointer(frame, {
+        21,
+        PointerEventKind2D::Down,
+        {marker_pixel.x, marker_pixel.y},
+        0,
+    }));
+    assert(marker_layer.data_marker_snapshot(*marker_handle)->dragging);
+    const PlotPixelPoint2D drag_pixel = frame.data_to_pixel(7.2, 15.7);
+    assert(marker_layer.route_pointer(frame, {
+        21,
+        PointerEventKind2D::Move,
+        {drag_pixel.x, drag_pixel.y},
+        0,
+    }));
+    auto dragged = marker_layer.data_marker_snapshot(*marker_handle);
+    assert(dragged);
+    assert(near(dragged->marker.data_position.x, 7.0));
+    assert(near(dragged->marker.data_position.y, 16.0));
+    assert(marker_layer.route_pointer(frame, {
+        21,
+        PointerEventKind2D::Up,
+        {frame.data_to_pixel(7.0, 16.0).x,
+         frame.data_to_pixel(7.0, 16.0).y},
+        0,
+    }));
+    assert(!marker_layer.data_marker_snapshot(*marker_handle)->dragging);
+
+    const GraphicItemHandle bubble_item =
+        marker_layer.snapshot(*marker_handle)->projected_graphics[2].item;
+    const auto bubble_before_pan = marker_layer.visual_scene(
+        PlotAnnotationPhase2D::Chrome,
+        PlotAnnotationClip2D::Viewport).snapshot(bubble_item);
+    assert(bubble_before_pan);
+    const auto* bubble_payload =
+        std::get_if<RoundedRectItem2D>(&bubble_before_pan->payload);
+    assert(bubble_payload);
+    const float bubble_width = bubble_payload->rect.width;
+    marker_layer.project(panned, data);
+    const auto bubble_after_pan = marker_layer.visual_scene(
+        PlotAnnotationPhase2D::Chrome,
+        PlotAnnotationClip2D::Viewport).snapshot(bubble_item);
+    assert(bubble_after_pan);
+    const auto* panned_bubble =
+        std::get_if<RoundedRectItem2D>(&bubble_after_pan->payload);
+    assert(panned_bubble && near(panned_bubble->rect.width, bubble_width));
+    assert(!near(
+        bubble_before_pan->world_transform.tx,
+        bubble_after_pan->world_transform.tx));
+
+    int close_actions = 0;
+    assert(marker_layer.set_action_handler(
+        *marker_handle,
+        [&](const PlotAnnotationAction2D& action) {
+            if (action.action == "close") ++close_actions;
+        }));
+    const auto close_projection =
+        marker_layer.snapshot(*marker_handle)->projected_graphics[4];
+    const auto close_item = marker_layer.visual_scene(
+        close_projection.phase,
+        close_projection.clip).snapshot(close_projection.item);
+    assert(close_item);
+    const termin::Vec2f close_point =
+        close_item->world_transform.transform_point({0.0f, 0.0f});
+    assert(marker_layer.route_pointer(panned, {
+        22, PointerEventKind2D::Down, close_point, 0}));
+    assert(marker_layer.route_pointer(panned, {
+        22, PointerEventKind2D::Up, close_point, 0}));
+    assert(close_actions == 1);
+    assert(!marker_layer.data_marker_snapshot(*marker_handle));
+
+    PlotDataMarker2D clipped_marker;
+    clipped_marker.data_position = {-0.2, 10.0};
+    clipped_marker.text = "clipped anchor";
+    const auto clipped_marker_handle =
+        marker_layer.create_data_marker(clipped_marker);
+    assert(clipped_marker_handle);
+    marker_layer.project(frame, data);
+    const auto clipped_marker_snapshot =
+        marker_layer.snapshot(*clipped_marker_handle);
+    const PlotPixelPoint2D clipped_anchor =
+        *clipped_marker_snapshot->projected_anchor;
+    assert(!frame.contains_plot_pixel(clipped_anchor.x, clipped_anchor.y));
+    assert(!marker_layer.hit_test(
+        frame, clipped_anchor.x, clipped_anchor.y));
+    const auto clipped_bubble_projection =
+        clipped_marker_snapshot->projected_graphics[2];
+    const auto clipped_bubble = marker_layer.visual_scene(
+        clipped_bubble_projection.phase,
+        clipped_bubble_projection.clip)
+        .snapshot(clipped_bubble_projection.item);
+    const termin::Vec2f clipped_bubble_center =
+        clipped_bubble->world_transform.transform_point({0.0f, 0.0f});
+    assert(marker_layer.hit_test(
+        frame, clipped_bubble_center.x, clipped_bubble_center.y));
+
+    const PlotPixelPoint2D teardown_anchor =
+        *marker_layer.snapshot(*clipped_marker_handle)->projected_anchor;
+    // Move the marker into the plot before starting the teardown gesture.
+    clipped_marker.data_position = {2.0, 5.0};
+    assert(marker_layer.update_data_marker(
+        *clipped_marker_handle, clipped_marker));
+    marker_layer.project(frame, data);
+    const PlotPixelPoint2D teardown_inside =
+        *marker_layer.snapshot(*clipped_marker_handle)->projected_anchor;
+    assert(marker_layer.route_pointer(frame, {
+        23, PointerEventKind2D::Down, {teardown_inside.x, teardown_inside.y}, 0}));
+    assert(marker_layer.destroy(*clipped_marker_handle));
+    assert(!marker_layer.route_pointer(frame, {
+        23, PointerEventKind2D::Move, {teardown_anchor.x, teardown_anchor.y}, 0}));
+
+    PlotDataMarker2D invalid_marker;
+    invalid_marker.callout_width =
+        std::numeric_limits<float>::quiet_NaN();
+    assert(!marker_layer.create_data_marker(invalid_marker));
+    invalid_marker.callout_width = 100.0f;
+    invalid_marker.text_color.r =
+        std::numeric_limits<float>::infinity();
+    assert(!marker_layer.create_data_marker(invalid_marker));
 
     // Engine-level routing distinguishes annotation consumption from plot
     // navigation so multi-panel hosts do not broadcast a fake zoom.
