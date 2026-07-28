@@ -209,6 +209,33 @@ const VisualScene2D::Record* VisualScene2D::record_locked_(
     return &records_.find(item.index)->second;
 }
 
+void VisualScene2D::sync_storage_item_locked_(
+    Record& record,
+    std::uint32_t dirty_flags) {
+    const tc_graphic_item_state state{
+        .local_transform = record.state.local_transform,
+        .visible = record.state.visible,
+        .enabled = record.state.enabled,
+        .opacity = record.state.opacity,
+        .z_order = record.state.z_order,
+    };
+    if (!storage_.set_state(record.handle, state)) {
+        tc::Log::error(
+            "VisualScene2D: failed to synchronize canonical tc_graphic_item");
+        return;
+    }
+    const auto remaining =
+        dirty_flags &
+        ~(TC_GRAPHIC_ITEM_DIRTY_TRANSFORM |
+          TC_GRAPHIC_ITEM_DIRTY_VISUAL |
+          TC_GRAPHIC_ITEM_DIRTY_INTERACTION);
+    if (remaining != 0 &&
+        !storage_.mark_dirty(record.handle, remaining)) {
+        tc::Log::error(
+            "VisualScene2D: failed to synchronize graphic item dirty state");
+    }
+}
+
 std::optional<GraphicItemHandle> VisualScene2D::create(
     GraphicItemPayload2D payload,
     GraphicItemHandle parent) {
@@ -224,7 +251,7 @@ std::optional<GraphicItemHandle> VisualScene2D::create(
     GraphicItemHandle handle{};
     try {
         handle = storage_.create(parent);
-        records_.emplace(
+        auto [position, inserted] = records_.emplace(
             handle.index,
             Record{
                 handle,
@@ -234,6 +261,11 @@ std::optional<GraphicItemHandle> VisualScene2D::create(
                 ++revision_,
                 revision_,
             });
+        if (!inserted) {
+            throw std::runtime_error("graphic item record index collision");
+        }
+        sync_storage_item_locked_(
+            position->second, TC_GRAPHIC_ITEM_DIRTY_ALL);
     } catch (const std::exception& error) {
         if (!tc_graphic_item_handle_is_invalid(handle)) {
             storage_.destroy_leaf(handle);
@@ -323,6 +355,8 @@ bool VisualScene2D::reparent(
     auto* record = record_locked_(item);
     record->revision = ++revision_;
     record->topology_revision = revision_;
+    sync_storage_item_locked_(
+        *record, TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY);
     return true;
 }
 
@@ -336,6 +370,8 @@ bool VisualScene2D::detach(GraphicItemHandle item) {
     auto* record = record_locked_(item);
     record->revision = ++revision_;
     record->topology_revision = revision_;
+    sync_storage_item_locked_(
+        *record, TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY);
     return true;
 }
 
@@ -362,6 +398,11 @@ bool VisualScene2D::set_state(
     }
     record->state = std::move(state);
     record->revision = ++revision_;
+    sync_storage_item_locked_(
+        *record,
+        TC_GRAPHIC_ITEM_DIRTY_TRANSFORM |
+            TC_GRAPHIC_ITEM_DIRTY_VISUAL |
+            TC_GRAPHIC_ITEM_DIRTY_INTERACTION);
     return true;
 }
 
@@ -380,6 +421,8 @@ bool VisualScene2D::set_payload(
     }
     record->payload = std::move(payload);
     record->revision = ++revision_;
+    sync_storage_item_locked_(
+        *record, TC_GRAPHIC_ITEM_DIRTY_VISUAL);
     return true;
 }
 
@@ -400,6 +443,8 @@ bool VisualScene2D::set_item(
     record->state = std::move(state);
     record->payload = std::move(payload);
     record->revision = ++revision_;
+    sync_storage_item_locked_(
+        *record, TC_GRAPHIC_ITEM_DIRTY_ALL);
     return true;
 }
 

@@ -32,13 +32,12 @@ public:
     }
 
     GraphicItemHandle adopt(
-        void* payload,
-        tc_graphic_item_deleter deleter = nullptr,
-        void* deleter_user_data = nullptr,
+        tc_graphic_item* item,
+        tc_graphic_item_deleter deleter,
         GraphicItemHandle parent = tc_graphic_item_handle_invalid()) {
         GraphicItemHandle result = tc_graphic_item_handle_invalid();
         if (!tc_visual_scene_adopt(
-                scene_, payload, deleter, deleter_user_data, parent, &result)) {
+                scene_, item, deleter, parent, &result)) {
             throw std::runtime_error("failed to adopt graphic item");
         }
         return result;
@@ -55,6 +54,22 @@ public:
 
     bool resolve(GraphicItemHandle item, GraphicItemView& out) {
         return tc_visual_scene_resolve(scene_, item, &out);
+    }
+    tc_graphic_item* resolve_item(GraphicItemHandle item) {
+        GraphicItemView view{};
+        return resolve(item, view) ? view.item : nullptr;
+    }
+    bool get_state(GraphicItemHandle item, tc_graphic_item_state& out) {
+        return tc_visual_scene_get_item_state(scene_, item, &out);
+    }
+    bool set_state(
+        GraphicItemHandle item,
+        const tc_graphic_item_state& state) {
+        return tc_visual_scene_set_item_state(scene_, item, &state);
+    }
+    bool mark_dirty(GraphicItemHandle item, std::uint32_t dirty_flags) {
+        return tc_visual_scene_mark_item_dirty(
+            scene_, item, dirty_flags);
     }
     bool reparent(GraphicItemHandle item, GraphicItemHandle parent) {
         return tc_visual_scene_reparent(scene_, item, parent);

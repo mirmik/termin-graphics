@@ -1,5 +1,6 @@
 #include "termin_visual_scene/tc_visual_scene.h"
 
+#include <math.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <threads.h>
@@ -8,13 +9,7 @@
 #include <tcbase/tc_pool.h>
 
 typedef struct tc_graphic_item_slot {
-    void* payload;
-    tc_graphic_item_deleter deleter;
-    void* deleter_user_data;
-    tc_handle parent;
-    tc_handle first_child;
-    tc_handle next_sibling;
-    tc_handle previous_sibling;
+    tc_graphic_item* item;
 } tc_graphic_item_slot;
 
 struct tc_visual_scene {
@@ -22,12 +17,13 @@ struct tc_visual_scene {
     tc_pool items;
     mtx_t mutex;
     bool clearing;
+    uint64_t next_stable_order;
+    uint64_t revision;
 };
 
 typedef struct tc_delete_record {
-    void* payload;
+    tc_graphic_item* item;
     tc_graphic_item_deleter deleter;
-    void* user_data;
 } tc_delete_record;
 
 typedef struct tc_walk_entry {
@@ -79,6 +75,17 @@ static bool valid_locked(
         tc_log_error("%s: graphic item handle is stale", operation);
         return false;
     }
+    tc_graphic_item_slot* slot =
+        (tc_graphic_item_slot*)tc_pool_get(
+            &scene->items, local_handle(handle));
+    if (slot == NULL || slot->item == NULL ||
+        slot->item->scene != scene ||
+        slot->item->handle.scene_id != handle.scene_id ||
+        slot->item->handle.index != handle.index ||
+        slot->item->handle.generation != handle.generation) {
+        tc_log_error("%s: graphic item slot/object identity mismatch", operation);
+        return false;
+    }
     return true;
 }
 
@@ -86,32 +93,41 @@ static tc_graphic_item_slot* slot_locked(tc_visual_scene* scene, tc_handle handl
     return (tc_graphic_item_slot*)tc_pool_get(&scene->items, handle);
 }
 
+static tc_graphic_item* item_locked(tc_visual_scene* scene, tc_handle handle) {
+    tc_graphic_item_slot* slot = slot_locked(scene, handle);
+    return slot != NULL ? slot->item : NULL;
+}
+
 static void unlink_locked(tc_visual_scene* scene, tc_handle item_handle) {
-    tc_graphic_item_slot* item = slot_locked(scene, item_handle);
-    if (item == NULL || tc_handle_is_invalid(item->parent)) {
+    tc_graphic_item* item = item_locked(scene, item_handle);
+    if (item == NULL || tc_graphic_item_handle_is_invalid(item->parent)) {
         if (item != NULL) {
-            item->previous_sibling = TC_HANDLE_INVALID;
-            item->next_sibling = TC_HANDLE_INVALID;
-            item->parent = TC_HANDLE_INVALID;
+            item->previous_sibling = tc_graphic_item_handle_invalid();
+            item->next_sibling = tc_graphic_item_handle_invalid();
+            item->parent = tc_graphic_item_handle_invalid();
         }
         return;
     }
 
-    tc_graphic_item_slot* parent = slot_locked(scene, item->parent);
-    if (parent != NULL && tc_handle_eq(parent->first_child, item_handle)) {
+    tc_graphic_item* parent = item_locked(scene, local_handle(item->parent));
+    if (parent != NULL &&
+        parent->first_child.index == item_handle.index &&
+        parent->first_child.generation == item_handle.generation) {
         parent->first_child = item->next_sibling;
     }
-    if (!tc_handle_is_invalid(item->previous_sibling)) {
-        tc_graphic_item_slot* previous = slot_locked(scene, item->previous_sibling);
+    if (!tc_graphic_item_handle_is_invalid(item->previous_sibling)) {
+        tc_graphic_item* previous =
+            item_locked(scene, local_handle(item->previous_sibling));
         if (previous != NULL) previous->next_sibling = item->next_sibling;
     }
-    if (!tc_handle_is_invalid(item->next_sibling)) {
-        tc_graphic_item_slot* next = slot_locked(scene, item->next_sibling);
+    if (!tc_graphic_item_handle_is_invalid(item->next_sibling)) {
+        tc_graphic_item* next =
+            item_locked(scene, local_handle(item->next_sibling));
         if (next != NULL) next->previous_sibling = item->previous_sibling;
     }
-    item->parent = TC_HANDLE_INVALID;
-    item->previous_sibling = TC_HANDLE_INVALID;
-    item->next_sibling = TC_HANDLE_INVALID;
+    item->parent = tc_graphic_item_handle_invalid();
+    item->previous_sibling = tc_graphic_item_handle_invalid();
+    item->next_sibling = tc_graphic_item_handle_invalid();
 }
 
 static void append_child_locked(
@@ -119,26 +135,33 @@ static void append_child_locked(
     tc_handle parent_handle,
     tc_handle child_handle)
 {
-    tc_graphic_item_slot* parent = slot_locked(scene, parent_handle);
-    tc_graphic_item_slot* child = slot_locked(scene, child_handle);
-    child->parent = parent_handle;
-    if (tc_handle_is_invalid(parent->first_child)) {
-        parent->first_child = child_handle;
+    tc_graphic_item* parent = item_locked(scene, parent_handle);
+    tc_graphic_item* child = item_locked(scene, child_handle);
+    child->parent = public_handle(scene, parent_handle);
+    if (tc_graphic_item_handle_is_invalid(parent->first_child)) {
+        parent->first_child = public_handle(scene, child_handle);
         return;
     }
-    tc_handle cursor = parent->first_child;
-    tc_graphic_item_slot* last = slot_locked(scene, cursor);
-    while (!tc_handle_is_invalid(last->next_sibling)) {
-        cursor = last->next_sibling;
-        last = slot_locked(scene, cursor);
+    tc_handle cursor = local_handle(parent->first_child);
+    tc_graphic_item* last = item_locked(scene, cursor);
+    while (!tc_graphic_item_handle_is_invalid(last->next_sibling)) {
+        cursor = local_handle(last->next_sibling);
+        last = item_locked(scene, cursor);
     }
-    last->next_sibling = child_handle;
-    child->previous_sibling = cursor;
+    last->next_sibling = public_handle(scene, child_handle);
+    child->previous_sibling = public_handle(scene, cursor);
 }
 
 static void run_delete_record(tc_delete_record record) {
+    if (record.item == NULL) return;
+    if (record.item->vtable != NULL &&
+        record.item->vtable->on_destroy != NULL) {
+        record.item->vtable->on_destroy(record.item);
+    }
+    tc_runtime_type_registry_unlink_instance(
+        &record.item->runtime_type_link);
     if (record.deleter != NULL) {
-        record.deleter(record.payload, record.user_data);
+        record.deleter(record.item);
     }
 }
 
@@ -148,6 +171,40 @@ static bool free_slot_locked(tc_visual_scene* scene, tc_handle handle) {
         scene->items.generations[handle.index] = 1;
     }
     return true;
+}
+
+static tc_delete_record prepare_delete_locked(
+    tc_visual_scene* scene,
+    tc_handle handle)
+{
+    tc_graphic_item_slot* slot = slot_locked(scene, handle);
+    tc_graphic_item* item = slot != NULL ? slot->item : NULL;
+    tc_delete_record record = {
+        item,
+        item != NULL ? item->deleter : NULL,
+    };
+    if (item == NULL) {
+        return record;
+    }
+    slot->item = NULL;
+    item->scene = NULL;
+    item->handle = tc_graphic_item_handle_invalid();
+    item->parent = tc_graphic_item_handle_invalid();
+    item->first_child = tc_graphic_item_handle_invalid();
+    item->next_sibling = tc_graphic_item_handle_invalid();
+    item->previous_sibling = tc_graphic_item_handle_invalid();
+    item->deleter = NULL;
+    item->dirty_flags = TC_GRAPHIC_ITEM_DIRTY_ALL;
+    free_slot_locked(scene, handle);
+    return record;
+}
+
+static const tc_graphic_item_vtable g_generic_item_vtable = {
+    .type_name = "termin.visual.GraphicItem",
+};
+
+static void delete_generic_item(tc_graphic_item* item) {
+    free(item);
 }
 
 tc_visual_scene* tc_visual_scene_create(void) {
@@ -179,6 +236,7 @@ tc_visual_scene* tc_visual_scene_create(void) {
         free(scene);
         return NULL;
     }
+    scene->next_stable_order = 1;
     return scene;
 }
 
@@ -203,32 +261,48 @@ size_t tc_visual_scene_item_count(tc_visual_scene* scene) {
 
 bool tc_visual_scene_adopt(
     tc_visual_scene* scene,
-    void* payload,
+    tc_graphic_item* item,
     tc_graphic_item_deleter deleter,
-    void* deleter_user_data,
     tc_graphic_item_handle parent,
     tc_graphic_item_handle* out_handle)
 {
+    if (item == NULL) {
+        tc_log_error("tc_visual_scene_adopt: item is NULL");
+        return false;
+    }
+    if (deleter == NULL) {
+        tc_log_error("tc_visual_scene_adopt: owned item adoption requires a deleter");
+        return false;
+    }
+    if (item->vtable == NULL || item->body == NULL) {
+        tc_log_error("tc_visual_scene_adopt: item is not fully initialized");
+        deleter(item);
+        return false;
+    }
+    if (tc_graphic_item_is_attached(item) || item->deleter != NULL) {
+        tc_log_error("tc_visual_scene_adopt: item is already attached");
+        return false;
+    }
     if (out_handle == NULL) {
         tc_log_error("tc_visual_scene_adopt: out_handle is NULL");
-        if (deleter != NULL) deleter(payload, deleter_user_data);
+        deleter(item);
         return false;
     }
     *out_handle = tc_graphic_item_handle_invalid();
     if (!lock_scene(scene)) {
-        if (deleter != NULL) deleter(payload, deleter_user_data);
+        deleter(item);
         return false;
     }
     const bool has_parent = !tc_graphic_item_handle_is_invalid(parent);
     if (scene->clearing) {
         tc_log_error("tc_visual_scene_adopt: scene teardown is in progress");
         mtx_unlock(&scene->mutex);
-        if (deleter != NULL) deleter(payload, deleter_user_data);
+        deleter(item);
         return false;
     }
     if (has_parent && !valid_locked(scene, parent, "tc_visual_scene_adopt")) {
         mtx_unlock(&scene->mutex);
-        if (deleter != NULL) deleter(payload, deleter_user_data);
+        deleter(item);
         return false;
     }
 
@@ -236,21 +310,24 @@ bool tc_visual_scene_adopt(
     if (tc_handle_is_invalid(local)) {
         tc_log_error("tc_visual_scene_adopt: item allocation failed");
         mtx_unlock(&scene->mutex);
-        if (deleter != NULL) deleter(payload, deleter_user_data);
+        deleter(item);
         return false;
     }
-    tc_graphic_item_slot* item = slot_locked(scene, local);
-    *item = (tc_graphic_item_slot){
-        .payload = payload,
-        .deleter = deleter,
-        .deleter_user_data = deleter_user_data,
-        .parent = TC_HANDLE_INVALID,
-        .first_child = TC_HANDLE_INVALID,
-        .next_sibling = TC_HANDLE_INVALID,
-        .previous_sibling = TC_HANDLE_INVALID,
-    };
+    tc_graphic_item_slot* slot = slot_locked(scene, local);
+    slot->item = item;
+    item->deleter = deleter;
+    item->scene = scene;
+    item->handle = public_handle(scene, local);
+    item->parent = tc_graphic_item_handle_invalid();
+    item->first_child = tc_graphic_item_handle_invalid();
+    item->next_sibling = tc_graphic_item_handle_invalid();
+    item->previous_sibling = tc_graphic_item_handle_invalid();
+    item->stable_order = scene->next_stable_order++;
+    item->revision = ++scene->revision;
+    item->topology_revision = item->revision;
+    item->dirty_flags = TC_GRAPHIC_ITEM_DIRTY_ALL;
     if (has_parent) append_child_locked(scene, local_handle(parent), local);
-    *out_handle = public_handle(scene, local);
+    *out_handle = item->handle;
     mtx_unlock(&scene->mutex);
     return true;
 }
@@ -260,8 +337,19 @@ bool tc_visual_scene_create_item(
     tc_graphic_item_handle parent,
     tc_graphic_item_handle* out_handle)
 {
+    tc_graphic_item* item =
+        (tc_graphic_item*)calloc(1, sizeof(tc_graphic_item));
+    if (item == NULL) {
+        tc_log_error("tc_visual_scene_create_item: allocation failed");
+        if (out_handle != NULL) {
+            *out_handle = tc_graphic_item_handle_invalid();
+        }
+        return false;
+    }
+    tc_graphic_item_init_unowned(
+        item, &g_generic_item_vtable, TC_LANGUAGE_C, item);
     return tc_visual_scene_adopt(
-        scene, NULL, NULL, NULL, parent, out_handle);
+        scene, item, delete_generic_item, parent, out_handle);
 }
 
 bool tc_visual_scene_resolve(
@@ -278,14 +366,100 @@ bool tc_visual_scene_resolve(
         mtx_unlock(&scene->mutex);
         return false;
     }
-    tc_graphic_item_slot* item = slot_locked(scene, local_handle(handle));
+    tc_graphic_item* item = item_locked(scene, local_handle(handle));
     *out_view = (tc_graphic_item_view){
-        .payload = item->payload,
-        .parent = public_handle(scene, item->parent),
-        .first_child = public_handle(scene, item->first_child),
-        .next_sibling = public_handle(scene, item->next_sibling),
-        .previous_sibling = public_handle(scene, item->previous_sibling),
+        .item = item,
+        .parent = item->parent,
+        .first_child = item->first_child,
+        .next_sibling = item->next_sibling,
+        .previous_sibling = item->previous_sibling,
     };
+    mtx_unlock(&scene->mutex);
+    return true;
+}
+
+bool tc_visual_scene_get_item_state(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle handle,
+    tc_graphic_item_state* out_state)
+{
+    if (out_state == NULL) {
+        tc_log_error("tc_visual_scene_get_item_state: out_state is NULL");
+        return false;
+    }
+    if (!lock_scene(scene)) return false;
+    if (!valid_locked(scene, handle, "tc_visual_scene_get_item_state")) {
+        mtx_unlock(&scene->mutex);
+        return false;
+    }
+    const tc_graphic_item* item =
+        item_locked(scene, local_handle(handle));
+    *out_state = (tc_graphic_item_state){
+        .local_transform = item->local_transform,
+        .visible = item->visible,
+        .enabled = item->enabled,
+        .opacity = item->opacity,
+        .z_order = item->z_order,
+    };
+    mtx_unlock(&scene->mutex);
+    return true;
+}
+
+bool tc_visual_scene_set_item_state(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle handle,
+    const tc_graphic_item_state* state)
+{
+    if (state == NULL) {
+        tc_log_error("tc_visual_scene_set_item_state: state is NULL");
+        return false;
+    }
+    if (!tc_affine2f_is_finite(state->local_transform) ||
+        !isfinite(state->opacity) ||
+        state->opacity < 0.0f ||
+        state->opacity > 1.0f) {
+        tc_log_error("tc_visual_scene_set_item_state: invalid state");
+        return false;
+    }
+    if (!lock_scene(scene)) return false;
+    if (!valid_locked(scene, handle, "tc_visual_scene_set_item_state")) {
+        mtx_unlock(&scene->mutex);
+        return false;
+    }
+    tc_graphic_item* item = item_locked(scene, local_handle(handle));
+    item->local_transform = state->local_transform;
+    item->visible = state->visible;
+    item->enabled = state->enabled;
+    item->opacity = state->opacity;
+    item->z_order = state->z_order;
+    item->revision = ++scene->revision;
+    item->dirty_flags |=
+        TC_GRAPHIC_ITEM_DIRTY_TRANSFORM |
+        TC_GRAPHIC_ITEM_DIRTY_VISUAL |
+        TC_GRAPHIC_ITEM_DIRTY_INTERACTION;
+    mtx_unlock(&scene->mutex);
+    return true;
+}
+
+bool tc_visual_scene_mark_item_dirty(
+    tc_visual_scene* scene,
+    tc_graphic_item_handle handle,
+    uint32_t dirty_flags)
+{
+    if ((dirty_flags & ~TC_GRAPHIC_ITEM_DIRTY_ALL) != 0) {
+        tc_log_error(
+            "tc_visual_scene_mark_item_dirty: unsupported dirty flags 0x%x",
+            dirty_flags);
+        return false;
+    }
+    if (!lock_scene(scene)) return false;
+    if (!valid_locked(scene, handle, "tc_visual_scene_mark_item_dirty")) {
+        mtx_unlock(&scene->mutex);
+        return false;
+    }
+    tc_graphic_item* item = item_locked(scene, local_handle(handle));
+    item->dirty_flags |= dirty_flags;
+    item->revision = ++scene->revision;
     mtx_unlock(&scene->mutex);
     return true;
 }
@@ -309,11 +483,17 @@ bool tc_visual_scene_reparent(
             mtx_unlock(&scene->mutex);
             return false;
         }
-        tc_graphic_item_slot* ancestor = slot_locked(scene, cursor);
-        cursor = ancestor->parent;
+        tc_graphic_item* ancestor = item_locked(scene, cursor);
+        cursor = tc_graphic_item_handle_is_invalid(ancestor->parent)
+            ? TC_HANDLE_INVALID
+            : local_handle(ancestor->parent);
     }
     unlink_locked(scene, item_local);
     append_child_locked(scene, local_handle(new_parent), item_local);
+    tc_graphic_item* moved = item_locked(scene, item_local);
+    moved->revision = ++scene->revision;
+    moved->topology_revision = moved->revision;
+    moved->dirty_flags |= TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY;
     mtx_unlock(&scene->mutex);
     return true;
 }
@@ -325,6 +505,10 @@ bool tc_visual_scene_detach(tc_visual_scene* scene, tc_graphic_item_handle item)
         return false;
     }
     unlink_locked(scene, local_handle(item));
+    tc_graphic_item* detached = item_locked(scene, local_handle(item));
+    detached->revision = ++scene->revision;
+    detached->topology_revision = detached->revision;
+    detached->dirty_flags |= TC_GRAPHIC_ITEM_DIRTY_TOPOLOGY;
     mtx_unlock(&scene->mutex);
     return true;
 }
@@ -339,15 +523,15 @@ bool tc_visual_scene_destroy_leaf(
         return false;
     }
     const tc_handle local = local_handle(item);
-    tc_graphic_item_slot* slot = slot_locked(scene, local);
-    if (!tc_handle_is_invalid(slot->first_child)) {
+    tc_graphic_item* stored = item_locked(scene, local);
+    if (!tc_graphic_item_handle_is_invalid(stored->first_child)) {
         tc_log_error("tc_visual_scene_destroy_leaf: item has children");
         mtx_unlock(&scene->mutex);
         return false;
     }
-    tc_delete_record record = {slot->payload, slot->deleter, slot->deleter_user_data};
     unlink_locked(scene, local);
-    free_slot_locked(scene, local);
+    const tc_delete_record record = prepare_delete_locked(scene, local);
+    ++scene->revision;
     mtx_unlock(&scene->mutex);
     run_delete_record(record);
     return true;
@@ -381,26 +565,25 @@ bool tc_visual_scene_destroy_subtree(
     stack[stack_size++] = (tc_walk_entry){local_handle(root), false};
     while (stack_size > 0) {
         tc_walk_entry entry = stack[--stack_size];
-        tc_graphic_item_slot* item = slot_locked(scene, entry.handle);
+        tc_graphic_item* item = item_locked(scene, entry.handle);
         if (entry.expanded) {
             order[order_size++] = entry.handle;
             continue;
         }
         stack[stack_size++] = (tc_walk_entry){entry.handle, true};
-        tc_handle child = item->first_child;
-        while (!tc_handle_is_invalid(child)) {
+        tc_graphic_item_handle child_handle = item->first_child;
+        while (!tc_graphic_item_handle_is_invalid(child_handle)) {
+            const tc_handle child = local_handle(child_handle);
             stack[stack_size++] = (tc_walk_entry){child, false};
-            child = slot_locked(scene, child)->next_sibling;
+            child_handle = item_locked(scene, child)->next_sibling;
         }
     }
 
     unlink_locked(scene, local_handle(root));
     for (size_t i = 0; i < order_size; ++i) {
-        tc_graphic_item_slot* item = slot_locked(scene, order[i]);
-        records[i] = (tc_delete_record){
-            item->payload, item->deleter, item->deleter_user_data};
-        free_slot_locked(scene, order[i]);
+        records[i] = prepare_delete_locked(scene, order[i]);
     }
+    ++scene->revision;
     mtx_unlock(&scene->mutex);
 
     for (size_t i = 0; i < order_size; ++i) run_delete_record(records[i]);
@@ -428,12 +611,10 @@ void tc_visual_scene_clear(tc_visual_scene* scene) {
             tc_log_error("tc_visual_scene_clear: pool count/state mismatch");
             break;
         }
-        tc_graphic_item_slot* item =
-            (tc_graphic_item_slot*)tc_pool_get_unchecked(&scene->items, index);
-        tc_delete_record record = (tc_delete_record){
-            item->payload, item->deleter, item->deleter_user_data};
         tc_handle handle = {index, scene->items.generations[index]};
-        free_slot_locked(scene, handle);
+        const tc_delete_record record =
+            prepare_delete_locked(scene, handle);
+        ++scene->revision;
         mtx_unlock(&scene->mutex);
         run_delete_record(record);
         if (!lock_scene(scene)) return;

@@ -208,6 +208,7 @@ private:
     bool owns_locked_(GraphicItemHandle item) const;
     Record* record_locked_(GraphicItemHandle item);
     const Record* record_locked_(GraphicItemHandle item) const;
+    void sync_storage_item_locked_(Record& record, std::uint32_t dirty_flags);
     bool snapshot_locked_(
         GraphicItemHandle item,
         GraphicItemSnapshot2D& out) const;

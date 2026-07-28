@@ -12,9 +12,11 @@ option(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
+    termin_require_package(termin_inspect termin_inspect::termin_inspect)
     termin_require_package(termin_graphics tgfx::termin_graphics2)
 else()
     find_package(termin_base REQUIRED)
+    find_package(termin_inspect REQUIRED)
     find_package(termin_graphics REQUIRED)
 endif()
 
@@ -30,6 +32,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 add_library(termin_visual_scene SHARED
+    src/tc_graphic_item.c
     src/tc_visual_scene.c
     src/scene2d.cpp
     src/scene_inspection2d.cpp
@@ -46,6 +49,7 @@ target_include_directories(termin_visual_scene PUBLIC
 )
 target_link_libraries(termin_visual_scene PUBLIC
     tcbase::termin_base
+    termin_inspect::termin_inspect
     tgfx::termin_graphics2
 )
 termin_set_rpath_lib(termin_visual_scene)

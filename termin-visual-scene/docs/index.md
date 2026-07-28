@@ -6,24 +6,43 @@ and `termin-graphics`; those lower-level modules do not depend on it.
 
 The C storage API uses per-scene index/generation handles. A handle includes
 the scene lifetime-domain ID, so stale and cross-scene references are rejected.
-Adopted payloads are destroyed exactly once by their optional custom deleter.
-The C++ facade is move-only and does not use shared ownership for items.
+Each language implementation embeds the common `tc_graphic_item` C base and
+supplies its vtable, native language, body and creator-owned deleter.
+`tc_visual_scene_adopt` transfers that item to one scene and requires a
+non-null deleter. Failed adoption rolls ownership back through the same
+deleter; explicit item destruction and scene teardown invoke `on_destroy` and
+the deleter exactly once after invalidating the generation handle. The C++
+facade is move-only and does not use shared ownership for items.
 
 All operations on a live scene are internally synchronized. A topology view is
-a momentary snapshot and its payload pointer is borrowed; callers must provide
+a momentary snapshot and its `tc_graphic_item*` is borrowed; callers must provide
 higher-level synchronization if they keep that pointer across mutations.
 Destroying a scene requires exclusive lifetime ownership: no operation may race
-with `tc_visual_scene_destroy`, and a payload deleter must not destroy its
+with `tc_visual_scene_destroy`, and an item deleter must not destroy its
 owning scene recursively.
+
+Lifecycle callbacks and deleters run outside the storage mutex. The common
+state API validates and mutates local `Affine2f`, visibility, enabled state,
+opacity and z-order under that mutex; direct writes to an attached base are not
+a synchronized mutation path. Topology and dirty revisions live in the common
+item object rather than a parallel slot payload.
 
 ## Typed retained items
 
 `VisualScene2D` layers inspectable retained state over the generation-handle
-storage. Each item has an exact local `termin::Affine2f`, visibility, opacity,
+storage. During the built-in-item migration it keeps a short-lived C++
+`Record + std::variant` bridge for type-specific payload data, while ownership,
+identity, topology and common state already resolve through the canonical
+`tc_graphic_item*`. Each item has an exact local `termin::Affine2f`, visibility, opacity,
 stable z/order, an optional geometric `tgfx::Path2f` clip, a dirty revision,
-and one canonical payload variant. Payloads cover groups, rectangles, rounded
+and a typed payload bridge. Payloads cover groups, rectangles, rounded
 rectangles, ellipses, paths, polylines, text, images, hit regions and custom
 batch references.
+
+That variant is not the target public extension model. The next migration ports
+the built-ins to concrete implementations embedding `tc_graphic_item`, moves
+their bounds/snapshot/hit/serialization hooks to item vtables and removes the
+bridge.
 
 Text and image items keep only serializable `StableResourceRef2D` values.
 Runtime font and texture handles are deliberately absent from persistent scene
