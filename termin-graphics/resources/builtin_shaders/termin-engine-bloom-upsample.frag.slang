@@ -1,18 +1,21 @@
-// Bloom upsample pass — 9-tap tent filter with blend factor.
+// Bloom upsample pass — smooth normalized high/low mip reconstruction.
 //
 
 import termin_prelude;
 
 struct BloomUpsampleParams {
     float2 texel_size;
-    float blend_factor;
+    float scatter;
 };
 
 [[TerminScope("pass")]]
 ConstantBuffer<BloomUpsampleParams> u_params;
 
 [[TerminScope("transient")]]
-Sampler2D u_texture;
+Sampler2D u_high;
+
+[[TerminScope("transient")]]
+Sampler2D u_low;
 
 struct FragmentInput {
     float4 screen_pos : SV_Position;
@@ -25,22 +28,24 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
-    float2 ts = u_params.texel_size;
-    float3 a = u_texture.Sample(input.uv + float2(-1.0, -1.0) * ts).rgb;
-    float3 b = u_texture.Sample(input.uv + float2( 0.0, -1.0) * ts).rgb;
-    float3 c = u_texture.Sample(input.uv + float2( 1.0, -1.0) * ts).rgb;
-    float3 d = u_texture.Sample(input.uv + float2(-1.0,  0.0) * ts).rgb;
-    float3 e = u_texture.Sample(input.uv + float2( 0.0,  0.0) * ts).rgb;
-    float3 f = u_texture.Sample(input.uv + float2( 1.0,  0.0) * ts).rgb;
-    float3 g = u_texture.Sample(input.uv + float2(-1.0,  1.0) * ts).rgb;
-    float3 h = u_texture.Sample(input.uv + float2( 0.0,  1.0) * ts).rgb;
-    float3 i = u_texture.Sample(input.uv + float2( 1.0,  1.0) * ts).rgb;
-    float3 upsampled = e * 4.0;
-    upsampled += (b + d + f + h) * 2.0;
-    upsampled += (a + c + g + i);
-    upsampled /= 16.0;
+    // Three bilinear taps per axis reproduce [1 4 6 4 1] / 16 while
+    // retaining the cost of the old 3x3 tent.
+    float2 offset = u_params.texel_size * 1.2;
+    float3 a = u_low.Sample(input.uv + float2(-offset.x, -offset.y)).rgb;
+    float3 b = u_low.Sample(input.uv + float2( 0.0,      -offset.y)).rgb;
+    float3 c = u_low.Sample(input.uv + float2( offset.x, -offset.y)).rgb;
+    float3 d = u_low.Sample(input.uv + float2(-offset.x,  0.0)).rgb;
+    float3 e = u_low.Sample(input.uv).rgb;
+    float3 f = u_low.Sample(input.uv + float2( offset.x,  0.0)).rgb;
+    float3 g = u_low.Sample(input.uv + float2(-offset.x,  offset.y)).rgb;
+    float3 h = u_low.Sample(input.uv + float2( 0.0,       offset.y)).rgb;
+    float3 i = u_low.Sample(input.uv + float2( offset.x,  offset.y)).rgb;
+    float3 upsampled = (a + c + g + i) * (25.0 / 256.0);
+    upsampled += (b + d + f + h) * (30.0 / 256.0);
+    upsampled += e * (36.0 / 256.0);
 
     FragmentOutput output;
-    output.color = float4(upsampled * u_params.blend_factor, 1.0);
+    float3 high = u_high.Sample(input.uv).rgb;
+    output.color = float4(lerp(high, upsampled, u_params.scatter), 1.0);
     return output;
 }
