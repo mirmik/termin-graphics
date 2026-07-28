@@ -1,9 +1,8 @@
 """Shared host loop for tcplot examples.
 
-Spins up an WindowedGraphicsSession window + tcgui UI and runs a wait-for-event main
-loop until the user closes the window. Picks OpenGL or Vulkan based
-on the ``TERMIN_BACKEND`` env-var, same as other backend-neutral SDL
-hosts in the project.
+Spins up a WindowedGraphicsSession window + tcgui UI and runs a wait-for-event
+main loop until the user closes the window. Native Termin events keep the
+examples independent from the third-party PySDL2 package.
 """
 
 from __future__ import annotations
@@ -27,10 +26,12 @@ def _event_button(value: int) -> MouseButton:
         return MouseButton.OTHER
 
 
-def run_demo(title: str, make_widget: Callable[[], object],
-             size: tuple[int, int] = (900, 600),
-             bg: tuple[float, float, float, float] = (0.10, 0.10, 0.12, 1.0)
-             ) -> None:
+def run_demo(
+    title: str,
+    make_widget: Callable[[], object],
+    size: tuple[int, int] = (900, 600),
+    bg: tuple[float, float, float, float] = (0.10, 0.10, 0.12, 1.0),
+) -> None:
     """Host a tcplot widget inside a WindowedGraphicsSession window until it closes."""
     configure_default_shader_runtime("examples")
     runtime = WindowedGraphicsSession.create_native()
