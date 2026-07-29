@@ -31,6 +31,9 @@
       "uuid": "termin-engine-shadow",
       "name": "ShadowEngineVSFS",
       "language": "slang",
+      "runtime_sources": [
+        "termin-engine-shadow.slang"
+      ],
       "stages": {
         "vertex": {
           "path": "termin-engine-shadow.slang",
