@@ -51,11 +51,6 @@ struct PointerDispatch2D {
     std::optional<ActionEvent2D> action;
 };
 
-TERMIN_VISUAL_SCENE_API
-std::optional<GraphicItemHandle> hit_test(
-    const TcVisualScene& scene,
-    termin::Vec2f world_point);
-
 class TERMIN_VISUAL_SCENE_API SceneInteraction2D {
 public:
     using ActionHandler =

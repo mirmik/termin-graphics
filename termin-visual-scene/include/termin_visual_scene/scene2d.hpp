@@ -19,7 +19,13 @@ namespace termin::visual {
 
 class GraphicItem2D;
 class SceneRenderResourceResolver2D;
+class TcVisualScene;
 using GraphicItemHandle = tc_graphic_item_handle;
+
+TERMIN_VISUAL_SCENE_API
+std::optional<GraphicItemHandle> hit_test(
+    const TcVisualScene& scene,
+    termin::Vec2f world_point);
 
 struct GeometricClip2D {
     tgfx::Path2f path;
@@ -111,7 +117,8 @@ private:
     tc_visual_scene_handle handle_ =
         tc_visual_scene_handle_invalid();
 
-    friend std::optional<GraphicItemHandle> hit_test(
+    friend TERMIN_VISUAL_SCENE_API
+    std::optional<GraphicItemHandle> hit_test(
         const TcVisualScene&,
         termin::Vec2f);
 };

@@ -7,7 +7,7 @@
 
 namespace termin::visual {
 
-class GraphicItem2D {
+class TERMIN_VISUAL_SCENE_API GraphicItem2D {
 public:
     virtual ~GraphicItem2D();
 
