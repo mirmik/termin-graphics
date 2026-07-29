@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include <termin/materials/termin_materials_api.h>
+#include <tgfx/texture_encoding.h>
 
 namespace termin {
 
@@ -37,6 +38,7 @@ struct MaterialProperty {
     std::optional<double> range_min;
     std::optional<double> range_max;
     std::optional<std::string> label;
+    std::optional<tgfx::TextureEncoding> expected_texture_encoding;
 
     MaterialProperty() = default;
     MaterialProperty(
@@ -45,13 +47,15 @@ struct MaterialProperty {
         DefaultValue default_ = std::monostate{},
         std::optional<double> min_ = std::nullopt,
         std::optional<double> max_ = std::nullopt,
-        std::optional<std::string> label_ = std::nullopt
+        std::optional<std::string> label_ = std::nullopt,
+        std::optional<tgfx::TextureEncoding> expected_texture_encoding_ = std::nullopt
     ) : name(std::move(name_)),
         property_type(std::move(type_)),
         default_value(std::move(default_)),
         range_min(min_),
         range_max(max_),
-        label(std::move(label_)) {}
+        label(std::move(label_)),
+        expected_texture_encoding(expected_texture_encoding_) {}
 };
 
 // Alias for backward compatibility
@@ -230,6 +234,7 @@ public:
  *   @glBlend <bool>
  *   @glCull <bool>
  *   @property <Type> <name> [= DefaultValue] [range(min, max)]
+ *   @property Texture2D <name> [= DefaultValue] encoding(srgb|linear)
  *      Material-level property. Inside @phase is accepted for legacy syntax,
  *      but per-phase properties are not supported.
  *   @stage <stage_name> [entry_name|entry=<entry_name>]

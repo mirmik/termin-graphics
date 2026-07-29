@@ -811,7 +811,7 @@ static MaterialProperty parse_typed_uniform_directive(
     std::string content = line.substr(directive.size());
     content = trim(content);
 
-    // Extract range(...) if present
+    // Extract range(...) if present.
     std::optional<double> range_min, range_max;
     std::regex range_regex(R"(\brange\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\))");
     std::smatch range_match;
@@ -823,9 +823,34 @@ static MaterialProperty parse_typed_uniform_directive(
             tc::Log::debug("Failed to parse range() in %s directive: %s",
                            directive.c_str(), line.c_str());
         }
-        // Remove range from content
-        content = content.substr(0, range_match.position());
+        content.erase(range_match.position(), range_match.length());
         content = trim(content);
+    }
+
+    std::optional<tgfx::TextureEncoding> expected_texture_encoding;
+    std::regex encoding_regex(R"(\bencoding\s*\(\s*([^)]+)\s*\))");
+    std::smatch encoding_match;
+    if (std::regex_search(content, encoding_match, encoding_regex)) {
+        const std::string value = trim(encoding_match[1].str());
+        if (value == "srgb") {
+            expected_texture_encoding = tgfx::TextureEncoding::SRGB;
+        } else if (value == "linear") {
+            expected_texture_encoding = tgfx::TextureEncoding::Linear;
+        } else {
+            throw std::runtime_error(
+                "Unknown texture encoding '" + value + "' in " + directive + ": " + line);
+        }
+        content.erase(encoding_match.position(), encoding_match.length());
+        content = trim(content);
+        if (std::regex_search(content, encoding_match, encoding_regex)) {
+            throw std::runtime_error(
+                "Duplicate encoding() modifier in " + directive + ": " + line);
+        }
+    }
+    const std::regex encoding_word_regex(R"(\bencoding\b)");
+    if (std::regex_search(content, encoding_word_regex)) {
+        throw std::runtime_error(
+            "Malformed encoding() modifier in " + directive + ": " + line);
     }
 
     // Parse: Type name = value
@@ -864,6 +889,15 @@ static MaterialProperty parse_typed_uniform_directive(
     if (!type_valid) {
         throw std::runtime_error("Unknown property type: " + property_type);
     }
+    const bool is_texture = property_type == "Texture";
+    if (is_texture && !expected_texture_encoding.has_value()) {
+        throw std::runtime_error(
+            directive + " Texture2D property requires encoding(srgb|linear): " + line);
+    }
+    if (!is_texture && expected_texture_encoding.has_value()) {
+        throw std::runtime_error(
+            "encoding() modifier is only valid for Texture2D properties: " + line);
+    }
 
     // Parse default value
     MaterialProperty::DefaultValue default_value;
@@ -873,7 +907,14 @@ static MaterialProperty parse_typed_uniform_directive(
         default_value = get_default_for_type(property_type);
     }
 
-    return MaterialProperty(name, property_type, default_value, range_min, range_max);
+    return MaterialProperty(
+        name,
+        property_type,
+        default_value,
+        range_min,
+        range_max,
+        std::nullopt,
+        expected_texture_encoding);
 }
 
 MaterialProperty parse_property_directive(const std::string& line) {
@@ -912,9 +953,10 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                 return other.name == prop.name;
             });
         if (existing != material_properties.end()) {
-            if (existing->property_type != prop.property_type) {
+            if (existing->property_type != prop.property_type
+                || existing->expected_texture_encoding != prop.expected_texture_encoding) {
                 throw std::runtime_error(
-                    "Duplicate @property with conflicting type: " + prop.name);
+                    "Duplicate @property with conflicting contract: " + prop.name);
             }
             return;
         }

@@ -587,6 +587,14 @@ void bind_shader(nb::module_& m) {
                 item["name"] = std::string(property.name);
                 item["property_type"] = std::string(property.property_type);
                 item["label"] = std::string(property.label);
+                if (property.has_expected_encoding) {
+                    item["expected_encoding"] = std::string(
+                        property.expected_encoding == TC_TEXTURE_ENCODING_SRGB
+                            ? "srgb"
+                            : "linear");
+                } else {
+                    item["expected_encoding"] = nb::none();
+                }
                 item["has_default"] = property.has_default != 0;
                 if (property.has_default) {
                     if (property.default_text[0] != '\0') {
@@ -708,6 +716,20 @@ void bind_shader(nb::module_& m) {
                 desc.name = property_names.back().c_str();
                 desc.property_type = property_types.back().c_str();
                 desc.label = property_labels.back().empty() ? nullptr : property_labels.back().c_str();
+                if (item.contains("expected_encoding")
+                    && !item["expected_encoding"].is_none()) {
+                    const std::string encoding =
+                        nb::cast<std::string>(item["expected_encoding"]);
+                    if (encoding == "srgb") {
+                        desc.expected_encoding = TC_TEXTURE_ENCODING_SRGB;
+                    } else if (encoding == "linear") {
+                        desc.expected_encoding = TC_TEXTURE_ENCODING_LINEAR;
+                    } else {
+                        throw std::runtime_error(
+                            "Shader property expected_encoding must be 'srgb' or 'linear'");
+                    }
+                    desc.has_expected_encoding = 1;
+                }
                 desc.default_value = has_defaults[i] && default_texts[i].empty()
                     ? &defaults[i]
                     : nullptr;

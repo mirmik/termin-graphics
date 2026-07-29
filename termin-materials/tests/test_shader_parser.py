@@ -180,10 +180,49 @@ def test_parse_property_directive_vec3():
 
 def test_parse_property_directive_texture2d():
     """Тест парсинга @property директивы для Texture."""
-    prop = parse_property_directive("@property Texture u_mainTex")
+    prop = parse_property_directive("@property Texture u_mainTex encoding(srgb)")
     assert prop.name == "u_mainTex"
     assert prop.property_type == "Texture"
     assert prop.default is None
+    assert prop.expected_encoding == "srgb"
+
+    linear = parse_property_directive(
+        '@property Texture2D u_normal = "normal" encoding(linear)'
+    )
+    assert linear.property_type == "Texture"
+    assert linear.default == "normal"
+    assert linear.expected_encoding == "linear"
+
+
+@pytest.mark.parametrize(
+    ("directive", "message"),
+    [
+        ('@property Texture2D u_albedo = "white"', "requires encoding"),
+        (
+            '@property Texture2D u_albedo = "white" encoding(display-p3)',
+            "Unknown texture encoding",
+        ),
+        (
+            "@property Float u_value = 1.0 encoding(linear)",
+            "only valid for Texture2D",
+        ),
+        (
+            '@property Texture2D u_albedo = "white" encoding srgb',
+            "Malformed encoding",
+        ),
+        (
+            '@property Texture2D u_albedo = "white" '
+            "encoding(srgb) encoding(linear)",
+            "Duplicate encoding",
+        ),
+    ],
+)
+def test_parse_property_directive_rejects_invalid_encoding_contract(
+    directive: str,
+    message: str,
+) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        parse_property_directive(directive)
 
 
 def test_parse_shader_text_rejects_implicit_glsl_shader():
@@ -209,11 +248,11 @@ def test_slang_material_texture_declarations_are_synthesized():
         "@program test",
         "@language slang",
         "@phase main",
-        "@property Texture2D u_tex0 = \"white\"",
-        "@property Texture2D u_tex1 = \"white\"",
-        "@property Texture2D u_tex2 = \"white\"",
-        "@property Texture2D u_tex3 = \"white\"",
-        "@property Texture2D u_tex4 = \"white\"",
+        "@property Texture2D u_tex0 = \"white\" encoding(srgb)",
+        "@property Texture2D u_tex1 = \"white\" encoding(srgb)",
+        "@property Texture2D u_tex2 = \"white\" encoding(srgb)",
+        "@property Texture2D u_tex3 = \"white\" encoding(srgb)",
+        "@property Texture2D u_tex4 = \"white\" encoding(srgb)",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 {",
         "    return u_tex0.Sample(uv) + u_tex1.Sample(uv) + u_tex2.Sample(uv) + u_tex3.Sample(uv) + u_tex4.Sample(uv);",
@@ -247,6 +286,7 @@ def test_shader_interface_compare_separates_source_from_inputs():
                 {
                     "name": prop.name,
                     "property_type": prop.property_type,
+                    "expected_encoding": prop.expected_encoding,
                     "default": prop.default,
                 }
                 for prop in parsed.material_properties
@@ -259,7 +299,7 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@program test",
         "@language slang",
         "@phase main",
-        "@property Texture2D u_input_tex = \"white\"",
+        "@property Texture2D u_input_tex = \"white\" encoding(srgb)",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv); }",
         "@endstage",
@@ -269,7 +309,7 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@program test",
         "@language slang",
         "@phase main",
-        "@property Texture2D u_input_tex = \"white\"",
+        "@property Texture2D u_input_tex = \"white\" encoding(srgb)",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv * 0.5); }",
         "@endstage",
@@ -279,8 +319,8 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@program test",
         "@language slang",
         "@phase main",
-        "@property Texture2D u_input_tex = \"white\"",
-        "@property Texture2D u_depth_texture = \"depth_default\"",
+        "@property Texture2D u_input_tex = \"white\" encoding(srgb)",
+        "@property Texture2D u_depth_texture = \"depth_default\" encoding(linear)",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv) + u_depth_texture.Sample(uv); }",
         "@endstage",
@@ -290,10 +330,20 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@program test",
         "@language slang",
         "@phase main",
-        "@property Texture2D u_input_tex = \"white\"",
+        "@property Texture2D u_input_tex = \"white\" encoding(srgb)",
         "@property Float u_factor = 1.0",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv) * material.u_factor; }",
+        "@endstage",
+        "@endphase",
+    ]))
+    encoding_changed = parse_shader_text("\n".join([
+        "@program test",
+        "@language slang",
+        "@phase main",
+        "@property Texture2D u_input_tex = \"white\" encoding(linear)",
+        "@stage fragment",
+        "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv); }",
         "@endstage",
         "@endphase",
     ]))
@@ -302,6 +352,9 @@ def test_shader_interface_compare_separates_source_from_inputs():
     source_only = canonical("shader-interface-source", source_only)
     texture_input_added = canonical("shader-interface-texture", texture_input_added)
     numeric_uniform_added = canonical("shader-interface-numeric", numeric_uniform_added)
+    encoding_changed = canonical("shader-interface-encoding", encoding_changed)
+
+    assert base.properties[0]["expected_encoding"] == "srgb"
 
     no_interface_change = compare_shader_interface(base, source_only)
     assert no_interface_change.material_changed is False
@@ -314,6 +367,10 @@ def test_shader_interface_compare_separates_source_from_inputs():
     material_only_change = compare_shader_interface(base, numeric_uniform_added)
     assert material_only_change.material_changed is True
     assert material_only_change.graph_inputs_changed is False
+
+    encoding_change = compare_shader_interface(base, encoding_changed)
+    assert encoding_change.material_changed is True
+    assert encoding_change.graph_inputs_changed is True
 
 
 def test_parse_property_in_phase():
@@ -597,7 +654,7 @@ def test_slang_shader_synthesizes_sampler2d_for_texture_properties():
     shader_text = "\n".join([
         "@program SlangWithTexture",
         "@language slang",
-        "@property Texture2D albedo = \"white\"",
+        "@property Texture2D albedo = \"white\" encoding(srgb)",
         "@phase opaque",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main() : SV_Target0 { return albedo.Sample(float2(0)); }",
@@ -623,7 +680,7 @@ def test_slang_texture_property_does_not_duplicate_existing_sampler2d_declaratio
     shader_text = "\n".join([
         "@program SlangWithTexture",
         "@language slang",
-        "@property Texture2D albedo = \"white\"",
+        "@property Texture2D albedo = \"white\" encoding(srgb)",
         "@phase opaque",
         "@stage fragment",
         "Sampler2D albedo;",

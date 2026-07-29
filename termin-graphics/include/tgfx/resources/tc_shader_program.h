@@ -7,6 +7,7 @@
 #include <tcbase/tc_resource.h>
 #include <tgfx/resources/tc_material.h>
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/texture_encoding.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,7 +30,8 @@ typedef struct tc_shader_program_property {
     uint8_t has_default;
     uint8_t has_range_min;
     uint8_t has_range_max;
-    uint8_t _reserved;
+    uint8_t has_expected_encoding;
+    tc_texture_encoding expected_encoding;
 } tc_shader_program_property;
 
 typedef struct tc_shader_program_phase {
@@ -49,6 +51,8 @@ typedef struct tc_shader_program_property_desc {
     double range_max;
     uint8_t has_range_min;
     uint8_t has_range_max;
+    uint8_t has_expected_encoding;
+    tc_texture_encoding expected_encoding;
 } tc_shader_program_property_desc;
 
 typedef struct tc_shader_program_phase_desc {

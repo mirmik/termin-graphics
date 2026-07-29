@@ -121,6 +121,43 @@ TEST_CASE("shader program declare is canonical by UUID") {
     tc_shader_program_shutdown();
 }
 
+TEST_CASE("shader program texture properties require expected encoding") {
+    tc_shader_init();
+    tc_shader_program_init();
+    {
+        TcShaderProgram program =
+            TcShaderProgram::declare("texture-contract-program", "Texture Contract");
+        REQUIRE(program.is_valid());
+        const tc_shader_program_phase_desc phase = {
+            "opaque", 0, tc_render_state_opaque()};
+
+        tc_shader_program_property_desc texture{};
+        texture.name = "u_albedo";
+        texture.property_type = "Texture";
+        const tc_shader_program_payload_desc missing_encoding = {
+            "Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
+        CHECK(!tc_shader_program_set_payload(program.get(), &missing_encoding));
+
+        texture.has_expected_encoding = 1;
+        texture.expected_encoding = TC_TEXTURE_ENCODING_SRGB;
+        const tc_shader_program_payload_desc valid = {
+            "Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
+        REQUIRE(tc_shader_program_set_payload(program.get(), &valid));
+        REQUIRE_EQ(program.get()->property_count, 1u);
+        CHECK(program.get()->properties[0].has_expected_encoding != 0);
+        CHECK(
+            program.get()->properties[0].expected_encoding
+            == TC_TEXTURE_ENCODING_SRGB);
+
+        texture.expected_encoding = (tc_texture_encoding)99;
+        const tc_shader_program_payload_desc invalid_encoding = {
+            "Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
+        CHECK(!tc_shader_program_set_payload(program.get(), &invalid_encoding));
+    }
+    tc_shader_program_shutdown();
+    tc_shader_shutdown();
+}
+
 TEST_CASE("shader program stale dereference is logged while validity probes stay quiet") {
     tc_shader_program_init();
     tc_shader_program_handle handle =

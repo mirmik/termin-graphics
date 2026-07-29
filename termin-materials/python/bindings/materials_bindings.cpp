@@ -25,13 +25,25 @@ void bind_shader_parser(nb::module_& m) {
             const std::string& property_type,
             nb::object default_val,
             std::optional<double> range_min,
-            std::optional<double> range_max
+            std::optional<double> range_max,
+            nb::object expected_encoding
         ) {
             new (self) MaterialProperty();
             self->name = name;
             self->property_type = property_type;
             self->range_min = range_min;
             self->range_max = range_max;
+            if (!expected_encoding.is_none()) {
+                const std::string value = nb::cast<std::string>(expected_encoding);
+                if (value == "srgb") {
+                    self->expected_texture_encoding = tgfx::TextureEncoding::SRGB;
+                } else if (value == "linear") {
+                    self->expected_texture_encoding = tgfx::TextureEncoding::Linear;
+                } else {
+                    throw std::runtime_error(
+                        "expected_encoding must be 'srgb', 'linear', or None");
+                }
+            }
 
             // Convert Python default value to C++ variant
             if (default_val.is_none()) {
@@ -56,13 +68,39 @@ void bind_shader_parser(nb::module_& m) {
             nb::arg("property_type"),
             nb::arg("default") = nb::none(),
             nb::arg("range_min") = std::nullopt,
-            nb::arg("range_max") = std::nullopt
+            nb::arg("range_max") = std::nullopt,
+            nb::arg("expected_encoding") = nb::none()
         )
         .def_rw("name", &MaterialProperty::name)
         .def_rw("property_type", &MaterialProperty::property_type)
         .def_rw("range_min", &MaterialProperty::range_min)
         .def_rw("range_max", &MaterialProperty::range_max)
         .def_rw("label", &MaterialProperty::label)
+        .def_prop_rw("expected_encoding",
+            [](const MaterialProperty& self) -> nb::object {
+                if (!self.expected_texture_encoding.has_value()) {
+                    return nb::none();
+                }
+                return nb::cast(std::string(
+                    *self.expected_texture_encoding == tgfx::TextureEncoding::SRGB
+                        ? "srgb"
+                        : "linear"));
+            },
+            [](MaterialProperty& self, nb::object value) {
+                if (value.is_none()) {
+                    self.expected_texture_encoding = std::nullopt;
+                    return;
+                }
+                const std::string encoding = nb::cast<std::string>(value);
+                if (encoding == "srgb") {
+                    self.expected_texture_encoding = tgfx::TextureEncoding::SRGB;
+                } else if (encoding == "linear") {
+                    self.expected_texture_encoding = tgfx::TextureEncoding::Linear;
+                } else {
+                    throw std::runtime_error(
+                        "expected_encoding must be 'srgb', 'linear', or None");
+                }
+            })
         .def_prop_rw("default",
             [](const MaterialProperty& self) -> nb::object {
                 return std::visit([](auto&& arg) -> nb::object {

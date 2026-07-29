@@ -312,6 +312,34 @@ static bool build_properties(
         output->range_max = input->range_max;
         output->has_range_min = input->has_range_min;
         output->has_range_max = input->has_range_max;
+        const bool is_texture =
+            strcmp(output->property_type, "Texture") == 0
+            || strcmp(output->property_type, "Texture2D") == 0;
+        if (is_texture && !input->has_expected_encoding) {
+            tc_log_error(
+                "tc_shader_program_set_payload: texture property '%s' requires expected encoding",
+                output->name);
+            free(properties);
+            return false;
+        }
+        if (!is_texture && input->has_expected_encoding) {
+            tc_log_error(
+                "tc_shader_program_set_payload: non-texture property '%s' has expected encoding",
+                output->name);
+            free(properties);
+            return false;
+        }
+        if (input->has_expected_encoding
+            && input->expected_encoding != TC_TEXTURE_ENCODING_LINEAR
+            && input->expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
+            tc_log_error(
+                "tc_shader_program_set_payload: property '%s' has invalid expected encoding",
+                output->name);
+            free(properties);
+            return false;
+        }
+        output->has_expected_encoding = input->has_expected_encoding;
+        output->expected_encoding = input->expected_encoding;
     }
     *out_properties = properties;
     return true;
