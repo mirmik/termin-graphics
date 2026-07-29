@@ -27,6 +27,24 @@ TEST_CASE("world2d quad bounds stay planar and use all transformed corners") {
     CHECK(near(bounds.max_point.z, 6.0));
 }
 
+TEST_CASE("world2d quad bounds preserve affine shear") {
+    const termin::World2DQuadRect rect{-1.0, -1.0, 1.0, 1.0};
+    termin::Mat44 model = termin::Mat44::identity();
+    model(2, 0) = 0.75;
+    model(0, 1) = -0.5;
+    model(3, 0) = 2.0;
+    model(3, 1) = 3.0;
+    model(3, 2) = 4.0;
+
+    const termin::AABB bounds = termin::world2d_quad_bounds(rect, model);
+    CHECK(near(bounds.min_point.x, 0.25));
+    CHECK(near(bounds.max_point.x, 3.75));
+    CHECK(near(bounds.min_point.y, 2.5));
+    CHECK(near(bounds.max_point.y, 3.5));
+    CHECK(near(bounds.min_point.z, 3.0));
+    CHECK(near(bounds.max_point.z, 5.0));
+}
+
 TEST_CASE("world2d quad ray picking hits exact transformed surface") {
     const termin::World2DQuadRect rect{-1.0, -1.0, 1.0, 1.0};
     const termin::Mat44 model = termin::Mat44::translation({2.0, 3.0, 4.0});
