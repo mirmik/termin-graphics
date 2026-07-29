@@ -10,7 +10,7 @@
       "sdk",
       "termin-thirdparty"
     ],
-    "exclude_directory_names": ["__pycache__", "build"]
+    "exclude_directory_names": ["__pycache__", "build", "dist"]
   },
   "native_test_inventory": {
     "patterns": ["test_*", "tests_*", "*_test.*"],
@@ -21,7 +21,7 @@
       "sdk",
       "termin-thirdparty"
     ],
-    "exclude_directory_names": ["__pycache__", "build"],
+    "exclude_directory_names": ["__pycache__", "build", "dist"],
     "source_classifications": [
       {
         "path": "termin-app/cpp/tests/tests_binding.cpp",
