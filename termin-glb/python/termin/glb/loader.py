@@ -140,7 +140,8 @@ class GLBMaterialData:
                  normal_scale: float = 1.0,
                  occlusion_texture: Optional[int] = None,
                  emissive_texture: Optional[int] = None,
-                 emissive_factor: Optional[np.ndarray] = None):
+                 emissive_factor: Optional[np.ndarray] = None,
+                 extension_texture_usages: Optional[List[tuple[int, str]]] = None):
         self.name = name
         self.base_color = base_color  # RGBA
         self.base_color_texture = base_color_texture  # texture index
@@ -152,6 +153,16 @@ class GLBMaterialData:
         self.occlusion_texture = occlusion_texture
         self.emissive_texture = emissive_texture
         self.emissive_factor = emissive_factor  # RGB
+        usages = extension_texture_usages or []
+        for texture_index, encoding in usages:
+            if encoding not in {"srgb", "linear"}:
+                raise ValueError(
+                    f"glTF extension texture index {texture_index} has unsupported "
+                    f"encoding contract {encoding!r}; expected 'srgb' or 'linear'"
+                )
+        # Extension importers must populate this explicitly. The core importer
+        # never guesses encoding from a filename or extension property name.
+        self.extension_texture_usages = tuple(usages)
 
 
 class GLBTcTexture:
@@ -163,12 +174,21 @@ class GLBTcTexture:
         data: bytes,
         mime_type: str,
         source_path: Path | None = None,
+        image_index: int | None = None,
+        sampler_index: int | None = None,
+        sampler: dict[str, int] | None = None,
     ):
         self.index = index
         self.name = name
         self.data = data  # Raw image bytes (PNG/JPEG)
         self.mime_type = mime_type
         self.source_path = source_path
+        # Keep the glTF image/texture/sampler model intact. Several glTF
+        # textures may reference the same image, while sampler state remains
+        # part of the native texture identity in the current renderer.
+        self.image_index = index if image_index is None else image_index
+        self.sampler_index = sampler_index
+        self.sampler = dict(sampler or {})
 
 
 class GLBAnimationChannel:
@@ -949,6 +969,7 @@ def _parse_textures(
 ):
     """Parse all textures/images from glTF."""
     images = gltf.get("images", [])
+    samplers = gltf.get("samplers", [])
 
     for tex_idx, texture in enumerate(gltf.get("textures", [])):
         source_idx = texture.get("source")
@@ -961,6 +982,17 @@ def _parse_textures(
         image = images[source_idx]
         name = image.get("name", f"Texture_{tex_idx}")
         mime_type = image.get("mimeType", "image/png")
+        sampler_index = texture.get("sampler")
+        sampler = {}
+        if sampler_index is not None:
+            if not isinstance(sampler_index, int) or not 0 <= sampler_index < len(samplers):
+                log.error(
+                    f"[GLBLoad] texture index={tex_idx} references invalid "
+                    f"sampler index {sampler_index}; using the glTF default sampler"
+                )
+                sampler_index = None
+            else:
+                sampler = samplers[sampler_index]
 
         # Get image data
         data = None
@@ -986,6 +1018,9 @@ def _parse_textures(
                 data=data,
                 mime_type=mime_type,
                 source_path=source_path,
+                image_index=source_idx,
+                sampler_index=sampler_index,
+                sampler=sampler,
             ))
 
 

@@ -6,8 +6,9 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Protocol
 
 import numpy as np
 
@@ -28,6 +29,28 @@ if TYPE_CHECKING:
     from termin.glb.loader import GLBSceneData, GLBMeshData, GLBMaterialData, GLBTcTexture
 
 TEXTURE_ASSET_TYPE = "texture"
+TextureEncodingName = Literal["srgb", "linear"]
+
+
+@dataclass(frozen=True)
+class GLBTextureResourceKey:
+    """Identity of a native texture in the current image+sampler model."""
+
+    image_index: int
+    sampler_identity: tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
+class GLBTextureImport:
+    """One immutable runtime texture requested by the glTF material graph."""
+
+    resource_key: GLBTextureResourceKey
+    encoding: TextureEncodingName
+    texture_indices: tuple[int, ...]
+    collision: bool
+
+
+TextureLookup = dict[tuple[int, TextureEncodingName], object]
 
 
 class SceneLike(Protocol):
@@ -416,9 +439,32 @@ class _PendingSkinnedMesh:
         self.glb_mesh = glb_mesh
 
 
-def _stable_glb_texture_uuid(texture: "GLBTcTexture") -> str:
+def _sampler_identity(texture: "GLBTcTexture") -> tuple[int, int, int, int]:
+    sampler = texture.sampler
+    return (
+        int(sampler.get("magFilter", 9729)),
+        int(sampler.get("minFilter", 9729)),
+        int(sampler.get("wrapS", 10497)),
+        int(sampler.get("wrapT", 10497)),
+    )
+
+
+def _texture_resource_key(texture: "GLBTcTexture") -> GLBTextureResourceKey:
+    return GLBTextureResourceKey(texture.image_index, _sampler_identity(texture))
+
+
+def _stable_glb_texture_uuid(
+    texture: "GLBTcTexture",
+    encoding: TextureEncodingName | None = None,
+) -> str:
     digest = hashlib.sha256(texture.data).hexdigest()
-    key = f"termin:gltf-texture:{texture.mime_type}:{texture.name}:{digest}"
+    sampler = ",".join(str(value) for value in _sampler_identity(texture))
+    key = (
+        f"termin:gltf-texture:{texture.mime_type}:{texture.name}:{digest}:"
+        f"sampler={sampler}"
+    )
+    if encoding is not None:
+        key += f":encoding={encoding}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
@@ -433,8 +479,15 @@ def _safe_glb_texture_name(texture: "GLBTcTexture") -> str:
     return name
 
 
-def _unique_glb_texture_name(rm, texture: "GLBTcTexture", texture_uuid: str) -> str:
+def _unique_glb_texture_name(
+    rm,
+    texture: "GLBTcTexture",
+    texture_uuid: str,
+    encoding: TextureEncodingName | None = None,
+) -> str:
     base_name = _safe_glb_texture_name(texture)
+    if encoding is not None:
+        base_name = f"{base_name}_{encoding}"
     asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, base_name)
     if asset is None or asset.uuid == texture_uuid:
         return base_name
@@ -469,7 +522,11 @@ def _tc_texture_from_asset_name(rm, name: str):
     return tc_texture
 
 
-def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
+def _texture_name_for_source_path(
+    rm,
+    source_path: Path,
+    encoding: TextureEncodingName,
+) -> str | None:
     from tcbase import log
 
     target_path = source_path.resolve()
@@ -481,6 +538,13 @@ def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
             continue
         asset_source_path = asset.source_path
         if asset_source_path is not None and asset_source_path.resolve() == target_path:
+            if asset.encoding != encoding:
+                log.warning(
+                    f"[glb_instantiator] glTF texture encoding differs from registered asset: "
+                    f"source_path={target_path} asset_name='{name}' "
+                    f"expected={encoding} actual={asset.encoding}"
+                )
+                continue
             log.info(
                 f"[glb_instantiator] matched glTF texture source by exact path: "
                 f"source_path={target_path} asset_name='{name}' asset_uuid={asset.uuid}"
@@ -489,7 +553,11 @@ def _texture_name_for_source_path(rm, source_path: Path) -> str | None:
 
     stem_name = source_path.stem
     stem_asset = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, stem_name)
-    if stem_asset is not None and _texture_asset_matches_source_content(stem_asset, source_path):
+    if (
+        stem_asset is not None
+        and stem_asset.encoding == encoding
+        and _texture_asset_matches_source_content(stem_asset, source_path)
+    ):
         log.info(
             f"[glb_instantiator] matched glTF texture source by stem/content: "
             f"source_path={target_path} asset_name='{stem_name}' asset_uuid={stem_asset.uuid} "
@@ -525,7 +593,12 @@ def _texture_asset_matches_source_content(asset, source_path: Path) -> bool:
         return False
 
 
-def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTexture") -> str | None:
+def _register_external_texture_asset(
+    rm,
+    source_path: Path,
+    texture: "GLBTcTexture",
+    encoding: TextureEncodingName,
+) -> str | None:
     from tcbase import log
     from termin.default_assets.render.texture_asset import TextureAsset
     from termin_assets import read_spec_file
@@ -535,11 +608,28 @@ def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTextu
         return None
 
     spec_data = read_spec_file(str(source_path))
-    texture_uuid = spec_data.get("uuid") if spec_data else None
+    if spec_data is not None:
+        metadata_encoding = spec_data.get("encoding", "srgb")
+        if metadata_encoding != encoding:
+            log.warning(
+                f"[glb_instantiator] external texture metadata conflicts with glTF usage; "
+                f"source_path={source_path.resolve()} metadata={metadata_encoding} "
+                f"glTF={encoding}; creating an immutable glTF runtime texture"
+            )
+            return None
+    texture_uuid = spec_data.get("uuid") if spec_data else _stable_glb_texture_uuid(texture)
     name = source_path.stem
     existing = rm.get_runtime_asset(TEXTURE_ASSET_TYPE, name)
     if existing is not None and existing.source_path is not None:
-        if existing.source_path.resolve() != source_path.resolve():
+        if existing.source_path.resolve() == source_path.resolve():
+            if existing.encoding != encoding:
+                log.warning(
+                    f"[glb_instantiator] cannot reuse external texture asset with "
+                    f"incompatible encoding: source_path={source_path.resolve()} "
+                    f"expected={encoding} actual={existing.encoding}"
+                )
+                return None
+        else:
             name = _unique_glb_texture_name(rm, texture, texture_uuid or _stable_glb_texture_uuid(texture))
             log.warning(
                 f"[glb_instantiator] texture name collision for external glTF texture: "
@@ -552,8 +642,11 @@ def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTextu
         name=name,
         source_path=source_path,
         uuid=texture_uuid,
+        encoding=encoding,
     )
-    asset.parse_spec(spec_data)
+    effective_spec = dict(spec_data or {})
+    effective_spec["encoding"] = encoding
+    asset.parse_spec(effective_spec)
     rm.register_runtime_asset(TEXTURE_ASSET_TYPE, name, asset, source_path=str(source_path), uuid=asset.uuid)
     log.info(
         f"[glb_instantiator] registered external glTF texture asset: "
@@ -563,7 +656,11 @@ def _register_external_texture_asset(rm, source_path: Path, texture: "GLBTcTextu
     return name
 
 
-def _registered_glb_texture(rm, texture: "GLBTcTexture"):
+def _registered_glb_texture(
+    rm,
+    texture: "GLBTcTexture",
+    encoding: TextureEncodingName,
+):
     from tcbase import log
 
     source_path = texture.source_path
@@ -578,27 +675,51 @@ def _registered_glb_texture(rm, texture: "GLBTcTexture"):
         f"[glb_instantiator] resolving glTF external texture index={texture.index} "
         f"name='{texture.name}' source_path={source_path.resolve()} mime={texture.mime_type}"
     )
-    name = _texture_name_for_source_path(rm, source_path)
+    name = _texture_name_for_source_path(rm, source_path, encoding)
     if name is None:
-        name = _register_external_texture_asset(rm, source_path, texture)
+        name = _register_external_texture_asset(rm, source_path, texture, encoding)
     if name is None:
-        log.error(
-            f"[glb_instantiator] failed to resolve/register glTF external texture "
-            f"index={texture.index} name='{texture.name}' source_path={source_path.resolve()}"
+        log.warning(
+            f"[glb_instantiator] external glTF texture cannot reuse a file-backed "
+            f"asset; decoding an immutable runtime variant: index={texture.index} "
+            f"name='{texture.name}' source_path={source_path.resolve()} "
+            f"encoding={encoding}"
         )
         return None
     return _tc_texture_from_asset_name(rm, name)
 
 
-def _decode_glb_texture(rm, texture: "GLBTcTexture"):
+def _decode_glb_texture(
+    rm,
+    texture: "GLBTcTexture",
+    encoding: TextureEncodingName,
+    *,
+    collision: bool,
+):
     """Decode glTF image bytes into a registered TextureAsset."""
     from termin.image import decode_rgba8
     from termin.default_assets.render.texture_asset import TextureAsset
-    from tgfx import TcTexture
+    from tgfx import TcTexture, TextureEncoding
     from tcbase import log
 
-    texture_uuid = _stable_glb_texture_uuid(texture)
+    texture_uuid = _stable_glb_texture_uuid(
+        texture,
+        encoding if collision else None,
+    )
     existing_asset = rm.get_runtime_asset_by_uuid(TEXTURE_ASSET_TYPE, texture_uuid)
+    if existing_asset is not None:
+        if existing_asset.encoding != encoding:
+            log.warning(
+                f"[glb_instantiator] stable glTF texture identity is already registered "
+                f"with another encoding: uuid={texture_uuid} expected={encoding} "
+                f"actual={existing_asset.encoding}; using an encoding variant"
+            )
+            collision = True
+            texture_uuid = _stable_glb_texture_uuid(texture, encoding)
+            existing_asset = rm.get_runtime_asset_by_uuid(
+                TEXTURE_ASSET_TYPE,
+                texture_uuid,
+            )
     if existing_asset is not None:
         tc_texture = existing_asset.texture_data
         if tc_texture is not None and tc_texture.is_valid:
@@ -611,13 +732,19 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
         log.warning(f"[glb_instantiator] Registered glTF texture asset is invalid: {texture.name} ({texture_uuid})")
 
     try:
-        texture_name = _unique_glb_texture_name(rm, texture, texture_uuid)
+        texture_name = _unique_glb_texture_name(
+            rm,
+            texture,
+            texture_uuid,
+            encoding if collision else None,
+        )
         decoded = decode_rgba8(texture.data, texture.name or f"glb-texture-{texture.index}")
         data = decoded.to_numpy(copy=True)
         asset = TextureAsset(
             texture_data=None,
             name=texture_name,
             uuid=texture_uuid,
+            encoding=encoding,
         )
         asset.texture_data = TcTexture.from_data(
             data,
@@ -629,6 +756,11 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
             transpose=False,
             name=texture_name,
             uuid=texture_uuid,
+            encoding=(
+                TextureEncoding.SRGB
+                if encoding == "srgb"
+                else TextureEncoding.LINEAR
+            ),
         )
         rm.register_runtime_asset(TEXTURE_ASSET_TYPE, texture_name, asset, uuid=texture_uuid)
         log.info(
@@ -642,8 +774,67 @@ def _decode_glb_texture(rm, texture: "GLBTcTexture"):
         return None
 
 
-def _build_texture_lookup(rm, scene_data: "GLBSceneData") -> dict[int, object]:
-    """Create a glTF texture-index to TcTexture map."""
+def _collect_texture_usages(
+    scene_data: "GLBSceneData",
+) -> dict[int, frozenset[TextureEncodingName]]:
+    """Pre-scan standard glTF material slots before creating any assets."""
+    usages: dict[int, set[TextureEncodingName]] = {}
+
+    def add(texture_index: int | None, encoding: TextureEncodingName) -> None:
+        if texture_index is not None:
+            usages.setdefault(texture_index, set()).add(encoding)
+
+    for material in scene_data.materials:
+        add(material.base_color_texture, "srgb")
+        add(material.emissive_texture, "srgb")
+        add(material.normal_texture, "linear")
+        add(material.metallic_roughness_texture, "linear")
+        add(material.occlusion_texture, "linear")
+        for texture_index, encoding in material.extension_texture_usages:
+            add(texture_index, encoding)
+    return {
+        texture_index: frozenset(encodings)
+        for texture_index, encodings in usages.items()
+    }
+
+
+def _plan_texture_imports(scene_data: "GLBSceneData") -> tuple[GLBTextureImport, ...]:
+    """Build a traversal-order-independent image/sampler encoding plan."""
+    usages = _collect_texture_usages(scene_data)
+    textures_by_index = {texture.index: texture for texture in scene_data.textures}
+    grouped_indices: dict[GLBTextureResourceKey, set[int]] = {}
+    grouped_encodings: dict[GLBTextureResourceKey, set[TextureEncodingName]] = {}
+
+    for texture_index in sorted(usages):
+        texture = textures_by_index.get(texture_index)
+        if texture is None:
+            continue
+        key = _texture_resource_key(texture)
+        grouped_indices.setdefault(key, set()).add(texture_index)
+        grouped_encodings.setdefault(key, set()).update(usages[texture_index])
+
+    imports: list[GLBTextureImport] = []
+    for key in sorted(
+        grouped_indices,
+        key=lambda item: (item.image_index, item.sampler_identity),
+    ):
+        encodings = grouped_encodings[key]
+        collision = len(encodings) > 1
+        for encoding in sorted(encodings):
+            indices = tuple(
+                index
+                for index in sorted(grouped_indices[key])
+                if encoding in usages[index]
+            )
+            imports.append(GLBTextureImport(key, encoding, indices, collision))
+    return tuple(imports)
+
+
+def _build_texture_lookup(
+    rm,
+    scene_data: "GLBSceneData",
+) -> TextureLookup:
+    """Create a (glTF texture index, encoding) to TcTexture map."""
     from tcbase import log
 
     texture_names = rm.list_runtime_asset_names(TEXTURE_ASSET_TYPE)
@@ -651,16 +842,32 @@ def _build_texture_lookup(rm, scene_data: "GLBSceneData") -> dict[int, object]:
         f"[glb_instantiator] building glTF texture lookup: "
         f"textures={len(scene_data.textures)} registered_texture_assets={len(texture_names)}"
     )
-    textures: dict[int, object] = {}
-    for texture in scene_data.textures:
-        tc_texture = _registered_glb_texture(rm, texture)
+    textures_by_index = {texture.index: texture for texture in scene_data.textures}
+    imports = _plan_texture_imports(scene_data)
+    textures: dict[tuple[int, TextureEncodingName], object] = {}
+    for texture_import in imports:
+        texture = textures_by_index[texture_import.texture_indices[0]]
+        tc_texture = None
+        if not texture_import.collision:
+            tc_texture = _registered_glb_texture(
+                rm,
+                texture,
+                texture_import.encoding,
+            )
         if tc_texture is None:
-            tc_texture = _decode_glb_texture(rm, texture)
+            tc_texture = _decode_glb_texture(
+                rm,
+                texture,
+                texture_import.encoding,
+                collision=texture_import.collision,
+            )
         if tc_texture is not None and tc_texture.is_valid:
-            textures[texture.index] = tc_texture
+            for texture_index in texture_import.texture_indices:
+                textures[(texture_index, texture_import.encoding)] = tc_texture
             resolved_name = _find_texture_name_for_tc_texture(rm, tc_texture)
             log.info(
-                f"[glb_instantiator] glTF texture lookup entry: index={texture.index} "
+                f"[glb_instantiator] glTF texture lookup entry: "
+                f"indices={texture_import.texture_indices} encoding={texture_import.encoding} "
                 f"glTF_name='{texture.name}' resolved_asset_name='{resolved_name}' "
                 f"tc_uuid={tc_texture.uuid} tc_name='{tc_texture.name}'"
             )
@@ -683,13 +890,20 @@ def _find_texture_name_for_tc_texture(rm, tc_texture) -> str | None:
     return None
 
 
-def _texture_for_index(textures: dict[int, object], texture_index: int | None):
+def _texture_for_index(
+    textures: TextureLookup,
+    texture_index: int | None,
+    encoding: TextureEncodingName,
+):
     if texture_index is None:
         return None
-    texture = textures.get(texture_index)
+    texture = textures.get((texture_index, encoding))
     if texture is None:
         from tcbase import log
-        log.warning(f"[glb_instantiator] glTF material references missing texture index {texture_index}")
+        log.warning(
+            f"[glb_instantiator] glTF material references missing texture "
+            f"index {texture_index} with {encoding} encoding"
+        )
     return texture
 
 
@@ -716,7 +930,7 @@ def _set_material_texture_if_present(material, name: str, texture) -> None:
 def _configure_import_material(
     material,
     glb_material: "GLBMaterialData",
-    texture_lookup: dict[int, object],
+    texture_lookup: TextureLookup,
 ) -> None:
     """Apply one glTF material to an already-created Termin material."""
     from termin.geombase import Vec4
@@ -744,14 +958,19 @@ def _configure_import_material(
         1.0,
     )
 
-    base_color_texture = _texture_for_index(texture_lookup, glb_material.base_color_texture)
+    base_color_texture = _texture_for_index(
+        texture_lookup,
+        glb_material.base_color_texture,
+        "srgb",
+    )
     metallic_roughness_texture = _texture_for_index(
         texture_lookup,
         glb_material.metallic_roughness_texture,
+        "linear",
     )
-    normal_texture = _texture_for_index(texture_lookup, glb_material.normal_texture)
-    occlusion_texture = _texture_for_index(texture_lookup, glb_material.occlusion_texture)
-    emissive_texture = _texture_for_index(texture_lookup, glb_material.emissive_texture)
+    normal_texture = _texture_for_index(texture_lookup, glb_material.normal_texture, "linear")
+    occlusion_texture = _texture_for_index(texture_lookup, glb_material.occlusion_texture, "linear")
+    emissive_texture = _texture_for_index(texture_lookup, glb_material.emissive_texture, "srgb")
     log.info(
         f"[glb_instantiator] applying glTF material override: material='{glb_material.name}' "
         f"base_color_index={glb_material.base_color_texture} metallic_roughness_index={glb_material.metallic_roughness_texture} "
@@ -773,7 +992,11 @@ def _configure_import_material(
     _set_material_texture_if_present(material, "u_emissive_texture", emissive_texture)
 
 
-def _create_import_material_slot(base_material, glb_material: "GLBMaterialData", texture_lookup: dict[int, object]):
+def _create_import_material_slot(
+    base_material,
+    glb_material: "GLBMaterialData",
+    texture_lookup: TextureLookup,
+):
     """Create one material instance for a glTF material slot."""
     from tcbase import log
 
@@ -793,7 +1016,7 @@ def _create_import_material_slot(base_material, glb_material: "GLBMaterialData",
 def _apply_import_material_override(
     renderer: MeshRenderer,
     glb_material: "GLBMaterialData",
-    texture_lookup: dict[int, object],
+    texture_lookup: TextureLookup,
 ) -> None:
     """Apply one glTF material as a MeshRenderer material override."""
     from tcbase import log
@@ -814,7 +1037,7 @@ def _apply_glb_material_slots(
     renderer: MeshRenderer,
     glb_mesh: "GLBMeshData",
     scene_data: "GLBSceneData",
-    texture_lookup: dict[int, object],
+    texture_lookup: TextureLookup,
 ) -> None:
     """Populate MeshRenderer material slots from glTF primitive materials."""
     base_material = renderer.get_base_material()
@@ -844,7 +1067,7 @@ def _apply_glb_material_override_if_present(
     renderer: MeshRenderer,
     glb_mesh: "GLBMeshData",
     scene_data: "GLBSceneData",
-    texture_lookup: dict[int, object],
+    texture_lookup: TextureLookup,
 ) -> None:
     if len(glb_mesh.submeshes) > 1:
         _apply_glb_material_slots(renderer, glb_mesh, scene_data, texture_lookup)
@@ -864,7 +1087,7 @@ def _create_entity_from_node(
     meshes: Dict[int, TcMesh],
     mesh_assets: Dict[str, "MeshAsset"],
     base_material,
-    texture_lookup: dict[int, object],
+    texture_lookup: TextureLookup,
     node_to_entity: Optional[Dict[int, Entity]] = None,
     pending_skinned: Optional[List[_PendingSkinnedMesh]] = None,
     scene: Optional[SceneLike] = None,
