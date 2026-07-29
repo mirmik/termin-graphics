@@ -2,6 +2,7 @@
 
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
+#include "tgfx2/tc_texture_upload.hpp"
 
 #include "tgfx2/tc_mesh_bridge.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
@@ -35,69 +36,6 @@ TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     if (usage & TC_TEXTURE_USAGE_COPY_DST)
         out |= static_cast<uint32_t>(TextureUsage::CopyDst);
     return static_cast<TextureUsage>(out);
-}
-
-std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFormat& out_format) {
-    if (!tex || !tex->data) {
-        return {};
-    }
-
-    const auto format = static_cast<tc_texture_format>(tex->format);
-    const uint8_t* src = static_cast<const uint8_t*>(tex->data);
-    const size_t pixel_count = static_cast<size_t>(tex->width) * static_cast<size_t>(tex->height);
-
-    if (format == TC_TEXTURE_RGB8) {
-        out_format = pixel_format_for_tc_texture(
-            TC_TEXTURE_RGBA8,
-            static_cast<tc_texture_encoding>(tex->encoding));
-        if (out_format == PixelFormat::Undefined) {
-            tc::Log::error(
-                "D3D11RenderDevice::ensure_tc_texture: texture '%s' has invalid encoding %u",
-                tex->header.name ? tex->header.name : tex->header.uuid,
-                static_cast<unsigned>(tex->encoding));
-            return {};
-        }
-        std::vector<uint8_t> pixels(pixel_count * 4u);
-        for (size_t i = 0; i < pixel_count; ++i) {
-            pixels[i * 4u + 0u] = src[i * 3u + 0u];
-            pixels[i * 4u + 1u] = src[i * 3u + 1u];
-            pixels[i * 4u + 2u] = src[i * 3u + 2u];
-            pixels[i * 4u + 3u] = 0xffu;
-        }
-        return pixels;
-    }
-
-    if (format == TC_TEXTURE_RGB16F) {
-        out_format = pixel_format_for_tc_texture(
-            format, static_cast<tc_texture_encoding>(tex->encoding));
-        if (out_format == PixelFormat::Undefined) {
-            tc::Log::error(
-                "D3D11RenderDevice::ensure_tc_texture: texture '%s' uses unsupported RGB16F encoding %u",
-                tex->header.name ? tex->header.name : tex->header.uuid,
-                static_cast<unsigned>(tex->encoding));
-            return {};
-        }
-        std::vector<uint8_t> pixels(pixel_count * 8u);
-        for (size_t i = 0; i < pixel_count; ++i) {
-            std::memcpy(&pixels[i * 8u], &src[i * 6u], 6u);
-            pixels[i * 8u + 6u] = 0x00u;
-            pixels[i * 8u + 7u] = 0x3cu; // IEEE-754 half 1.0, little endian.
-        }
-        return pixels;
-    }
-
-    out_format = pixel_format_for_tc_texture(
-        format, static_cast<tc_texture_encoding>(tex->encoding));
-    if (out_format == PixelFormat::Undefined) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_tc_texture: texture '%s' has unsupported format/encoding %u/%u",
-            tex->header.name ? tex->header.name : tex->header.uuid,
-            static_cast<unsigned>(tex->format),
-            static_cast<unsigned>(tex->encoding));
-        return {};
-    }
-    const size_t bytes = pixel_count * tc_texture_format_bpp(format);
-    return std::vector<uint8_t>(src, src + bytes);
 }
 
 } // namespace
@@ -263,6 +201,12 @@ TextureHandle D3D11RenderDevice::ensure_tc_texture(tc_texture* tex) {
     desc.sample_count = 1;
 
     if (gpu_first) {
+        if (tex->mipmap) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_texture: GPU-first texture '%s' requests mipmaps without a source chain",
+                tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
         desc.format = pixel_format_for_tc_texture(
             static_cast<tc_texture_format>(tex->format),
             static_cast<tc_texture_encoding>(tex->encoding));
@@ -290,13 +234,13 @@ TextureHandle D3D11RenderDevice::ensure_tc_texture(tc_texture* tex) {
         return handle;
     }
 
-    PixelFormat upload_format = PixelFormat::RGBA8_UNorm;
-    std::vector<uint8_t> pixels = normalize_tc_texture_pixels(tex, upload_format);
-    if (pixels.empty()) {
+    TcTextureUpload upload;
+    if (!prepare_tc_texture_upload(tex, upload)) {
         return {};
     }
 
-    desc.format = upload_format;
+    desc.format = upload.format;
+    desc.mip_levels = static_cast<uint32_t>(upload.levels.size());
     desc.usage = TextureUsage::Sampled | TextureUsage::CopySrc | TextureUsage::CopyDst;
     TextureHandle handle = create_texture(desc);
     if (!handle) {
@@ -306,7 +250,13 @@ TextureHandle D3D11RenderDevice::ensure_tc_texture(tc_texture* tex) {
         return {};
     }
 
-    upload_texture(handle, std::span<const uint8_t>(pixels.data(), pixels.size()));
+    for (uint32_t mip = 0; mip < upload.levels.size(); ++mip) {
+        const auto& pixels = upload.levels[mip];
+        upload_texture(
+            handle,
+            std::span<const uint8_t>(pixels.data(), pixels.size()),
+            mip);
+    }
     tc_texture_cache_.emplace(pool_index, CachedTcTextureEntry{handle, version});
     return handle;
 }

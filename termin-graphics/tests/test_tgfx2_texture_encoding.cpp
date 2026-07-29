@@ -1,8 +1,10 @@
 #include "guard_main.h"
 
 #include "tgfx2/pixel_format_utils.hpp"
+#include "tgfx2/tc_texture_upload.hpp"
 
 #include <cmath>
+#include <cstring>
 
 #ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
@@ -119,4 +121,98 @@ TEST_CASE("sRGB reference transfer preserves alpha as linear data") {
 
     CHECK(std::abs(linear_rgb - 0.21586f) < 0.0001f);
     CHECK(std::abs(encoded - 0.50196f) < 0.0001f);
+}
+
+TEST_CASE("sRGB mip filtering averages color in linear light and alpha numerically") {
+    using tgfx::PixelFormat;
+
+    const std::vector<uint8_t> base = {
+        0, 0, 0, 0,
+        255, 255, 255, 255,
+        0, 0, 0, 0,
+        255, 255, 255, 255,
+    };
+    std::vector<std::vector<uint8_t>> levels;
+
+    REQUIRE(tgfx::build_texture_mip_chain(
+        PixelFormat::RGBA8_sRGB, 2, 2, base, levels));
+    REQUIRE_EQ(levels.size(), 2u);
+    REQUIRE_EQ(levels[1].size(), 4u);
+    CHECK_EQ(levels[1][0], 188u);
+    CHECK_EQ(levels[1][1], 188u);
+    CHECK_EQ(levels[1][2], 188u);
+    CHECK_EQ(levels[1][3], 128u);
+}
+
+TEST_CASE("linear mip filtering averages every channel numerically") {
+    using tgfx::PixelFormat;
+
+    const std::vector<uint8_t> base = {
+        0, 0, 0, 0,
+        255, 255, 255, 255,
+        0, 0, 0, 0,
+        255, 255, 255, 255,
+    };
+    std::vector<std::vector<uint8_t>> levels;
+
+    REQUIRE(tgfx::build_texture_mip_chain(
+        PixelFormat::RGBA8_UNorm, 2, 2, base, levels));
+    REQUIRE_EQ(levels.size(), 2u);
+    REQUIRE_EQ(levels[1].size(), 4u);
+    CHECK_EQ(levels[1][0], 128u);
+    CHECK_EQ(levels[1][1], 128u);
+    CHECK_EQ(levels[1][2], 128u);
+    CHECK_EQ(levels[1][3], 128u);
+}
+
+TEST_CASE("floating-point mip filtering preserves numeric range") {
+    using tgfx::PixelFormat;
+
+    const float source_values[] = {1.0f, 2.0f, 3.0f, 4.0f};
+    std::vector<uint8_t> base(sizeof(source_values));
+    std::memcpy(base.data(), source_values, sizeof(source_values));
+    std::vector<std::vector<uint8_t>> levels;
+
+    REQUIRE(tgfx::build_texture_mip_chain(
+        PixelFormat::R32F, 2, 2, base, levels));
+    REQUIRE_EQ(levels.size(), 2u);
+    REQUIRE_EQ(levels[1].size(), sizeof(float));
+    float result = 0.0f;
+    std::memcpy(&result, levels[1].data(), sizeof(result));
+    CHECK(std::abs(result - 2.5f) < 0.0001f);
+}
+
+TEST_CASE("odd mip extents include every source texel") {
+    using tgfx::PixelFormat;
+
+    const std::vector<uint8_t> base = {0, 0, 255};
+    std::vector<std::vector<uint8_t>> levels;
+
+    REQUIRE(tgfx::build_texture_mip_chain(
+        PixelFormat::R8_UNorm, 3, 1, base, levels));
+    REQUIRE_EQ(levels.size(), 2u);
+    REQUIRE_EQ(levels[1].size(), 1u);
+    CHECK_EQ(levels[1][0], 85u);
+}
+
+TEST_CASE("tc texture upload policy produces a complete normalized mip chain") {
+    std::vector<uint8_t> rgb(4u * 2u * 3u, 64u);
+    tc_texture texture{};
+    texture.width = 4;
+    texture.height = 2;
+    texture.format = TC_TEXTURE_RGB8;
+    texture.encoding = TC_TEXTURE_ENCODING_SRGB;
+    texture.mipmap = 1;
+    texture.data = rgb.data();
+
+    tgfx::TcTextureUpload upload;
+    REQUIRE(tgfx::prepare_tc_texture_upload(&texture, upload));
+    CHECK(upload.format == tgfx::PixelFormat::RGBA8_sRGB);
+    REQUIRE_EQ(upload.levels.size(), 3u);
+    CHECK_EQ(upload.levels[0].size(), 4u * 2u * 4u);
+    CHECK_EQ(upload.levels[1].size(), 2u * 1u * 4u);
+    CHECK_EQ(upload.levels[2].size(), 1u * 1u * 4u);
+    CHECK_EQ(upload.levels[0][3], 255u);
+    CHECK_EQ(upload.levels[1][3], 255u);
+    CHECK_EQ(upload.levels[2][3], 255u);
 }

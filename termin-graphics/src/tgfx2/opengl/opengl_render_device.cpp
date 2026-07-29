@@ -3,6 +3,7 @@
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
+#include "tgfx2/tc_texture_upload.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <array>
@@ -303,85 +304,6 @@ TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     return static_cast<TextureUsage>(out);
 }
 
-uint32_t mip_count_for(uint32_t width, uint32_t height) {
-    uint32_t levels = 1;
-    uint32_t side = std::max(width, height);
-    while (side > 1) {
-        side >>= 1;
-        ++levels;
-    }
-    return levels;
-}
-
-std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFormat& out_fmt) {
-    const auto fmt = static_cast<tc_texture_format>(tex->format);
-    const auto* src = static_cast<const uint8_t*>(tex->data);
-    const size_t src_bytes = static_cast<size_t>(tex->width) * tex->height *
-                             tc_texture_format_bpp(fmt);
-
-    std::vector<uint8_t> pixels;
-    if (!src || src_bytes == 0) {
-        return pixels;
-    }
-
-    if (fmt == TC_TEXTURE_RGB8) {
-        out_fmt = pixel_format_for_tc_texture(
-            TC_TEXTURE_RGBA8,
-            static_cast<tc_texture_encoding>(tex->encoding));
-        if (out_fmt == PixelFormat::Undefined) {
-            tc_log_error(
-                "OpenGLRenderDevice::ensure_tc_texture: texture '%s' has invalid encoding %u",
-                tex->header.name ? tex->header.name : tex->header.uuid,
-                static_cast<unsigned>(tex->encoding));
-            return {};
-        }
-        const size_t pixel_count = static_cast<size_t>(tex->width) * tex->height;
-        pixels.resize(pixel_count * 4u);
-        for (size_t i = 0; i < pixel_count; ++i) {
-            pixels[i * 4u + 0u] = src[i * 3u + 0u];
-            pixels[i * 4u + 1u] = src[i * 3u + 1u];
-            pixels[i * 4u + 2u] = src[i * 3u + 2u];
-            pixels[i * 4u + 3u] = 0xffu;
-        }
-        return pixels;
-    }
-
-    if (fmt == TC_TEXTURE_RGB16F) {
-        out_fmt = pixel_format_for_tc_texture(
-            fmt, static_cast<tc_texture_encoding>(tex->encoding));
-        if (out_fmt == PixelFormat::Undefined) {
-            tc_log_error(
-                "OpenGLRenderDevice::ensure_tc_texture: texture '%s' uses unsupported RGB16F encoding %u",
-                tex->header.name ? tex->header.name : tex->header.uuid,
-                static_cast<unsigned>(tex->encoding));
-            return {};
-        }
-        const size_t pixel_count = static_cast<size_t>(tex->width) * tex->height;
-        pixels.resize(pixel_count * 8);
-        for (size_t i = 0; i < pixel_count; ++i) {
-            const uint8_t* s = src + i * 6;
-            uint8_t* d = pixels.data() + i * 8;
-            std::memcpy(d, s, 6);
-            d[6] = 0x00;
-            d[7] = 0x3c; // half-float 1.0 alpha, little-endian
-        }
-        return pixels;
-    }
-
-    out_fmt = pixel_format_for_tc_texture(
-        fmt, static_cast<tc_texture_encoding>(tex->encoding));
-    if (out_fmt == PixelFormat::Undefined) {
-        tc_log_error(
-            "OpenGLRenderDevice::ensure_tc_texture: texture '%s' has unsupported format/encoding %u/%u",
-            tex->header.name ? tex->header.name : tex->header.uuid,
-            static_cast<unsigned>(tex->format),
-            static_cast<unsigned>(tex->encoding));
-        return {};
-    }
-    pixels.assign(src, src + src_bytes);
-    return pixels;
-}
-
 bool load_opengl_shader_artifact_source(
     const termin::ShaderArtifactResolver& resolver,
     tc_shader* shader,
@@ -448,10 +370,15 @@ TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
             static_cast<unsigned>(tex->encoding));
         return {};
     }
-    desc.mip_levels = tex->mipmap ? mip_count_for(tex->width, tex->height) : 1;
+    desc.mip_levels = 1;
 
     if (gpu_first) {
-        desc.mip_levels = 1;
+        if (tex->mipmap) {
+            tc_log_error(
+                "OpenGLRenderDevice::ensure_tc_texture: GPU-first texture '%s' requests mipmaps without a source chain",
+                tex->header.name ? tex->header.name : tex->header.uuid);
+            return {};
+        }
         desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
         if (static_cast<uint32_t>(desc.usage) == static_cast<uint32_t>(TextureUsage::CopyDst)) {
             desc.usage = desc.usage | TextureUsage::Sampled;
@@ -479,6 +406,13 @@ TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
 
     desc.usage = TextureUsage::Sampled | TextureUsage::CopySrc | TextureUsage::CopyDst;
 
+    TcTextureUpload upload;
+    if (!prepare_tc_texture_upload(tex, upload)) {
+        return {};
+    }
+    desc.format = upload.format;
+    desc.mip_levels = static_cast<uint32_t>(upload.levels.size());
+
     TextureHandle handle = create_texture(desc);
     if (!handle) {
         tc_log_error("OpenGLRenderDevice::ensure_tc_texture: create_texture failed for '%s'",
@@ -486,31 +420,22 @@ TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
         return {};
     }
 
-    PixelFormat upload_format = desc.format;
-    std::vector<uint8_t> pixels = normalize_tc_texture_pixels(tex, upload_format);
-    if (pixels.empty()) {
-        destroy(handle);
-        return {};
-    }
-    if (upload_format != desc.format) {
-        tc_log_error("OpenGLRenderDevice::ensure_tc_texture: upload format mismatch for '%s'",
-                     tex->header.name ? tex->header.name : tex->header.uuid);
-        destroy(handle);
-        return {};
-    }
-    upload_texture(handle, std::span<const uint8_t>(pixels.data(), pixels.size()));
-
-    if (tex->mipmap) {
-        if (auto* gl_tex = get_texture(handle)) {
-            glBindTexture(gl_tex->target, gl_tex->gl_id);
-            glGenerateMipmap(gl_tex->target);
-            glTexParameteri(gl_tex->target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glBindTexture(gl_tex->target, 0);
-        }
+    for (uint32_t mip = 0; mip < upload.levels.size(); ++mip) {
+        const auto& pixels = upload.levels[mip];
+        upload_texture(
+            handle,
+            std::span<const uint8_t>(pixels.data(), pixels.size()),
+            mip);
     }
 
     if (auto* gl_tex = get_texture(handle)) {
         glBindTexture(gl_tex->target, gl_tex->gl_id);
+        if (desc.mip_levels > 1) {
+            glTexParameteri(
+                gl_tex->target,
+                GL_TEXTURE_MIN_FILTER,
+                GL_LINEAR_MIPMAP_LINEAR);
+        }
         glTexParameteri(gl_tex->target, GL_TEXTURE_WRAP_S,
                         tex->clamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
         glTexParameteri(gl_tex->target, GL_TEXTURE_WRAP_T,
