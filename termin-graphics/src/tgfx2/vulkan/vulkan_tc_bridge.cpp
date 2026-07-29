@@ -1,6 +1,7 @@
 #ifdef TGFX2_HAS_VULKAN
 
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <cstring>
@@ -26,22 +27,6 @@ namespace tgfx {
 
 namespace {
 
-PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
-    switch (fmt) {
-        case TC_TEXTURE_RGBA8:   return PixelFormat::RGBA8_UNorm;
-        case TC_TEXTURE_RGB8:    return PixelFormat::RGB8_UNorm;
-        case TC_TEXTURE_RG8:     return PixelFormat::RG8_UNorm;
-        case TC_TEXTURE_R8:      return PixelFormat::R8_UNorm;
-        case TC_TEXTURE_RGBA16F: return PixelFormat::RGBA16F;
-        case TC_TEXTURE_RGB16F:  return PixelFormat::RGBA16F;
-        case TC_TEXTURE_R16F:    return PixelFormat::R16F;
-        case TC_TEXTURE_R32F:    return PixelFormat::R32F;
-        case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
-        case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
-    }
-    return PixelFormat::Undefined;
-}
-
 // Normalise tc_texture pixel data to formats with an unambiguous Vulkan
 // upload layout. RGB formats are expanded to their RGBA counterparts.
 std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fmt) {
@@ -64,7 +49,16 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
 
     std::vector<uint8_t> pixels;
     if (fmt == TC_TEXTURE_RGB8) {
-        out_fmt = PixelFormat::RGBA8_UNorm;
+        out_fmt = pixel_format_for_tc_texture(
+            TC_TEXTURE_RGBA8,
+            static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_fmt == PixelFormat::Undefined) {
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_texture: texture '%s' has invalid encoding %u",
+                   tex->header.name ? tex->header.name : tex->header.uuid,
+                   static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         pixels.resize(pixel_count * 4u);
         for (size_t i = 0; i < pixel_count; ++i) {
             pixels[i * 4u + 0u] = src[i * 3u + 0u];
@@ -76,7 +70,15 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
     }
 
     if (fmt == TC_TEXTURE_RGB16F) {
-        out_fmt = PixelFormat::RGBA16F;
+        out_fmt = pixel_format_for_tc_texture(
+            fmt, static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_fmt == PixelFormat::Undefined) {
+            tc_log(TC_LOG_ERROR,
+                   "VulkanRenderDevice::ensure_tc_texture: texture '%s' uses unsupported RGB16F encoding %u",
+                   tex->header.name ? tex->header.name : tex->header.uuid,
+                   static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         pixels.resize(pixel_count * 8u);
         for (size_t i = 0; i < pixel_count; ++i) {
             std::memcpy(&pixels[i * 8u], &src[i * 6u], 6u);
@@ -86,7 +88,8 @@ std::vector<uint8_t> normalize_pixels(const tc_texture* tex, PixelFormat& out_fm
         return pixels;
     }
 
-    out_fmt = tc_format_to_tgfx2(fmt);
+    out_fmt = pixel_format_for_tc_texture(
+        fmt, static_cast<tc_texture_encoding>(tex->encoding));
     if (out_fmt == PixelFormat::Undefined) {
         tc_log(TC_LOG_ERROR,
                "VulkanRenderDevice::ensure_tc_texture: tc_texture '%s' maps to no Vulkan format",
@@ -163,7 +166,9 @@ TextureHandle VulkanRenderDevice::ensure_tc_texture(tc_texture* tex) {
         // VkImage with whatever attachment bits the caller declared.
         // CopyDst is always added because the staging upload path uses
         // it and so do `blit_to_texture` / `clear_texture`.
-        desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+        desc.format = pixel_format_for_tc_texture(
+            static_cast<tc_texture_format>(tex->format),
+            static_cast<tc_texture_encoding>(tex->encoding));
         if (desc.format == PixelFormat::Undefined) {
             tc_log(TC_LOG_ERROR,
                    "VulkanRenderDevice::ensure_tc_texture: GPU-only tc_texture '%s' has unsupported format %u",

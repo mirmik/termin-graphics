@@ -221,6 +221,11 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
 
     add_test(NAME termin_window_backend_triangle_immediate
         COMMAND termin_window_backend_triangle)
+    if(COMMAND termin_set_test_build_target)
+        termin_set_test_build_target(
+            termin_window_backend_triangle_immediate
+            termin_window_backend_triangle)
+    endif()
     set_tests_properties(termin_window_backend_triangle_immediate PROPERTIES
         TIMEOUT 10
         ENVIRONMENT "TERMIN_BACKEND=opengl;TERMIN_TEST_PRESENTATION_MODE=immediate"
@@ -230,6 +235,11 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
     if(TGFX2_ENABLE_VULKAN)
         add_test(NAME termin_window_backend_triangle_vulkan_vsync
             COMMAND termin_window_backend_triangle)
+        if(COMMAND termin_set_test_build_target)
+            termin_set_test_build_target(
+                termin_window_backend_triangle_vulkan_vsync
+                termin_window_backend_triangle)
+        endif()
         set_tests_properties(termin_window_backend_triangle_vulkan_vsync PROPERTIES
             TIMEOUT 10
             ENVIRONMENT "TERMIN_BACKEND=vulkan;TERMIN_TEST_PRESENTATION_MODE=vsync"
@@ -238,6 +248,11 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
 
         add_test(NAME termin_window_backend_triangle_vulkan_immediate
             COMMAND termin_window_backend_triangle)
+        if(COMMAND termin_set_test_build_target)
+            termin_set_test_build_target(
+                termin_window_backend_triangle_vulkan_immediate
+                termin_window_backend_triangle)
+        endif()
         set_tests_properties(termin_window_backend_triangle_vulkan_immediate PROPERTIES
             TIMEOUT 10
             ENVIRONMENT "TERMIN_BACKEND=vulkan;TERMIN_TEST_PRESENTATION_MODE=immediate"
@@ -279,6 +294,11 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
         COMMAND termin_window_backend_d3d11_present vsync)
     add_test(NAME termin_window_backend_d3d11_present_immediate
         COMMAND termin_window_backend_d3d11_present immediate)
+    if(COMMAND termin_set_test_build_target)
+        termin_set_test_build_target(
+            termin_window_backend_d3d11_present_immediate
+            termin_window_backend_d3d11_present)
+    endif()
     set_tests_properties(
         termin_window_backend_d3d11_present
         termin_window_backend_d3d11_present_immediate

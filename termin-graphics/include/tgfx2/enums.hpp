@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "tgfx/texture_encoding.h"
+
 namespace tgfx {
 
 enum class BackendType { OpenGL, Vulkan, Metal, D3D11, Null };
@@ -71,6 +73,8 @@ enum class PixelFormat {
     D24_UNorm,
     D24_UNorm_S8_UInt,
     D32F,
+    RGBA8_sRGB,
+    BGRA8_sRGB,
     // Sentinel: "no attachment of this kind". Used by RenderContext2
     // to tell the pipeline cache that the current pass has no depth
     // attachment, so the cached pipeline's VkRenderPass must be built

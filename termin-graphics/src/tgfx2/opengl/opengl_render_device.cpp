@@ -2,6 +2,7 @@
 #include "tgfx2/opengl/opengl_command_list.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <array>
@@ -287,22 +288,6 @@ void OpenGLRenderDevice::wait_idle() {
 
 namespace {
 
-PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
-    switch (fmt) {
-        case TC_TEXTURE_RGBA8:    return PixelFormat::RGBA8_UNorm;
-        case TC_TEXTURE_RGB8:     return PixelFormat::RGB8_UNorm;
-        case TC_TEXTURE_RG8:      return PixelFormat::RG8_UNorm;
-        case TC_TEXTURE_R8:       return PixelFormat::R8_UNorm;
-        case TC_TEXTURE_RGBA16F:  return PixelFormat::RGBA16F;
-        case TC_TEXTURE_RGB16F:   return PixelFormat::RGBA16F;
-        case TC_TEXTURE_DEPTH24:  return PixelFormat::D24_UNorm_S8_UInt;
-        case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
-        case TC_TEXTURE_R16F:     return PixelFormat::R16F;
-        case TC_TEXTURE_R32F:     return PixelFormat::R32F;
-    }
-    return PixelFormat::RGBA8_UNorm;
-}
-
 TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     uint32_t out = 0;
     if (usage & TC_TEXTURE_USAGE_SAMPLED)
@@ -339,8 +324,38 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
         return pixels;
     }
 
+    if (fmt == TC_TEXTURE_RGB8) {
+        out_fmt = pixel_format_for_tc_texture(
+            TC_TEXTURE_RGBA8,
+            static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_fmt == PixelFormat::Undefined) {
+            tc_log_error(
+                "OpenGLRenderDevice::ensure_tc_texture: texture '%s' has invalid encoding %u",
+                tex->header.name ? tex->header.name : tex->header.uuid,
+                static_cast<unsigned>(tex->encoding));
+            return {};
+        }
+        const size_t pixel_count = static_cast<size_t>(tex->width) * tex->height;
+        pixels.resize(pixel_count * 4u);
+        for (size_t i = 0; i < pixel_count; ++i) {
+            pixels[i * 4u + 0u] = src[i * 3u + 0u];
+            pixels[i * 4u + 1u] = src[i * 3u + 1u];
+            pixels[i * 4u + 2u] = src[i * 3u + 2u];
+            pixels[i * 4u + 3u] = 0xffu;
+        }
+        return pixels;
+    }
+
     if (fmt == TC_TEXTURE_RGB16F) {
-        out_fmt = PixelFormat::RGBA16F;
+        out_fmt = pixel_format_for_tc_texture(
+            fmt, static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_fmt == PixelFormat::Undefined) {
+            tc_log_error(
+                "OpenGLRenderDevice::ensure_tc_texture: texture '%s' uses unsupported RGB16F encoding %u",
+                tex->header.name ? tex->header.name : tex->header.uuid,
+                static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         const size_t pixel_count = static_cast<size_t>(tex->width) * tex->height;
         pixels.resize(pixel_count * 8);
         for (size_t i = 0; i < pixel_count; ++i) {
@@ -353,7 +368,16 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
         return pixels;
     }
 
-    out_fmt = tc_format_to_tgfx2(fmt);
+    out_fmt = pixel_format_for_tc_texture(
+        fmt, static_cast<tc_texture_encoding>(tex->encoding));
+    if (out_fmt == PixelFormat::Undefined) {
+        tc_log_error(
+            "OpenGLRenderDevice::ensure_tc_texture: texture '%s' has unsupported format/encoding %u/%u",
+            tex->header.name ? tex->header.name : tex->header.uuid,
+            static_cast<unsigned>(tex->format),
+            static_cast<unsigned>(tex->encoding));
+        return {};
+    }
     pixels.assign(src, src + src_bytes);
     return pixels;
 }
@@ -413,7 +437,17 @@ TextureHandle OpenGLRenderDevice::ensure_tc_texture(tc_texture* tex) {
     desc.width = tex->width;
     desc.height = tex->height;
     desc.sample_count = 1;
-    desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+    desc.format = pixel_format_for_tc_texture(
+        static_cast<tc_texture_format>(tex->format),
+        static_cast<tc_texture_encoding>(tex->encoding));
+    if (desc.format == PixelFormat::Undefined) {
+        tc_log_error(
+            "OpenGLRenderDevice::ensure_tc_texture: texture '%s' has unsupported format/encoding %u/%u",
+            tex->header.name ? tex->header.name : tex->header.uuid,
+            static_cast<unsigned>(tex->format),
+            static_cast<unsigned>(tex->encoding));
+        return {};
+    }
     desc.mip_levels = tex->mipmap ? mip_count_for(tex->width, tex->height) : 1;
 
     if (gpu_first) {
@@ -1586,8 +1620,7 @@ uint64_t OpenGLRenderDevice::request_pixel_readback(
         return 0;
     }
     if (kind == PixelReadbackKind::Rgba8 &&
-        texture->desc.format != PixelFormat::RGBA8_UNorm &&
-        texture->desc.format != PixelFormat::BGRA8_UNorm) {
+        !is_rgba8_family(texture->desc.format)) {
         tc_log_error(
             "OpenGLRenderDevice::request_pixel_readback: texture %u is not RGBA8/BGRA8",
             handle.id);

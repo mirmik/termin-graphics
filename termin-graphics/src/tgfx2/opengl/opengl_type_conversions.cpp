@@ -1,4 +1,5 @@
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 namespace tgfx::gl {
 
@@ -9,6 +10,8 @@ GLFormatInfo to_gl_format(PixelFormat fmt) {
         case PixelFormat::RGB8_UNorm:         return {GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE};
         case PixelFormat::RGBA8_UNorm:        return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
         case PixelFormat::BGRA8_UNorm:        return {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE};
+        case PixelFormat::RGBA8_sRGB:         return {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE};
+        case PixelFormat::BGRA8_sRGB:         return {GL_SRGB8_ALPHA8, GL_BGRA, GL_UNSIGNED_BYTE};
         case PixelFormat::R16F:               return {GL_R16F, GL_RED, GL_HALF_FLOAT};
         case PixelFormat::RG16F:              return {GL_RG16F, GL_RG, GL_HALF_FLOAT};
         case PixelFormat::RGBA16F:            return {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT};
@@ -24,24 +27,7 @@ GLFormatInfo to_gl_format(PixelFormat fmt) {
 }
 
 uint32_t pixel_bytes(PixelFormat fmt) {
-    switch (fmt) {
-        case PixelFormat::R8_UNorm:           return 1;
-        case PixelFormat::RG8_UNorm:          return 2;
-        case PixelFormat::RGB8_UNorm:         return 3;
-        case PixelFormat::RGBA8_UNorm:        return 4;
-        case PixelFormat::BGRA8_UNorm:        return 4;
-        case PixelFormat::R16F:               return 2;
-        case PixelFormat::RG16F:              return 4;
-        case PixelFormat::RGBA16F:            return 8;
-        case PixelFormat::R32F:               return 4;
-        case PixelFormat::RG32F:              return 8;
-        case PixelFormat::RGBA32F:            return 16;
-        case PixelFormat::D24_UNorm:          return 4;
-        case PixelFormat::D24_UNorm_S8_UInt:  return 4;
-        case PixelFormat::D32F:               return 4;
-        case PixelFormat::Undefined:          return 0;
-    }
-    return 0;
+    return tgfx::pixel_format_byte_size(fmt);
 }
 
 GLenum to_gl_compare(CompareOp op) {

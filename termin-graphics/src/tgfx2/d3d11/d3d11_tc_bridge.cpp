@@ -1,6 +1,7 @@
 #include "tgfx2/d3d11/d3d11_render_device.hpp"
 
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 #include "tgfx2/tc_mesh_bridge.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
@@ -21,22 +22,6 @@ extern "C" {
 
 namespace tgfx {
 namespace {
-PixelFormat tc_format_to_tgfx2(tc_texture_format fmt) {
-    switch (fmt) {
-        case TC_TEXTURE_RGBA8: return PixelFormat::RGBA8_UNorm;
-        case TC_TEXTURE_RGB8: return PixelFormat::RGBA8_UNorm;
-        case TC_TEXTURE_RG8: return PixelFormat::RG8_UNorm;
-        case TC_TEXTURE_R8: return PixelFormat::R8_UNorm;
-        case TC_TEXTURE_RGBA16F: return PixelFormat::RGBA16F;
-        case TC_TEXTURE_RGB16F: return PixelFormat::RGBA16F;
-        case TC_TEXTURE_DEPTH24: return PixelFormat::D24_UNorm_S8_UInt;
-        case TC_TEXTURE_DEPTH32F: return PixelFormat::D32F;
-        case TC_TEXTURE_R16F: return PixelFormat::R16F;
-        case TC_TEXTURE_R32F: return PixelFormat::R32F;
-    }
-    return PixelFormat::RGBA8_UNorm;
-}
-
 TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     uint32_t out = 0;
     if (usage & TC_TEXTURE_USAGE_SAMPLED)
@@ -62,7 +47,16 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
     const size_t pixel_count = static_cast<size_t>(tex->width) * static_cast<size_t>(tex->height);
 
     if (format == TC_TEXTURE_RGB8) {
-        out_format = PixelFormat::RGBA8_UNorm;
+        out_format = pixel_format_for_tc_texture(
+            TC_TEXTURE_RGBA8,
+            static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_format == PixelFormat::Undefined) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_texture: texture '%s' has invalid encoding %u",
+                tex->header.name ? tex->header.name : tex->header.uuid,
+                static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         std::vector<uint8_t> pixels(pixel_count * 4u);
         for (size_t i = 0; i < pixel_count; ++i) {
             pixels[i * 4u + 0u] = src[i * 3u + 0u];
@@ -74,7 +68,15 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
     }
 
     if (format == TC_TEXTURE_RGB16F) {
-        out_format = PixelFormat::RGBA16F;
+        out_format = pixel_format_for_tc_texture(
+            format, static_cast<tc_texture_encoding>(tex->encoding));
+        if (out_format == PixelFormat::Undefined) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_texture: texture '%s' uses unsupported RGB16F encoding %u",
+                tex->header.name ? tex->header.name : tex->header.uuid,
+                static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         std::vector<uint8_t> pixels(pixel_count * 8u);
         for (size_t i = 0; i < pixel_count; ++i) {
             std::memcpy(&pixels[i * 8u], &src[i * 6u], 6u);
@@ -84,7 +86,16 @@ std::vector<uint8_t> normalize_tc_texture_pixels(const tc_texture* tex, PixelFor
         return pixels;
     }
 
-    out_format = tc_format_to_tgfx2(format);
+    out_format = pixel_format_for_tc_texture(
+        format, static_cast<tc_texture_encoding>(tex->encoding));
+    if (out_format == PixelFormat::Undefined) {
+        tc::Log::error(
+            "D3D11RenderDevice::ensure_tc_texture: texture '%s' has unsupported format/encoding %u/%u",
+            tex->header.name ? tex->header.name : tex->header.uuid,
+            static_cast<unsigned>(tex->format),
+            static_cast<unsigned>(tex->encoding));
+        return {};
+    }
     const size_t bytes = pixel_count * tc_texture_format_bpp(format);
     return std::vector<uint8_t>(src, src + bytes);
 }
@@ -252,7 +263,17 @@ TextureHandle D3D11RenderDevice::ensure_tc_texture(tc_texture* tex) {
     desc.sample_count = 1;
 
     if (gpu_first) {
-        desc.format = tc_format_to_tgfx2(static_cast<tc_texture_format>(tex->format));
+        desc.format = pixel_format_for_tc_texture(
+            static_cast<tc_texture_format>(tex->format),
+            static_cast<tc_texture_encoding>(tex->encoding));
+        if (desc.format == PixelFormat::Undefined) {
+            tc::Log::error(
+                "D3D11RenderDevice::ensure_tc_texture: GPU-first texture '%s' has unsupported format/encoding %u/%u",
+                tex->header.name ? tex->header.name : tex->header.uuid,
+                static_cast<unsigned>(tex->format),
+                static_cast<unsigned>(tex->encoding));
+            return {};
+        }
         desc.usage = tc_usage_to_tgfx(tex->usage) | TextureUsage::CopyDst;
         if (static_cast<uint32_t>(desc.usage) == static_cast<uint32_t>(TextureUsage::CopyDst)) {
             desc.usage = desc.usage | TextureUsage::Sampled;

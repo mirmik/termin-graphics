@@ -41,6 +41,7 @@ struct TcTextureCreateInfo {
     std::string name;
     std::string source_path;
     std::string uuid_hint;
+    tgfx::TextureEncoding encoding = tgfx::TextureEncoding::Linear;
 };
 
 // TcTexture - texture wrapper with registry integration
@@ -142,6 +143,14 @@ public:
         return t ? t->channels : 0;
     }
 
+    tgfx::TextureEncoding encoding() const {
+        tc_texture* t = get();
+        return t
+            ? tgfx::from_tc_texture_encoding(
+                  static_cast<tc_texture_encoding>(t->encoding))
+            : tgfx::TextureEncoding::Linear;
+    }
+
     const void* data() const {
         tc_texture* t = get();
         return t ? t->data : nullptr;
@@ -149,7 +158,7 @@ public:
 
     size_t data_size() const {
         tc_texture* t = get();
-        return t ? (size_t)t->width * t->height * t->channels : 0;
+        return t ? tc_texture_data_size(t) : 0;
     }
 
     // Transform flags
@@ -177,6 +186,12 @@ public:
         if (tc_texture* t = get()) {
             t->header.version++;
         }
+    }
+
+    bool set_encoding(tgfx::TextureEncoding value) {
+        tc_texture* t = get();
+        return t && tc_texture_set_encoding(
+            t, tgfx::to_tc_texture_encoding(value));
     }
 
     // Set texture data

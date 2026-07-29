@@ -13,6 +13,8 @@ VkFormat to_vk_format(PixelFormat fmt) {
         case PixelFormat::RGB8_UNorm:        return VK_FORMAT_R8G8B8_UNORM;
         case PixelFormat::RGBA8_UNorm:       return VK_FORMAT_R8G8B8A8_UNORM;
         case PixelFormat::BGRA8_UNorm:       return VK_FORMAT_B8G8R8A8_UNORM;
+        case PixelFormat::RGBA8_sRGB:        return VK_FORMAT_R8G8B8A8_SRGB;
+        case PixelFormat::BGRA8_sRGB:        return VK_FORMAT_B8G8R8A8_SRGB;
         case PixelFormat::R16F:              return VK_FORMAT_R16_SFLOAT;
         case PixelFormat::RG16F:             return VK_FORMAT_R16G16_SFLOAT;
         case PixelFormat::RGBA16F:           return VK_FORMAT_R16G16B16A16_SFLOAT;

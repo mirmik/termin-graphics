@@ -23,6 +23,7 @@ TcTexture TcTexture::from_data(const TcTextureCreateInfo& info) {
             pixels.width,
             pixels.height,
             pixels.channels,
+            tgfx::to_tc_texture_encoding(info.encoding),
             uuid_buf
         );
         final_uuid = uuid_buf;
@@ -49,6 +50,11 @@ TcTexture TcTexture::from_data(const TcTextureCreateInfo& info) {
                 info.transform.flip_y,
                 info.transform.transpose
             );
+            if (!tc_texture_set_encoding(
+                    tex, tgfx::to_tc_texture_encoding(info.encoding))) {
+                tc::Log::error("TcTexture::from_data: failed to set texture encoding");
+                return TcTexture();
+            }
         }
         return TcTexture(h);
     }
@@ -81,6 +87,12 @@ TcTexture TcTexture::from_data(const TcTextureCreateInfo& info) {
         info.transform.flip_y,
         info.transform.transpose
     );
+    if (!tc_texture_set_encoding(
+            tex, tgfx::to_tc_texture_encoding(info.encoding))) {
+        tc::Log::error("TcTexture::from_data: failed to set texture encoding");
+        tc_texture_destroy(h);
+        return TcTexture();
+    }
 
     return TcTexture(h);
 }

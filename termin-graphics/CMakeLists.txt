@@ -609,6 +609,7 @@ if(BUILD_TGFX2_TESTS)
         tests/test_tgfx2_interop_ownership.cpp
         tests/test_tgfx2_line_mesh_builder.cpp
         tests/test_tgfx2_pipeline_cache_stats.cpp
+        tests/test_tgfx2_texture_encoding.cpp
         tests/test_tgfx2_tc_mesh_bridge.cpp
     )
     target_include_directories(tgfx2_device_factory_test PRIVATE
@@ -618,6 +619,9 @@ if(BUILD_TGFX2_TESTS)
     target_link_libraries(tgfx2_device_factory_test PRIVATE termin_graphics2)
     if(TGFX2_ENABLE_VULKAN)
         target_compile_definitions(tgfx2_device_factory_test PRIVATE TGFX2_HAS_VULKAN)
+    endif()
+    if(TGFX2_ENABLE_D3D11)
+        target_compile_definitions(tgfx2_device_factory_test PRIVATE TGFX2_HAS_D3D11)
     endif()
     termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)

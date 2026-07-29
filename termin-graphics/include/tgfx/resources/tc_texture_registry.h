@@ -54,8 +54,9 @@ typedef struct tc_texture_info {
     uint32_t height;
     uint8_t channels;
     uint8_t format;
+    uint8_t encoding;
     uint8_t is_loaded;
-    uint8_t _pad[7];
+    uint8_t _pad[5];
     size_t memory_bytes;
 } tc_texture_info;
 

@@ -3,6 +3,7 @@
 
 #include "tgfx/tgfx_api.h"
 #include "tgfx/tc_handle.h"
+#include "tgfx/texture_encoding.h"
 #include <tcbase/tc_resource.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -73,6 +74,7 @@ typedef struct tc_texture {
     uint32_t height;
     uint8_t channels;           // 1, 2, 3, or 4
     uint8_t format;             // tc_texture_format
+    uint8_t encoding;           // tc_texture_encoding
     uint8_t flip_x;             // transform flag
     uint8_t flip_y;             // transform flag (default true for OpenGL)
     uint8_t transpose;          // transform flag
@@ -116,6 +118,14 @@ TGFX_API void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_ki
 // Replace the usage bitset. Pass an OR of tc_texture_usage_flags values.
 TGFX_API void tc_texture_set_usage(tc_texture* tex, uint32_t usage);
 
+// Change the transfer encoding used by sampled RGB channels. Returns false
+// for an unknown enum value. A real change bumps header.version so every
+// per-device native texture cache recreates the image with the new format.
+TGFX_API bool tc_texture_set_encoding(
+    tc_texture* tex,
+    tc_texture_encoding encoding
+);
+
 // Set width/height/format in one call. Bumps `header.version` so cached
 // GPU handles get re-created on the next bridge lookup. Used by render
 // targets when they are resized.
@@ -152,6 +162,7 @@ TGFX_API bool tc_texture_release(tc_texture* tex);
 TGFX_API void tc_texture_compute_uuid(
     const void* data, size_t size,
     uint32_t width, uint32_t height, uint8_t channels,
+    tc_texture_encoding encoding,
     char* uuid_out
 );
 

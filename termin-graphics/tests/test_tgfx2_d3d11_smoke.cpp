@@ -826,10 +826,11 @@ int main() {
         tc_texture_handle texture_handle = tc_texture_create("d3d11-smoke-texture");
         tc_texture* texture = tc_texture_get(texture_handle);
         const uint8_t texture_pixels[] = {
-            13, 191, 64, 255, 13, 191, 64, 255,
-            13, 191, 64, 255, 13, 191, 64, 255,
+            128, 128, 128, 128, 128, 128, 128, 128,
+            128, 128, 128, 128, 128, 128, 128, 128,
         };
         if (!texture ||
+            !tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB) ||
             !tc_texture_set_data(
                 texture,
                 texture_pixels,
@@ -968,12 +969,12 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: tc resource draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 13.0f / 255.0f) ||
-            !close_enough(rgba[1], 191.0f / 255.0f) ||
-            !close_enough(rgba[2], 64.0f / 255.0f) ||
-            !close_enough(rgba[3], 1.00f)) {
+        if (!close_enough(rgba[0], 0.21586f) ||
+            !close_enough(rgba[1], 0.21586f) ||
+            !close_enough(rgba[2], 0.21586f) ||
+            !close_enough(rgba[3], 128.0f / 255.0f)) {
             std::fprintf(stderr,
-                         "D3D11 smoke: unexpected tc resource pixel %.3f %.3f %.3f %.3f\n",
+                         "D3D11 smoke: unexpected sRGB sample %.3f %.3f %.3f %.3f\n",
                          rgba[0], rgba[1], rgba[2], rgba[3]);
             return 1;
         }

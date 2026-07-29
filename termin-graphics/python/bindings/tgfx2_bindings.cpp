@@ -347,6 +347,8 @@ void bind_tgfx2(nb::module_& m) {
         .value("RGB8_UNorm",        tgfx::PixelFormat::RGB8_UNorm)
         .value("RGBA8_UNorm",       tgfx::PixelFormat::RGBA8_UNorm)
         .value("BGRA8_UNorm",       tgfx::PixelFormat::BGRA8_UNorm)
+        .value("RGBA8_sRGB",        tgfx::PixelFormat::RGBA8_sRGB)
+        .value("BGRA8_sRGB",        tgfx::PixelFormat::BGRA8_sRGB)
         .value("R16F",              tgfx::PixelFormat::R16F)
         .value("RG16F",             tgfx::PixelFormat::RG16F)
         .value("RGBA16F",           tgfx::PixelFormat::RGBA16F)

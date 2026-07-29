@@ -1,4 +1,7 @@
 #include "guard_main.h"
+#include "tgfx/tgfx_texture_handle.hpp"
+
+#include <string>
 
 extern "C" {
 #include "tgfx/resources/tc_texture.h"
@@ -47,6 +50,53 @@ TEST_CASE("tc_texture rejects unknown formats from byte-size calculations") {
     CHECK_EQ(tc_texture_format_channels(static_cast<tc_texture_format>(texture.format)), 0u);
     CHECK_EQ(tc_texture_data_size(&texture), 0u);
     CHECK_EQ(tc_texture_data_size(nullptr), 0u);
+}
+
+TEST_CASE("tc_texture encoding changes are validated and versioned") {
+    tc_texture_init();
+    const tc_texture_handle handle = tc_texture_create("texture-encoding-version");
+    tc_texture* texture = tc_texture_get(handle);
+    REQUIRE(texture != nullptr);
+    CHECK_EQ(texture->encoding, TC_TEXTURE_ENCODING_LINEAR);
+
+    const uint32_t initial_version = texture->header.version;
+    CHECK(tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB));
+    CHECK_EQ(texture->encoding, TC_TEXTURE_ENCODING_SRGB);
+    CHECK_EQ(texture->header.version, initial_version + 1u);
+
+    CHECK(tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB));
+    CHECK_EQ(texture->header.version, initial_version + 1u);
+
+    CHECK_FALSE(tc_texture_set_encoding(
+        texture, static_cast<tc_texture_encoding>(255)));
+    CHECK_EQ(texture->encoding, TC_TEXTURE_ENCODING_SRGB);
+    CHECK_EQ(texture->header.version, initial_version + 1u);
+    tc_texture_shutdown();
+}
+
+TEST_CASE("content texture identity includes transfer encoding") {
+    tc_texture_init();
+    const uint8_t pixel[4] = {128, 128, 128, 128};
+
+    termin::TcTextureCreateInfo linear_info;
+    linear_info.pixels = {pixel, 1, 1, 4};
+    linear_info.name = "linear";
+    linear_info.encoding = tgfx::TextureEncoding::Linear;
+    termin::TcTexture linear = termin::TcTexture::from_data(linear_info);
+
+    termin::TcTextureCreateInfo srgb_info;
+    srgb_info.pixels = {pixel, 1, 1, 4};
+    srgb_info.name = "srgb";
+    srgb_info.encoding = tgfx::TextureEncoding::SRGB;
+    termin::TcTexture srgb = termin::TcTexture::from_data(srgb_info);
+
+    REQUIRE(linear.is_valid());
+    REQUIRE(srgb.is_valid());
+    CHECK_FALSE(tc_texture_handle_eq(linear.handle, srgb.handle));
+    CHECK(std::string(linear.uuid()) != std::string(srgb.uuid()));
+    CHECK(linear.encoding() == tgfx::TextureEncoding::Linear);
+    CHECK(srgb.encoding() == tgfx::TextureEncoding::SRGB);
+    tc_texture_shutdown();
 }
 
 TEST_CASE("tc_texture registry owns canonical default textures") {

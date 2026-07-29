@@ -20,27 +20,6 @@ namespace tgfx {
 
 namespace {
 
-static uint32_t pixel_format_byte_size(PixelFormat fmt) {
-    switch (fmt) {
-        case PixelFormat::R8_UNorm:          return 1;
-        case PixelFormat::RG8_UNorm:         return 2;
-        case PixelFormat::RGB8_UNorm:        return 3;
-        case PixelFormat::RGBA8_UNorm:       return 4;
-        case PixelFormat::BGRA8_UNorm:       return 4;
-        case PixelFormat::R16F:              return 2;
-        case PixelFormat::RG16F:             return 4;
-        case PixelFormat::RGBA16F:           return 8;
-        case PixelFormat::R32F:              return 4;
-        case PixelFormat::RG32F:             return 8;
-        case PixelFormat::RGBA32F:           return 16;
-        case PixelFormat::D24_UNorm:         return 4;
-        case PixelFormat::D24_UNorm_S8_UInt: return 4;
-        case PixelFormat::D32F:              return 4;
-        case PixelFormat::Undefined:         return 0;
-    }
-    return 0;
-}
-
 static VkImageLayout texture_post_upload_layout(const TextureDesc& desc) {
     return has_flag(desc.usage, TextureUsage::Sampled)
         ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -786,9 +765,11 @@ bool VulkanRenderDevice::read_texture_rgba_float(TextureHandle tex, float* out) 
                 dst[0] = src[0] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[2] / 255.0f; dst[3] = 1.0f;
                 break;
             case PixelFormat::RGBA8_UNorm:
+            case PixelFormat::RGBA8_sRGB:
                 dst[0] = src[0] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[2] / 255.0f; dst[3] = src[3] / 255.0f;
                 break;
             case PixelFormat::BGRA8_UNorm:
+            case PixelFormat::BGRA8_sRGB:
                 dst[0] = src[2] / 255.0f; dst[1] = src[1] / 255.0f; dst[2] = src[0] / 255.0f; dst[3] = src[3] / 255.0f;
                 break;
             case PixelFormat::R16F: {

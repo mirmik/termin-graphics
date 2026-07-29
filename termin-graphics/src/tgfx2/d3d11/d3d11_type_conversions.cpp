@@ -1,4 +1,5 @@
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 #include <stdexcept>
 
@@ -11,6 +12,8 @@ DXGI_FORMAT to_dxgi_format(PixelFormat format) {
         case PixelFormat::RGB8_UNorm: return DXGI_FORMAT_R8G8B8A8_UNORM;
         case PixelFormat::RGBA8_UNorm: return DXGI_FORMAT_R8G8B8A8_UNORM;
         case PixelFormat::BGRA8_UNorm: return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case PixelFormat::RGBA8_sRGB: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case PixelFormat::BGRA8_sRGB: return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
         case PixelFormat::R16F: return DXGI_FORMAT_R16_FLOAT;
         case PixelFormat::RG16F: return DXGI_FORMAT_R16G16_FLOAT;
         case PixelFormat::RGBA16F: return DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -180,25 +183,7 @@ D3D11_TEXTURE_ADDRESS_MODE to_d3d_address(AddressMode mode) {
 }
 
 uint32_t pixel_format_bytes(PixelFormat format) {
-    switch (format) {
-        case PixelFormat::R8_UNorm: return 1;
-        case PixelFormat::RG8_UNorm: return 2;
-        case PixelFormat::RGB8_UNorm:
-        case PixelFormat::RGBA8_UNorm:
-        case PixelFormat::BGRA8_UNorm:
-        case PixelFormat::R32F:
-        case PixelFormat::D24_UNorm:
-        case PixelFormat::D24_UNorm_S8_UInt:
-        case PixelFormat::D32F:
-            return 4;
-        case PixelFormat::R16F: return 2;
-        case PixelFormat::RG16F: return 4;
-        case PixelFormat::RGBA16F: return 8;
-        case PixelFormat::RG32F: return 8;
-        case PixelFormat::RGBA32F: return 16;
-        case PixelFormat::Undefined: return 0;
-    }
-    return 0;
+    return tgfx::pixel_format_byte_size(format);
 }
 
 bool is_depth_format(PixelFormat format) {

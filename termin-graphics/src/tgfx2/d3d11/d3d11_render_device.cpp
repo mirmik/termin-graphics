@@ -197,12 +197,14 @@ bool unpack_rgba_float_pixel(PixelFormat format, const uint8_t* src, float* dst)
             dst[3] = 1.0f;
             return true;
         case PixelFormat::RGBA8_UNorm:
+        case PixelFormat::RGBA8_sRGB:
             dst[0] = src[0] / 255.0f;
             dst[1] = src[1] / 255.0f;
             dst[2] = src[2] / 255.0f;
             dst[3] = src[3] / 255.0f;
             return true;
         case PixelFormat::BGRA8_UNorm:
+        case PixelFormat::BGRA8_sRGB:
             dst[0] = src[2] / 255.0f;
             dst[1] = src[1] / 255.0f;
             dst[2] = src[0] / 255.0f;
@@ -261,6 +263,8 @@ bool supports_rgba_float_readback(PixelFormat format) {
         case PixelFormat::RGB8_UNorm:
         case PixelFormat::RGBA8_UNorm:
         case PixelFormat::BGRA8_UNorm:
+        case PixelFormat::RGBA8_sRGB:
+        case PixelFormat::BGRA8_sRGB:
         case PixelFormat::R16F:
         case PixelFormat::RG16F:
         case PixelFormat::RGBA16F:
@@ -1758,7 +1762,7 @@ bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, flo
     if (!out_rgba) return false;
     auto* tex = get_texture(handle);
     if (!tex || !tex->texture) return false;
-    if (tex->desc.format != PixelFormat::RGBA8_UNorm && tex->desc.format != PixelFormat::BGRA8_UNorm) {
+    if (!is_rgba8_family(tex->desc.format)) {
         tc::Log::error("D3D11RenderDevice::read_pixel_rgba8: unsupported format");
         return false;
     }
@@ -1783,7 +1787,8 @@ bool D3D11RenderDevice::read_pixel_rgba8(TextureHandle handle, int x, int y, flo
     }
     const auto* row = static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch;
     const auto* p = row + static_cast<size_t>(x) * 4u;
-    if (tex->desc.format == PixelFormat::BGRA8_UNorm) {
+    if (tex->desc.format == PixelFormat::BGRA8_UNorm ||
+        tex->desc.format == PixelFormat::BGRA8_sRGB) {
         out_rgba[0] = p[2] / 255.0f;
         out_rgba[1] = p[1] / 255.0f;
         out_rgba[2] = p[0] / 255.0f;
@@ -1828,7 +1833,8 @@ bool D3D11RenderDevice::poll_pixel_rgba8(uint64_t request_id, float out_rgba[4])
     }
 
     const auto* pixel = static_cast<const uint8_t*>(mapped.pData);
-    if (slot->format == PixelFormat::BGRA8_UNorm) {
+    if (slot->format == PixelFormat::BGRA8_UNorm ||
+        slot->format == PixelFormat::BGRA8_sRGB) {
         out_rgba[0] = pixel[2] / 255.0f;
         out_rgba[1] = pixel[1] / 255.0f;
         out_rgba[2] = pixel[0] / 255.0f;
@@ -1901,8 +1907,7 @@ uint64_t D3D11RenderDevice::request_pixel_readback(
         return 0;
     }
     if (kind == PixelReadbackKind::Rgba8 &&
-        texture->desc.format != PixelFormat::RGBA8_UNorm &&
-        texture->desc.format != PixelFormat::BGRA8_UNorm) {
+        !is_rgba8_family(texture->desc.format)) {
         tc::Log::error(
             "D3D11RenderDevice::request_pixel_readback: texture %u is not RGBA8/BGRA8",
             handle.id);

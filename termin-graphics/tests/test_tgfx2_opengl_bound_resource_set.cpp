@@ -1,6 +1,7 @@
 // OpenGL runtime smoke for the backend-facing BoundResourceSetDesc path.
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <exception>
 #include <memory>
@@ -45,6 +46,15 @@ layout(std140, binding = 2) uniform ColorBlock {
 out vec4 FragColor;
 void main() {
     FragColor = color;
+}
+)";
+
+static const char* kSrgbSamplingFragmentSource = R"(
+#version 420 core
+layout(binding = 0) uniform sampler2D source_texture;
+out vec4 FragColor;
+void main() {
+    FragColor = texture(source_texture, vec2(0.5, 0.5));
 }
 )";
 
@@ -332,6 +342,88 @@ int main() {
         depth_ready &&
         async_depth > 0.36f && async_depth < 0.38f;
 
+    tgfx::ShaderDesc srgb_fs_desc;
+    srgb_fs_desc.stage = tgfx::ShaderStage::Fragment;
+    srgb_fs_desc.source = kSrgbSamplingFragmentSource;
+    srgb_fs_desc.debug_name = "opengl-srgb-sampling:fragment";
+    const tgfx::ShaderHandle srgb_fs = device->create_shader(srgb_fs_desc);
+    tgfx::PipelineDesc srgb_pipeline_desc = pipeline_desc;
+    srgb_pipeline_desc.fragment_shader = srgb_fs;
+    const tgfx::PipelineHandle srgb_pipeline =
+        device->create_pipeline(srgb_pipeline_desc);
+
+    tgfx::TextureDesc source_desc;
+    source_desc.width = 1;
+    source_desc.height = 1;
+    source_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
+    source_desc.usage =
+        tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle source = device->create_texture(source_desc);
+    const uint8_t encoded_pixel[] = {128, 128, 128, 128};
+    device->upload_texture(
+        source,
+        std::span<const uint8_t>(encoded_pixel, sizeof(encoded_pixel)));
+    const tgfx::SamplerHandle sampler =
+        device->create_sampler(tgfx::SamplerDesc{});
+
+    tgfx::BackendBindingPlanEntry texture_plan;
+    texture_plan.resource.name = "source_texture";
+    texture_plan.resource.kind = tgfx::ShaderResourceKind::Texture;
+    texture_plan.resource.scope = tgfx::ShaderResourceScope::Material;
+    texture_plan.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    texture_plan.placement.kind = tgfx::BackendPlacementKind::OpenGLBinding;
+    texture_plan.placement.opengl.binding_class =
+        tgfx::OpenGLBindingClass::TextureUnit;
+    texture_plan.placement.opengl.texture_unit = 0;
+
+    tgfx::BoundResourceValue texture_value;
+    texture_value.kind = tgfx::BoundResourceKind::SampledTexture;
+    texture_value.texture = source;
+    texture_value.sampler = sampler;
+    const tgfx::BoundResourceBinding texture_binding = {
+        tgfx::bound_resource_slot_from_plan_entry(texture_plan),
+        texture_value,
+    };
+    tgfx::BoundResourceSetStorage texture_storage;
+    texture_storage.set_resource_layout_token(
+        device->pipeline_resource_layout_token(srgb_pipeline));
+    texture_storage.append_group(
+        tgfx::ShaderResourceScope::Material, true, &texture_binding, 1);
+    const tgfx::ResourceSetHandle texture_set =
+        device->create_bound_resource_set(texture_storage.view());
+
+    auto srgb_cmd = device->create_command_list();
+    srgb_cmd->begin();
+    srgb_cmd->begin_render_pass(pass);
+    srgb_cmd->set_viewport(0, 0, kWidth, kHeight);
+    srgb_cmd->bind_pipeline(srgb_pipeline);
+    srgb_cmd->bind_resource_set(texture_set);
+    srgb_cmd->bind_vertex_buffer(0, vb);
+    srgb_cmd->draw(3);
+    srgb_cmd->end_render_pass();
+    srgb_cmd->end();
+    device->submit(*srgb_cmd);
+
+    float srgb_pixel[4] = {};
+    const bool srgb_read_ok =
+        device->read_pixel_rgba8(
+            rt, kWidth / 2, kHeight / 2, srgb_pixel);
+    const bool srgb_sampling_ok =
+        srgb_read_ok &&
+        std::abs(srgb_pixel[0] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[1] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[2] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
+    std::printf(
+        "OpenGL sRGB sampling: %s (%.3f %.3f %.3f %.3f)\n",
+        srgb_sampling_ok ? "ok" : "failed",
+        srgb_pixel[0], srgb_pixel[1], srgb_pixel[2], srgb_pixel[3]);
+
+    device->destroy(texture_set);
+    device->destroy(sampler);
+    device->destroy(source);
+    device->destroy(srgb_pipeline);
+    device->destroy(srgb_fs);
     device->destroy(resource_set);
     device->destroy(ubo);
     device->destroy(vb);
@@ -342,7 +434,7 @@ int main() {
     device->destroy(fs);
     device.reset();
 
-    if (!pass_ok) {
+    if (!pass_ok || !srgb_sampling_ok) {
         std::fprintf(stderr, "OpenGL bound resource set smoke failed\n");
         return 1;
     }

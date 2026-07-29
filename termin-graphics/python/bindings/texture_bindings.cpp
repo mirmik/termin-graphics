@@ -20,6 +20,11 @@ using namespace termin;
 namespace tgfx_bindings {
 
 void bind_texture(nb::module_& m) {
+    nb::enum_<tgfx::TextureEncoding>(m, "TextureEncoding", nb::is_arithmetic())
+        .value("LINEAR", tgfx::TextureEncoding::Linear)
+        .value("SRGB", tgfx::TextureEncoding::SRGB)
+        .export_values();
+
     nb::class_<TcTexture>(m, "TcTexture")
         .def(nb::init<>())
 
@@ -31,6 +36,7 @@ void bind_texture(nb::module_& m) {
         .def_prop_ro("width", &TcTexture::width)
         .def_prop_ro("height", &TcTexture::height)
         .def_prop_ro("channels", &TcTexture::channels)
+        .def_prop_rw("encoding", &TcTexture::encoding, &TcTexture::set_encoding)
         .def_prop_ro("flip_x", &TcTexture::flip_x)
         .def_prop_ro("flip_y", &TcTexture::flip_y)
         .def_prop_ro("transpose", &TcTexture::transpose)
@@ -116,14 +122,16 @@ void bind_texture(nb::module_& m) {
             bool transpose,
             const std::string& name,
             const std::string& source_path,
-            const std::string& uuid_hint
+            const std::string& uuid_hint,
+            tgfx::TextureEncoding encoding
         ) {
             return TcTexture::from_data(TcTextureCreateInfo{
                 TexturePixelDataView{data.data(), width, height, channels},
                 TextureTransformFlags{flip_x, flip_y, transpose},
                 name,
                 source_path,
-                uuid_hint
+                uuid_hint,
+                encoding
             });
         },
             nb::arg("data"),
@@ -135,7 +143,8 @@ void bind_texture(nb::module_& m) {
             nb::arg("transpose") = false,
             nb::arg("name") = "",
             nb::arg("source_path") = "",
-            nb::arg("uuid") = ""
+            nb::arg("uuid") = "",
+            nb::arg("encoding") = tgfx::TextureEncoding::Linear
         )
 
         .def_static("white_1x1", &TcTexture::white_1x1)
@@ -179,6 +188,7 @@ void bind_texture(nb::module_& m) {
             d["height"] = infos[i].height;
             d["channels"] = infos[i].channels;
             d["format"] = infos[i].format;
+            d["encoding"] = infos[i].encoding;
             d["is_loaded"] = (bool)infos[i].is_loaded;
             d["memory_bytes"] = infos[i].memory_bytes;
             result.append(d);

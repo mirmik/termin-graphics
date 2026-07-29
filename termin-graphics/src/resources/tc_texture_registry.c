@@ -136,6 +136,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->header.pool_index = h.index;
     tex->header.is_loaded = 1;
     tex->flip_y = 1;  // Default for OpenGL
+    tex->encoding = TC_TEXTURE_ENCODING_LINEAR;
     tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
 
@@ -516,6 +517,25 @@ void tc_texture_set_usage(tc_texture* tex, uint32_t usage) {
     tex->header.version++;
 }
 
+bool tc_texture_set_encoding(
+    tc_texture* tex,
+    tc_texture_encoding encoding
+) {
+    if (!tex) return false;
+    if (encoding != TC_TEXTURE_ENCODING_LINEAR &&
+        encoding != TC_TEXTURE_ENCODING_SRGB) {
+        tc_log(TC_LOG_ERROR,
+               "tc_texture_set_encoding: unsupported encoding %u for texture '%s'",
+               (unsigned)encoding,
+               tex->header.name ? tex->header.name : tex->header.uuid);
+        return false;
+    }
+    if (tex->encoding == (uint8_t)encoding) return true;
+    tex->encoding = (uint8_t)encoding;
+    tex->header.version++;
+    return true;
+}
+
 void tc_texture_set_size_format(
     tc_texture* tex,
     uint32_t width, uint32_t height,
@@ -537,6 +557,7 @@ void tc_texture_set_size_format(
 void tc_texture_compute_uuid(
     const void* data, size_t size,
     uint32_t width, uint32_t height, uint8_t channels,
+    tc_texture_encoding encoding,
     char* uuid_out
 ) {
     uint64_t hash = 14695981039346656037ULL;
@@ -550,6 +571,9 @@ void tc_texture_compute_uuid(
             hash *= 1099511628211ULL;
         }
     }
+
+    hash ^= (uint8_t)encoding;
+    hash *= 1099511628211ULL;
 
     if (!data && size > 0) {
         tc_log_error("tc_texture_compute_uuid: data is NULL for non-empty texture data");
@@ -615,6 +639,7 @@ static bool collect_texture_info(tc_texture_handle h, tc_texture* tex, void* use
     info->height = tex->height;
     info->channels = tex->channels;
     info->format = tex->format;
+    info->encoding = tex->encoding;
     info->is_loaded = tex->header.is_loaded;
     info->memory_bytes = (size_t)tex->width * tex->height * tex->channels;
 
