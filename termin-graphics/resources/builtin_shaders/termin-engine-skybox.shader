@@ -7,8 +7,7 @@
 @glDepthMask false
 @glCull false
 
-@property Mat4  u_view
-@property Mat4  u_projection
+@property Mat4  u_inv_view_projection
 @property Int   u_skybox_type
 @property Color u_skybox_color        = Color(0.5, 0.5, 0.5, 1.0)
 @property Color u_skybox_top_color    = Color(0.3, 0.5, 1.0, 1.0)
@@ -18,7 +17,7 @@
 import termin_prelude;
 
 struct VertexInput {
-    float3 position : POSITION;
+    float2 position : POSITION;
 };
 
 struct VertexOutput {
@@ -29,10 +28,17 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput main(VertexInput input) {
     VertexOutput output;
-    float4 view_dir = mul(material.u_view, float4(input.position, 0.0));
-    output.dir = input.position;
-    float4 clip = mul(material.u_projection, float4(view_dir.xyz, 1.0));
-    output.position = termin_to_native_clip(clip.xyww);
+    float4 near_h = mul(
+        material.u_inv_view_projection,
+        float4(input.position, 0.0, 1.0));
+    float4 far_h = mul(
+        material.u_inv_view_projection,
+        float4(input.position, 1.0, 1.0));
+    float3 near_world = near_h.xyz / near_h.w;
+    float3 far_world = far_h.xyz / far_h.w;
+    output.dir = far_world - near_world;
+    output.position = termin_to_native_clip(
+        float4(input.position, 0.0, 1.0));
     return output;
 }
 @endstage
