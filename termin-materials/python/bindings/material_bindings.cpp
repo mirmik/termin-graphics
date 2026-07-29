@@ -601,13 +601,13 @@ TcMaterial create_material_from_parsed(
                     TcTexture tex = nb::cast<TcTexture>(val);
                     if (!tc_material_phase_set_texture(phase, key.c_str(), tex.handle)) {
                         throw std::runtime_error(
-                            "Texture '" + key + "' violates its encoding contract");
+                            "Failed to bind texture '" + key + "'");
                     }
                 } else {
                     TcTexture tex = require_tc_texture(val, "create_material_from_parsed(textures)");
                     if (!tc_material_phase_set_texture(phase, key.c_str(), tex.handle)) {
                         throw std::runtime_error(
-                            "Texture '" + key + "' violates its encoding contract");
+                            "Failed to bind texture '" + key + "'");
                     }
                 }
             }

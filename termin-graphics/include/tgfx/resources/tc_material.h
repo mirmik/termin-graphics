@@ -246,16 +246,17 @@ TGFX_API bool tc_material_phase_set_texture(
     tc_texture_handle texture
 );
 
-// Declare an encoding-checked canonical texture slot without assigning a
-// texture. Repeating the same declaration is idempotent; conflicting schema
-// or an already-bound incompatible texture is rejected.
+// Declare an encoding-described canonical texture slot without assigning a
+// texture. Repeating the same declaration is idempotent and conflicting schema
+// is rejected. An already-bound encoding mismatch is retained with a warning.
 TGFX_API bool tc_material_phase_declare_texture(
     tc_material_phase* phase,
     const char* name,
     tc_texture_encoding expected_encoding
 );
 
-// Check a prospective binding without mutating the phase.
+// Check whether a prospective binding can be applied without mutating the
+// phase. Encoding mismatches are accepted; the mutating setter logs them.
 TGFX_API bool tc_material_phase_accepts_texture(
     const tc_material_phase* phase,
     const char* name,
@@ -297,9 +298,9 @@ TGFX_API void tc_material_set_uniform(
     const void* value
 );
 
-// Set texture on all phases and store handle for inspector. The operation is
-// transactional with respect to encoding validation: zero means rejection or
-// no phases, otherwise the return value is the number of updated phases.
+// Set texture on all phases and store handle for inspector. Encoding mismatch
+// is accepted with a warning; zero is reserved for structural failure or no
+// phases, otherwise the return value is the number of updated phases.
 TGFX_API size_t tc_material_set_texture(
     tc_material* mat,
     const char* name,

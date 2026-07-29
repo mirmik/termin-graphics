@@ -471,6 +471,24 @@ bool tc_material_phase_set_texture(
         tex->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
     }
 
+    if (tex->has_expected_encoding && !tc_texture_handle_is_invalid(texture)) {
+        const tc_texture* candidate = tc_texture_get(texture);
+        if (candidate
+            && candidate->encoding != tex->expected_encoding) {
+            tc_log(
+                TC_LOG_WARN,
+                "tc_material_phase_set_texture: slot '%s' expects %s but "
+                "texture '%s' is %s; binding it unchanged",
+                name,
+                tex->expected_encoding == TC_TEXTURE_ENCODING_SRGB
+                    ? "sRGB" : "Linear",
+                candidate->header.name
+                    ? candidate->header.name : candidate->header.uuid,
+                candidate->encoding == TC_TEXTURE_ENCODING_SRGB
+                    ? "sRGB" : "Linear");
+        }
+    }
+
     tex->texture = texture;
     return true;
 }
@@ -520,14 +538,22 @@ bool tc_material_phase_declare_texture(
 
     if (!tc_texture_handle_is_invalid(slot->texture)) {
         tc_texture* texture = tc_texture_get(slot->texture);
-        if (!texture || texture->encoding != (uint8_t)expected_encoding) {
+        if (!texture) {
             tc_log(
                 TC_LOG_ERROR,
-                "tc_material_phase_declare_texture: existing texture for slot '%s' "
-                "does not match encoding %u",
-                name,
-                (unsigned)expected_encoding);
+                "tc_material_phase_declare_texture: stale existing texture "
+                "for slot '%s'",
+                name);
             return false;
+        }
+        if (texture->encoding != (uint8_t)expected_encoding) {
+            tc_log(
+                TC_LOG_WARN,
+                "tc_material_phase_declare_texture: existing texture for slot '%s' "
+                "does not match %s encoding; keeping the binding unchanged",
+                name,
+                expected_encoding == TC_TEXTURE_ENCODING_SRGB
+                    ? "sRGB" : "Linear");
         }
     }
 
@@ -572,14 +598,10 @@ bool tc_material_phase_accepts_texture(
         return false;
     }
     if (candidate->encoding != slot->expected_encoding) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_phase_set_texture: slot '%s' expects %s but texture '%s' is %s",
-            name,
-            slot->expected_encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear",
-            candidate->header.name ? candidate->header.name : candidate->header.uuid,
-            candidate->encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear");
-        return false;
+        // Encoding is a semantic diagnostic, not a safety boundary. The
+        // texture's own encoding still selects its native GPU format and
+        // sampling behavior, so an incompatible slot remains renderable.
+        return true;
     }
     return true;
 }

@@ -1,13 +1,29 @@
 #include "guard_main.h"
 #include "tgfx/tgfx_texture_handle.hpp"
 
+#include <cstring>
 #include <string>
 
 extern "C" {
+#include "tcbase/tc_log.h"
 #include "tgfx/resources/tc_material.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 }
+
+namespace {
+
+tc_log_level g_encoding_log_level = TC_LOG_DEBUG;
+std::string g_encoding_log_message;
+
+void capture_encoding_log(tc_log_level level, const char* message) {
+    if (message && std::strstr(message, "expects sRGB")) {
+        g_encoding_log_level = level;
+        g_encoding_log_message = message;
+    }
+}
+
+} // namespace
 
 TEST_CASE("tc_texture formats report canonical byte sizes") {
     struct FormatCase {
@@ -156,7 +172,7 @@ TEST_CASE("tc_texture registry owns canonical default textures") {
     tc_texture_shutdown();
 }
 
-TEST_CASE("material texture slots reject encoding mismatches transactionally") {
+TEST_CASE("material texture slots warn and bind encoding mismatches") {
     tc_texture_init();
     const tc_texture_handle linear = tc_texture_get_white_1x1();
     const tc_texture_handle srgb = tc_texture_get_white_1x1_srgb();
@@ -170,8 +186,15 @@ TEST_CASE("material texture slots reject encoding mismatches transactionally") {
 
     REQUIRE(tc_material_phase_set_texture(&phase, "albedo", srgb));
     const tc_texture_handle previous = phase.textures[0].texture;
-    CHECK_FALSE(tc_material_phase_set_texture(&phase, "albedo", linear));
-    CHECK(tc_texture_handle_eq(phase.textures[0].texture, previous));
+    g_encoding_log_level = TC_LOG_DEBUG;
+    g_encoding_log_message.clear();
+    tc_log_set_callback(capture_encoding_log);
+    CHECK(tc_material_phase_set_texture(&phase, "albedo", linear));
+    tc_log_set_callback(nullptr);
+    CHECK_FALSE(tc_texture_handle_eq(phase.textures[0].texture, previous));
+    CHECK(tc_texture_handle_eq(phase.textures[0].texture, linear));
+    CHECK_EQ(g_encoding_log_level, TC_LOG_WARN);
+    CHECK(g_encoding_log_message.find("binding it unchanged") != std::string::npos);
 
     tc_material_phase unchecked{};
     CHECK(tc_material_phase_set_texture(&unchecked, "manual", linear));
