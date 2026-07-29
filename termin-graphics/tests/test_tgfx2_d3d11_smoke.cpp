@@ -782,7 +782,7 @@ int main() {
             "Texture2D albedo_texture : register(t0);\n"
             "SamplerState albedo_sampler : register(s0);\n"
             "float4 main() : SV_Target0 {\n"
-            "    return albedo_texture.Sample(albedo_sampler, float2(0.5, 0.5));\n"
+            "    return albedo_texture.SampleLevel(albedo_sampler, float2(0.5, 0.5), 1.0);\n"
             "}\n";
         if (!compile_hlsl_to_file(textured_vs_source, "vs_5_0", textured_vs_path) ||
             !compile_hlsl_to_file(textured_ps_source, "ps_5_0", textured_ps_path)) {
@@ -842,10 +842,39 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: failed to create tc_texture\n");
             return 1;
         }
+        texture->mipmap = 1;
         auto texture_gpu = device->ensure_tc_texture(texture);
         auto texture_gpu_again = device->ensure_tc_texture(texture);
         if (!texture_gpu || texture_gpu != texture_gpu_again) {
             std::fprintf(stderr, "D3D11 smoke: ensure_tc_texture failed or did not cache\n");
+            return 1;
+        }
+        tc_texture_handle linear_texture_handle =
+            tc_texture_create("d3d11-smoke-linear-texture");
+        tc_texture* linear_texture = tc_texture_get(linear_texture_handle);
+        if (!linear_texture ||
+            !tc_texture_set_encoding(
+                linear_texture,
+                TC_TEXTURE_ENCODING_LINEAR) ||
+            !tc_texture_set_data(
+                linear_texture,
+                texture_pixels,
+                2,
+                2,
+                4,
+                "D3D11 smoke linear texture",
+                nullptr)) {
+            std::fprintf(
+                stderr,
+                "D3D11 smoke: failed to create Linear tc_texture\n");
+            return 1;
+        }
+        linear_texture->mipmap = 1;
+        auto linear_texture_gpu = device->ensure_tc_texture(linear_texture);
+        if (!linear_texture_gpu) {
+            std::fprintf(
+                stderr,
+                "D3D11 smoke: ensure_tc_texture failed for Linear texture\n");
             return 1;
         }
 
@@ -936,14 +965,24 @@ int main() {
         sampled_texture.value.kind = tgfx::BoundResourceKind::SampledTexture;
         sampled_texture.value.texture = texture_gpu;
         sampled_texture.value.sampler = sampler;
-        tgfx::BoundResourceSetStorage resource_set_storage;
-        resource_set_storage.set_resource_layout_token(
-            device->pipeline_resource_layout_token(textured_pipeline));
-        resource_set_storage.append_group(
-            tgfx::ShaderResourceScope::Material, true, &sampled_texture, 1);
-        const tgfx::BoundResourceSetDesc resource_set_desc = resource_set_storage.view();
-        auto resource_set = device->create_bound_resource_set(resource_set_desc);
-        if (!sampler || !resource_set) {
+        const auto create_texture_resource_set =
+            [&](tgfx::TextureHandle texture_handle) {
+                tgfx::BoundResourceBinding binding = sampled_texture;
+                binding.value.texture = texture_handle;
+                tgfx::BoundResourceSetStorage storage;
+                storage.set_resource_layout_token(
+                    device->pipeline_resource_layout_token(textured_pipeline));
+                storage.append_group(
+                    tgfx::ShaderResourceScope::Material,
+                    true,
+                    &binding,
+                    1);
+                return device->create_bound_resource_set(storage.view());
+            };
+        auto resource_set = create_texture_resource_set(texture_gpu);
+        auto linear_resource_set =
+            create_texture_resource_set(linear_texture_gpu);
+        if (!sampler || !resource_set || !linear_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: failed to create sampler/resource set\n");
             return 1;
         }
@@ -953,29 +992,57 @@ int main() {
         attachment.clear_color[2] = 0.0f;
         attachment.clear_color[3] = 1.0f;
         pass.colors[0] = attachment;
-        auto tc_draw_cmd = device->create_command_list();
-        tc_draw_cmd->begin();
-        tc_draw_cmd->begin_render_pass(pass);
-        tc_draw_cmd->bind_pipeline(textured_pipeline);
-        tc_draw_cmd->bind_resource_set(resource_set);
-        tc_draw_cmd->bind_vertex_buffer(0, mesh_gpu.first);
-        tc_draw_cmd->bind_index_buffer(mesh_gpu.second, tgfx::IndexType::Uint32);
-        tc_draw_cmd->draw_indexed(3);
-        tc_draw_cmd->end_render_pass();
-        tc_draw_cmd->end();
-        device->submit(*tc_draw_cmd);
-
-        if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
-            std::fprintf(stderr, "D3D11 smoke: tc resource draw readback failed\n");
+        const auto sample_texture =
+            [&](tgfx::ResourceSetHandle set, float out_rgba[4]) {
+                auto draw_cmd = device->create_command_list();
+                draw_cmd->begin();
+                draw_cmd->begin_render_pass(pass);
+                draw_cmd->bind_pipeline(textured_pipeline);
+                draw_cmd->bind_resource_set(set);
+                draw_cmd->bind_vertex_buffer(0, mesh_gpu.first);
+                draw_cmd->bind_index_buffer(
+                    mesh_gpu.second,
+                    tgfx::IndexType::Uint32);
+                draw_cmd->draw_indexed(3);
+                draw_cmd->end_render_pass();
+                draw_cmd->end();
+                device->submit(*draw_cmd);
+                return device->read_pixel_rgba8(color, 2, 2, out_rgba);
+            };
+        float srgb_rgba[4] = {};
+        float linear_rgba[4] = {};
+        const bool srgb_read_ok = sample_texture(resource_set, srgb_rgba);
+        const bool linear_read_ok =
+            sample_texture(linear_resource_set, linear_rgba);
+        if (!srgb_read_ok || !linear_read_ok) {
+            std::fprintf(
+                stderr,
+                "D3D11 smoke: texture encoding draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.21586f) ||
-            !close_enough(rgba[1], 0.21586f) ||
-            !close_enough(rgba[2], 0.21586f) ||
-            !close_enough(rgba[3], 128.0f / 255.0f)) {
+        const bool srgb_ok =
+            close_enough(srgb_rgba[0], 0.21586f) &&
+            close_enough(srgb_rgba[1], 0.21586f) &&
+            close_enough(srgb_rgba[2], 0.21586f) &&
+            close_enough(srgb_rgba[3], 128.0f / 255.0f);
+        const bool linear_ok =
+            close_enough(linear_rgba[0], 128.0f / 255.0f) &&
+            close_enough(linear_rgba[1], 128.0f / 255.0f) &&
+            close_enough(linear_rgba[2], 128.0f / 255.0f) &&
+            close_enough(linear_rgba[3], 128.0f / 255.0f);
+        if (!srgb_ok || !linear_ok) {
             std::fprintf(stderr,
-                         "D3D11 smoke: unexpected sRGB sample %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         "D3D11 smoke: unexpected mipmapped encoding samples "
+                         "(sRGB %.3f %.3f %.3f %.3f; "
+                         "Linear %.3f %.3f %.3f %.3f)\n",
+                         srgb_rgba[0],
+                         srgb_rgba[1],
+                         srgb_rgba[2],
+                         srgb_rgba[3],
+                         linear_rgba[0],
+                         linear_rgba[1],
+                         linear_rgba[2],
+                         linear_rgba[3]);
             return 1;
         }
 
@@ -1880,6 +1947,7 @@ int main() {
         device->destroy(normal_pipeline);
         device->destroy(normal_fs);
         device->destroy(normal_vs);
+        device->destroy(linear_resource_set);
         device->destroy(resource_set);
         device->destroy(sampler);
         device->destroy(textured_pipeline);

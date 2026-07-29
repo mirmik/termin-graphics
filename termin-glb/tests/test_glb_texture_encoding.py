@@ -10,7 +10,11 @@ from termin.glb.instantiator import (
     _stable_glb_texture_uuid,
 )
 from termin.glb.loader import GLBMaterialData, GLBSceneData, GLBTcTexture
+from termin.default_assets.render.material_asset import _parse_material_content
+from termin.default_assets.render.shader_asset import ShaderAsset
+from termin.default_assets.resource_manager import DefaultResourceManager
 from termin.image import encode_png_rgba8
+from termin.stdlib import stdlib_root
 from tgfx import TextureEncoding
 
 
@@ -282,6 +286,43 @@ def test_collision_lookup_builds_and_reuses_two_native_encodings() -> None:
     assert second[(0, "linear")].uuid == first[(0, "linear")].uuid
     assert first[(0, "srgb")].uuid != first[(0, "linear")].uuid
     assert set(rm.by_name) == {"SharedImage_linear", "SharedImage_srgb"}
+
+
+def test_collision_lookup_binds_native_encodings_to_real_pbr_material() -> None:
+    DefaultResourceManager._reset_for_testing()
+    rm = DefaultResourceManager.instance()
+    shader_path = stdlib_root() / "shaders" / "CookTorrancePBR.shader"
+    shader_asset = ShaderAsset.from_file(shader_path, name="CookTorrancePBR")
+    assert shader_asset.program is not None
+    rm.register_shader_asset(
+        "CookTorrancePBR",
+        shader_asset,
+        source_path=str(shader_path),
+    )
+
+    material_path = stdlib_root() / "materials" / "CookTorrancePBR.material"
+    material, _uuid = _parse_material_content(
+        material_path.read_text(encoding="utf-8"),
+        name="CookTorrancePBR",
+        source_path=str(material_path),
+    )
+    scene = _scene(
+        [_texture(0)],
+        [GLBMaterialData("Conflicting", base_color_texture=0, normal_texture=0)],
+    )
+
+    try:
+        lookup = _build_texture_lookup(rm, scene)
+        _configure_import_material(material, scene.materials[0], lookup)
+
+        albedo = material.textures["u_albedo_texture"]
+        normal = material.textures["u_normal_texture"]
+        assert albedo.uuid == lookup[(0, "srgb")].uuid
+        assert normal.uuid == lookup[(0, "linear")].uuid
+        assert albedo.encoding == TextureEncoding.SRGB
+        assert normal.encoding == TextureEncoding.LINEAR
+    finally:
+        DefaultResourceManager._reset_for_testing()
 
 
 def test_unambiguous_lookup_does_not_add_encoding_to_name_or_uuid() -> None:

@@ -102,7 +102,7 @@ static const char* srgb_sampling_fragment_src = R"(
 layout(set = 0, binding = 0) uniform sampler2D source_texture;
 layout(location = 0) out vec4 FragColor;
 void main() {
-    FragColor = texture(source_texture, vec2(0.5, 0.5));
+    FragColor = textureLod(source_texture, vec2(0.5, 0.5), 1.0);
 }
 )";
 
@@ -716,7 +716,7 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     return pass_ok;
 }
 
-static bool render_srgb_sampling_smoke(tgfx::IRenderDevice& device) {
+static bool render_texture_encoding_sampling_smoke(tgfx::IRenderDevice& device) {
     constexpr uint32_t kSize = 4;
 
     tgfx::ShaderDesc vs_desc;
@@ -761,16 +761,38 @@ static bool render_srgb_sampling_smoke(tgfx::IRenderDevice& device) {
             reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
 
     tgfx::TextureDesc source_desc;
-    source_desc.width = 1;
-    source_desc.height = 1;
+    source_desc.width = 2;
+    source_desc.height = 2;
+    source_desc.mip_levels = 2;
     source_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
     source_desc.usage =
         tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
-    const tgfx::TextureHandle source = device.create_texture(source_desc);
-    const uint8_t encoded_pixel[] = {128, 128, 128, 128};
+    const tgfx::TextureHandle srgb_source = device.create_texture(source_desc);
+    source_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    const tgfx::TextureHandle linear_source = device.create_texture(source_desc);
+    const uint8_t encoded_base[] = {
+        128, 128, 128, 128,
+        128, 128, 128, 128,
+        128, 128, 128, 128,
+        128, 128, 128, 128,
+    };
+    const uint8_t encoded_mip[] = {128, 128, 128, 128};
     device.upload_texture(
-        source,
-        std::span<const uint8_t>(encoded_pixel, sizeof(encoded_pixel)));
+        srgb_source,
+        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
+        0);
+    device.upload_texture(
+        srgb_source,
+        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
+        1);
+    device.upload_texture(
+        linear_source,
+        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
+        0);
+    device.upload_texture(
+        linear_source,
+        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
+        1);
     const tgfx::SamplerHandle sampler = device.create_sampler(tgfx::SamplerDesc{});
 
     tgfx::BackendBindingPlanEntry plan_entry;
@@ -784,21 +806,27 @@ static bool render_srgb_sampling_smoke(tgfx::IRenderDevice& device) {
     plan_entry.placement.vulkan.descriptor_kind =
         tgfx::BackendDescriptorKind::SampledTexture;
 
-    tgfx::BoundResourceValue value;
-    value.kind = tgfx::BoundResourceKind::SampledTexture;
-    value.texture = source;
-    value.sampler = sampler;
-    const tgfx::BoundResourceBinding binding = {
-        tgfx::bound_resource_slot_from_plan_entry(plan_entry),
-        value,
-    };
-    tgfx::BoundResourceSetStorage bound_storage;
-    bound_storage.set_resource_layout_token(
-        device.pipeline_resource_layout_token(pipeline));
-    bound_storage.append_group(
-        tgfx::ShaderResourceScope::Material, true, &binding, 1);
-    const tgfx::ResourceSetHandle resource_set =
-        device.create_bound_resource_set(bound_storage.view());
+    const auto create_resource_set =
+        [&](tgfx::TextureHandle texture) -> tgfx::ResourceSetHandle {
+            tgfx::BoundResourceValue value;
+            value.kind = tgfx::BoundResourceKind::SampledTexture;
+            value.texture = texture;
+            value.sampler = sampler;
+            const tgfx::BoundResourceBinding binding = {
+                tgfx::bound_resource_slot_from_plan_entry(plan_entry),
+                value,
+            };
+            tgfx::BoundResourceSetStorage storage;
+            storage.set_resource_layout_token(
+                device.pipeline_resource_layout_token(pipeline));
+            storage.append_group(
+                tgfx::ShaderResourceScope::Material, true, &binding, 1);
+            return device.create_bound_resource_set(storage.view());
+        };
+    const tgfx::ResourceSetHandle srgb_resource_set =
+        create_resource_set(srgb_source);
+    const tgfx::ResourceSetHandle linear_resource_set =
+        create_resource_set(linear_source);
 
     tgfx::TextureDesc target_desc;
     target_desc.width = kSize;
@@ -808,41 +836,58 @@ static bool render_srgb_sampling_smoke(tgfx::IRenderDevice& device) {
         tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     const tgfx::TextureHandle target = device.create_texture(target_desc);
 
-    auto cmd = device.create_command_list();
-    cmd->begin();
     tgfx::RenderPassDesc pass;
     tgfx::ColorAttachmentDesc color;
     color.texture = target;
     color.load = tgfx::LoadOp::Clear;
     pass.colors.push_back(color);
-    cmd->begin_render_pass(pass);
-    cmd->set_viewport(0, 0, kSize, kSize);
-    cmd->bind_pipeline(pipeline);
-    cmd->bind_resource_set(resource_set);
-    cmd->bind_vertex_buffer(0, vb);
-    cmd->draw(3);
-    cmd->end_render_pass();
-    cmd->end();
-    device.submit(*cmd);
-    device.wait_idle();
+    const auto sample =
+        [&](tgfx::ResourceSetHandle resource_set, float out_pixel[4]) {
+            auto cmd = device.create_command_list();
+            cmd->begin();
+            cmd->begin_render_pass(pass);
+            cmd->set_viewport(0, 0, kSize, kSize);
+            cmd->bind_pipeline(pipeline);
+            cmd->bind_resource_set(resource_set);
+            cmd->bind_vertex_buffer(0, vb);
+            cmd->draw(3);
+            cmd->end_render_pass();
+            cmd->end();
+            device.submit(*cmd);
+            device.wait_idle();
+            return device.read_pixel_rgba8(
+                target, kSize / 2, kSize / 2, out_pixel);
+        };
 
-    float pixel[4] = {};
-    const bool read_ok =
-        device.read_pixel_rgba8(target, kSize / 2, kSize / 2, pixel);
-    const bool pass_ok =
-        read_ok &&
-        std::abs(pixel[0] - 0.21586f) < 0.015f &&
-        std::abs(pixel[1] - 0.21586f) < 0.015f &&
-        std::abs(pixel[2] - 0.21586f) < 0.015f &&
-        std::abs(pixel[3] - 0.50196f) < 0.015f;
+    float srgb_pixel[4] = {};
+    float linear_pixel[4] = {};
+    const bool srgb_read_ok = sample(srgb_resource_set, srgb_pixel);
+    const bool linear_read_ok = sample(linear_resource_set, linear_pixel);
+    const bool srgb_ok =
+        srgb_read_ok &&
+        std::abs(srgb_pixel[0] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[1] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[2] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
+    const bool linear_ok =
+        linear_read_ok &&
+        std::abs(linear_pixel[0] - 0.50196f) < 0.015f &&
+        std::abs(linear_pixel[1] - 0.50196f) < 0.015f &&
+        std::abs(linear_pixel[2] - 0.50196f) < 0.015f &&
+        std::abs(linear_pixel[3] - 0.50196f) < 0.015f;
+    const bool pass_ok = srgb_ok && linear_ok;
     printf(
-        "Vulkan sRGB sampling: %s (%.3f %.3f %.3f %.3f)\n",
+        "Vulkan mipmapped texture encoding sampling: %s "
+        "(sRGB %.3f %.3f %.3f %.3f; Linear %.3f %.3f %.3f %.3f)\n",
         pass_ok ? "ok" : "failed",
-        pixel[0], pixel[1], pixel[2], pixel[3]);
+        srgb_pixel[0], srgb_pixel[1], srgb_pixel[2], srgb_pixel[3],
+        linear_pixel[0], linear_pixel[1], linear_pixel[2], linear_pixel[3]);
 
-    device.destroy(resource_set);
+    device.destroy(linear_resource_set);
+    device.destroy(srgb_resource_set);
     device.destroy(sampler);
-    device.destroy(source);
+    device.destroy(linear_source);
+    device.destroy(srgb_source);
     device.destroy(vb);
     device.destroy(target);
     device.destroy(pipeline);
@@ -1238,9 +1283,10 @@ int main(int argc, char** argv) {
     if (!bound_resource_ok) {
         fprintf(stderr, "Vulkan bound resource set smoke failed\n");
     }
-    const bool srgb_sampling_ok = render_srgb_sampling_smoke(*device);
-    if (!srgb_sampling_ok) {
-        fprintf(stderr, "Vulkan sRGB sampling smoke failed\n");
+    const bool texture_encoding_sampling_ok =
+        render_texture_encoding_sampling_smoke(*device);
+    if (!texture_encoding_sampling_ok) {
+        fprintf(stderr, "Vulkan texture encoding sampling smoke failed\n");
     }
     const bool ordered_mrt_ok = render_ordered_mrt_smoke(*device);
     if (!ordered_mrt_ok) {
@@ -1490,14 +1536,15 @@ int main(int argc, char** argv) {
     device.reset();
 
     printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, "
-           "sRGB sampling: %d, Ordered MRT: %d, Slang artifacts: %d, "
+           "Texture encoding sampling: %d, Ordered MRT: %d, Slang artifacts: %d, "
            "Ring overflow fallback: %d\n",
-           center_drawn, corner_is_blue, bound_resource_ok, srgb_sampling_ok,
+           center_drawn, corner_is_blue, bound_resource_ok,
+           texture_encoding_sampling_ok,
            ordered_mrt_ok,
            slang_artifact_ok,
            ring_ubo_overflow_ok);
     if (center_drawn && corner_is_blue && bound_resource_ok &&
-        srgb_sampling_ok && ordered_mrt_ok &&
+        texture_encoding_sampling_ok && ordered_mrt_ok &&
         slang_artifact_ok &&
         ring_ubo_overflow_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
