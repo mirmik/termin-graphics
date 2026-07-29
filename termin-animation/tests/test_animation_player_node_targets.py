@@ -30,5 +30,5 @@ def test_animation_player_applies_non_bone_node_channel():
 
     player.update_bones_at_time(1.0)
 
-    position = node.global_pose()["lin"]
+    position = node.transform.global_position
     assert tuple(position) == pytest.approx((1.0, 2.0, 3.0))
