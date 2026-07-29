@@ -4,6 +4,7 @@
 #include <string>
 
 extern "C" {
+#include "tgfx/resources/tc_material.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 }
@@ -104,14 +105,21 @@ TEST_CASE("tc_texture registry owns canonical default textures") {
 
     const tc_texture_handle white = tc_texture_get_white_1x1();
     const tc_texture_handle white_again = tc_texture_get_white_1x1();
+    const tc_texture_handle white_srgb = tc_texture_get_white_1x1_srgb();
+    const tc_texture_handle white_srgb_again = tc_texture_get_white_1x1_srgb();
     const tc_texture_handle normal = tc_texture_get_normal_1x1();
     const tc_texture_handle normal_again = tc_texture_get_normal_1x1();
 
     REQUIRE(tc_texture_is_valid(white));
+    REQUIRE(tc_texture_is_valid(white_srgb));
     REQUIRE(tc_texture_is_valid(normal));
     CHECK(tc_texture_handle_eq(white, white_again));
+    CHECK(tc_texture_handle_eq(white_srgb, white_srgb_again));
     CHECK(tc_texture_handle_eq(normal, normal_again));
     CHECK_FALSE(tc_texture_handle_eq(white, normal));
+    CHECK_FALSE(tc_texture_handle_eq(white, white_srgb));
+    CHECK_EQ(tc_texture_get(white)->encoding, TC_TEXTURE_ENCODING_LINEAR);
+    CHECK_EQ(tc_texture_get(white_srgb)->encoding, TC_TEXTURE_ENCODING_SRGB);
 
     const tc_texture* white_texture = tc_texture_get(white);
     const tc_texture* normal_texture = tc_texture_get(normal);
@@ -133,6 +141,7 @@ TEST_CASE("tc_texture registry owns canonical default textures") {
 
     tc_texture_shutdown();
     CHECK_FALSE(tc_texture_is_valid(white));
+    CHECK_FALSE(tc_texture_is_valid(white_srgb));
     CHECK_FALSE(tc_texture_is_valid(normal));
 
     tc_texture_init();
@@ -144,5 +153,28 @@ TEST_CASE("tc_texture registry owns canonical default textures") {
     CHECK_FALSE(tc_texture_handle_eq(normal, next_normal));
     CHECK_FALSE(tc_texture_is_valid(white));
     CHECK_FALSE(tc_texture_is_valid(normal));
+    tc_texture_shutdown();
+}
+
+TEST_CASE("material texture slots reject encoding mismatches transactionally") {
+    tc_texture_init();
+    const tc_texture_handle linear = tc_texture_get_white_1x1();
+    const tc_texture_handle srgb = tc_texture_get_white_1x1_srgb();
+
+    tc_material_phase phase{};
+    REQUIRE(tc_material_phase_declare_texture(
+        &phase, "albedo", TC_TEXTURE_ENCODING_SRGB));
+    CHECK_EQ(phase.texture_count, 1u);
+    CHECK(phase.textures[0].has_expected_encoding != 0);
+    CHECK_EQ(phase.textures[0].expected_encoding, TC_TEXTURE_ENCODING_SRGB);
+
+    REQUIRE(tc_material_phase_set_texture(&phase, "albedo", srgb));
+    const tc_texture_handle previous = phase.textures[0].texture;
+    CHECK_FALSE(tc_material_phase_set_texture(&phase, "albedo", linear));
+    CHECK(tc_texture_handle_eq(phase.textures[0].texture, previous));
+
+    tc_material_phase unchecked{};
+    CHECK(tc_material_phase_set_texture(&unchecked, "manual", linear));
+    CHECK(tc_material_phase_set_texture(&unchecked, "manual", srgb));
     tc_texture_shutdown();
 }

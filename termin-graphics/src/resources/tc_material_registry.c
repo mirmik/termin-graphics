@@ -1,6 +1,7 @@
 // tc_material_registry.c - Material registry with pool + hash table
 #include "tgfx/resources/tc_material_registry.h"
 #include "tgfx/resources/tc_shader_registry.h"
+#include "tgfx/resources/tc_texture_registry.h"
 #include <tcbase/tc_pool.h>
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_registry_utils.h>
@@ -456,6 +457,9 @@ bool tc_material_phase_set_texture(
     tc_texture_handle texture
 ) {
     if (!phase || !name) return false;
+    if (!tc_material_phase_accepts_texture(phase, name, texture)) {
+        return false;
+    }
 
     tc_material_texture* tex = tc_material_phase_find_texture(phase, name);
     if (!tex) {
@@ -464,9 +468,119 @@ bool tc_material_phase_set_texture(
         }
         tex = &phase->textures[phase->texture_count++];
         strncpy(tex->name, name, TC_UNIFORM_NAME_MAX - 1);
+        tex->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
     }
 
     tex->texture = texture;
+    return true;
+}
+
+bool tc_material_phase_declare_texture(
+    tc_material_phase* phase,
+    const char* name,
+    tc_texture_encoding expected_encoding
+) {
+    if (!phase || !name || name[0] == '\0') {
+        tc_log(TC_LOG_ERROR, "tc_material_phase_declare_texture: phase and name are required");
+        return false;
+    }
+    if (expected_encoding != TC_TEXTURE_ENCODING_LINEAR
+        && expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_phase_declare_texture: unsupported encoding %u for slot '%s'",
+            (unsigned)expected_encoding,
+            name);
+        return false;
+    }
+
+    tc_material_texture* slot = tc_material_phase_find_texture(phase, name);
+    if (!slot) {
+        if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_material_phase_declare_texture: texture slot capacity exceeded for '%s'",
+                name);
+            return false;
+        }
+        slot = &phase->textures[phase->texture_count++];
+        memset(slot, 0, sizeof(*slot));
+        slot->texture = tc_texture_handle_invalid();
+        strncpy(slot->name, name, TC_UNIFORM_NAME_MAX - 1);
+        slot->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
+    } else if (
+        slot->has_expected_encoding
+        && slot->expected_encoding != (uint8_t)expected_encoding) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_phase_declare_texture: conflicting encoding contract for slot '%s'",
+            name);
+        return false;
+    }
+
+    if (!tc_texture_handle_is_invalid(slot->texture)) {
+        tc_texture* texture = tc_texture_get(slot->texture);
+        if (!texture || texture->encoding != (uint8_t)expected_encoding) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_material_phase_declare_texture: existing texture for slot '%s' "
+                "does not match encoding %u",
+                name,
+                (unsigned)expected_encoding);
+            return false;
+        }
+    }
+
+    slot->has_expected_encoding = 1;
+    slot->expected_encoding = (uint8_t)expected_encoding;
+    return true;
+}
+
+bool tc_material_phase_accepts_texture(
+    const tc_material_phase* phase,
+    const char* name,
+    tc_texture_handle texture
+) {
+    if (!phase || !name || name[0] == '\0') return false;
+    const tc_material_texture* slot = NULL;
+    for (size_t i = 0; i < phase->texture_count; ++i) {
+        if (strcmp(phase->textures[i].name, name) == 0) {
+            slot = &phase->textures[i];
+            break;
+        }
+    }
+    if (!slot) {
+        if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_material_phase_set_texture: texture slot capacity exceeded for '%s'",
+                name);
+            return false;
+        }
+        return true;
+    }
+    if (!slot->has_expected_encoding || tc_texture_handle_is_invalid(texture)) {
+        return true;
+    }
+
+    const tc_texture* candidate = tc_texture_get(texture);
+    if (!candidate) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_phase_set_texture: stale texture handle for slot '%s'",
+            name);
+        return false;
+    }
+    if (candidate->encoding != slot->expected_encoding) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_phase_set_texture: slot '%s' expects %s but texture '%s' is %s",
+            name,
+            slot->expected_encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear",
+            candidate->header.name ? candidate->header.name : candidate->header.uuid,
+            candidate->encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear");
+        return false;
+    }
     return true;
 }
 
@@ -533,15 +647,62 @@ void tc_material_set_uniform(
     // Note: uniforms are per-frame values, don't bump version
 }
 
-void tc_material_set_texture(
+size_t tc_material_set_texture(
     tc_material* mat,
     const char* name,
     tc_texture_handle texture
 ) {
-    if (!mat || !name) return;
+    if (!mat || !name || mat->phase_count == 0) return 0;
+
+    bool has_declared_schema = false;
+    bool target_is_declared = false;
+    for (size_t phase_index = 0; phase_index < mat->phase_count; ++phase_index) {
+        const tc_material_phase* phase = &mat->phases[phase_index];
+        for (size_t slot_index = 0; slot_index < phase->texture_count; ++slot_index) {
+            const tc_material_texture* slot = &phase->textures[slot_index];
+            if (!slot->has_expected_encoding) continue;
+            has_declared_schema = true;
+            if (strcmp(slot->name, name) == 0) {
+                target_is_declared = true;
+            }
+        }
+    }
+    if (has_declared_schema && !target_is_declared) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_set_texture: slot '%s' is not present in canonical schema",
+            name);
+        return 0;
+    }
+
+    bool has_material_slot = false;
+    for (size_t i = 0; i < mat->texture_handle_count; ++i) {
+        if (strcmp(mat->texture_handles[i].name, name) == 0) {
+            has_material_slot = true;
+            break;
+        }
+    }
+    if (!has_material_slot && mat->texture_handle_count >= TC_MATERIAL_MAX_TEXTURES) {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_set_texture: inspector texture slot capacity exceeded for '%s'",
+            name);
+        return 0;
+    }
 
     for (size_t i = 0; i < mat->phase_count; i++) {
-        tc_material_phase_set_texture(&mat->phases[i], name, texture);
+        if (!tc_material_phase_accepts_texture(&mat->phases[i], name, texture)) {
+            return 0;
+        }
+    }
+    for (size_t i = 0; i < mat->phase_count; i++) {
+        if (!tc_material_phase_set_texture(&mat->phases[i], name, texture)) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_material_set_texture: failed to bind slot '%s' after validation",
+                name);
+            return 0;
+        }
     }
 
     tc_material_texture* th = NULL;
@@ -553,13 +714,16 @@ void tc_material_set_texture(
     }
     if (!th && mat->texture_handle_count < TC_MATERIAL_MAX_TEXTURES) {
         th = &mat->texture_handles[mat->texture_handle_count++];
+        memset(th, 0, sizeof(*th));
         strncpy(th->name, name, TC_UNIFORM_NAME_MAX - 1);
+        th->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
     }
     if (th) {
         th->texture = texture;
     }
 
     mat->header.version++;
+    return mat->phase_count;
 }
 
 bool tc_material_get_color(

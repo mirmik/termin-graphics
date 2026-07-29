@@ -294,18 +294,14 @@ public:
         }
     }
 
-    void set_texture(const char* name, TcTexture& tex) {
+    size_t set_texture(const char* name, TcTexture& tex) {
         tc_material* m = get();
-        if (m) {
-            tc_material_set_texture(m, name, tex.handle);
-        }
+        return m ? tc_material_set_texture(m, name, tex.handle) : 0;
     }
 
-    void set_texture(const char* name, tc_texture_handle tex_handle) {
+    size_t set_texture(const char* name, tc_texture_handle tex_handle) {
         tc_material* m = get();
-        if (m) {
-            tc_material_set_texture(m, name, tex_handle);
-        }
+        return m ? tc_material_set_texture(m, name, tex_handle) : 0;
     }
 
     const char* active_phase_mark() const {

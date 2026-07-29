@@ -10,9 +10,13 @@ from __future__ import annotations
 from tgfx import TcTexture
 
 
-def get_white_texture_handle() -> TcTexture:
-    """Return the canonical white 1x1 texture from the C registry."""
-    return TcTexture.white_1x1()
+def get_white_texture_handle(encoding: str = "linear") -> TcTexture:
+    """Return the canonical white 1x1 texture for the requested encoding."""
+    if encoding == "linear":
+        return TcTexture.white_1x1()
+    if encoding == "srgb":
+        return TcTexture.white_1x1_srgb()
+    raise ValueError("white texture encoding must be 'srgb' or 'linear'")
 
 
 def get_normal_texture_handle() -> TcTexture:

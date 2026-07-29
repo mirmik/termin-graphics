@@ -5,6 +5,7 @@ from tgfx import TcTexture
 
 def test_default_texture_helpers_return_tc_texture() -> None:
     white = get_white_texture_handle()
+    white_srgb = get_white_texture_handle("srgb")
     normal = get_normal_texture_handle()
 
     assert isinstance(white, TcTexture)
@@ -12,6 +13,8 @@ def test_default_texture_helpers_return_tc_texture() -> None:
     assert white.is_valid
     assert normal.is_valid
     assert white.uuid == "__white_1x1__"
+    assert white_srgb.uuid == "__white_srgb_1x1__"
+    assert white_srgb.uuid != white.uuid
     assert normal.uuid == "__normal_1x1__"
 
 

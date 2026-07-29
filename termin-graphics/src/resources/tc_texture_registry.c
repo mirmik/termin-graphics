@@ -210,7 +210,8 @@ tc_texture_handle tc_texture_get_or_create(const char* uuid) {
 
 static tc_texture_handle tc_texture_get_builtin_rgba8(
     const char* uuid,
-    const uint8_t pixel[4]
+    const uint8_t pixel[4],
+    tc_texture_encoding encoding
 ) {
     tc_texture_handle handle = tc_texture_find(uuid);
     if (!tc_texture_handle_is_invalid(handle)) {
@@ -232,17 +233,31 @@ static tc_texture_handle tc_texture_get_builtin_rgba8(
         return tc_texture_handle_invalid();
     }
     tc_texture_set_transforms(texture, false, false, false);
+    if (!tc_texture_set_encoding(texture, encoding)) {
+        tc_log(TC_LOG_ERROR,
+               "tc_texture: failed to set built-in texture '%s' encoding", uuid);
+        tc_texture_destroy(handle);
+        return tc_texture_handle_invalid();
+    }
     return handle;
 }
 
 tc_texture_handle tc_texture_get_white_1x1(void) {
     static const uint8_t pixel[4] = {255, 255, 255, 255};
-    return tc_texture_get_builtin_rgba8("__white_1x1__", pixel);
+    return tc_texture_get_builtin_rgba8(
+        "__white_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
+}
+
+tc_texture_handle tc_texture_get_white_1x1_srgb(void) {
+    static const uint8_t pixel[4] = {255, 255, 255, 255};
+    return tc_texture_get_builtin_rgba8(
+        "__white_srgb_1x1__", pixel, TC_TEXTURE_ENCODING_SRGB);
 }
 
 tc_texture_handle tc_texture_get_normal_1x1(void) {
     static const uint8_t pixel[4] = {128, 128, 255, 255};
-    return tc_texture_get_builtin_rgba8("__normal_1x1__", pixel);
+    return tc_texture_get_builtin_rgba8(
+        "__normal_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
 }
 
 // ============================================================================

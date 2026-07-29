@@ -402,6 +402,13 @@ TcMaterial create_material_from_parsed(
     TcTexture normal_tex = optional_tc_texture(
         options.default_normal_texture,
         "create_material_from_parsed(default_normal_texture)");
+    if (!white_tex.is_valid()) {
+        white_tex = TcTexture::white_1x1();
+    }
+    if (!normal_tex.is_valid()) {
+        normal_tex = TcTexture::normal_1x1();
+    }
+    TcTexture srgb_white_tex = TcTexture::white_1x1_srgb();
 
     for (const auto& shader_phase : program.phases) {
         // Get shader sources from stages
@@ -540,24 +547,46 @@ TcMaterial create_material_from_parsed(
             }
         }
 
-        // Set default textures
+        // Declare encoding-checked slots and set symbolic defaults.
         for (const auto& prop : shader_uniforms) {
             if (prop.property_type == "Texture") {
+                if (!prop.expected_texture_encoding.has_value()) {
+                    throw std::runtime_error(
+                        "Texture property '" + prop.name + "' has no encoding contract");
+                }
+                const tc_texture_encoding expected = tgfx::to_tc_texture_encoding(
+                    *prop.expected_texture_encoding);
+                if (!tc_material_phase_declare_texture(
+                        phase, prop.name.c_str(), expected)) {
+                    throw std::runtime_error(
+                        "Failed to declare texture property '" + prop.name + "'");
+                }
+
+                std::string default_tex_name = "white";
                 if (std::holds_alternative<std::string>(prop.default_value)) {
-                    const std::string& default_tex_name = std::get<std::string>(prop.default_value);
-                    if (default_tex_name == "normal") {
-                        if (normal_tex.is_valid()) {
-                            tc_material_phase_set_texture(phase, prop.name.c_str(), normal_tex.handle);
-                        }
-                    } else {
-                        if (white_tex.is_valid()) {
-                            tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
-                        }
-                    }
-                } else {
-                    if (white_tex.is_valid()) {
-                        tc_material_phase_set_texture(phase, prop.name.c_str(), white_tex.handle);
-                    }
+                    default_tex_name = std::get<std::string>(prop.default_value);
+                }
+                if (default_tex_name != "white" && default_tex_name != "normal") {
+                    throw std::runtime_error(
+                        "Texture property '" + prop.name
+                        + "' has unsupported default '" + default_tex_name + "'");
+                }
+                if (default_tex_name == "normal"
+                    && expected != TC_TEXTURE_ENCODING_LINEAR) {
+                    throw std::runtime_error(
+                        "Texture property '" + prop.name
+                        + "' cannot use normal default with sRGB encoding");
+                }
+
+                TcTexture& default_texture = default_tex_name == "normal"
+                    ? normal_tex
+                    : (expected == TC_TEXTURE_ENCODING_SRGB
+                        ? srgb_white_tex : white_tex);
+                if (default_texture.is_valid()
+                    && !tc_material_phase_set_texture(
+                        phase, prop.name.c_str(), default_texture.handle)) {
+                    throw std::runtime_error(
+                        "Failed to bind default texture for '" + prop.name + "'");
                 }
             }
         }
@@ -570,10 +599,16 @@ TcMaterial create_material_from_parsed(
                 nb::object val = nb::borrow<nb::object>(item.second);
                 if (nb::isinstance<TcTexture>(val)) {
                     TcTexture tex = nb::cast<TcTexture>(val);
-                    tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
+                    if (!tc_material_phase_set_texture(phase, key.c_str(), tex.handle)) {
+                        throw std::runtime_error(
+                            "Texture '" + key + "' violates its encoding contract");
+                    }
                 } else {
                     TcTexture tex = require_tc_texture(val, "create_material_from_parsed(textures)");
-                    tc_material_phase_set_texture(phase, key.c_str(), tex.handle);
+                    if (!tc_material_phase_set_texture(phase, key.c_str(), tex.handle)) {
+                        throw std::runtime_error(
+                            "Texture '" + key + "' violates its encoding contract");
+                    }
                 }
             }
         }
@@ -782,8 +817,22 @@ void bind_tc_material(nb::module_& m) {
             tc_material_phase_set_uniform(&p, name, TC_UNIFORM_VEC4, arr);
         })
         .def("set_texture", [](tc_material_phase& p, const char* name, TcTexture& tex) {
-            tc_material_phase_set_texture(&p, name, tex.handle);
+            return tc_material_phase_set_texture(&p, name, tex.handle);
         })
+        .def("declare_texture", [](tc_material_phase& p, const char* name, const std::string& encoding) {
+            tc_texture_encoding expected;
+            if (encoding == "srgb") {
+                expected = TC_TEXTURE_ENCODING_SRGB;
+            } else if (encoding == "linear") {
+                expected = TC_TEXTURE_ENCODING_LINEAR;
+            } else {
+                throw nb::value_error("texture slot encoding must be 'srgb' or 'linear'");
+            }
+            if (!tc_material_phase_declare_texture(&p, name, expected)) {
+                throw std::runtime_error(
+                    "failed to declare texture slot '" + std::string(name) + "'");
+            }
+        }, nb::arg("name"), nb::arg("expected_encoding"))
         .def("set_color", [](tc_material_phase& p, float r, float g, float b, float a) {
             tc_material_phase_set_color(&p, r, g, b, a);
         })
@@ -1192,22 +1241,9 @@ void bind_tc_material(nb::module_& m) {
             self.set_uniform_mat4(name, mat.to_float());
         })
         .def("set_texture", [](TcMaterial& self, const char* name, TcTexture& tex) -> size_t {
-            size_t applied = 0;
-            for (size_t i = 0; i < self.phase_count(); i++) {
-                tc_material_phase* phase = self.get_phase(i);
-                if (!phase || !tc_material_phase_find_texture(phase, name)) {
-                    continue;
-                }
-                if (tc_material_phase_set_texture(phase, name, tex.handle)) {
-                    applied++;
-                }
-            }
-            if (applied > 0) {
-                self.bump_version();
-            }
-            return applied;
+            return self.set_texture(name, tex);
         }, nb::arg("name"), nb::arg("texture"),
-           "Set a material texture on phases that already expose the texture slot.")
+           "Set a material texture transactionally across all phases.")
         // Phase access
         .def_prop_rw("active_phase_mark",
             &TcMaterial::active_phase_mark,

@@ -134,6 +134,8 @@ typedef struct tc_uniform_value {
 typedef struct tc_material_texture {
     char name[TC_UNIFORM_NAME_MAX];  // uniform name (e.g., "u_albedo")
     tc_texture_handle texture;
+    uint8_t has_expected_encoding;
+    uint8_t expected_encoding;       // tc_texture_encoding
 } tc_material_texture;
 
 // ============================================================================
@@ -244,6 +246,22 @@ TGFX_API bool tc_material_phase_set_texture(
     tc_texture_handle texture
 );
 
+// Declare an encoding-checked canonical texture slot without assigning a
+// texture. Repeating the same declaration is idempotent; conflicting schema
+// or an already-bound incompatible texture is rejected.
+TGFX_API bool tc_material_phase_declare_texture(
+    tc_material_phase* phase,
+    const char* name,
+    tc_texture_encoding expected_encoding
+);
+
+// Check a prospective binding without mutating the phase.
+TGFX_API bool tc_material_phase_accepts_texture(
+    const tc_material_phase* phase,
+    const char* name,
+    tc_texture_handle texture
+);
+
 // Get color (u_color uniform) from phase
 TGFX_API bool tc_material_phase_get_color(
     const tc_material_phase* phase,
@@ -279,8 +297,10 @@ TGFX_API void tc_material_set_uniform(
     const void* value
 );
 
-// Set texture on all phases and store handle for inspector
-TGFX_API void tc_material_set_texture(
+// Set texture on all phases and store handle for inspector. The operation is
+// transactional with respect to encoding validation: zero means rejection or
+// no phases, otherwise the return value is the number of updated phases.
+TGFX_API size_t tc_material_set_texture(
     tc_material* mat,
     const char* name,
     tc_texture_handle texture

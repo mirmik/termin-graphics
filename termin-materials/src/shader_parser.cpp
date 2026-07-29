@@ -906,6 +906,18 @@ static MaterialProperty parse_typed_uniform_directive(
     } else {
         default_value = get_default_for_type(property_type);
     }
+    if (is_texture && std::holds_alternative<std::string>(default_value)) {
+        const std::string& default_name = std::get<std::string>(default_value);
+        if (default_name != "white" && default_name != "normal") {
+            throw std::runtime_error(
+                "Texture2D property default must be \"white\" or \"normal\": " + line);
+        }
+        if (default_name == "normal"
+            && expected_texture_encoding != tgfx::TextureEncoding::Linear) {
+            throw std::runtime_error(
+                "Texture2D property default \"normal\" requires encoding(linear): " + line);
+        }
+    }
 
     return MaterialProperty(
         name,

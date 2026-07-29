@@ -215,6 +215,14 @@ def test_parse_property_directive_texture2d():
             "encoding(srgb) encoding(linear)",
             "Duplicate encoding",
         ),
+        (
+            '@property Texture2D u_albedo = "checker" encoding(srgb)',
+            "default must be",
+        ),
+        (
+            '@property Texture2D u_normal = "normal" encoding(srgb)',
+            "normal.*encoding\\(linear\\)",
+        ),
     ],
 )
 def test_parse_property_directive_rejects_invalid_encoding_contract(
@@ -320,7 +328,7 @@ def test_shader_interface_compare_separates_source_from_inputs():
         "@language slang",
         "@phase main",
         "@property Texture2D u_input_tex = \"white\" encoding(srgb)",
-        "@property Texture2D u_depth_texture = \"depth_default\" encoding(linear)",
+        "@property Texture2D u_depth_texture = \"white\" encoding(linear)",
         "@stage fragment",
         "[shader(\"fragment\")] float4 main(float2 uv : TEXCOORD0) : SV_Target0 { return u_input_tex.Sample(uv) + u_depth_texture.Sample(uv); }",
         "@endstage",

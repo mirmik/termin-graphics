@@ -227,6 +227,9 @@ public:
     // Create 1x1 white texture
     static TcTexture white_1x1();
 
+    // Create 1x1 sRGB-encoded white texture.
+    static TcTexture white_1x1_srgb();
+
     // Create 1x1 flat tangent-space normal texture
     static TcTexture normal_1x1();
 

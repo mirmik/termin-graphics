@@ -173,7 +173,7 @@ def _default_texture(texture_data: TcTexture, name: str) -> Texture:
     return texture
 
 
-def get_white_texture() -> Texture:
+def get_white_texture(encoding: str = "linear") -> Texture:
     """
     Returns a white 1x1 texture.
 
@@ -183,7 +183,8 @@ def get_white_texture() -> Texture:
     """
     from termin.render.texture_handle import get_white_texture_handle
 
-    return _default_texture(get_white_texture_handle(), "__white_1x1__")
+    name = "__white_srgb_1x1__" if encoding == "srgb" else "__white_1x1__"
+    return _default_texture(get_white_texture_handle(encoding), name)
 
 
 def get_normal_texture() -> Texture:

@@ -28,6 +28,7 @@ TGFX_API tc_texture_handle tc_texture_get_or_create(const char* uuid);
 // subsequent calls. The registry owns their storage and releases it during
 // tc_texture_shutdown().
 TGFX_API tc_texture_handle tc_texture_get_white_1x1(void);
+TGFX_API tc_texture_handle tc_texture_get_white_1x1_srgb(void);
 TGFX_API tc_texture_handle tc_texture_get_normal_1x1(void);
 TGFX_API tc_texture_handle tc_texture_declare(const char* uuid, const char* name);
 TGFX_API bool tc_texture_is_loaded(tc_texture_handle h);

@@ -340,6 +340,27 @@ static bool build_properties(
         }
         output->has_expected_encoding = input->has_expected_encoding;
         output->expected_encoding = input->expected_encoding;
+        if (is_texture && output->has_default) {
+            if (output->default_text[0] == '\0'
+                || (strcmp(output->default_text, "white") != 0
+                    && strcmp(output->default_text, "normal") != 0)) {
+                tc_log_error(
+                    "tc_shader_program_set_payload: texture property '%s' "
+                    "default must be 'white' or 'normal'",
+                    output->name);
+                free(properties);
+                return false;
+            }
+            if (strcmp(output->default_text, "normal") == 0
+                && output->expected_encoding != TC_TEXTURE_ENCODING_LINEAR) {
+                tc_log_error(
+                    "tc_shader_program_set_payload: texture property '%s' "
+                    "normal default requires Linear encoding",
+                    output->name);
+                free(properties);
+                return false;
+            }
+        }
     }
     *out_properties = properties;
     return true;

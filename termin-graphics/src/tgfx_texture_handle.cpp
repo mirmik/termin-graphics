@@ -101,6 +101,10 @@ TcTexture TcTexture::white_1x1() {
     return TcTexture(tc_texture_get_white_1x1());
 }
 
+TcTexture TcTexture::white_1x1_srgb() {
+    return TcTexture(tc_texture_get_white_1x1_srgb());
+}
+
 TcTexture TcTexture::normal_1x1() {
     return TcTexture(tc_texture_get_normal_1x1());
 }
