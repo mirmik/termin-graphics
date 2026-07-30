@@ -93,6 +93,18 @@ invalidates the reference. GUI-native does not define a second graphic-item
 reference or scene wrapper: `SceneView` accepts the same shared
 `TcVisualScene` directly.
 
+The public C boundary in `tc_visual_scene_item2d.h` exposes common
+generation-handle operations for topology, transforms, presentation, bounds
+and clips. `tc_builtin_items2d.h` provides concrete factories and mutations
+for native Group, Rect, Path, Text, Image and HitRegion items. Factories belong
+to those concrete types; there is no closed scene-level type enumeration.
+
+`Termin.Native` mirrors this contract with non-owning typed
+`GraphicItemRef2D` wrappers. `TcVisualScene2D` explicitly owns the native
+scene; disposing it invalidates all existing item wrappers. Built-in bodies,
+painting and resource access remain native. User-defined language-owned item
+bodies are intentionally deferred to task `#1107`.
+
 Serialization, detached inspection, state RPC and scene snapshots are not
 responsibilities of this module. A domain that needs a serializable document
 or immutable data snapshot owns that representation above the visual scene.

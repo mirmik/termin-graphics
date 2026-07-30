@@ -10,6 +10,15 @@
 
 namespace {
 
+class RetainedBatch final : public tgfx::RetainedDrawBatch2D {
+public:
+    bool draw(
+        tgfx::RenderContext2&,
+        const tgfx::RetainedDrawState2D&) override {
+        return true;
+    }
+};
+
 tgfx::Path2f make_path() {
     tgfx::Path2f path;
     assert(path.move_to({0, 0}));
@@ -50,6 +59,7 @@ tgfx::DrawList2D make_list() {
         {{0, 0}, {0, 0}}, {{10, 0}, {1, 0}}, {{0, 10}, {0, 1}}};
     assert(builder.custom_batch(
         triangle, {1, 0, 0, 1}, tgfx::TextureHandle{29}));
+    assert(builder.retained_batch(std::make_shared<RetainedBatch>()));
 
     assert(builder.pop_clip());
     assert(builder.pop_transform());
@@ -93,6 +103,9 @@ std::string fingerprint(const tgfx::DrawList2D& list) {
         } else if (const auto* custom =
                        std::get_if<tgfx::DrawCustomBatch2D>(&command)) {
             out << custom->vertices.size() << ',' << custom->texture.id;
+        } else if (const auto* retained =
+                       std::get_if<tgfx::DrawRetainedBatch2D>(&command)) {
+            out << static_cast<bool>(retained->batch);
         }
         out << ';';
     }
@@ -107,7 +120,7 @@ int main() {
 
     const auto first = make_list();
     const auto second = make_list();
-    assert(first.size() == 18);
+    assert(first.size() == 19);
     assert(fingerprint(first) == fingerprint(second));
 
     // A sheared transform remains exact and the nested clips remain paths;
@@ -128,10 +141,13 @@ int main() {
     const auto* image =
         std::get_if<tgfx::DrawImage2D>(&first.commands()[11]);
     const auto* custom =
-        std::get_if<tgfx::DrawCustomBatch2D>(&first.commands()[12]);
+                       std::get_if<tgfx::DrawCustomBatch2D>(&first.commands()[12]);
+    const auto* retained =
+        std::get_if<tgfx::DrawRetainedBatch2D>(&first.commands()[13]);
     assert(text && text->text == "frozen text" && text->font.id == 17);
     assert(image && image->texture.id == 23);
     assert(custom && custom->vertices.size() == 3);
+    assert(retained && retained->batch);
 
     // Appending a frozen list copies its immutable commands into the current
     // state scopes. This is how adapters apply camera transforms without

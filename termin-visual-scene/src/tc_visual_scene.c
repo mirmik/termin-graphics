@@ -444,23 +444,72 @@ size_t tc_visual_scene_copy_items(
     }
     const size_t count = tc_pool_count(&scene->items);
     size_t written = 0;
-    for (uint32_t index = 0;
-         index < scene->items.capacity &&
-         written < capacity;
-         ++index) {
-        if (scene->items.states[index] !=
-            TC_SLOT_OCCUPIED) {
-            continue;
+    uint64_t previous_order = 0;
+    while (written < capacity && written < count) {
+        const tc_graphic_item* next = NULL;
+        for (uint32_t index = 0;
+             index < scene->items.capacity;
+             ++index) {
+            if (scene->items.states[index] != TC_SLOT_OCCUPIED) continue;
+            const tc_handle local = {
+                index,
+                scene->items.generations[index],
+            };
+            const tc_graphic_item_slot* slot =
+                slot_for_const(scene, local);
+            const tc_graphic_item* candidate =
+                slot != NULL ? slot->item : NULL;
+            if (candidate != NULL &&
+                candidate->stable_order > previous_order &&
+                (next == NULL ||
+                 candidate->stable_order < next->stable_order)) {
+                next = candidate;
+            }
         }
-        const tc_handle local = {
-            index,
-            scene->items.generations[index],
-        };
-        const tc_graphic_item_slot* slot =
-            slot_for_const(scene, local);
-        if (slot != NULL && slot->item != NULL) {
-            out_items[written++] = slot->item;
+        if (next == NULL) break;
+        out_items[written++] = (tc_graphic_item*)next;
+        previous_order = next->stable_order;
+    }
+    return count;
+}
+
+size_t tc_visual_scene_copy_item_handles(
+    tc_visual_scene_handle scene_handle,
+    tc_graphic_item_handle* out_handles,
+    size_t capacity)
+{
+    const tc_visual_scene* scene = resolve_scene(scene_handle);
+    if (scene == NULL ||
+        (out_handles == NULL && capacity != 0)) {
+        return 0;
+    }
+    const size_t count = tc_pool_count(&scene->items);
+    size_t written = 0;
+    uint64_t previous_order = 0;
+    while (written < capacity && written < count) {
+        const tc_graphic_item* next = NULL;
+        for (uint32_t index = 0;
+             index < scene->items.capacity;
+             ++index) {
+            if (scene->items.states[index] != TC_SLOT_OCCUPIED) continue;
+            const tc_handle local = {
+                index,
+                scene->items.generations[index],
+            };
+            const tc_graphic_item_slot* slot =
+                slot_for_const(scene, local);
+            const tc_graphic_item* candidate =
+                slot != NULL ? slot->item : NULL;
+            if (candidate != NULL &&
+                candidate->stable_order > previous_order &&
+                (next == NULL ||
+                 candidate->stable_order < next->stable_order)) {
+                next = candidate;
+            }
         }
+        if (next == NULL) break;
+        out_handles[written++] = next->handle;
+        previous_order = next->stable_order;
     }
     return count;
 }

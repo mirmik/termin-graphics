@@ -51,6 +51,10 @@ set(TCPLOT_SOURCES
     src/orbit_camera.cpp
     src/plot_data.cpp
     src/plot_frame2d.cpp
+    src/plot_projection2d.cpp
+    src/plot_grid_item2d.cpp
+    src/plot_series_item2d.cpp
+    src/plot_layout2d.cpp
     src/plot_annotations2d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
@@ -107,6 +111,41 @@ if(TERMIN_BUILD_TESTS)
     add_test(NAME tcplot_plot_frame2d_test
         COMMAND tcplot_plot_frame2d_test)
 
+    add_executable(tcplot_plot_projection2d_test
+        tests/test_plot_projection2d.cpp)
+    target_link_libraries(tcplot_plot_projection2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_projection2d_test)
+    add_test(NAME tcplot_plot_projection2d_test
+        COMMAND tcplot_plot_projection2d_test)
+
+    add_executable(tcplot_plot_grid_item2d_test
+        tests/test_plot_grid_item2d.cpp)
+    target_link_libraries(tcplot_plot_grid_item2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_grid_item2d_test)
+    add_test(NAME tcplot_plot_grid_item2d_test
+        COMMAND tcplot_plot_grid_item2d_test)
+
+    add_executable(tcplot_plot_series_item2d_test
+        tests/test_plot_series_item2d.cpp)
+    target_link_libraries(tcplot_plot_series_item2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_series_item2d_test)
+    add_test(NAME tcplot_plot_series_item2d_test
+        COMMAND tcplot_plot_series_item2d_test)
+
+    add_executable(tcplot_plot_layout2d_test
+        tests/test_plot_layout2d.cpp)
+    target_link_libraries(tcplot_plot_layout2d_test PRIVATE
+        tcplot)
+    target_compile_definitions(tcplot_plot_layout2d_test PRIVATE
+        TCPLOT_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+        TCPLOT_TEST_FONT_ALT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Contrib/imgui/misc/fonts/Roboto-Medium.ttf")
+    termin_set_rpath_test(tcplot_plot_layout2d_test)
+    add_test(NAME tcplot_plot_layout2d_test
+        COMMAND tcplot_plot_layout2d_test)
+
     add_executable(tcplot_plot_annotations2d_test
         tests/test_plot_annotations2d.cpp)
     target_link_libraries(tcplot_plot_annotations2d_test PRIVATE
@@ -116,6 +155,25 @@ if(TERMIN_BUILD_TESTS)
         COMMAND tcplot_plot_annotations2d_test)
 
     if(TARGET termin_shaderc)
+        add_executable(tcplot_plot_series_performance_test
+            tests/test_plot_series_performance.cpp)
+        target_link_libraries(tcplot_plot_series_performance_test PRIVATE
+            tcplot)
+        target_compile_definitions(tcplot_plot_series_performance_test PRIVATE
+            TCPLOT_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+        add_dependencies(tcplot_plot_series_performance_test termin_shaderc)
+        termin_set_rpath_test(tcplot_plot_series_performance_test)
+        add_test(NAME tcplot_plot_series_performance_test
+            COMMAND tcplot_plot_series_performance_test)
+        set_tests_properties(tcplot_plot_series_performance_test PROPERTIES
+            SKIP_RETURN_CODE 77
+            TIMEOUT 30
+            ENVIRONMENT
+                "TERMIN_SHADERC=$<TARGET_FILE:termin_shaderc>;TERMIN_BUILTIN_SHADER_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../termin-graphics/resources/builtin_shaders")
+        termin_add_test_labels(
+            tcplot_plot_series_performance_test
+            "termin:capability:vulkan")
+
         add_executable(tcplot_plot_marker_offscreen_test
             tests/test_plot_marker_offscreen.cpp)
         target_link_libraries(tcplot_plot_marker_offscreen_test PRIVATE

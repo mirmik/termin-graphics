@@ -262,6 +262,16 @@ bool DrawList2DBuilder::custom_batch(
     return true;
 }
 
+bool DrawList2DBuilder::retained_batch(
+    std::shared_ptr<RetainedDrawBatch2D> batch) {
+    if (!batch) {
+        tc::Log::error("[DrawList2DBuilder] null retained batch rejected");
+        return false;
+    }
+    commands_.emplace_back(DrawRetainedBatch2D{std::move(batch)});
+    return true;
+}
+
 std::optional<DrawList2D> DrawList2DBuilder::freeze() {
     if (!scopes_.empty()) {
         tc::Log::error("[DrawList2DBuilder] cannot freeze unbalanced state scopes");
