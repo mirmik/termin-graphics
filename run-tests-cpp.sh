@@ -255,15 +255,21 @@ if [[ "${#CTEST_BUILD_TARGETS[@]}" -eq 0 ]]; then
     exit 1
 fi
 echo "Building ${#CTEST_BUILD_TARGETS[@]} selected CTest target(s)"
-if [[ "$TERMIN_BUILD_WINDOW_TESTS" == "ON" ]]; then
-    CMAKE_TEST_TARGET=termin_native_tests_with_window
-else
-    CMAKE_TEST_TARGET=termin_native_tests
-fi
 if ! cmake --build "$BUILD_DIR" \
-    --target "$CMAKE_TEST_TARGET" \
+    --target "${CTEST_BUILD_TARGETS[@]}" \
     --parallel "$BUILD_JOBS"; then
     echo "ERROR: C++ test build failed" >&2
+    exit 1
+fi
+
+# Python shader tests must consume the artifact produced by this exact CMake
+# graph/configuration.  Build the producer target explicitly: the aggregate
+# native-test target is allowed to contain no dependency on termin_shaderc,
+# and merely checking bin/termin_shaderc would therefore accept a stale file.
+if ! cmake --build "$BUILD_DIR" \
+    --target termin_shaderc \
+    --parallel "$BUILD_JOBS"; then
+    echo "ERROR: termin_shaderc build failed; refusing to run Python tests" >&2
     exit 1
 fi
 

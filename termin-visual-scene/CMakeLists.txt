@@ -126,6 +126,10 @@ if(TERMIN_BUILD_TESTS)
             COMMAND termin_visual_scene_draggable_example --headless-smoke)
         add_test(NAME termin_visual_scene_draggable_example_shader_smoke
             COMMAND termin_visual_scene_draggable_example --shader-smoke)
+        add_test(
+            NAME termin_visual_scene_draggable_example_missing_shader_smoke
+            COMMAND termin_visual_scene_draggable_example
+                --shader-smoke-missing-artifacts)
         set_tests_properties(
             termin_visual_scene_draggable_example_shader_smoke
             PROPERTIES
@@ -133,6 +137,12 @@ if(TERMIN_BUILD_TESTS)
                 SKIP_RETURN_CODE 77
                 SKIP_REGULAR_EXPRESSION
                     "Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
+        set_tests_properties(
+            termin_visual_scene_draggable_example_missing_shader_smoke
+            PROPERTIES
+                TIMEOUT 30
+                WILL_FAIL TRUE
+                SKIP_RETURN_CODE 77)
         if(COMMAND termin_set_test_build_target)
             termin_set_test_build_target(
                 termin_visual_scene_draggable_example_smoke
@@ -140,15 +150,24 @@ if(TERMIN_BUILD_TESTS)
             termin_set_test_build_target(
                 termin_visual_scene_draggable_example_shader_smoke
                 termin_visual_scene_draggable_example)
+            termin_set_test_build_target(
+                termin_visual_scene_draggable_example_missing_shader_smoke
+                termin_visual_scene_draggable_example)
         endif()
         if(COMMAND termin_add_test_labels)
             if(TGFX2_ENABLE_VULKAN)
                 termin_add_test_labels(
                     termin_visual_scene_draggable_example_shader_smoke
                     "termin:capability:vulkan")
+                termin_add_test_labels(
+                    termin_visual_scene_draggable_example_missing_shader_smoke
+                    "termin:capability:vulkan")
             elseif(TGFX2_ENABLE_D3D11)
                 termin_add_test_labels(
                     termin_visual_scene_draggable_example_shader_smoke
+                    "termin:capability:d3d11")
+                termin_add_test_labels(
+                    termin_visual_scene_draggable_example_missing_shader_smoke
                     "termin:capability:d3d11")
             endif()
         endif()

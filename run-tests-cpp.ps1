@@ -305,15 +305,19 @@ if ($CtestBuildTargets.Count -eq 0) {
     exit 1
 }
 Write-Host "Building $($CtestBuildTargets.Count) selected CTest target(s)"
-$CmakeTestTarget = if ($TerminBuildWindowTests -eq "ON") {
-    "termin_native_tests_with_window"
-} else {
-    "termin_native_tests"
-}
 Invoke-TerminCMakeBuild `
     -BuildDir $BuildDir `
     -BuildType $BuildType `
-    -Target $CmakeTestTarget `
+    -Target $CtestBuildTargets `
+    -BuildJobs $BuildJobs
+
+# Keep the shader compiler provenance tied to this CMake graph/configuration.
+# The aggregate native-test target may not depend on termin_shaderc, so a
+# pre-existing bin/termin_shaderc must never be accepted by the Python runner.
+Invoke-TerminCMakeBuild `
+    -BuildDir $BuildDir `
+    -BuildType $BuildType `
+    -Target "termin_shaderc" `
     -BuildJobs $BuildJobs
 
 $CtestJunitPath = Join-Path $BuildDir "ctest-results.xml"

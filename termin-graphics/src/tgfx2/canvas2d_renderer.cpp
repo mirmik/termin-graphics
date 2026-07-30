@@ -484,6 +484,7 @@ void Canvas2DRenderer::begin(RenderContext2& ctx,
     batch_mode_ = BatchMode::None;
     batch_texture_ = TextureHandle{};
     batch_texture_sampling_ = CanvasTextureSampling::Linear;
+    batch_failed_ = false;
 
     ensure_shaders_(ctx.device());
     ensure_samplers_(ctx.device());
@@ -770,7 +771,10 @@ bool Canvas2DRenderer::execute(
             return false;
         }
     }
-    return true;
+    // Flush once at the list boundary so failures in the final batch are
+    // observable to the caller.  Intermediate commands still retain the
+    // existing batching behaviour and only flush on a state change.
+    return flush_() && !batch_failed_;
 }
 
 void Canvas2DRenderer::begin_clip(float x, float y, float w, float h) {
@@ -1156,8 +1160,8 @@ void Canvas2DRenderer::build_projection_() {
                              projection_);
 }
 
-void Canvas2DRenderer::flush_() {
-    if (ctx_ == nullptr || batch_vertices_.empty()) return;
+bool Canvas2DRenderer::flush_() {
+    if (ctx_ == nullptr || batch_vertices_.empty()) return true;
 
     bool bound = false;
     if (batch_mode_ == BatchMode::Solid) {
@@ -1166,17 +1170,19 @@ void Canvas2DRenderer::flush_() {
         bound = bind_texture_(batch_color_, batch_texture_, batch_texture_sampling_);
     } else {
         batch_vertices_.clear();
-        return;
+        return true;
     }
     if (!bound) {
         batch_vertices_.clear();
-        return;
+        batch_failed_ = true;
+        return false;
     }
 
     const uint32_t vertex_count =
         static_cast<uint32_t>(batch_vertices_.size() / 7);
     ctx_->draw_immediate_triangles(batch_vertices_.data(), vertex_count);
     batch_vertices_.clear();
+    return true;
 }
 
 bool Canvas2DRenderer::bind_solid_(CanvasColor color) {

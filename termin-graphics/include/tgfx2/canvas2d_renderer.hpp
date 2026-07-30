@@ -73,6 +73,11 @@ private:
     SamplerHandle nearest_sampler_{};
     IRenderDevice* samplers_on_ = nullptr;
     std::vector<float> batch_vertices_;
+    // A failed flush must survive until execute() returns.  Batches are
+    // intentionally accumulated across commands; checking only at the point
+    // where a batch is switched would otherwise turn a failed final bind into
+    // a false-positive execution result.
+    bool batch_failed_ = false;
 
 public:
     explicit Canvas2DRenderer(FontAtlas* default_font = nullptr);
@@ -131,7 +136,7 @@ private:
     void ensure_shaders_(IRenderDevice& device);
     void ensure_samplers_(IRenderDevice& device);
     void build_projection_();
-    void flush_();
+    bool flush_();
     bool bind_solid_(CanvasColor color);
     bool bind_texture_(CanvasColor tint, TextureHandle texture,
                        CanvasTextureSampling sampling);

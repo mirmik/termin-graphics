@@ -18,6 +18,7 @@
 #include <tgfx2/graphics_host.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
+#include <tgfx2/shader_artifact_resolver.hpp>
 #include <tgfx2/standalone_shader_runtime.hpp>
 
 #include "termin_visual_scene/builtin_items2d.hpp"
@@ -262,7 +263,7 @@ tgfx::TextureHandle create_target(
     int width,
     int height);
 
-int shader_smoke() {
+int shader_smoke(bool force_missing_artifacts = false) {
     tc_shader_init();
     try {
         tgfx::BackendType backend = tgfx::BackendType::Null;
@@ -283,6 +284,14 @@ int shader_smoke() {
                 *host, "visual-scene-draggable-smoke")) {
             throw std::runtime_error(
                 "standalone shader runtime configuration failed");
+        }
+        if (force_missing_artifacts) {
+            host->configure_shader_artifacts(termin::ShaderArtifactResolver(
+                "/__termin_intentionally_missing_shader_artifacts__",
+                "",
+                "",
+                false,
+                false));
         }
 
         constexpr int width = 640;
@@ -442,6 +451,10 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && std::string_view(argv[1]) == "--shader-smoke") {
         return shader_smoke();
+    }
+    if (argc > 1 &&
+        std::string_view(argv[1]) == "--shader-smoke-missing-artifacts") {
+        return shader_smoke(true);
     }
     return windowed_example();
 }
