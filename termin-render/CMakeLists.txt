@@ -290,6 +290,56 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_material_pipeline_shader_assembler_test PRIVATE termin_render)
     add_test(NAME termin_render_material_pipeline_shader_assembler_test COMMAND termin_render_material_pipeline_shader_assembler_test)
 
+    add_library(
+        termin_render_project_surface_test_plugin SHARED
+        tests/project_surface_test_plugin.cpp
+    )
+    target_link_libraries(
+        termin_render_project_surface_test_plugin
+        PRIVATE termin_materials::termin_materials
+    )
+    set_target_properties(
+        termin_render_project_surface_test_plugin
+        PROPERTIES
+            WINDOWS_EXPORT_ALL_SYMBOLS ON
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+    termin_set_rpath_lib(termin_render_project_surface_test_plugin)
+
+    add_executable(
+        termin_render_project_surface_contract_test
+        tests/test_project_surface_contract.cpp
+    )
+    target_include_directories(
+        termin_render_project_surface_contract_test
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(
+        termin_render_project_surface_contract_test
+        PRIVATE
+            termin_render
+            termin_render_project_surface_test_plugin
+    )
+    if(TARGET termin_shaderc)
+        add_dependencies(
+            termin_render_project_surface_contract_test
+            termin_shaderc
+        )
+        target_compile_definitions(
+            termin_render_project_surface_contract_test
+            PRIVATE
+                TERMIN_PROJECT_SURFACE_TEST_SHADERC="$<TARGET_FILE:termin_shaderc>"
+        )
+    endif()
+    add_test(
+        NAME termin_render_project_surface_contract_test
+        COMMAND termin_render_project_surface_contract_test
+    )
+
     add_executable(termin_render_shader_contract_test tests/test_shader_contract.cpp)
     target_include_directories(termin_render_shader_contract_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
@@ -371,6 +421,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_vertex_transform_contracts_test
         termin_render_camera_capability_test
         termin_render_material_pipeline_shader_assembler_test
+        termin_render_project_surface_contract_test
         termin_render_shader_contract_test
         termin_render_shader_abi_test
         termin_render_pass_ownership_test
