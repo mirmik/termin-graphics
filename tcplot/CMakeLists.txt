@@ -51,6 +51,7 @@ set(TCPLOT_SOURCES
     src/orbit_camera.cpp
     src/plot_data.cpp
     src/plot_frame2d.cpp
+    src/plot_projection2d.cpp
     src/plot_annotations2d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
@@ -106,6 +107,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(tcplot_plot_frame2d_test)
     add_test(NAME tcplot_plot_frame2d_test
         COMMAND tcplot_plot_frame2d_test)
+
+    add_executable(tcplot_plot_projection2d_test
+        tests/test_plot_projection2d.cpp)
+    target_link_libraries(tcplot_plot_projection2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_projection2d_test)
+    add_test(NAME tcplot_plot_projection2d_test
+        COMMAND tcplot_plot_projection2d_test)
 
     add_executable(tcplot_plot_annotations2d_test
         tests/test_plot_annotations2d.cpp)

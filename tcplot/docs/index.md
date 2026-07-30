@@ -8,8 +8,14 @@ plot annotations используют `termin-visual-scene` как внутре�
 Связанные документы:
 
 - [Module Map](../../docs/modules.md#tcplot)
+- [C# Retained Chart Composition](../../docs/architecture/2026-07-30-csharp-retained-chart-composition.md)
 - [termin-graphics](../../termin-graphics/docs/index.md)
 - [termin-gui](../../termin-gui/docs/index.md)
+
+Текущий `PlotEngine2D` остаётся монолитным native composer. Целевая архитектура
+разбирает chart на типизированные retained parts в общей `TcVisualScene`, чтобы
+C# владел композицией и layout-политикой, а тяжёлые series items продолжали
+рисоваться нативно.
 
 ## Основные области
 
@@ -32,6 +38,14 @@ target_link_libraries(my_plot PRIVATE tcplot::tcplot)
 snapshot viewport, plot area, data range, clip и прямого/обратного
 data-to-pixel преобразования. Снимок не меняется после последующих pan, zoom,
 resize или синхронизации общей оси X.
+
+`PlotProjection2D` — thread-confined generation-checked native projection,
+принадлежащая одной `TcVisualScene`. Она хранит компактные viewport, plot area,
+clip, data range и pixel scale, обновляется транзакционно и выдаёт immutable
+snapshot с revision. Будущие retained series/grid items используют один этот
+контракт: pan, zoom и resize не требуют переносить проецированные массивы или
+draw-команды через языковую границу. Создание и уничтожение projection явные;
+projection следует уничтожать до либо сразу после owner scene.
 
 `PlotAnnotationLayer2D` принадлежит plot engine и хранит semantic annotations
 через generation handles. Одна annotation может проецироваться в несколько
