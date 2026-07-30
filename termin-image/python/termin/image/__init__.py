@@ -11,6 +11,10 @@ preload_sdk_libs("termin_image")
 
 from termin.image._image_native import decode_rgba8 as _decode_rgba8_native
 from termin.image._image_native import encode_png_rgba8 as _encode_png_rgba8_native
+from termin.image._image_native import supported_rgba8_extensions as _supported_rgba8_extensions_native
+
+
+SUPPORTED_RGBA8_EXTENSIONS = frozenset(_supported_rgba8_extensions_native())
 
 
 @dataclass(frozen=True)

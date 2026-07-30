@@ -203,6 +203,10 @@ void png_flush_callback(png_structp) {}
 
 } // namespace
 
+std::vector<std::string> supported_rgba8_extensions() {
+    return {".jpeg", ".jpg", ".png", ".webp"};
+}
+
 DecodedImage decode_rgba8(std::span<const std::uint8_t> bytes, const std::string& source_hint) {
     if (bytes.empty()) {
         throw std::runtime_error("cannot decode empty image data");

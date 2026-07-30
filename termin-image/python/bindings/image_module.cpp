@@ -1,6 +1,7 @@
 #include <Python.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <cstdint>
 #include <span>
@@ -63,6 +64,7 @@ nb::bytes encode_png_rgba8(nb::object data, int width, int height) {
 
 NB_MODULE(_image_native, m) {
     m.doc() = "termin-image native image codec bindings";
+    m.def("supported_rgba8_extensions", &termin::image::supported_rgba8_extensions);
     m.def("decode_rgba8", &decode_rgba8, nb::arg("data"), nb::arg("source_hint") = "");
     m.def("encode_png_rgba8", &encode_png_rgba8, nb::arg("data"), nb::arg("width"), nb::arg("height"));
 }

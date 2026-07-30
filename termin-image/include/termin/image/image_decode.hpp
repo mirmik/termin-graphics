@@ -23,6 +23,8 @@ struct DecodedImage {
     std::vector<std::uint8_t> pixels;
 };
 
+TERMIN_IMAGE_API std::vector<std::string> supported_rgba8_extensions();
+
 TERMIN_IMAGE_API DecodedImage decode_rgba8(
     std::span<const std::uint8_t> bytes,
     const std::string& source_hint = {}

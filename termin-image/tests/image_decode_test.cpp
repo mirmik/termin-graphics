@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <new>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <termin/image/image_decode.hpp>
@@ -38,6 +39,23 @@ TEST_CASE("image codecs reject truncated PNG") {
     };
 
     CHECK(decode_throws(truncated_png));
+}
+
+TEST_CASE("image codec capability contract lists the decodable file extensions") {
+    const std::vector<std::string> extensions = termin::image::supported_rgba8_extensions();
+
+    CHECK((extensions == std::vector<std::string>{".jpeg", ".jpg", ".png", ".webp"}));
+}
+
+TEST_CASE("unsupported image errors include the source hint") {
+    constexpr std::array<std::uint8_t, 3> unsupported = {'T', 'G', 'A'};
+
+    try {
+        (void)termin::image::decode_rgba8(unsupported, "Textures/Legacy.tga");
+        CHECK(false);
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string(error.what()) == "Textures/Legacy.tga: unsupported image format");
+    }
 }
 
 TEST_CASE("PNG encoder output is decoded as RGBA8") {
