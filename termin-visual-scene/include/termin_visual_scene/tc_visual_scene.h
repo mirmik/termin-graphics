@@ -52,6 +52,12 @@ TERMIN_VISUAL_SCENE_API size_t tc_visual_scene_copy_items(
     tc_visual_scene_handle scene,
     tc_graphic_item** out_items,
     size_t capacity);
+// Copies stable generation handles in adoption order. Passing NULL/0 is a
+// size query. Unlike copy_items, this surface is safe across language ABIs.
+TERMIN_VISUAL_SCENE_API size_t tc_visual_scene_copy_item_handles(
+    tc_visual_scene_handle scene,
+    tc_graphic_item_handle* out_handles,
+    size_t capacity);
 
 // Destroying an item destroys its complete child subtree.
 TERMIN_VISUAL_SCENE_API bool tc_visual_scene_destroy_item(

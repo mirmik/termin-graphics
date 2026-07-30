@@ -34,6 +34,8 @@ include(TerminRpath)
 add_library(termin_visual_scene SHARED
     src/tc_graphic_item.c
     src/tc_visual_scene.c
+    src/tc_visual_scene_item2d.cpp
+    src/tc_builtin_items2d.cpp
     src/graphic_item2d.cpp
     src/native_graphic_item2d.cpp
     src/graphic_item_paint_context2d.cpp
@@ -96,6 +98,22 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_visual_scene_storage_test)
     add_test(NAME termin_visual_scene_storage_test
         COMMAND termin_visual_scene_storage_test)
+
+    add_executable(termin_visual_scene_c_api_test
+        tests/test_visual_scene_c_api.cpp)
+    target_link_libraries(termin_visual_scene_c_api_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene_c_api_test)
+    add_test(NAME termin_visual_scene_c_api_test
+        COMMAND termin_visual_scene_c_api_test)
+
+    add_executable(termin_visual_scene_c_header_test
+        tests/test_visual_scene_c_api.c)
+    target_link_libraries(termin_visual_scene_c_header_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene_c_header_test)
+    add_test(NAME termin_visual_scene_c_header_test
+        COMMAND termin_visual_scene_c_header_test)
 
     add_executable(termin_visual_scene_item_test
         tests/test_scene2d_items.cpp)
