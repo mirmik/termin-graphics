@@ -4,6 +4,7 @@
 
 #include "tgfx2/d3d11/d3d11_command_list.hpp"
 #include "tgfx2/d3d11/d3d11_type_conversions.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/tc_mesh_bridge.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
