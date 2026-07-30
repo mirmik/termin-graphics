@@ -38,6 +38,20 @@ public:
     }
 };
 
+class RetainedProbe final : public tgfx::RetainedDrawBatch2D {
+public:
+    bool called = false;
+    tgfx::RetainedDrawState2D state{};
+
+    bool draw(
+        tgfx::RenderContext2&,
+        const tgfx::RetainedDrawState2D& value) override {
+        called = true;
+        state = value;
+        return true;
+    }
+};
+
 struct TempDirectory {
     std::filesystem::path path;
 
@@ -130,6 +144,12 @@ int run(const char* executable) {
     assert(builder.pop_clip());
     assert(builder.pop_clip());
     assert(builder.pop_transform());
+    auto retained_probe = std::make_shared<RetainedProbe>();
+    assert(builder.push_opacity(0.4f));
+    assert(builder.push_clip_rect({2, 3, 20, 21}));
+    assert(builder.retained_batch(retained_probe));
+    assert(builder.pop_clip());
+    assert(builder.pop_opacity());
     auto list = builder.freeze();
     assert(list);
 
@@ -162,7 +182,11 @@ int run(const char* executable) {
         immediate_control[2] > 0.8f && immediate_control[3] > 0.9f;
     const bool result =
         executed && read && clear(center) && red(inside_tip) &&
-        clear(outside_corner) && blue_control;
+        clear(outside_corner) && blue_control &&
+        retained_probe->called &&
+        retained_probe->state.has_clip_rect &&
+        !retained_probe->state.unsupported_clip &&
+        std::fabs(retained_probe->state.opacity - 0.4f) < 1.0e-6f;
     if (!result) {
         std::fprintf(
             stderr,

@@ -30,6 +30,9 @@ bool marker_fixture_present(
     int height) {
     std::size_t orange = 0;
     std::size_t light_border = 0;
+    std::size_t blue_series = 0;
+    std::size_t green_series = 0;
+    std::size_t magenta_series = 0;
     std::size_t opaque = 0;
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -46,11 +49,17 @@ bool marker_fixture_present(
             if (r > 0.68f && g > 0.70f && b > 0.76f) {
                 ++light_border;
             }
+            if (b > 0.70f && r < 0.35f && g < 0.65f) ++blue_series;
+            if (g > 0.65f && r < 0.35f && b < 0.35f) ++green_series;
+            if (r > 0.65f && b > 0.65f && g < 0.35f) ++magenta_series;
         }
     }
     return opaque > static_cast<std::size_t>(width * height * 9 / 10)
         && orange >= 20
-        && light_border >= 40;
+        && light_border >= 40
+        && blue_series >= 20
+        && green_series >= 20
+        && magenta_series >= 20;
 }
 
 }  // namespace
@@ -82,6 +91,38 @@ int main() {
         view.set_msaa_samples(1);
         view.set_view(0.0, 10.0, 0.0, 10.0);
         view.set_title("Retained marker");
+        const double series_x[] = {1.0, 3.0, 5.0, 7.0, 9.0};
+        const double solid_y[] = {2.0, 3.0, 2.0, 3.0, 2.0};
+        const double dashed_y[] = {7.0, 8.0, 7.0, 8.0, 7.0};
+        const double colormap_y[] = {8.8, 9.2, 8.8, 9.2, 8.8};
+        const double scatter_y[] = {4.0, 6.0, 4.0, 6.0, 4.0};
+        const double scalar[] = {0.0, 0.25, 0.5, 0.75, 1.0};
+        view.plot(
+            {series_x, solid_y, 5},
+            tcplot::LinePlotOptions{{tcplot::Color4{0.1f, 0.3f, 0.9f, 1.0f}},
+                                    2.0, "solid"});
+        view.plot(
+            {series_x, dashed_y, 5},
+            tcplot::LinePlotOptions{{tcplot::Color4{0.1f, 0.9f, 0.1f, 1.0f}},
+                                    3.0, "dashed"});
+        if (!view.set_line_style(1, tcplot::LineStyle::Dash, 10.0f, 5.0f)) {
+            std::fprintf(stderr, "failed to style retained line\n");
+            return 1;
+        }
+        view.plot_colormap(
+            {series_x, colormap_y, 5},
+            scalar,
+            tcplot::LineColormapOptions{
+                tcplot::SurfaceColorMap::Viridis,
+                0.0,
+                1.0,
+                3.0,
+                "colormap",
+                true});
+        view.scatter(
+            {series_x, scatter_y, 5},
+            tcplot::ScatterPlotOptions{
+                {tcplot::Color4{0.9f, 0.1f, 0.9f, 1.0f}}, 10.0, "scatter"});
 
         tcplot::PlotDataMarker2D marker;
         marker.data_position = {5.0, 5.0};

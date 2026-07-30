@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -19,6 +20,7 @@
 namespace tgfx {
 
 class FontAtlas;
+class RenderContext2;
 
 enum class DrawTextureSampling2D : std::uint8_t {
     Linear,
@@ -112,6 +114,35 @@ struct DrawCustomBatch2D {
     DrawTextureSampling2D sampling = DrawTextureSampling2D::Linear;
 };
 
+// State accumulated by the backend-neutral command stream before a retained
+// native batch is executed. Native batches are intended for large,
+// renderer-owned GPU streams which must not be copied into DrawList2D every
+// frame. They still receive the scene transform, opacity and rectangular clip
+// explicitly and render only through the backend-neutral RenderContext2 API.
+struct RetainedDrawState2D {
+    termin::Affine2f transform = termin::Affine2f::identity();
+    float opacity = 1.0f;
+    termin::Rect2f clip_rect{};
+    bool has_clip_rect = false;
+    bool unsupported_clip = false;
+    int viewport_x = 0;
+    int viewport_y = 0;
+    int viewport_width = 0;
+    int viewport_height = 0;
+};
+
+class TGFX2_TYPE_API RetainedDrawBatch2D {
+public:
+    virtual ~RetainedDrawBatch2D() = default;
+    virtual bool draw(
+        RenderContext2& context,
+        const RetainedDrawState2D& state) = 0;
+};
+
+struct DrawRetainedBatch2D {
+    std::shared_ptr<RetainedDrawBatch2D> batch;
+};
+
 using DrawCommand2D = std::variant<
     PushTransform2D,
     PopTransform2D,
@@ -126,14 +157,15 @@ using DrawCommand2D = std::variant<
     DrawPolyline2D,
     DrawText2D,
     DrawImage2D,
-    DrawCustomBatch2D>;
+    DrawCustomBatch2D,
+    DrawRetainedBatch2D>;
 
 class DrawList2DBuilder;
 
 // DrawList2D has no mutation surface. It owns all strings, paths, point arrays
-// and custom vertices, so it remains valid after its builder is reused or
-// destroyed. Runtime resource handles remain borrowed from their device or
-// resolver and must be live for execute().
+// and custom vertices and shares retained batch bodies, so it remains valid
+// after its builder is reused or destroyed. Runtime resource handles remain
+// borrowed from their device or resolver and must be live for execute().
 class TGFX2_TYPE_API DrawList2D {
 public:
     DrawList2D() = default;
@@ -194,8 +226,9 @@ public:
     bool custom_batch(std::span<const DrawVertex2D> vertices,
                       Color4f color,
                       TextureHandle texture = {},
-                      DrawTextureSampling2D sampling =
+                          DrawTextureSampling2D sampling =
                           DrawTextureSampling2D::Linear);
+    bool retained_batch(std::shared_ptr<RetainedDrawBatch2D> batch);
 
     // Fails without consuming the builder if any state scope is unbalanced.
     std::optional<DrawList2D> freeze();

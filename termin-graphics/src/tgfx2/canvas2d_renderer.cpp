@@ -91,6 +91,73 @@ bool same_color(CanvasColor a, CanvasColor b) {
 using DrawTriangle2D = std::array<DrawVertex2D, 3>;
 using ClipMesh2D = std::vector<DrawTriangle2D>;
 
+struct NativeClip2D {
+    termin::Rect2f rect{};
+    bool has_rect = false;
+    bool unsupported = false;
+};
+
+NativeClip2D retained_clip(
+    const Path2f& path,
+    const termin::Affine2f& transform,
+    const NativeClip2D& parent)
+{
+    NativeClip2D result = parent;
+    if (parent.unsupported) return result;
+    if (path.points().size() != 4) {
+        result.unsupported = true;
+        return result;
+    }
+    std::array<termin::Vec2f, 4> points{};
+    for (std::size_t index = 0; index < points.size(); ++index) {
+        points[index] = transform.transform_point(path.points()[index]);
+    }
+    float left = points[0].x;
+    float right = points[0].x;
+    float top = points[0].y;
+    float bottom = points[0].y;
+    for (const auto point : points) {
+        left = std::min(left, point.x);
+        right = std::max(right, point.x);
+        top = std::min(top, point.y);
+        bottom = std::max(bottom, point.y);
+    }
+    constexpr float epsilon = 1.0e-4f;
+    for (const auto point : points) {
+        const bool x_edge =
+            std::fabs(point.x - left) <= epsilon ||
+            std::fabs(point.x - right) <= epsilon;
+        const bool y_edge =
+            std::fabs(point.y - top) <= epsilon ||
+            std::fabs(point.y - bottom) <= epsilon;
+        if (!x_edge || !y_edge) {
+            result.unsupported = true;
+            return result;
+        }
+    }
+    termin::Rect2f rect{left, top, right - left, bottom - top};
+    if (rect.width <= 0.0f || rect.height <= 0.0f) {
+        result.unsupported = true;
+        return result;
+    }
+    if (result.has_rect) {
+        const float x0 = std::max(result.rect.x, rect.x);
+        const float y0 = std::max(result.rect.y, rect.y);
+        const float x1 = std::min(
+            result.rect.x + result.rect.width,
+            rect.x + rect.width);
+        const float y1 = std::min(
+            result.rect.y + result.rect.height,
+            rect.y + rect.height);
+        result.rect = {x0, y0, std::max(0.0f, x1 - x0),
+                       std::max(0.0f, y1 - y0)};
+    } else {
+        result.rect = rect;
+        result.has_rect = true;
+    }
+    return result;
+}
+
 float cross(termin::Vec2f a, termin::Vec2f b, termin::Vec2f c) {
     return (b.x - a.x) * (c.y - a.y) -
            (b.y - a.y) * (c.x - a.x);
@@ -524,6 +591,7 @@ bool Canvas2DRenderer::execute(
         termin::Affine2f::identity()};
     std::vector<float> opacities{1.0f};
     std::vector<ClipMesh2D> clips;
+    std::vector<NativeClip2D> native_clips{{}};
 
     const auto emit = [this, &clips](
         std::span<const DrawTriangle2D> triangles,
@@ -559,10 +627,13 @@ bool Canvas2DRenderer::execute(
                         return false;
                     }
                     clips.push_back(std::move(mesh));
+                    native_clips.push_back(retained_clip(
+                        value.path, transforms.back(), native_clips.back()));
                     return true;
                 } else if constexpr (std::is_same_v<T, PopClip2D>) {
-                    if (clips.empty()) return false;
+                    if (clips.empty() || native_clips.size() <= 1) return false;
                     clips.pop_back();
+                    native_clips.pop_back();
                     return true;
                 } else if constexpr (std::is_same_v<T, DrawRect2D>) {
                     ClipMesh2D triangles;
@@ -683,6 +754,28 @@ bool Canvas2DRenderer::execute(
                         value.texture,
                         sampling_from(value.sampling));
                     return true;
+                } else if constexpr (
+                    std::is_same_v<T, DrawRetainedBatch2D>) {
+                    if (!value.batch) return false;
+                    flush_();
+                    const auto& clip = native_clips.back();
+                    RetainedDrawState2D state{
+                        .transform = transforms.back(),
+                        .opacity = opacities.back(),
+                        .clip_rect = clip.rect,
+                        .has_clip_rect = clip.has_rect,
+                        .unsupported_clip = clip.unsupported,
+                        .viewport_x = viewport_x_,
+                        .viewport_y = viewport_y_,
+                        .viewport_width = viewport_w_,
+                        .viewport_height = viewport_h_,
+                    };
+                    const bool drawn = value.batch->draw(*ctx_, state);
+                    ctx_->set_viewport(
+                        viewport_x_, viewport_y_, viewport_w_, viewport_h_);
+                    ctx_->set_scissor(
+                        viewport_x_, viewport_y_, viewport_w_, viewport_h_);
+                    return drawn;
                 } else if constexpr (std::is_same_v<T, DrawText2D>) {
                     FontAtlas* font = resources.resolve_font(value.font);
                     if (font == nullptr) {

@@ -54,6 +54,8 @@ public:
     bool custom_batch(
         std::string key,
         termin::Bounds2f local_bounds);
+    bool retained_batch(
+        std::shared_ptr<tgfx::RetainedDrawBatch2D> batch);
     bool push_clip_rect(termin::Rect2f rect);
     bool pop_clip();
 

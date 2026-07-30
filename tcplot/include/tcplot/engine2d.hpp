@@ -33,6 +33,8 @@ class Canvas2DRenderer;
 namespace tcplot {
 
 class PlotAnnotationLayer2D;
+class PlotLineSeriesGpu2D;
+class PlotScatterSeriesGpu2D;
 
 enum class PlotInputResult2D {
     Unhandled,
@@ -42,8 +44,6 @@ enum class PlotInputResult2D {
 
 class TCPLOT_API PlotEngine2D {
 private:
-    struct LineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; };
-    struct StyledLineGpuState { tgfx::BufferHandle vbo{}; uint32_t capacity = 0; uint32_t gpu_count = 0; uint64_t data_version = 0; };
     float vx_ = 0.0f, vy_ = 0.0f, vw_ = 0.0f, vh_ = 0.0f;
     float fbo_height_ = 0.0f;
     float pixel_scale_ = 1.0f;
@@ -51,13 +51,8 @@ private:
     bool panning_ = false;
     float pan_start_mx_ = 0.0f, pan_start_my_ = 0.0f;
     double pan_start_view_[4] = {0, 1, 0, 1};
-    tgfx::IRenderDevice* line_shader_device_ = nullptr;
-    uint32_t line_shader_vs_id_ = 0, line_shader_fs_id_ = 0;
-    tgfx::IRenderDevice* styled_line_shader_device_ = nullptr;
-    uint32_t styled_line_shader_vs_id_ = 0, styled_line_shader_fs_id_ = 0;
-    std::vector<LineGpuState> line_gpu_;
-    std::vector<StyledLineGpuState> styled_line_gpu_;
-    uint64_t data_version_ = 1;
+    std::vector<std::unique_ptr<PlotLineSeriesGpu2D>> line_renderers_;
+    std::vector<std::unique_ptr<PlotScatterSeriesGpu2D>> scatter_renderers_;
     std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
     std::unique_ptr<PlotAnnotationLayer2D> annotations_;
     PlotRenderPhaseSink2D* render_phase_sink_ = nullptr;
@@ -213,11 +208,6 @@ public:
         float x, float y, float dy);
 
 private:
-    void ensure_line_shader_(tgfx::IRenderDevice& device);
-    void ensure_styled_line_shader_(tgfx::IRenderDevice& device);
-    void ensure_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
-    void ensure_styled_line_gpu_(tgfx::IRenderDevice& device, size_t idx);
-    void compute_data_to_clip_(const PlotFrame2D& frame, float out16[16]);
     void begin_render_phase_(
         PlotRenderPhase2D phase,
         const PlotFrame2D& frame,

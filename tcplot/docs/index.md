@@ -12,10 +12,10 @@ plot annotations используют `termin-visual-scene` как внутре�
 - [termin-graphics](../../termin-graphics/docs/index.md)
 - [termin-gui](../../termin-gui/docs/index.md)
 
-Текущий `PlotEngine2D` остаётся монолитным native composer. Целевая архитектура
-разбирает chart на типизированные retained parts в общей `TcVisualScene`, чтобы
-C# владел композицией и layout-политикой, а тяжёлые series items продолжали
-рисоваться нативно.
+Текущий `PlotEngine2D` пока остаётся native composer, но его grid/layout и
+series rendering уже вынесены в публичные retained parts и общие utilities.
+Целевая архитектура собирает эти части в общей `TcVisualScene`, чтобы C# владел
+композицией и layout-политикой, а тяжёлые series items рисовались нативно.
 
 ## Основные области
 
@@ -54,6 +54,26 @@ projection следует уничтожать до либо сразу посл
 передают только compact projection update. C API
 `tc_plot_grid_item2d_create/set_*/snapshot/copy_ticks` использует scene и
 graphic-item handles, проверяет тип, owner scene и stale state.
+
+`PlotLineSeriesItem2D` и `PlotScatterSeriesItem2D` — самостоятельные native
+series parts с обычным `TcVisualScene` lifetime. Они хранят data/style на C++
+стороне, читают актуальный `PlotProjection2D`, поддерживают native
+nearest-point query и добавляют в draw list только маленькую retained-команду.
+Line data живёт в persistent VBO с tail upload для append; solid, styled и
+colormap варианты рисуются одним draw call. Scatter хранит instance VBO и
+рисуется одним instanced draw вместо Canvas-вызова на каждую точку.
+
+C API в `tc_plot_series_item2d.h` принимает только generation handles,
+detached arrays и value styles. Через него можно создать, заменить/добавить
+data, изменить style/projection, получить snapshot/copy и выполнить nearest
+query. Wrong-type, stale и cross-scene операции отклоняются явно.
+
+Общий `tgfx2::DrawRetainedBatch2D` переносит в native renderer эффективные
+transform, opacity, viewport и axis-aligned clip без копирования series
+geometry. Для retained batches произвольный geometric clip сейчас явно
+отклоняется; plot-area rectangle использует быстрый scissor contract.
+`PlotEngine2D` вызывает те же `Plot*SeriesGpu2D`, отдельного legacy renderer
+больше нет.
 
 `fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
 value-only layout boundary. Tick spacing и font size задаются в logical pixels

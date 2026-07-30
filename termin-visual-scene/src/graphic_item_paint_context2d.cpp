@@ -122,6 +122,13 @@ bool GraphicItemPaintContext2D::custom_batch(
         batch->sampling);
 }
 
+bool GraphicItemPaintContext2D::retained_batch(
+    std::shared_ptr<tgfx::RetainedDrawBatch2D> batch)
+{
+    return sink_ != nullptr && sink_->builder != nullptr &&
+        sink_->builder->retained_batch(std::move(batch));
+}
+
 bool GraphicItemPaintContext2D::push_clip_rect(
     termin::Rect2f rect)
 {

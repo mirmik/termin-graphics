@@ -136,6 +136,21 @@
       }
     },
     {
+      "uuid": "termin-engine-tcplot-2d-scatter",
+      "name": "Tcplot2DScatterVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-tcplot-2d-scatter.slang",
+          "entry": "vs_main"
+        },
+        "fragment": {
+          "path": "termin-engine-tcplot-2d-scatter.slang",
+          "entry": "fs_main"
+        }
+      }
+    },
+    {
       "uuid": "termin-engine-canvas2d-solid",
       "name": "Canvas2DSolidVSFS",
       "language": "slang",
