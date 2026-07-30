@@ -729,6 +729,20 @@ if(BUILD_TGFX2_TESTS)
         termin_add_test_labels(tgfx2_vulkan_stats_enabled
             "termin:capability:vulkan")
 
+        add_executable(tgfx2_vulkan_presentation_transform_test
+            tests/test_tgfx2_vulkan_presentation_transform.cpp)
+        target_compile_definitions(tgfx2_vulkan_presentation_transform_test
+            PRIVATE TGFX2_HAS_VULKAN)
+        target_link_libraries(tgfx2_vulkan_presentation_transform_test
+            PRIVATE termin_graphics2 Vulkan::Vulkan)
+        termin_set_rpath_test(tgfx2_vulkan_presentation_transform_test)
+        add_test(NAME tgfx2_vulkan_presentation_transform_test
+            COMMAND tgfx2_vulkan_presentation_transform_test)
+        set_tests_properties(tgfx2_vulkan_presentation_transform_test
+            PROPERTIES TIMEOUT 10)
+        termin_add_test_labels(tgfx2_vulkan_presentation_transform_test
+            "termin:capability:vulkan")
+
         add_executable(tgfx2_per_pipeline_layout_test tests/test_per_pipeline_layout.cpp)
         target_compile_definitions(tgfx2_per_pipeline_layout_test PRIVATE TGFX2_HAS_VULKAN)
         target_link_libraries(tgfx2_per_pipeline_layout_test PRIVATE termin_graphics2 Vulkan::Vulkan)

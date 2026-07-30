@@ -21,6 +21,20 @@ namespace tgfx {
 
 class VulkanRenderDevice;
 
+constexpr VkSurfaceTransformFlagBitsKHR select_swapchain_pre_transform(
+    VkSurfaceTransformFlagsKHR supported_transforms
+) noexcept {
+    return (supported_transforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0
+        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+        : static_cast<VkSurfaceTransformFlagBitsKHR>(0);
+}
+
+constexpr bool swapchain_result_requires_recreate(VkResult result) noexcept {
+    // VK_SUBOPTIMAL_KHR is usable and may be persistent when Android's
+    // currentTransform differs from our deliberate identity pre-transform.
+    return result == VK_ERROR_OUT_OF_DATE_KHR;
+}
+
 class TGFX2_TYPE_API VulkanSwapchain {
 public:
     // Number of CPU/GPU frames in flight. Must be >=1. 2 is a sensible
@@ -38,6 +52,8 @@ private:
     VkColorSpaceKHR color_space_ = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
     PresentationMode requested_presentation_mode_ = PresentationMode::VSync;
+    VkSurfaceTransformFlagBitsKHR pre_transform_ =
+        VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
 
@@ -120,8 +136,9 @@ public:
     // as this swapchain and can be any size — it's scaled to the
     // swapchain extent with VK_FILTER_LINEAR.
     //
-    // Returns whether a recreate is recommended (OUT_OF_DATE /
-    // SUBOPTIMAL from acquire or present). True means the caller
+    // Returns whether a recreate is required (OUT_OF_DATE from acquire or
+    // present). SUBOPTIMAL remains usable; host resize callbacks recreate
+    // explicitly. True means the caller
     // should call recreate(w, h) before the next frame.
     bool compose_and_present(tgfx::TextureHandle color_tex);
 
@@ -133,6 +150,7 @@ public:
     // Introspection
     VkSwapchainKHR handle() const { return swapchain_; }
     VkFormat format() const { return format_; }
+    VkSurfaceTransformFlagBitsKHR pre_transform() const { return pre_transform_; }
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
     uint32_t image_count() const { return static_cast<uint32_t>(images_.size()); }

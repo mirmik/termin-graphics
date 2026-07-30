@@ -172,6 +172,28 @@ void VulkanSwapchain::create_swapchain() {
         image_count = caps.maxImageCount;
     }
 
+    pre_transform_ = select_swapchain_pre_transform(caps.supportedTransforms);
+    if (pre_transform_ == 0) {
+        tc_log_error(
+            "VulkanSwapchain: identity surface transform is required but unsupported "
+            "(currentTransform=0x%x supportedTransforms=0x%x extent=%ux%u)",
+            static_cast<unsigned>(caps.currentTransform),
+            static_cast<unsigned>(caps.supportedTransforms),
+            extent.width,
+            extent.height);
+        throw std::runtime_error(
+            "VulkanSwapchain: surface does not support identity presentation transform");
+    }
+
+    tc_log_info(
+        "VulkanSwapchain: presentation transform current=0x%x supported=0x%x "
+        "selected=0x%x extent=%ux%u",
+        static_cast<unsigned>(caps.currentTransform),
+        static_cast<unsigned>(caps.supportedTransforms),
+        static_cast<unsigned>(pre_transform_),
+        extent.width,
+        extent.height);
+
     VkSwapchainCreateInfoKHR ci{};
     ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     ci.surface = surface_;
@@ -184,7 +206,10 @@ void VulkanSwapchain::create_swapchain() {
     // so we can render directly into it through a VkRenderPass.
     ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    ci.preTransform = caps.currentTransform;
+    // The renderer and input pipeline already operate in the SurfaceView's
+    // current physical orientation. Asking the presentation engine to apply
+    // currentTransform rotates that upright image a second time on Android.
+    ci.preTransform = pre_transform_;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     ci.presentMode = present_mode_;
     ci.clipped = VK_TRUE;
@@ -362,8 +387,6 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
     if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
         return true;
     }
-    bool suboptimal = (ar == VK_SUBOPTIMAL_KHR);
-
     // 3. Look up the color texture on the device.
     VkTextureResource* rt = device_.get_texture(color_tex);
     if (!rt || !rt->image) {
@@ -489,14 +512,13 @@ bool VulkanSwapchain::compose_and_present(tgfx::TextureHandle color_tex) {
                   in_flight_fences_[current_frame_]);
     const auto submit1 = timestamp();
 
-    // 6. Present — returns OUT_OF_DATE / SUBOPTIMAL if the surface
-    //    lost sync with the window (typical after resize).
+    // 6. Present. OUT_OF_DATE requires recreation. SUBOPTIMAL remains usable:
+    // Android reports it continuously when identity differs from the current
+    // surface transform, and resize callbacks already recreate explicitly.
     const auto present0 = timestamp();
     VkResult pr = present(image_idx, render_done);
     const auto present1 = timestamp();
-    bool should_recreate = suboptimal ||
-                           pr == VK_ERROR_OUT_OF_DATE_KHR ||
-                           pr == VK_SUBOPTIMAL_KHR;
+    const bool should_recreate = swapchain_result_requires_recreate(pr);
 
     advance_frame();
     const auto total1 = timestamp();
@@ -556,8 +578,6 @@ bool VulkanSwapchain::clear_and_present(float r, float g, float b, float a) {
     if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
         return true;
     }
-    bool suboptimal = (ar == VK_SUBOPTIMAL_KHR);
-
     VkCommandBuffer cb = compose_command_buffers_[current_frame_];
     vkResetCommandBuffer(cb, 0);
 
@@ -623,9 +643,7 @@ bool VulkanSwapchain::clear_and_present(float r, float g, float b, float a) {
                   in_flight_fences_[current_frame_]);
 
     VkResult pr = present(image_idx, render_done);
-    bool should_recreate = suboptimal ||
-                           pr == VK_ERROR_OUT_OF_DATE_KHR ||
-                           pr == VK_SUBOPTIMAL_KHR;
+    const bool should_recreate = swapchain_result_requires_recreate(pr);
     advance_frame();
     return should_recreate;
 }
