@@ -13,7 +13,7 @@
 #include <tcbase/tc_log.h>
 
 #include <termin/gui_native/color_picker.hpp>
-#include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/native_document_painter.hpp>
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/graphics_host.hpp>
@@ -28,18 +28,6 @@ namespace {
     tc_log_error("[gui-native-document-renderer] %s", message.c_str());
     throw std::logic_error(message);
 }
-
-struct DrawListDeleter {
-    void operator()(tc_ui_draw_list* draw_list) const {
-        tc_ui_draw_list_destroy(draw_list);
-    }
-};
-
-struct PaintContextDeleter {
-    void operator()(tc_ui_paint_context* context) const {
-        tc_ui_paint_context_destroy(context);
-    }
-};
 
 tgfx::TextureHandle create_color_target(
     tgfx::IRenderDevice& device, int width, int height) {
@@ -64,9 +52,7 @@ struct DocumentRenderer::Impl {
     DocumentPlatformServices* platform;
     tgfx::IRenderDevice* device;
     tgfx::RenderContext2* context;
-    UiDrawListRenderer renderer;
-    std::unique_ptr<tc_ui_draw_list, DrawListDeleter> draw_list;
-    std::unique_ptr<tc_ui_paint_context, PaintContextDeleter> paint_context;
+    NativeDocumentPainter painter;
     tgfx::TextureHandle color_target{};
     int target_width = 0;
     int target_height = 0;
@@ -84,19 +70,14 @@ struct DocumentRenderer::Impl {
          DocumentFrameSink& sink, DocumentPlatformServices& services)
         : facade(&renderer_facade), graphics(&graphics_ref), document(document_ref),
           config(std::move(renderer_config)), frame_sink(&sink), platform(&services),
-          device(&graphics_ref.device()), context(&graphics_ref.context()),
-          draw_list(tc_ui_draw_list_create()),
-          paint_context(tc_ui_paint_context_create(draw_list.get())) {
+          device(&graphics_ref.device()), context(&graphics_ref.context()) {
         if (!document.valid()) {
             renderer_error("DocumentRenderer requires a live TcDocument");
         }
         if (config.font_path.empty()) {
             renderer_error("DocumentRenderer requires a resolved font path");
         }
-        if (!draw_list || !paint_context) {
-            renderer_error("DocumentRenderer failed to allocate paint state");
-        }
-        if (!renderer.set_default_font_path(config.font_path, config.font_size)) {
+        if (!painter.set_default_font_path(config.font_path, config.font_size)) {
             renderer_error(
                 "DocumentRenderer failed to load UI font: " + config.font_path);
         }
@@ -105,7 +86,6 @@ struct DocumentRenderer::Impl {
             if (!platform->set_text_input_enabled(config.enable_text_input)) {
                 renderer_error("DocumentRenderer platform rejected text-input configuration");
             }
-            renderer.bind_text_measurer(document.handle());
             document.set_clipboard(&clipboard_get, &clipboard_set, this);
             document.set_cursor_changed_callback(&cursor_changed, this);
             texture_leases = std::make_shared<DocumentRendererLeaseState>();
@@ -233,13 +213,12 @@ struct DocumentRenderer::Impl {
         document.set_clipboard(nullptr, nullptr, nullptr);
         texture_leases->close_all();
         device->wait_idle();
-        renderer.release_gpu();
+        painter.close();
         if (color_target) {
             device->destroy(color_target);
             device->invalidate_render_target_cache();
             color_target = {};
         }
-        document.set_text_measurer(nullptr, nullptr);
         document = TcDocument{};
         frame_sink = nullptr;
         platform = nullptr;
@@ -378,19 +357,17 @@ bool DocumentRenderer::render_frame() {
             iterator = impl_->color_pickers.erase(iterator);
             continue;
         }
-        impl_->renderer.sync_color_picker_surfaces(*impl_->context, *picker);
+        impl_->painter.sync_color_picker_surfaces(*impl_->context, *picker);
         ++iterator;
     }
-    tc_ui_draw_list_clear(impl_->draw_list.get());
-    impl_->document.layout_roots(
-        tc_ui_rect{0.0f, 0.0f, static_cast<float>(width),
-                   static_cast<float>(height)});
-    impl_->document.paint(impl_->paint_context.get());
     impl_->context->begin_pass(
         impl_->color_target, tgfx::TextureHandle{},
         impl_->config.clear_color.data(), 1.0f, false);
-    impl_->renderer.render(
-        *impl_->context, impl_->draw_list.get(), width, height);
+    const UiDocumentSubmission submission{
+        impl_->document, 0, 0};
+    impl_->painter.paint_documents(
+        *impl_->context, width, height,
+        std::span<const UiDocumentSubmission>(&submission, 1));
     impl_->context->end_pass();
     impl_->context->end_frame();
     impl_->frame_sink->publish_frame(impl_->color_target);
@@ -429,7 +406,7 @@ void DocumentRenderer::register_color_picker(ColorPicker& picker) {
 
 void DocumentRenderer::unregister_color_picker(ColorPicker& picker) {
     impl_->require_open("unregister_color_picker");
-    impl_->renderer.release_color_picker_surfaces(picker);
+    impl_->painter.release_color_picker_surfaces(picker);
     const tc_widget_handle handle = picker.handle();
     impl_->color_pickers.erase(
         std::remove_if(

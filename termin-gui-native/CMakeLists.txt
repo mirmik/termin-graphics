@@ -146,6 +146,7 @@ target_link_libraries(termin_gui_native
 
 add_library(termin_gui_native_document_renderer SHARED
     src/document_renderer.cpp
+    src/native_document_painter.cpp
     src/dynamic_texture_lease.cpp
 )
 add_library(termin_gui_native::document_renderer ALIAS
@@ -428,6 +429,8 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_renderer_pixel_smoke
         tests/test_draw_list_renderer_pixel_smoke.cpp
     )
+    target_link_libraries(termin_gui_native_renderer_pixel_smoke
+        PRIVATE termin_gui_native_document_renderer)
     set_tests_properties(termin_gui_native_renderer_pixel_smoke PROPERTIES
         SKIP_RETURN_CODE 77)
     if(TARGET termin_shaderc)

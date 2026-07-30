@@ -30,7 +30,11 @@ composition.render_frame();
 std::vector<float> rgba = composition.read_frame_rgba_float();
 ```
 
-`DocumentRenderer` is the shared borrowed layout/paint/GPU primitive.
+`NativeDocumentPainter` is the presentation-neutral GPU primitive: it sorts
+borrowed documents by priority and stable identity, lays them out, builds one
+draw list and renders it into an already-open caller-owned pass. It has no
+framegraph, attachment, frame-lifecycle or presentation policy.
+`DocumentRenderer` wraps that primitive for standalone composition roots.
 `OffscreenGuiComposition` owns an isolated `GraphicsHost`, a
 `tc_ui_document`, that renderer, a thread-safe normalized input queue, in-memory
 clipboard/cursor/text-input services and a resizable texture sink. It owns no

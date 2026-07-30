@@ -1,5 +1,6 @@
-#include <termin/gui_native/draw_list_renderer.hpp>
 #include <termin/gui_native/color_picker.hpp>
+#include <termin/gui_native/native_document_painter.hpp>
+#include <termin/gui_native/native_widget.hpp>
 
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/device_factory.hpp>
@@ -20,6 +21,7 @@ extern "C" {
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -101,6 +103,88 @@ const float* pixel_at(const std::vector<float>& pixels, uint32_t x, uint32_t y) 
     return &pixels[(static_cast<size_t>(y) * kWidth + x) * 4u];
 }
 
+class PainterProbe final : public termin::gui_native::NativeWidget {
+public:
+    bool draw_commands = false;
+    uint32_t image = 0;
+    uint32_t sampling_image = 0;
+    uint32_t picker_image = 0;
+    tc_ui_color order_color{};
+
+    void paint(tc_ui_document_handle, tc_ui_paint_context* painter) override {
+        if (order_color.a > 0.0f) {
+            tc_ui_painter_fill_rect(
+                painter, tc_ui_rect{112.0f, 72.0f, 8.0f, 8.0f},
+                order_color);
+        }
+        if (!draw_commands) {
+            return;
+        }
+        tc_ui_painter_draw_texture(
+            painter, image, tc_ui_rect{8.0f, 8.0f, 16.0f, 16.0f},
+            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            TC_UI_TEXTURE_SAMPLING_LINEAR, false);
+        tc_ui_painter_push_clip(
+            painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
+        tc_ui_painter_push_clip(
+            painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
+        tc_ui_painter_fill_rect(
+            painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f},
+            tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f});
+        tc_ui_painter_pop_clip(painter);
+        tc_ui_painter_pop_clip(painter);
+        tc_ui_painter_fill_rounded_rect(
+            painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f,
+            tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
+        tc_ui_painter_fill_circle(
+            painter, tc_ui_point{48.0f, 50.0f}, 8.0f,
+            tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
+        tc_ui_painter_draw_texture(
+            painter, sampling_image,
+            tc_ui_rect{8.0f, 72.0f, 16.0f, 16.0f},
+            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            TC_UI_TEXTURE_SAMPLING_NEAREST, false);
+        tc_ui_painter_draw_texture(
+            painter, sampling_image,
+            tc_ui_rect{32.0f, 72.0f, 16.0f, 16.0f},
+            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+            TC_UI_TEXTURE_SAMPLING_LINEAR, false);
+        tc_ui_painter_draw_text(
+            painter, "Native", tc_ui_point{72.0f, 30.0f}, 20.0f,
+            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
+        if (picker_image != 0) {
+            tc_ui_painter_draw_texture(
+                painter, picker_image,
+                tc_ui_rect{90.0f, 40.0f, 28.0f, 20.0f},
+                tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                TC_UI_TEXTURE_SAMPLING_LINEAR, false);
+        }
+    }
+};
+
+struct ProbeDocument {
+    tc_ui_document_handle handle = tc_ui_document_create();
+    termin::gui_native::TcDocument document{handle};
+    PainterProbe* probe = new PainterProbe();
+
+    ProbeDocument() {
+        const tc_widget_handle root = document.adopt(probe);
+        if (tc_widget_handle_is_invalid(root) ||
+            !tc_ui_document_add_root(handle, root)) {
+            throw std::runtime_error("failed to create painter probe document");
+        }
+    }
+
+    ~ProbeDocument() {
+        if (tc_ui_document_is_valid(handle)) {
+            tc_ui_document_destroy(handle);
+        }
+    }
+
+    ProbeDocument(const ProbeDocument&) = delete;
+    ProbeDocument& operator=(const ProbeDocument&) = delete;
+};
+
 int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
     const ScopedTempDirectory artifacts{
@@ -145,67 +229,52 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
         sampling_image,
         std::span<const uint8_t>(sampling_pixels, sizeof(sampling_pixels)));
 
-    tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
-    tc_ui_paint_context* painter = tc_ui_paint_context_create(draw_list);
-    tc_ui_painter_draw_texture(painter, image.id, tc_ui_rect{8.0f, 8.0f, 16.0f, 16.0f},
-                               tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
-                               TC_UI_TEXTURE_SAMPLING_LINEAR, false);
-    tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
-    tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
-    tc_ui_painter_fill_rect(painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f},
-                            tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f});
-    tc_ui_painter_pop_clip(painter);
-    tc_ui_painter_pop_clip(painter);
-    tc_ui_painter_fill_rounded_rect(painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f,
-                                    tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
-    tc_ui_painter_fill_circle(painter, tc_ui_point{48.0f, 50.0f}, 8.0f,
-                              tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
-    tc_ui_painter_draw_texture(
-        painter, sampling_image.id, tc_ui_rect{8.0f, 72.0f, 16.0f, 16.0f},
-        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, TC_UI_TEXTURE_SAMPLING_NEAREST, false);
-    tc_ui_painter_draw_texture(
-        painter, sampling_image.id, tc_ui_rect{32.0f, 72.0f, 16.0f, 16.0f},
-        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}, TC_UI_TEXTURE_SAMPLING_LINEAR, false);
     constexpr uint32_t text_baseline = 30;
-    tc_ui_painter_draw_text(
-        painter,
-        "Native",
-        tc_ui_point{72.0f, static_cast<float>(text_baseline)},
-        20.0f,
-        tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}
-    );
 
     tgfx::PipelineCache cache(*device);
     tgfx::RenderContext2 context(*device, cache);
-    termin::gui_native::UiDrawListRenderer renderer;
+    termin::gui_native::NativeDocumentPainter painter;
     const std::string font_path =
         std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
         "/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf";
-    if (!renderer.set_default_font_path(font_path, 14)) {
+    if (!painter.set_default_font_path(font_path, 14)) {
         std::fprintf(stderr, "Failed to configure renderer smoke font\n");
         return 1;
     }
+
+    ProbeDocument commands;
+    commands.probe->draw_commands = true;
+    commands.probe->image = image.id;
+    commands.probe->sampling_image = sampling_image.id;
+    ProbeDocument early;
+    early.probe->order_color = tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f};
+    ProbeDocument identity_first;
+    identity_first.probe->order_color =
+        tc_ui_color{0.05f, 0.85f, 0.05f, 1.0f};
+    ProbeDocument identity_last;
+    identity_last.probe->order_color =
+        tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f};
 
     termin::gui_native::ColorPicker color_picker;
 
     const float clear[]{0.0f, 0.0f, 0.0f, 1.0f};
     context.begin_frame();
-    renderer.sync_color_picker_surfaces(context, color_picker);
+    painter.sync_color_picker_surfaces(context, color_picker);
     const auto picker_textures = color_picker.texture_ids();
     const bool picker_textures_ready = picker_textures.saturation_value != 0 &&
         picker_textures.hue != 0 && picker_textures.alpha != 0;
-    if (picker_textures_ready) {
-        tc_ui_painter_draw_texture(
-            painter,
-            picker_textures.saturation_value,
-            tc_ui_rect{90.0f, 40.0f, 28.0f, 20.0f},
-            tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
-            TC_UI_TEXTURE_SAMPLING_LINEAR,
-            false
-        );
-    }
+    commands.probe->picker_image = picker_textures.saturation_value;
+    const termin::gui_native::UiDocumentSubmission submissions[]{
+        {identity_last.document, 0, 20},
+        {termin::gui_native::TcDocument{}, -100, 0},
+        {commands.document, 100, 1},
+        {early.document, -1, 100},
+        {identity_first.document, 0, 10},
+    };
     context.begin_pass(target, {}, clear, 1.0f, false);
-    renderer.render(context, draw_list, static_cast<int>(kWidth), static_cast<int>(kHeight));
+    const std::size_t painted = painter.paint_documents(
+        context, static_cast<int>(kWidth), static_cast<int>(kHeight),
+        submissions);
     context.end_pass();
     context.end_frame();
     device->wait_idle();
@@ -221,6 +290,7 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool nearest_left_ok = read_ok && looks_red(pixel_at(pixels, 15, 80));
     const bool nearest_right_ok = read_ok && looks_blue(pixel_at(pixels, 16, 80));
     const bool linear_mid_ok = read_ok && looks_purple(pixel_at(pixels, 39, 80));
+    const bool ordering_ok = read_ok && looks_red(pixel_at(pixels, 116, 76));
     const float* picker_pixel = pixel_at(pixels, 96, 48);
     const bool picker_texture_ok = read_ok && picker_textures_ready &&
         (picker_pixel[0] > 0.1f || picker_pixel[1] > 0.1f || picker_pixel[2] > 0.1f);
@@ -244,15 +314,14 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool text_ok = text_signal >= 8 && text_min_y < text_baseline
         && text_max_y <= text_baseline + 5;
 
-    renderer.release_color_picker_surfaces(color_picker);
-    renderer.release_gpu();
-    tc_ui_paint_context_destroy(painter);
-    tc_ui_draw_list_destroy(draw_list);
+    painter.release_color_picker_surfaces(color_picker);
+    painter.close();
     device->destroy(image);
     device->destroy(sampling_image);
     device->destroy(target);
 
-    if (!read_ok || !image_ok || !nested_clip_inside_ok || !nested_clip_outside_ok ||
+    if (painted != std::size(submissions) - 1 || !read_ok || !image_ok ||
+        !nested_clip_inside_ok || !nested_clip_outside_ok ||
         !rounded_center_ok || !rounded_corner_ok || !circle_ok || !picker_texture_ok || !text_ok) {
         std::fprintf(stderr,
                      "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
@@ -267,6 +336,13 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
                      "UI renderer %s sampling smoke failed: nearest_left=%d nearest_right=%d "
                      "linear_mid=%d\n",
                      tgfx::backend_name(backend), nearest_left_ok, nearest_right_ok, linear_mid_ok);
+        return 1;
+    }
+    if (!ordering_ok) {
+        std::fprintf(
+            stderr,
+            "UI painter %s submission ordering smoke failed\n",
+            tgfx::backend_name(backend));
         return 1;
     }
     return 0;
