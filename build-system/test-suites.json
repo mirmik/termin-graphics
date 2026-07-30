@@ -290,6 +290,7 @@
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
     {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
     {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
+    {"id": "termin-components-ui-tests-native", "module": "termin-components-ui", "executor": "ctest", "roots": ["termin-components/termin-components-ui/tests"]},
     {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
     {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
     {"id": "termin-dispatch-tests-native", "module": "termin-dispatch", "executor": "ctest", "roots": ["termin-dispatch/tests"]},
