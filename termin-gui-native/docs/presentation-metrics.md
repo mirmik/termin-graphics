@@ -39,6 +39,25 @@ the scaled left/top insets and excludes all four scaled insets. Logical bounds
 remain fractional; render-boundary pixel snapping is defined by the painter
 integration rather than by this value contract.
 
+`NativeDocumentPainter` requires explicit metrics on every document
+submission. It rejects a submission whose physical extent differs from the
+active render target. At the renderer boundary, non-identity geometry is
+multiplied by `density_scale`; points and rectangle edges are rounded to the
+nearest physical pixel (half values away from zero), and a positive logical
+stroke or radius remains at least one physical pixel. Rectangle width and
+height are derived from their independently snapped edges so clips, fills and
+textures share exactly the same boundary. Scale `1.0` preserves coordinates
+unchanged. Hit testing uses unsnapped logical bounds, and input uses the exact
+inverse division by `density_scale`.
+
+Logical text size is multiplied by `density_scale * font_scale` for
+measurement and rasterization. Physical measurements are divided only by
+`density_scale` before returning to layout, so accessibility font scale changes
+logical text extent and therefore reflow. Glyph storage remains bounded by the
+font atlas dimensions, and the per-integer-size metrics cache is capped at 256
+entries so repeated scale changes cannot grow it for the lifetime of the
+process.
+
 ## Root policy and invalidation
 
 Each document chooses `TC_UI_ROOT_LAYOUT_FULL_VIEWPORT` (the default) or

@@ -99,7 +99,19 @@ void bind_gui_native_core(nb::module_& m) {
             return rect;
         })
         .def_prop_ro("effective_font_scale",
-                     &tc_ui_presentation_metrics_effective_font_scale);
+                     &tc_ui_presentation_metrics_effective_font_scale)
+        .def(
+            "physical_to_logical_point",
+            [](const tc_ui_presentation_metrics& self, tc_ui_point physical) {
+                tc_ui_point logical{};
+                if (!tc_ui_presentation_metrics_physical_to_logical_point(
+                        &self, physical, &logical)) {
+                    throw std::invalid_argument(
+                        "invalid native UI presentation transform");
+                }
+                return logical;
+            },
+            nb::arg("physical"));
 
     nb::enum_<tc_ui_root_layout_policy>(m, "RootLayoutPolicy")
         .value("FullViewport", TC_UI_ROOT_LAYOUT_FULL_VIEWPORT)

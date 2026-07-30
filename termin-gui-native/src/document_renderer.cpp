@@ -364,7 +364,15 @@ bool DocumentRenderer::render_frame() {
         impl_->color_target, tgfx::TextureHandle{},
         impl_->config.clear_color.data(), 1.0f, false);
     const UiDocumentSubmission submission{
-        impl_->document, 0, 0};
+        impl_->document,
+        0,
+        0,
+        tc_ui_presentation_metrics_identity(
+            tc_ui_size{
+                static_cast<float>(width),
+                static_cast<float>(height),
+            }),
+    };
     impl_->painter.paint_documents(
         *impl_->context, width, height,
         std::span<const UiDocumentSubmission>(&submission, 1));

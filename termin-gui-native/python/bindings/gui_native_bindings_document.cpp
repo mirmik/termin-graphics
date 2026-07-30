@@ -1336,7 +1336,21 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           [](termin::gui_native::UiDrawListRenderer &self,
              tgfx::RenderContext2 &context, const DrawList &draw_list,
              int width, int height) {
-            self.render(context, draw_list.get(), width, height);
+            const termin::gui_native::UiDrawListBatch batch{
+                0,
+                tc_ui_draw_list_command_count(draw_list.get()),
+                tc_ui_presentation_metrics_identity(tc_ui_size{
+                    static_cast<float>(width),
+                    static_cast<float>(height),
+                }),
+            };
+            self.render(
+                context,
+                draw_list.get(),
+                width,
+                height,
+                std::span<const termin::gui_native::UiDrawListBatch>(
+                    &batch, 1));
           },
           nb::arg("context"), nb::arg("draw_list"), nb::arg("width"),
           nb::arg("height"))

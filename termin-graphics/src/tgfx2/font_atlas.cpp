@@ -116,6 +116,12 @@ const FontAtlas::SizeMetrics& FontAtlas::metrics_for_(int px_size) const {
     auto it = size_metrics_.find(px_size);
     if (it != size_metrics_.end()) return it->second;
 
+    // Glyph storage is already bounded by the bitmap/SDF atlas dimensions.
+    // Keep the much smaller per-integer-size metrics cache bounded as well so
+    // repeated presentation-scale changes cannot grow it for process life.
+    if (size_metrics_.size() >= kMaxCachedMetricSizes) {
+        size_metrics_.erase(size_metrics_.begin());
+    }
     SizeMetrics sm{};
     sm.scale = stbtt_ScaleForPixelHeight(&impl_->font,
                                          static_cast<float>(px_size));

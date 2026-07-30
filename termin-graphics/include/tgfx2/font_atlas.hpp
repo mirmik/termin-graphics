@@ -124,6 +124,7 @@ private:
     // Per-size metrics cache (mutable so const accessors can populate
     // on demand — the cache is a pure function of px_size + loaded TTF).
     mutable std::unordered_map<int, SizeMetrics> size_metrics_;
+    static constexpr std::size_t kMaxCachedMetricSizes = 256;
 
     // GPU state.
     RenderContext2* gpu_owner_ = nullptr;

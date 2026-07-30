@@ -18,6 +18,7 @@ struct TestWidget {
 
 struct TextMeasureProbe {
     size_t last_length = 0;
+    float last_font_size = 0.0f;
     bool return_invalid_metrics = false;
 };
 
@@ -30,6 +31,7 @@ static bool probe_text_measure(
 ) {
     auto* probe = static_cast<TextMeasureProbe*>(user_data);
     probe->last_length = byte_length;
+    probe->last_font_size = font_size;
     out_metrics->width = probe->return_invalid_metrics ? -1.0f : font_size * static_cast<float>(byte_length);
     out_metrics->height = font_size;
     out_metrics->ascent = font_size * 0.8f;
@@ -464,6 +466,10 @@ static void test_presentation_metrics_value_and_document_contract() {
     assert(rect.x == 10.0f && rect.y == 20.0f);
     assert(rect.width == 320.0f && rect.height == 580.0f);
     assert(tc_ui_presentation_metrics_effective_font_scale(&scaled) == 4.5f);
+    tc_ui_point logical_point{};
+    assert(tc_ui_presentation_metrics_physical_to_logical_point(
+        &scaled, tc_ui_point{150.0f, 75.0f}, &logical_point));
+    assert(logical_point.x == 50.0f && logical_point.y == 25.0f);
 
     tc_ui_presentation_metrics fractional{
         1.5f,
@@ -770,14 +776,31 @@ static void test_document_text_measurement_service_contract() {
     tc_ui_document_handle document = tc_ui_document_create();
     tc_ui_text_metrics metrics {};
     assert(!tc_ui_document_measure_text(document, "abc", 3, 12.0f, &metrics));
+    const tc_ui_presentation_metrics identity =
+        tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
+    assert(tc_ui_document_set_presentation_metrics(document, &identity));
 
     TextMeasureProbe probe;
     tc_ui_document_set_text_measurer(document, &probe_text_measure, &probe);
     const char bytes[] = {'a', '\0', 'b'};
     assert(tc_ui_document_measure_text(document, bytes, sizeof(bytes), 10.0f, &metrics));
     assert(probe.last_length == sizeof(bytes));
+    assert(probe.last_font_size == 10.0f);
     assert(metrics.width == 30.0f);
     assert(metrics.ascent == 8.0f);
+
+    const tc_ui_presentation_metrics scaled{
+        2.0f,
+        1.3f,
+        tc_ui_size{800.0f, 600.0f},
+        tc_ui_insets{},
+    };
+    assert(tc_ui_document_set_presentation_metrics(document, &scaled));
+    assert(tc_ui_document_measure_text(
+        document, bytes, sizeof(bytes), 10.0f, &metrics));
+    assert(probe.last_font_size == 26.0f);
+    assert(metrics.width == 39.0f);
+    assert(metrics.line_height == 13.0f);
 
     probe.return_invalid_metrics = true;
     assert(!tc_ui_document_measure_text(document, "x", 1, 10.0f, &metrics));

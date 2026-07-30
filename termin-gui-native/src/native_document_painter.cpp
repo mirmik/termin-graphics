@@ -180,6 +180,31 @@ std::size_t NativeDocumentPainter::paint_documents(
                 submission.priority);
             continue;
         }
+        if (!tc_ui_presentation_metrics_is_valid(
+                &submission.presentation_metrics)) {
+            tc_log_error(
+                "[gui-native-document-painter] skipping document with invalid "
+                "presentation metrics identity=%llu priority=%d",
+                static_cast<unsigned long long>(submission.stable_identity),
+                submission.priority);
+            continue;
+        }
+        if (submission.presentation_metrics.physical_extent.width !=
+                static_cast<float>(width) ||
+            submission.presentation_metrics.physical_extent.height !=
+                static_cast<float>(height)) {
+            tc_log_error(
+                "[gui-native-document-painter] skipping document whose "
+                "physical extent %.3fx%.3f does not match render viewport "
+                "%dx%d identity=%llu",
+                submission.presentation_metrics.physical_extent.width,
+                submission.presentation_metrics.physical_extent.height,
+                width,
+                height,
+                static_cast<unsigned long long>(
+                    submission.stable_identity));
+            continue;
+        }
         ordered.push_back(submission);
     }
     std::sort(
@@ -202,15 +227,42 @@ std::size_t NativeDocumentPainter::paint_documents(
 
     impl_->synchronize_text_measurers(ordered);
     tc_ui_draw_list_clear(impl_->draw_list.get());
-    const tc_ui_rect viewport{
-        0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+    std::vector<UiDrawListBatch> batches;
+    batches.reserve(ordered.size());
     for (const UiDocumentSubmission& submission : ordered) {
-        submission.document.layout_roots(viewport);
+        if (!submission.document.set_presentation_metrics(
+                submission.presentation_metrics)) {
+            tc_log_error(
+                "[gui-native-document-painter] document rejected validated "
+                "presentation metrics identity=%llu",
+                static_cast<unsigned long long>(
+                    submission.stable_identity));
+            continue;
+        }
+        tc_ui_rect layout_rect{};
+        if (!submission.document.presentation_layout_rect(layout_rect)) {
+            tc_log_error(
+                "[gui-native-document-painter] document has no logical layout "
+                "rect identity=%llu",
+                static_cast<unsigned long long>(
+                    submission.stable_identity));
+            continue;
+        }
+        const std::size_t first =
+            tc_ui_draw_list_command_count(impl_->draw_list.get());
+        submission.document.layout_roots(layout_rect);
         submission.document.paint(impl_->paint_context.get());
+        const std::size_t last =
+            tc_ui_draw_list_command_count(impl_->draw_list.get());
+        batches.push_back(UiDrawListBatch{
+            first,
+            last - first,
+            submission.presentation_metrics,
+        });
     }
     impl_->renderer.render(
-        context, impl_->draw_list.get(), width, height);
-    return ordered.size();
+        context, impl_->draw_list.get(), width, height, batches);
+    return batches.size();
 }
 
 void NativeDocumentPainter::sync_color_picker_surfaces(

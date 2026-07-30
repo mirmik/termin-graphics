@@ -21,6 +21,7 @@ struct UiDocumentSubmission {
     TcDocument document;
     int priority = 0;
     std::uint64_t stable_identity = 0;
+    tc_ui_presentation_metrics presentation_metrics{};
 };
 
 struct NativeDocumentPainterConfig {
@@ -46,9 +47,10 @@ public:
         int default_size_px = 14
     );
 
-    // Appends all valid documents to one draw list in ascending
-    // (priority, stable_identity) order and renders it into the caller's
-    // already-open pass. Returns the number of documents painted.
+    // Appends all valid documents with explicit presentation metrics to one
+    // draw list in ascending (priority, stable_identity) order and renders it
+    // into the caller's already-open pass. A submission is rejected when its
+    // physical extent differs from width/height. Returns the number painted.
     std::size_t paint_documents(
         tgfx::RenderContext2& context,
         int width,

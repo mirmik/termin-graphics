@@ -82,6 +82,9 @@ def test_presentation_metrics_project_to_python_document():
     assert metrics.logical_safe_rect.x == pytest.approx(10.0)
     assert metrics.logical_safe_rect.width == pytest.approx(500.0)
     assert metrics.effective_font_scale == pytest.approx(2.6)
+    logical_point = metrics.physical_to_logical_point(Point(90.0, 45.0))
+    assert logical_point.x == pytest.approx(45.0)
+    assert logical_point.y == pytest.approx(22.5)
 
     document = tc_ui_document_create()
     try:
@@ -1166,6 +1169,9 @@ def test_renderer_font_exposes_document_text_metrics():
     document = tc_ui_document_create()
     renderer = DrawListRenderer()
     assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
+    document.presentation_metrics = PresentationMetrics.identity(
+        Size(800.0, 600.0)
+    )
     renderer.bind_text_measurer(document)
 
     narrow = document.measure_text("iii", 18.0)

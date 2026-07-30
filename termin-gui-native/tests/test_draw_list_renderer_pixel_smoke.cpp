@@ -15,6 +15,7 @@ extern "C" {
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -110,12 +111,12 @@ public:
     uint32_t sampling_image = 0;
     uint32_t picker_image = 0;
     tc_ui_color order_color{};
+    tc_ui_rect order_rect{112.0f, 72.0f, 8.0f, 8.0f};
 
     void paint(tc_ui_document_handle, tc_ui_paint_context* painter) override {
         if (order_color.a > 0.0f) {
             tc_ui_painter_fill_rect(
-                painter, tc_ui_rect{112.0f, 72.0f, 8.0f, 8.0f},
-                order_color);
+                painter, order_rect, order_color);
         }
         if (!draw_commands) {
             return;
@@ -264,12 +265,17 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool picker_textures_ready = picker_textures.saturation_value != 0 &&
         picker_textures.hue != 0 && picker_textures.alpha != 0;
     commands.probe->picker_image = picker_textures.saturation_value;
+    const tc_ui_presentation_metrics metrics =
+        tc_ui_presentation_metrics_identity(
+            tc_ui_size{
+                static_cast<float>(kWidth),
+                static_cast<float>(kHeight)});
     const termin::gui_native::UiDocumentSubmission submissions[]{
-        {identity_last.document, 0, 20},
-        {termin::gui_native::TcDocument{}, -100, 0},
-        {commands.document, 100, 1},
-        {early.document, -1, 100},
-        {identity_first.document, 0, 10},
+        {identity_last.document, 0, 20, metrics},
+        {termin::gui_native::TcDocument{}, -100, 0, metrics},
+        {commands.document, 100, 1, metrics},
+        {early.document, -1, 100, metrics},
+        {identity_first.document, 0, 10, metrics},
     };
     context.begin_pass(target, {}, clear, 1.0f, false);
     const std::size_t painted = painter.paint_documents(
@@ -314,6 +320,62 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
     const bool text_ok = text_signal >= 8 && text_min_y < text_baseline
         && text_max_y <= text_baseline + 5;
 
+    bool scaled_geometry_ok = true;
+    ProbeDocument scaled_document;
+    scaled_document.probe->order_color =
+        tc_ui_color{0.05f, 0.85f, 0.05f, 1.0f};
+    scaled_document.probe->order_rect =
+        tc_ui_rect{8.0f, 8.0f, 8.0f, 8.0f};
+    for (const float scale : {1.0f, 1.5f, 2.0f, 3.0f}) {
+        const tc_ui_presentation_metrics scaled_metrics{
+            scale,
+            1.0f,
+            tc_ui_size{
+                static_cast<float>(kWidth),
+                static_cast<float>(kHeight),
+            },
+            tc_ui_insets{},
+        };
+        const termin::gui_native::UiDocumentSubmission scaled_submission{
+            scaled_document.document, 0, 0, scaled_metrics};
+        context.begin_frame();
+        context.begin_pass(target, {}, clear, 1.0f, false);
+        scaled_geometry_ok =
+            scaled_geometry_ok &&
+            painter.paint_documents(
+                context,
+                static_cast<int>(kWidth),
+                static_cast<int>(kHeight),
+                std::span<const termin::gui_native::UiDocumentSubmission>(
+                    &scaled_submission, 1)) == 1;
+        context.end_pass();
+        context.end_frame();
+        device->wait_idle();
+        std::vector<float> scaled_pixels(
+            static_cast<size_t>(kWidth) * kHeight * 4u);
+        scaled_geometry_ok =
+            scaled_geometry_ok &&
+            device->read_texture_rgba_float(
+                target, scaled_pixels.data());
+        const uint32_t sample = static_cast<uint32_t>(
+            (std::round(8.0f * scale) +
+             std::round(16.0f * scale)) *
+            0.5f);
+        scaled_geometry_ok =
+            scaled_geometry_ok &&
+            looks_green(pixel_at(scaled_pixels, sample, sample));
+        const tc_ui_rect logical_bounds =
+            scaled_document.probe->bounds();
+        scaled_geometry_ok =
+            scaled_geometry_ok &&
+            std::fabs(
+                logical_bounds.width -
+                static_cast<float>(kWidth) / scale) < 0.001f &&
+            std::fabs(
+                logical_bounds.height -
+                static_cast<float>(kHeight) / scale) < 0.001f;
+    }
+
     painter.release_color_picker_surfaces(color_picker);
     painter.close();
     device->destroy(image);
@@ -322,13 +384,16 @@ int run_smoke(const char* argv0, tgfx::BackendType backend) {
 
     if (painted != std::size(submissions) - 1 || !read_ok || !image_ok ||
         !nested_clip_inside_ok || !nested_clip_outside_ok ||
-        !rounded_center_ok || !rounded_corner_ok || !circle_ok || !picker_texture_ok || !text_ok) {
+        !rounded_center_ok || !rounded_corner_ok || !circle_ok ||
+        !picker_texture_ok || !text_ok || !scaled_geometry_ok) {
         std::fprintf(stderr,
                      "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
-                     "round_center=%d round_corner=%d circle=%d picker=%d text=%d signal=%zu y=[%u,%u]\n",
+                     "round_center=%d round_corner=%d circle=%d picker=%d "
+                     "text=%d scaled=%d signal=%zu y=[%u,%u]\n",
                      tgfx::backend_name(backend), read_ok, image_ok, nested_clip_inside_ok,
                      nested_clip_outside_ok, rounded_center_ok, rounded_corner_ok, circle_ok,
-                     picker_texture_ok, text_ok, text_signal, text_min_y, text_max_y);
+                     picker_texture_ok, text_ok, scaled_geometry_ok,
+                     text_signal, text_min_y, text_max_y);
         return 1;
     }
     if (!nearest_left_ok || !nearest_right_ok || !linear_mid_ok) {

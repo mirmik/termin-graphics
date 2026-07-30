@@ -556,6 +556,12 @@ TERMIN_GUI_NATIVE_API bool tc_ui_presentation_metrics_logical_safe_rect(
 TERMIN_GUI_NATIVE_API float tc_ui_presentation_metrics_effective_font_scale(
     const tc_ui_presentation_metrics* metrics
 );
+TERMIN_GUI_NATIVE_API bool
+tc_ui_presentation_metrics_physical_to_logical_point(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_point physical_point,
+    tc_ui_point* out_logical_point
+);
 
 TERMIN_GUI_NATIVE_API void tc_widget_init_unowned(
     tc_widget* widget,

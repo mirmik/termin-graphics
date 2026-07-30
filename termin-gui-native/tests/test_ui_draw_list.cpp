@@ -118,6 +118,9 @@ void test_renderer_font_binds_document_text_measurement() {
     const std::string font_path = std::string(TERMIN_GUI_NATIVE_SOURCE_DIR) +
         "/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf";
     assert(renderer.set_default_font_path(font_path, 14));
+    assert(document.set_presentation_metrics(
+        tc_ui_presentation_metrics_identity(
+            tc_ui_size{800.0f, 600.0f})));
     renderer.bind_text_measurer(document.get());
 
     tc_ui_text_metrics full {};

@@ -68,6 +68,9 @@ inline bool test_text_measure(void *, const char *text, size_t byte_length,
 }
 
 inline void install_test_text_measurer(TcDocument document) {
+  const auto metrics =
+      tc_ui_presentation_metrics_identity(tc_ui_size{1920.0f, 1080.0f});
+  assert(document.set_presentation_metrics(metrics));
   document.set_text_measurer(&test_text_measure, nullptr);
 }
 

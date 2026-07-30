@@ -145,6 +145,29 @@ float tc_ui_presentation_metrics_effective_font_scale(
     return metrics->density_scale * metrics->font_scale;
 }
 
+bool tc_ui_presentation_metrics_physical_to_logical_point(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_point physical_point,
+    tc_ui_point* out_logical_point
+) {
+    if (!out_logical_point) {
+        tc_log_error(
+            "[termin-gui-native] logical point output cannot be null");
+        return false;
+    }
+    if (!tc_ui_presentation_metrics_is_valid(metrics) ||
+        !isfinite(physical_point.x) || !isfinite(physical_point.y)) {
+        tc_log_error(
+            "[termin-gui-native] cannot transform physical point with invalid "
+            "presentation metrics or coordinates");
+        memset(out_logical_point, 0, sizeof(*out_logical_point));
+        return false;
+    }
+    out_logical_point->x = physical_point.x / metrics->density_scale;
+    out_logical_point->y = physical_point.y / metrics->density_scale;
+    return true;
+}
+
 tc_ui_document* tc_ui_internal_resolve_document(tc_ui_document_handle handle) {
     tc_ui_document_pool_slot* slot;
     if (!g_ui_document_pool_initialized || tc_ui_document_handle_is_invalid(handle)) {
@@ -970,6 +993,12 @@ bool tc_ui_document_set_presentation_metrics(
         same_presentation_metrics(&document->presentation_metrics, metrics)) {
         return true;
     }
+    if (document->has_presentation_metrics) {
+        tc_ui_document_cancel_pointer_interaction(
+            document_handle,
+            TC_UI_POINTER_CANCEL_CAPTURE_REPLACED
+        );
+    }
     document->presentation_metrics = *metrics;
     document->has_presentation_metrics = true;
     advance_presentation_revision(document);
@@ -1051,6 +1080,10 @@ bool tc_ui_document_set_root_layout_policy(
     if (document->root_layout_policy == policy) {
         return true;
     }
+    tc_ui_document_cancel_pointer_interaction(
+        document_handle,
+        TC_UI_POINTER_CANCEL_CAPTURE_REPLACED
+    );
     document->root_layout_policy = policy;
     advance_presentation_revision(document);
     invalidate_presentation_layout(document);
@@ -1424,11 +1457,21 @@ bool tc_ui_document_measure_text(
 ) {
     tc_ui_document* document = tc_ui_internal_resolve_document_checked(
         document_handle, "tc_ui_document_measure_text");
-    if (!document || !out_metrics || (!text_utf8 && text_byte_length > 0) || font_size <= 0.0f) {
+    float physical_font_size;
+    float inverse_density;
+    if (!document || !out_metrics || (!text_utf8 && text_byte_length > 0) ||
+        !isfinite(font_size) || font_size <= 0.0f) {
         tc_log_error("[termin-gui-native] invalid text measurement request");
         return false;
     }
     memset(out_metrics, 0, sizeof(*out_metrics));
+    if (!document->has_presentation_metrics) {
+        tc_log_error(
+            "[termin-gui-native] UI document '%s' cannot measure logical text "
+            "without explicit presentation metrics",
+            document->debug_name);
+        return false;
+    }
     if (!document->measure_text) {
         if (!document->missing_text_measurer_logged) {
             tc_log_error("[termin-gui-native] UI document has no text measurement service");
@@ -1436,11 +1479,20 @@ bool tc_ui_document_measure_text(
         }
         return false;
     }
+    physical_font_size = font_size *
+        tc_ui_presentation_metrics_effective_font_scale(
+            &document->presentation_metrics);
+    inverse_density = 1.0f / document->presentation_metrics.density_scale;
+    if (!isfinite(physical_font_size) || physical_font_size <= 0.0f) {
+        tc_log_error(
+            "[termin-gui-native] effective physical font size is invalid");
+        return false;
+    }
     if (!document->measure_text(
             document->text_measurer_user_data,
             text_utf8 ? text_utf8 : "",
             text_byte_length,
-            font_size,
+            physical_font_size,
             out_metrics) ||
         !valid_text_metric(out_metrics->width) ||
         !valid_text_metric(out_metrics->height) ||
@@ -1454,6 +1506,11 @@ bool tc_ui_document_measure_text(
         memset(out_metrics, 0, sizeof(*out_metrics));
         return false;
     }
+    out_metrics->width *= inverse_density;
+    out_metrics->height *= inverse_density;
+    out_metrics->ascent *= inverse_density;
+    out_metrics->descent *= inverse_density;
+    out_metrics->line_height *= inverse_density;
     return true;
 }
 

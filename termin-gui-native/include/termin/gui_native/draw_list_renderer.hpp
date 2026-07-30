@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 
@@ -12,6 +13,12 @@ namespace termin::gui_native {
 
 class ColorPicker;
 struct ColorPickerSurface;
+
+struct UiDrawListBatch {
+    std::size_t first_command = 0;
+    std::size_t command_count = 0;
+    tc_ui_presentation_metrics presentation_metrics{};
+};
 
 class UiDrawListRenderer {
 private:
@@ -40,7 +47,13 @@ public:
     void sync_color_picker_surfaces(tgfx::RenderContext2& context, ColorPicker& picker);
     // Release GPU data before the corresponding widget is destroyed.
     void release_color_picker_surfaces(ColorPicker& picker);
-    void render(tgfx::RenderContext2& context, const tc_ui_draw_list* draw_list, int width, int height);
+    void render(
+        tgfx::RenderContext2& context,
+        const tc_ui_draw_list* draw_list,
+        int width,
+        int height,
+        std::span<const UiDrawListBatch> batches
+    );
     void release_gpu();
 
 private:
