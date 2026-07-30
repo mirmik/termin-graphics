@@ -5,6 +5,7 @@
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/unique_ptr.h>
 
+#include <termin/gui_native/ui_document_asset.hpp>
 #include <termin/gui_native/uiscript.hpp>
 
 using namespace termin::gui_native::python_bindings;
@@ -1149,6 +1150,108 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
           },
           nb::arg("loaded"), nb::arg("source"),
           nb::arg("source_name") = "<reload>");
+
+  nb::class_<termin::gui_native::UiDocumentAssetHandle>(
+      m, "UiDocumentAssetHandle")
+      .def(nb::init<>())
+      .def_ro("index", &termin::gui_native::UiDocumentAssetHandle::index)
+      .def_ro(
+          "generation",
+          &termin::gui_native::UiDocumentAssetHandle::generation)
+      .def_prop_ro(
+          "valid",
+          &termin::gui_native::UiDocumentAssetHandle::valid);
+
+  nb::class_<termin::gui_native::TcUiDocumentAsset>(
+      m, "UiDocumentAsset")
+      .def(nb::init<>())
+      .def_prop_ro(
+          "handle",
+          &termin::gui_native::TcUiDocumentAsset::handle)
+      .def_prop_ro("valid", &termin::gui_native::TcUiDocumentAsset::valid)
+      .def_prop_ro("uuid", &termin::gui_native::TcUiDocumentAsset::uuid)
+      .def_prop_ro(
+          "name",
+          [](const termin::gui_native::TcUiDocumentAsset &self) {
+            const auto asset = self.resolve();
+            return asset ? asset->name() : std::string{};
+          })
+      .def_prop_ro(
+          "source_identity",
+          [](const termin::gui_native::TcUiDocumentAsset &self) {
+            const auto asset = self.resolve();
+            return asset ? asset->source_identity() : std::string{};
+          })
+      .def_prop_ro(
+          "revision",
+          &termin::gui_native::TcUiDocumentAsset::revision)
+      .def_prop_ro(
+          "type_dependencies",
+          [](const termin::gui_native::TcUiDocumentAsset &self) {
+            const auto asset = self.resolve();
+            return asset ? asset->type_dependencies()
+                         : std::vector<std::string>{};
+          })
+      .def(
+          "compiled_json",
+          [](const termin::gui_native::TcUiDocumentAsset &self,
+             int indent) {
+            const auto asset = self.resolve();
+            if (!asset)
+              throw termin::gui_native::UiScriptError(
+                  "cannot compile an invalid native UI document asset");
+            return asset->compiled_json(indent);
+          },
+          nb::arg("indent") = 2)
+      .def(
+          "instantiate",
+          [](const termin::gui_native::TcUiDocumentAsset &self,
+             std::optional<termin::gui_native::TcDocument> document) {
+            const bool owns = !document || !document->valid();
+            return std::make_unique<PythonLoadedUiScript>(
+                self.instantiate(
+                    document.value_or(termin::gui_native::TcDocument{})),
+                owns);
+          },
+          nb::arg("document").none() = nb::none())
+      .def(
+          "reload_instance",
+          [](const termin::gui_native::TcUiDocumentAsset &self,
+             PythonLoadedUiScript &loaded) {
+            const bool owns = loaded.owns_document();
+            auto replacement = self.reload_instance(loaded.value());
+            loaded.relinquish_document_ownership();
+            return std::make_unique<PythonLoadedUiScript>(
+                std::move(replacement), owns);
+          },
+          nb::arg("loaded"))
+      .def(
+          "reload_source",
+          &termin::gui_native::TcUiDocumentAsset::reload_source,
+          nb::arg("source"))
+      .def("remove", &termin::gui_native::TcUiDocumentAsset::remove)
+      .def_static(
+          "declare_source",
+          &termin::gui_native::TcUiDocumentAsset::declare_source,
+          nb::arg("uuid"), nb::arg("name"),
+          nb::arg("source_identity"), nb::arg("source"))
+      .def_static(
+          "declare_compiled_json",
+          &termin::gui_native::TcUiDocumentAsset::declare_compiled_json,
+          nb::arg("compiled_json"), nb::arg("expected_uuid") = "")
+      .def_static(
+          "compile_source_json",
+          &termin::gui_native::TcUiDocumentAsset::compile_source_json,
+          nb::arg("uuid"), nb::arg("name"),
+          nb::arg("source_identity"), nb::arg("source"),
+          nb::arg("indent") = 2)
+      .def_static(
+          "from_uuid",
+          &termin::gui_native::TcUiDocumentAsset::from_uuid,
+          nb::arg("uuid"))
+      .def_static(
+          "clear_registry_for_tests",
+          &termin::gui_native::TcUiDocumentAsset::clear_registry_for_tests);
 
   nb::class_<termin::gui_native::UiDrawListRenderer>(m, "DrawListRenderer")
       .def(nb::init<>())

@@ -38,6 +38,28 @@ type dependencies. Materialization creates a fresh document tree for every
 consumer. A failure destroys every widget created by that attempt. Reload
 builds a complete replacement first and leaves the old tree alive on error.
 
+## UI document assets
+
+`UiDocumentAsset` is the durable native asset wrapper around a validated
+description. Assets are registered by UUID and referenced through
+generation-checked `UiDocumentAssetHandle` values. The asset payload is
+immutable: a source reload parses and validates a complete replacement before
+atomically replacing the registry entry and incrementing its revision. Live
+widget trees are independent instances and are replaced separately with
+`reload_instance`.
+
+Runtime packages store the normalized native recipe as
+`ui/<uuid>.ui-document.json` and list it as a `ui_document` resource. The
+compiled payload uses `ui_document_asset: 1`, records source identity and
+revision, and includes the exact canonical widget-type dependency list.
+Runtime package loading validates and registers these assets before scene
+deserialization, without importing Python.
+
+The registry operation itself is safe to stage before a frame boundary. The
+engine-level hot-reload coordinator is expected to publish staged asset and
+instance replacements transactionally while rendering is paused between
+frames; that coordinator is outside this asset layer.
+
 UiScript is deliberately separate from universal durable document
 serialization. Declarative-only widgets fail the generic persistence API until
 they receive an explicit state codec under the broader persistence contract.

@@ -36,6 +36,7 @@ struct UiScriptDescription {
 class TERMIN_GUI_NATIVE_API UiScriptParser {
 public:
     UiScriptDescription parse(const std::string& source) const;
+    UiScriptDescription parse_document(tc::trent_view document) const;
 };
 
 struct MaterializedWidget {
@@ -95,6 +96,10 @@ public:
         LoadedUiScript& loaded,
         const std::string& source,
         const std::string& source_name = "<reload>"
+    ) const;
+    LoadedUiScript reload(
+        LoadedUiScript& loaded,
+        const UiScriptDescription& description
     ) const;
 };
 

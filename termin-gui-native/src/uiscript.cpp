@@ -274,14 +274,20 @@ std::string read_file(const std::string& path) {
 } // namespace
 
 UiScriptDescription UiScriptParser::parse(const std::string& source) const {
-    if (!register_builtin_widget_types()) {
-        throw UiScriptError("failed to register built-in native UI widget types");
-    }
     tc::trent document;
     try {
         document = tc::yaml::parse(source);
     } catch (const std::exception& error) {
         throw UiScriptError(std::string("invalid native UiScript YAML: ") + error.what());
+    }
+    return parse_document(document);
+}
+
+UiScriptDescription UiScriptParser::parse_document(
+    tc::trent_view document
+) const {
+    if (!register_builtin_widget_types()) {
+        throw UiScriptError("failed to register built-in native UI widget types");
     }
     if (!document.is_dict()) {
         fail("document", "expected a mapping");
@@ -429,8 +435,27 @@ LoadedUiScript UiScriptLoader::reload(
     if (loaded.closed_ || !tc_ui_document_is_valid(loaded.document_)) {
         throw UiScriptError("cannot reload a closed native UiScript");
     }
+    UiScriptDescription description;
+    try {
+        description = parser.parse(source);
+    } catch (const std::exception& error) {
+        tc_log_error(
+            "[termin-gui-native] failed to reload native UiScript '%s': %s",
+            source_name.c_str(), error.what());
+        throw;
+    }
+    return reload(loaded, description);
+}
+
+LoadedUiScript UiScriptLoader::reload(
+    LoadedUiScript& loaded,
+    const UiScriptDescription& description
+) const {
+    if (loaded.closed_ || !tc_ui_document_is_valid(loaded.document_)) {
+        throw UiScriptError("cannot reload a closed native UiScript");
+    }
     LoadedUiScript replacement =
-        load_string(source, TcDocument(loaded.document_), source_name);
+        materialize(description, TcDocument(loaded.document_));
     replacement.owns_document_ = loaded.owns_document_;
     loaded.owns_document_ = false;
     loaded.close();

@@ -350,6 +350,11 @@ from termin.gui_native.uiscript import (  # noqa: E402
     UiScriptNode,
     UiScriptParser,
 )
+from termin.gui_native.ui_document_asset import (  # noqa: E402
+    UI_DOCUMENT_ASSET_SCHEMA_VERSION,
+    UiDocumentAsset,
+    UiDocumentAssetHandle,
+)
 
 
 __all__ = [
@@ -494,6 +499,9 @@ __all__ = [
     "TreeWidget",
     "VStack",
     "UISCRIPT_VERSION",
+    "UI_DOCUMENT_ASSET_SCHEMA_VERSION",
+    "UiDocumentAsset",
+    "UiDocumentAssetHandle",
     "UiScriptDescription",
     "UiScriptError",
     "UiScriptLoader",

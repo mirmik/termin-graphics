@@ -10,6 +10,7 @@ from termin.gui_native import (
     PointerEvent,
     PointerEventType,
     Rect,
+    UiDocumentAsset,
     UiScriptError,
     UiScriptLoader,
 )
@@ -160,6 +161,54 @@ def test_uiscript_failed_reload_preserves_old_tree_and_cleans_attempt():
     assert document.live_widget_count == 3
     assert loaded.root.widget.alive
     loaded.close()
+
+
+def test_ui_document_asset_compiles_roundtrips_and_reloads_transactionally():
+    UiDocumentAsset.clear_registry_for_tests()
+    compiled = UiDocumentAsset.compile_source_json(
+        "test-native-ui",
+        "Test native UI",
+        "UI/test.uiscript",
+        CAMERA_SCRIPT,
+    )
+    asset = UiDocumentAsset.declare_compiled_json(
+        compiled, expected_uuid="test-native-ui"
+    )
+
+    assert asset.valid
+    assert asset.handle.valid
+    assert asset.uuid == "test-native-ui"
+    assert asset.source_identity == "UI/test.uiscript"
+    assert asset.revision == 1
+    assert asset.type_dependencies == [
+        "termin.gui.OverlayLayout",
+        "termin.gui.HStack",
+        "termin.gui.IconButton",
+    ]
+    first = asset.instantiate()
+    second = asset.instantiate()
+    assert first.document.live_widget_count == 3
+    assert second.document.live_widget_count == 3
+
+    assert not asset.reload_source(
+        CAMERA_SCRIPT.replace("background_color:", "unknown_color:")
+    )
+    assert asset.revision == 1
+    assert first.named("inspect_btn").widget.alive
+
+    replacement_source = CAMERA_SCRIPT.replace("inspect_btn", "replacement_btn")
+    assert asset.reload_source(replacement_source)
+    assert asset.revision == 2
+    replacement = asset.reload_instance(first)
+    assert replacement.named("replacement_btn").widget.alive
+    assert not first.root.widget.alive
+    assert second.named("inspect_btn").widget.alive
+
+    replacement.close()
+    second.close()
+    assert asset.remove()
+    assert not asset.valid
+    UiDocumentAsset.clear_registry_for_tests()
 
 
 def test_editor_camera_uiscript_is_in_the_supported_v2_dialect():
