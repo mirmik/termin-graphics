@@ -10,28 +10,23 @@ from termin.gui_native import (
     PointerEvent,
     PointerEventType,
     Rect,
-    UiLength,
     UiScriptError,
     UiScriptLoader,
 )
 
 
 CAMERA_SCRIPT = """
-uiscript: 1
+uiscript: 2
 root:
-  type: Overlay
+  type: termin.gui.OverlayLayout
   name: overlay
   background_color: [0, 0, 0, 0]
-  anchor: absolute
-  position: [0px, 0px]
-  width: 100%
-  height: 100%
   children:
-    - type: HStack
+    - type: termin.gui.HStack
       name: controls
       spacing: 4
       children:
-        - type: IconButton
+        - type: termin.gui.IconButton
           name: inspect_btn
           icon: I
           tooltip: Inspect
@@ -44,12 +39,16 @@ root:
 """
 
 
-def test_uiscript_v1_parses_to_toolkit_neutral_description():
+def test_uiscript_v2_parses_to_native_description():
     description = UiScriptLoader().parser.parse(CAMERA_SCRIPT)
 
-    assert description.version == 1
-    assert description.root.type_name == "Overlay"
-    assert description.root.properties["width"] == UiLength(100.0, "%")
+    assert description.version == 2
+    assert description.root.type_name == "termin.gui.OverlayLayout"
+    assert description.type_dependencies == [
+        "termin.gui.OverlayLayout",
+        "termin.gui.HStack",
+        "termin.gui.IconButton",
+    ]
     button = description.root.children[0].children[0]
     assert button.name == "inspect_btn"
     assert button.properties["tooltip"] == "Inspect"
@@ -58,17 +57,31 @@ def test_uiscript_v1_parses_to_toolkit_neutral_description():
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        ("root: {type: Panel}", "document.uiscript: expected dialect version 1"),
-        ("uiscript: 2\nroot: {type: Panel}", "expected dialect version 1"),
-        ("uiscript: 1\nroot: {type: Mystery}", "unsupported gui-native uiscript widget type"),
-        ("uiscript: 1\nroot: {type: Panel, mystery: 1}", "unsupported Panel property"),
         (
-            "uiscript: 1\nroot: {type: Panel, children: [{type: Panel, name: x}, {type: Panel, name: x}]}",
+            "root: {type: termin.gui.Panel}",
+            "document.uiscript: expected dialect version 2",
+        ),
+        (
+            "uiscript: 1\nroot: {type: termin.gui.Panel}",
+            "expected dialect version 2",
+        ),
+        (
+            "uiscript: 2\nroot: {type: termin.gui.Mystery}",
+            "unknown registered widget type",
+        ),
+        (
+            "uiscript: 2\nroot: {type: termin.gui.Panel, mystery: 1}",
+            "unsupported termin.gui.Panel property",
+        ),
+        (
+            "uiscript: 2\nroot: {type: termin.gui.Panel, children: "
+            "[{type: termin.gui.Panel, name: x}, "
+            "{type: termin.gui.Panel, name: x}]}",
             "duplicate widget name 'x'",
         ),
     ],
 )
-def test_uiscript_v1_rejects_unsupported_or_ambiguous_input(source, message):
+def test_uiscript_v2_rejects_unsupported_or_ambiguous_input(source, message):
     with pytest.raises(UiScriptError, match=message):
         UiScriptLoader().parser.parse(source)
 
@@ -85,13 +98,14 @@ def test_uiscript_materialization_lookup_reload_and_teardown():
     assert loaded.named("inspect_btn").tooltip == "Inspect"
     assert loaded.named("inspect_btn").widget.preferred_size.width == pytest.approx(26.0)
     assert loaded.widgets["inspect_btn"].properties["active_color"] == pytest.approx(
-        (0.2, 0.5, 0.8, 0.95)
+        [0.2, 0.5, 0.8, 0.95]
     )
 
+    old_root = loaded.root.widget
     replacement_source = CAMERA_SCRIPT.replace("inspect_btn", "replacement_btn")
     replacement = loader.reload(loaded, replacement_source)
     assert document.live_widget_count == 3
-    assert not loaded.root.widget.alive
+    assert not old_root.alive
     assert replacement.named("replacement_btn").widget.alive
 
     replacement.close()
@@ -102,9 +116,9 @@ def test_uiscript_materialization_lookup_reload_and_teardown():
 
 def test_uiscript_icon_button_materializes_visual_states():
     source = """
-uiscript: 1
+uiscript: 2
 root:
-  type: IconButton
+  type: termin.gui.IconButton
   name: stateful
   icon: S
   background_color: [0.1, 0.2, 0.3, 1]
@@ -140,7 +154,7 @@ def test_uiscript_failed_reload_preserves_old_tree_and_cleans_attempt():
     loader = UiScriptLoader()
     loaded = loader.load_string(CAMERA_SCRIPT, document=document)
 
-    with pytest.raises(UiScriptError, match="unsupported Overlay property"):
+    with pytest.raises(UiScriptError, match="unsupported termin.gui.OverlayLayout property"):
         loader.reload(loaded, CAMERA_SCRIPT.replace("background_color:", "unknown_color:"))
 
     assert document.live_widget_count == 3
@@ -148,7 +162,7 @@ def test_uiscript_failed_reload_preserves_old_tree_and_cleans_attempt():
     loaded.close()
 
 
-def test_editor_camera_uiscript_is_in_the_supported_v1_dialect():
+def test_editor_camera_uiscript_is_in_the_supported_v2_dialect():
     root = Path(__file__).resolve().parents[3]
     script = root / "termin-stdlib/python/termin/stdlib/resources/uiscript/editor_camera_ui.uiscript"
     description = UiScriptLoader().parser.parse(script.read_text(encoding="utf-8"))

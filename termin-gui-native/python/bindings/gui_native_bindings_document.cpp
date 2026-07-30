@@ -1,6 +1,80 @@
 #include "gui_native_bindings_shared.hpp"
 
+#include <filesystem>
+
+#include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/unique_ptr.h>
+
+#include <termin/gui_native/uiscript.hpp>
+
 using namespace termin::gui_native::python_bindings;
+
+namespace {
+
+struct PythonMaterializedWidget {
+  std::shared_ptr<DocumentState> state;
+  termin::gui_native::MaterializedWidget value;
+};
+
+nb::object typed_uiscript_widget(const PythonMaterializedWidget &materialized) {
+  WidgetRef ref{materialized.state, materialized.value.handle};
+  const std::string &type = materialized.value.type_name;
+  if (type == "termin.gui.IconButton")
+    return nb::cast(IconButtonRef{ref});
+  if (type == "termin.gui.OverlayLayout")
+    return nb::cast(OverlayLayoutRef{ref});
+  if (type == "termin.gui.HStack")
+    return nb::cast(HStackRef{ref});
+  if (type == "termin.gui.VStack")
+    return nb::cast(VStackRef{ref});
+  if (type == "termin.gui.Panel")
+    return nb::cast(PanelRef{ref});
+  return nb::cast(ref);
+}
+
+class PythonLoadedUiScript {
+public:
+  explicit PythonLoadedUiScript(
+      termin::gui_native::LoadedUiScript value,
+      bool owns_document)
+      : value_(std::move(value)), owns_document_(owns_document) {
+    state_ = require_document_state(value_.document());
+  }
+
+  PythonLoadedUiScript(const PythonLoadedUiScript &) = delete;
+  PythonLoadedUiScript &operator=(const PythonLoadedUiScript &) = delete;
+  ~PythonLoadedUiScript() { close(); }
+
+  termin::gui_native::LoadedUiScript &value() { return value_; }
+  const termin::gui_native::LoadedUiScript &value() const { return value_; }
+  const std::shared_ptr<DocumentState> &state() const { return state_; }
+  bool owns_document() const { return owns_document_; }
+  void relinquish_document_ownership() { owns_document_ = false; }
+
+  void close() {
+    if (value_.closed())
+      return;
+    const tc_ui_document_handle document = value_.document().handle();
+    value_.close();
+    if (owns_document_) {
+      unregister_document_state(document);
+      owns_document_ = false;
+    }
+  }
+
+private:
+  termin::gui_native::LoadedUiScript value_;
+  std::shared_ptr<DocumentState> state_;
+  bool owns_document_ = false;
+};
+
+PythonMaterializedWidget materialized_ref(
+    const PythonLoadedUiScript &loaded,
+    const termin::gui_native::MaterializedWidget &value) {
+  return PythonMaterializedWidget{loaded.state(), value};
+}
+
+} // namespace
 
 void bind_gui_native_rendering_and_document(nb::module_ &m) {
   m.def("tc_ui_document_registry_get_all_info", []() {
@@ -902,6 +976,179 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def("focus_previous", [](termin::gui_native::TcDocument &self) {
         return tc_ui_document_focus_previous(checked_document_handle(self));
       });
+
+  nb::exception<termin::gui_native::UiScriptError>(
+      m, "UiScriptError", PyExc_ValueError);
+
+  nb::class_<termin::gui_native::UiScriptNode>(m, "UiScriptNode")
+      .def_prop_ro("type_name",
+                   [](const termin::gui_native::UiScriptNode &self) {
+                     return self.type_name;
+                   })
+      .def_prop_ro("name",
+                   [](const termin::gui_native::UiScriptNode &self)
+                       -> nb::object {
+                     return self.name.empty() ? nb::none()
+                                              : nb::cast(self.name);
+                   })
+      .def_prop_ro("properties",
+                   [](const termin::gui_native::UiScriptNode &self) {
+                     return tc_value_to_python(self.properties.raw());
+                   })
+      .def_prop_ro("children",
+                   [](const termin::gui_native::UiScriptNode &self) {
+                     return self.children;
+                   })
+      .def_prop_ro("source_path",
+                   [](const termin::gui_native::UiScriptNode &self) {
+                     return self.source_path;
+                   });
+
+  nb::class_<termin::gui_native::UiScriptDescription>(
+      m, "UiScriptDescription")
+      .def_prop_ro("version",
+                   [](const termin::gui_native::UiScriptDescription &self) {
+                     return self.version;
+                   })
+      .def_prop_ro(
+          "root",
+          [](const termin::gui_native::UiScriptDescription &self)
+              -> const termin::gui_native::UiScriptNode & {
+            return self.root;
+          },
+          nb::rv_policy::reference_internal)
+      .def_prop_ro(
+          "type_dependencies",
+          [](const termin::gui_native::UiScriptDescription &self) {
+            return self.type_dependencies;
+          });
+
+  nb::class_<termin::gui_native::UiScriptParser>(m, "UiScriptParser")
+      .def(nb::init<>())
+      .def("parse", &termin::gui_native::UiScriptParser::parse,
+           nb::arg("source"));
+
+  nb::class_<PythonMaterializedWidget>(m, "MaterializedWidget")
+      .def_prop_ro("widget",
+                   [](const PythonMaterializedWidget &self) {
+                     return WidgetRef{self.state, self.value.handle};
+                   })
+      .def_prop_ro("public", &typed_uiscript_widget)
+      .def_prop_ro("type_name",
+                   [](const PythonMaterializedWidget &self) {
+                     return self.value.type_name;
+                   })
+      .def_prop_ro("properties",
+                   [](const PythonMaterializedWidget &self) {
+                     return tc_value_to_python(self.value.properties.raw());
+                   });
+
+  nb::class_<PythonLoadedUiScript>(m, "LoadedUiScript")
+      .def_prop_ro("document",
+                   [](const PythonLoadedUiScript &self) {
+                     return self.value().document();
+                   })
+      .def_prop_ro(
+          "description",
+          [](const PythonLoadedUiScript &self)
+              -> const termin::gui_native::UiScriptDescription & {
+            return self.value().description();
+          },
+          nb::rv_policy::reference_internal)
+      .def_prop_ro("root",
+                   [](const PythonLoadedUiScript &self) {
+                     return materialized_ref(self, self.value().root());
+                   })
+      .def_prop_ro("widgets",
+                   [](const PythonLoadedUiScript &self) {
+                     nb::dict result;
+                     for (const auto &[name, widget] :
+                          self.value().widgets()) {
+                       result[name.c_str()] =
+                           materialized_ref(self, widget);
+                     }
+                     return result;
+                   })
+      .def("named",
+           [](const PythonLoadedUiScript &self, const std::string &name) {
+             return typed_uiscript_widget(
+                 materialized_ref(self, self.value().named(name)));
+           },
+           nb::arg("name"))
+      .def("close", &PythonLoadedUiScript::close)
+      .def("__enter__",
+           [](PythonLoadedUiScript &self) -> PythonLoadedUiScript & {
+             return self;
+           },
+           nb::rv_policy::reference_internal)
+      .def("__exit__",
+           [](PythonLoadedUiScript &self, nb::args) { self.close(); });
+
+  nb::class_<termin::gui_native::UiScriptLoader>(m, "UiScriptLoader")
+      .def(nb::init<>())
+      .def_prop_ro(
+          "parser",
+          [](termin::gui_native::UiScriptLoader &self)
+              -> termin::gui_native::UiScriptParser & {
+            return self.parser;
+          },
+          nb::rv_policy::reference_internal)
+      .def(
+          "load",
+          [](termin::gui_native::UiScriptLoader &self,
+             const std::filesystem::path &path,
+             std::optional<termin::gui_native::TcDocument> document) {
+            const bool owns = !document || !document->valid();
+            return std::make_unique<PythonLoadedUiScript>(
+                self.load(path.string(), document.value_or(
+                                           termin::gui_native::TcDocument{})),
+                owns);
+          },
+          nb::arg("path"), nb::arg("document").none() = nb::none())
+      .def(
+          "load_string",
+          [](termin::gui_native::UiScriptLoader &self,
+             const std::string &source,
+             std::optional<termin::gui_native::TcDocument> document,
+             const std::string &source_name) {
+            const bool owns = !document || !document->valid();
+            return std::make_unique<PythonLoadedUiScript>(
+                self.load_string(
+                    source,
+                    document.value_or(termin::gui_native::TcDocument{}),
+                    source_name),
+                owns);
+          },
+          nb::arg("source"), nb::arg("document").none() = nb::none(),
+          nb::arg("source_name") = "<string>")
+      .def(
+          "materialize",
+          [](termin::gui_native::UiScriptLoader &self,
+             const termin::gui_native::UiScriptDescription &description,
+             std::optional<termin::gui_native::TcDocument> document) {
+            const bool owns = !document || !document->valid();
+            return std::make_unique<PythonLoadedUiScript>(
+                self.materialize(
+                    description,
+                    document.value_or(termin::gui_native::TcDocument{})),
+                owns);
+          },
+          nb::arg("description"),
+          nb::arg("document").none() = nb::none())
+      .def(
+          "reload",
+          [](termin::gui_native::UiScriptLoader &self,
+             PythonLoadedUiScript &loaded, const std::string &source,
+             const std::string &source_name) {
+            const bool owns = loaded.owns_document();
+            auto replacement =
+                self.reload(loaded.value(), source, source_name);
+            loaded.relinquish_document_ownership();
+            return std::make_unique<PythonLoadedUiScript>(
+                std::move(replacement), owns);
+          },
+          nb::arg("loaded"), nb::arg("source"),
+          nb::arg("source_name") = "<reload>");
 
   nb::class_<termin::gui_native::UiDrawListRenderer>(m, "DrawListRenderer")
       .def(nb::init<>())

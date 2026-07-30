@@ -166,6 +166,22 @@ bool tc_widget_registry_register(const char* type_name, const char* owner, const
         tc_runtime_type_descriptor_destroy(type_descriptor);
         return false;
     }
+    if (descriptor->uiscript) {
+        if (descriptor->uiscript->abi_version != TC_UISCRIPT_TYPE_ABI_VERSION) {
+            tc_log_error(
+                "[termin-gui-native] widget factory '%s' has unsupported UiScript ABI version %u",
+                type_name, descriptor->uiscript->abi_version);
+            tc_runtime_type_descriptor_destroy(type_descriptor);
+            return false;
+        }
+        if (!tc_runtime_type_descriptor_add_facet(
+                type_descriptor, TC_RUNTIME_TYPE_FACET_UISCRIPT,
+                (void*)descriptor->uiscript, NULL, NULL,
+                TC_UISCRIPT_TYPE_ABI_VERSION)) {
+            tc_runtime_type_descriptor_destroy(type_descriptor);
+            return false;
+        }
+    }
 
     if (replacing) {
         const char* existing_owner = tc_runtime_type_registry_get_owner(type_name);
@@ -228,6 +244,14 @@ size_t tc_widget_registry_type_count(void) {
 
 const char* tc_widget_registry_type_at(size_t index) {
     return tc_runtime_type_registry_type_with_facet_at(TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY, index);
+}
+
+const tc_uiscript_type_descriptor*
+tc_uiscript_type_descriptor_get(const char* type_name) {
+    return type_name
+        ? (const tc_uiscript_type_descriptor*)tc_runtime_type_registry_get_facet(
+              type_name, TC_RUNTIME_TYPE_FACET_UISCRIPT)
+        : NULL;
 }
 
 bool tc_widget_registry_serialize_state(const tc_widget* widget, tc_value* out_state) {

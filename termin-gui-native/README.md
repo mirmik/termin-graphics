@@ -9,9 +9,9 @@ The standard pointer, focus, keyboard and visual-state contract is maintained
 in [`docs/input-conformance.md`](docs/input-conformance.md).
 
 Declarative native documents use the deliberately limited, versioned
-[`uiscript: 1` dialect](docs/uiscript-v1.md). The loader validates into a
-toolkit-neutral description before materializing into a `tc_ui_document`; it does
-not import or emulate `tcgui`.
+[`uiscript: 2` dialect](docs/uiscript-v2.md). The native loader parses and
+validates the product-local recipe before materializing it into a
+`tc_ui_document`; it does not import or emulate `tcgui`.
 
 The installed widget/document and rendering targets have no native-window
 dependency:

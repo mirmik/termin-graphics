@@ -6,6 +6,11 @@ namespace termin::gui_native {
 
 class TextArea;
 class TextInput;
+class OverlayLayout;
+class Panel;
+class HStack;
+class VStack;
+class IconButton;
 
 TERMIN_GUI_NATIVE_API bool register_builtin_widget_types();
 
@@ -22,6 +27,31 @@ struct NativeWidgetRuntimeType<TextInput> {
 template <>
 struct NativeWidgetRuntimeType<TextArea> {
     static constexpr const char* name = "termin.gui.TextArea";
+};
+
+template <>
+struct NativeWidgetRuntimeType<OverlayLayout> {
+    static constexpr const char* name = "termin.gui.OverlayLayout";
+};
+
+template <>
+struct NativeWidgetRuntimeType<Panel> {
+    static constexpr const char* name = "termin.gui.Panel";
+};
+
+template <>
+struct NativeWidgetRuntimeType<HStack> {
+    static constexpr const char* name = "termin.gui.HStack";
+};
+
+template <>
+struct NativeWidgetRuntimeType<VStack> {
+    static constexpr const char* name = "termin.gui.VStack";
+};
+
+template <>
+struct NativeWidgetRuntimeType<IconButton> {
+    static constexpr const char* name = "termin.gui.IconButton";
 };
 
 } // namespace termin::gui_native

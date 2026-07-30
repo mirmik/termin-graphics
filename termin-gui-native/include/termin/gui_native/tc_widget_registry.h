@@ -3,12 +3,13 @@
 
 #include <tcbase/tc_value.h>
 #include <termin/gui_native/tc_ui_document.h>
+#include <termin/gui_native/tc_uiscript.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define TC_WIDGET_FACTORY_ABI_VERSION 2u
+#define TC_WIDGET_FACTORY_ABI_VERSION 3u
 #define TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY "termin.gui.widget_factory"
 
 typedef struct tc_widget_factory_result {
@@ -42,6 +43,7 @@ typedef struct tc_widget_factory_descriptor {
     void* userdata;
     tc_widget_state_serialize_fn serialize_state;
     tc_widget_state_deserialize_fn deserialize_state;
+    const tc_uiscript_type_descriptor* uiscript;
 } tc_widget_factory_descriptor;
 
 /*
