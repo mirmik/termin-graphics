@@ -47,6 +47,22 @@ snapshot с revision. Будущие retained series/grid items использу
 draw-команды через языковую границу. Создание и уничтожение projection явные;
 projection следует уничтожать до либо сразу после owner scene.
 
+`PlotGridItem2D` — первый самостоятельный retained chart part. Он принадлежит
+обычной `TcVisualScene`, хранит копию major tick values и style, а актуальную
+геометрию получает из `PlotProjection2D` во время native paint. Tick values за
+пределами текущего range не попадают в draw path, поэтому pan/zoom/resize
+передают только compact projection update. C API
+`tc_plot_grid_item2d_create/set_*/snapshot/copy_ticks` использует scene и
+graphic-item handles, проверяет тип, owner scene и stale state.
+
+`fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
+value-only layout boundary. Tick spacing и font size задаются в logical pixels
+и масштабируются через `pixel_scale`; возвращаемые ranges, values, labels и
+text metrics не содержат borrowed backend pointers. Пересчитывать ticks нужно
+при изменении range, plot-area extent или pixel scale; text metrics — при
+изменении текста, font, logical size или pixel scale. `PlotEngine2D` использует
+эти же utilities как reference path.
+
 `PlotAnnotationLayer2D` принадлежит plot engine и хранит semantic annotations
 через generation handles. Одна annotation может проецироваться в несколько
 visual items с независимыми фазами `Underlay`, `Overlay`, `Chrome` и clipping

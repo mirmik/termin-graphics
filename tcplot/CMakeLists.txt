@@ -52,6 +52,8 @@ set(TCPLOT_SOURCES
     src/plot_data.cpp
     src/plot_frame2d.cpp
     src/plot_projection2d.cpp
+    src/plot_grid_item2d.cpp
+    src/plot_layout2d.cpp
     src/plot_annotations2d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
@@ -115,6 +117,25 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(tcplot_plot_projection2d_test)
     add_test(NAME tcplot_plot_projection2d_test
         COMMAND tcplot_plot_projection2d_test)
+
+    add_executable(tcplot_plot_grid_item2d_test
+        tests/test_plot_grid_item2d.cpp)
+    target_link_libraries(tcplot_plot_grid_item2d_test PRIVATE
+        tcplot)
+    termin_set_rpath_test(tcplot_plot_grid_item2d_test)
+    add_test(NAME tcplot_plot_grid_item2d_test
+        COMMAND tcplot_plot_grid_item2d_test)
+
+    add_executable(tcplot_plot_layout2d_test
+        tests/test_plot_layout2d.cpp)
+    target_link_libraries(tcplot_plot_layout2d_test PRIVATE
+        tcplot)
+    target_compile_definitions(tcplot_plot_layout2d_test PRIVATE
+        TCPLOT_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+        TCPLOT_TEST_FONT_ALT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Contrib/imgui/misc/fonts/Roboto-Medium.ttf")
+    termin_set_rpath_test(tcplot_plot_layout2d_test)
+    add_test(NAME tcplot_plot_layout2d_test
+        COMMAND tcplot_plot_layout2d_test)
 
     add_executable(tcplot_plot_annotations2d_test
         tests/test_plot_annotations2d.cpp)

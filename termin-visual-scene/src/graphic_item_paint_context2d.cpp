@@ -122,4 +122,17 @@ bool GraphicItemPaintContext2D::custom_batch(
         batch->sampling);
 }
 
+bool GraphicItemPaintContext2D::push_clip_rect(
+    termin::Rect2f rect)
+{
+    return sink_ != nullptr && sink_->builder != nullptr &&
+        sink_->builder->push_clip_rect(rect);
+}
+
+bool GraphicItemPaintContext2D::pop_clip()
+{
+    return sink_ != nullptr && sink_->builder != nullptr &&
+        sink_->builder->pop_clip();
+}
+
 }  // namespace termin::visual

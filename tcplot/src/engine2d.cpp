@@ -24,8 +24,8 @@
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
-#include "tcplot/axes.hpp"
 #include "tcplot/plot_annotations2d.hpp"
+#include "tcplot/plot_layout2d.hpp"
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -194,15 +194,16 @@ void PlotEngine2D::clear() {
 
 void PlotEngine2D::fit() {
     const auto bounds = data.data_bounds_2d();
-    const double x0 = bounds[0], x1 = bounds[1];
-    const double y0 = bounds[2], y1 = bounds[3];
-    const double dx = (x1 > x0) ? (x1 - x0) : 1.0;
-    const double dy = (y1 > y0) ? (y1 - y0) : 1.0;
-    constexpr double pad = 0.05;
-    view_x_min_ = x0 - dx * pad;
-    view_x_max_ = x1 + dx * pad;
-    view_y_min_ = y0 - dy * pad;
-    view_y_max_ = y1 + dy * pad;
+    const auto fitted = fit_plot_range2d(
+        PlotRange2D{bounds[0], bounds[1], bounds[2], bounds[3]});
+    if (!fitted) {
+        tc::Log::error("PlotEngine2D::fit failed to fit data bounds");
+        return;
+    }
+    view_x_min_ = fitted->x_min();
+    view_x_max_ = fitted->x_max();
+    view_y_min_ = fitted->y_min();
+    view_y_max_ = fitted->y_max();
 }
 
 void PlotEngine2D::set_view(double x_min, double x_max, double y_min, double y_max) {
@@ -637,12 +638,13 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     canvas_->draw_rect(
         pa.x(), pa.y(), pa.width(), pa.height(), canvas_color(plot_bg_color));
 
-    const int max_x_ticks = std::max(int(pa.width() / 80.0f), 3);
-    const int max_y_ticks = std::max(int(pa.height() / 50.0f), 3);
-    const std::vector<double> x_ticks =
-        axes::nice_ticks(v.x_min(), v.x_max(), max_x_ticks);
-    const std::vector<double> y_ticks =
-        axes::nice_ticks(v.y_min(), v.y_max(), max_y_ticks);
+    const auto layout_ticks = make_plot_ticks2d(frame);
+    if (!layout_ticks) {
+        tc::Log::error("PlotEngine2D::render failed to compute ticks");
+        return;
+    }
+    const std::vector<double>& x_ticks = layout_ticks->x.values;
+    const std::vector<double>& y_ticks = layout_ticks->y.values;
 
     canvas_->begin_clip(pa.x(), pa.y(), pa.width(), pa.height());
     if (show_grid) {
@@ -844,20 +846,27 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         // / tick-label hierarchy visible even at similar sizes.
         const float tick_sz = font_size - 2.0f;
 
-        for (double tx : x_ticks) {
+        for (std::size_t index = 0; index < x_ticks.size(); ++index) {
+            const double tx = x_ticks[index];
             const PlotPixelPoint2D p = frame.data_to_pixel(tx, 0.0);
-            canvas_->draw_text(axes::format_tick(tx),
+            canvas_->draw_text(layout_ticks->x.labels[index],
                                p.x, pa.bottom() + 14.0f,
                                tick_sz, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Center);
         }
-        for (double ty : y_ticks) {
+        for (std::size_t index = 0; index < y_ticks.size(); ++index) {
+            const double ty = y_ticks[index];
             const PlotPixelPoint2D p = frame.data_to_pixel(0.0, ty);
-            const std::string lab = axes::format_tick(ty);
-            const auto m = font->measure_text(lab, tick_sz);
-            const float tw = m.width;
-            canvas_->draw_text(lab,
-                               pa.x() - tw - 6.0f, p.y + 4.0f,
+            const std::string& label = layout_ticks->y.labels[index];
+            const auto metrics =
+                measure_plot_text2d(*font, label, tick_sz);
+            if (!metrics) {
+                tc::Log::error(
+                    "PlotEngine2D::render failed to measure Y tick");
+                return;
+            }
+            canvas_->draw_text(label,
+                               pa.x() - metrics->width - 6.0f, p.y + 4.0f,
                                tick_sz, canvas_color(label_color),
                                font, tgfx::Text2DRenderer::Anchor::Left);
         }
@@ -879,13 +888,19 @@ void PlotEngine2D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
             // implicit coupling made theme switching and per-panel
             // recolouring unpredictable.
             const Color4 tc = title_color.value_or(label_color);
-            const int title_lh = font->line_height_px(title_font_size);
+            const auto title_metrics =
+                measure_plot_text2d(*font, data.title, title_font_size);
+            if (!title_metrics) {
+                tc::Log::error(
+                    "PlotEngine2D::render failed to measure title");
+                return;
+            }
             // Clamp to viewport top so a title bigger than margin_top
             // gets cut off at the top instead of drawing at a negative
             // Y — caller's cue to bump margin_top.
             const float title_top_y = std::max(
                 static_cast<float>(vy_),
-                pa.y() - static_cast<float>(title_lh) - title_pad);
+                pa.y() - title_metrics->line_height - title_pad);
             canvas_->draw_text(data.title,
                                pa.x(), title_top_y,
                                title_font_size, canvas_color(tc),
