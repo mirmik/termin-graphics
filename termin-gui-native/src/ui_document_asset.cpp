@@ -104,7 +104,14 @@ std::shared_ptr<UiDocumentAsset> build_source_asset(
     if (uuid.empty()) {
         throw UiScriptError("ui document asset UUID must not be empty");
     }
-    UiScriptDescription description = UiScriptParser().parse(source);
+    UiScriptDescription description;
+    try {
+        description = UiScriptParser().parse(source);
+    } catch (const std::exception& error) {
+        throw UiScriptError(
+            (source_identity.empty() ? std::string("<memory>") : source_identity) +
+            ": " + error.what());
+    }
     const std::string asset_name = name.empty() ? uuid : std::move(name);
     return std::make_shared<UiDocumentAsset>(
         std::move(uuid), asset_name, std::move(source_identity), revision,
@@ -292,7 +299,15 @@ LoadedUiScript TcUiDocumentAsset::instantiate(TcDocument document) const {
         throw UiScriptError(
             "cannot instantiate an invalid native UI document asset handle");
     }
-    return UiScriptLoader().materialize(asset->description(), document);
+    try {
+        return UiScriptLoader().materialize(asset->description(), document);
+    } catch (const std::exception& error) {
+        throw UiScriptError(
+            (asset->source_identity().empty()
+                ? std::string("<memory>")
+                : asset->source_identity()) +
+            ": " + error.what());
+    }
 }
 
 LoadedUiScript TcUiDocumentAsset::reload_instance(
@@ -303,7 +318,15 @@ LoadedUiScript TcUiDocumentAsset::reload_instance(
         throw UiScriptError(
             "cannot reload from an invalid native UI document asset handle");
     }
-    return UiScriptLoader().reload(loaded, asset->description());
+    try {
+        return UiScriptLoader().reload(loaded, asset->description());
+    } catch (const std::exception& error) {
+        throw UiScriptError(
+            (asset->source_identity().empty()
+                ? std::string("<memory>")
+                : asset->source_identity()) +
+            ": " + error.what());
+    }
 }
 
 bool TcUiDocumentAsset::reload_source(const std::string& source) {
@@ -321,8 +344,10 @@ bool TcUiDocumentAsset::reload_source(const std::string& source) {
             source, current->revision() + 1);
     } catch (const std::exception& error) {
         tc_log_error(
-            "[gui-native-ui-asset] failed to reload '%s': %s",
-            current->uuid().c_str(), error.what());
+            "[gui-native-ui-asset] failed to reload '%s' from '%s': %s",
+            current->uuid().c_str(),
+            current->source_identity().c_str(),
+            error.what());
         return false;
     }
 
@@ -360,14 +385,15 @@ TcUiDocumentAsset TcUiDocumentAsset::declare_source(
     std::string source_identity,
     const std::string& source
 ) {
+    const std::string diagnostic_source = source_identity;
     try {
         return register_asset(build_source_asset(
             std::move(uuid), std::move(name), std::move(source_identity),
             source, 1));
     } catch (const std::exception& error) {
         tc_log_error(
-            "[gui-native-ui-asset] failed to declare source asset: %s",
-            error.what());
+            "[gui-native-ui-asset] failed to declare source asset '%s': %s",
+            diagnostic_source.c_str(), error.what());
         return {};
     }
 }

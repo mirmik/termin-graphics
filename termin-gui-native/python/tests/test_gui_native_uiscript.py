@@ -211,6 +211,18 @@ def test_ui_document_asset_compiles_roundtrips_and_reloads_transactionally():
     UiDocumentAsset.clear_registry_for_tests()
 
 
+def test_ui_document_asset_diagnostics_include_source_identity():
+    UiDocumentAsset.clear_registry_for_tests()
+
+    with pytest.raises(UiScriptError, match="UI/broken.uiscript"):
+        UiDocumentAsset.compile_source_json(
+            "broken-native-ui",
+            "Broken native UI",
+            "UI/broken.uiscript",
+            "uiscript: 2\nroot:\n  type: termin.gui.Missing\n",
+        )
+
+
 def test_editor_camera_uiscript_is_in_the_supported_v2_dialect():
     root = Path(__file__).resolve().parents[3]
     script = root / "termin-stdlib/python/termin/stdlib/resources/uiscript/editor_camera_ui.uiscript"
