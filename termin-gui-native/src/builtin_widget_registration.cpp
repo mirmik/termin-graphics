@@ -7,6 +7,7 @@
 #include <tcbase/tc_log.h>
 #include <termin/gui_native/h_stack.hpp>
 #include <termin/gui_native/icon_button.hpp>
+#include <termin/gui_native/label.hpp>
 #include <termin/gui_native/overlay_layout.hpp>
 #include <termin/gui_native/panel.hpp>
 #include <termin/gui_native/tc_widget_registry.h>
@@ -168,6 +169,35 @@ bool apply_icon_button_properties(tc_widget* widget, const tc_value* properties)
     return true;
 }
 
+bool create_label(
+    tc_ui_document_handle,
+    void*,
+    tc_widget_factory_result* result
+) {
+    if (!result) {
+        return false;
+    }
+    auto* widget = new Label("");
+    *result = tc_widget_factory_result{
+        widget->c_widget(), &delete_native_widget, TC_WIDGET_OWNED};
+    return true;
+}
+
+bool apply_label_properties(tc_widget* widget, const tc_value* properties) {
+    auto* label = static_cast<Label*>(widget->body);
+    if (const tc_value* text = property(properties, "text")) {
+        label->set_text(text->data.s ? text->data.s : "");
+    }
+    if (property(properties, "font_size")) {
+        label->set_font_size(number_property(properties, "font_size"));
+    }
+    Color color;
+    if (color_property(properties, "color", color)) {
+        label->set_color(color);
+    }
+    return true;
+}
+
 bool append_child(
     tc_widget* parent,
     tc_widget* child,
@@ -319,6 +349,7 @@ constexpr const char* kIconButtonProperties[] = {
     "hover_color", "pressed_color", "active_color", "icon_color",
     "border_radius", "active",
 };
+constexpr const char* kLabelProperties[] = {"text", "font_size", "color"};
 
 const tc_uiscript_type_descriptor kOverlayUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -348,6 +379,33 @@ const tc_uiscript_type_descriptor kIconButtonUiScript{
     &apply_icon_button_properties,
     nullptr,
 };
+const tc_uiscript_type_descriptor kLabelUiScript{
+    TC_UISCRIPT_TYPE_ABI_VERSION,
+    kLabelProperties,
+    std::size(kLabelProperties),
+    &apply_label_properties,
+    nullptr,
+};
+
+bool register_label_widget() {
+    constexpr const char* type_name = NativeWidgetRuntimeType<Label>::name;
+    if (tc_widget_registry_has(type_name)) {
+        return true;
+    }
+    const tc_widget_factory_descriptor descriptor{
+        TC_WIDGET_FACTORY_ABI_VERSION,
+        TC_LANGUAGE_CXX,
+        &create_label,
+        nullptr,
+        nullptr,
+        nullptr,
+        &reject_declarative_persistence,
+        &reject_declarative_restore,
+        &kLabelUiScript,
+    };
+    return tc_widget_registry_register(
+        type_name, kBuiltinOwner, kWidgetParent, &descriptor);
+}
 
 } // namespace
 
@@ -363,6 +421,7 @@ bool register_builtin_widget_types() {
             NativeWidgetRuntimeType<HStack>::name, &kBoxUiScript) &&
         register_declarative_widget<VStack>(
             NativeWidgetRuntimeType<VStack>::name, &kBoxUiScript) &&
+        register_label_widget() &&
         register_declarative_widget<IconButton>(
             NativeWidgetRuntimeType<IconButton>::name, &kIconButtonUiScript);
 }

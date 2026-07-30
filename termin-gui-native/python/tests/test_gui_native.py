@@ -57,7 +57,10 @@ from termin.gui_native import (
     tooltip_rect,
     unregister_widget_owner,
     unregister_widget_type,
+    widget_type_info,
 )
+
+
 def _bundled_font_path() -> Path:
     sdk_root = os.environ.get("TERMIN_SDK")
     if not sdk_root:
@@ -220,6 +223,11 @@ def test_python_registered_widget_type_identity_lifetime_and_reload():
         register_widget_type(type_name, RegisteredWidget, owner="test.python")
         assert has_widget_type(type_name)
         assert type_name in registered_widget_types()
+        assert widget_type_info(type_name) == {
+            "registered": True,
+            "language": "python",
+            "uiscript": False,
+        }
 
         document = tc_ui_document_create()
         parent = document.create_registered_widget(type_name)
@@ -255,6 +263,14 @@ def test_python_registered_widget_type_identity_lifetime_and_reload():
         assert not parent.alive
     finally:
         assert unregister_widget_type(type_name)
+
+
+def test_builtin_label_publishes_native_uiscript_factory_contract():
+    assert widget_type_info("termin.gui.Label") == {
+        "registered": True,
+        "language": "cxx",
+        "uiscript": True,
+    }
 
 
 def test_python_registered_widget_constructor_failure_rolls_back():

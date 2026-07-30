@@ -238,6 +238,16 @@ bool tc_widget_registry_has(const char* type_name) {
            tc_runtime_type_registry_has_facet(type_name, TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY);
 }
 
+tc_language tc_widget_registry_language(const char* type_name) {
+    tc_widget_factory_record* record = factory_record(type_name);
+    return record ? record->descriptor.language : TC_LANGUAGE_MAX;
+}
+
+bool tc_widget_registry_has_uiscript(const char* type_name) {
+    return type_name &&
+           tc_runtime_type_registry_has_facet(type_name, TC_RUNTIME_TYPE_FACET_UISCRIPT);
+}
+
 size_t tc_widget_registry_type_count(void) {
     return tc_runtime_type_registry_types_with_facet_count(TC_RUNTIME_TYPE_FACET_WIDGET_FACTORY);
 }

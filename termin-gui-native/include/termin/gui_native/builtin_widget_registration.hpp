@@ -11,6 +11,7 @@ class Panel;
 class HStack;
 class VStack;
 class IconButton;
+class Label;
 
 TERMIN_GUI_NATIVE_API bool register_builtin_widget_types();
 
@@ -52,6 +53,11 @@ struct NativeWidgetRuntimeType<VStack> {
 template <>
 struct NativeWidgetRuntimeType<IconButton> {
     static constexpr const char* name = "termin.gui.IconButton";
+};
+
+template <>
+struct NativeWidgetRuntimeType<Label> {
+    static constexpr const char* name = "termin.gui.Label";
 };
 
 } // namespace termin::gui_native

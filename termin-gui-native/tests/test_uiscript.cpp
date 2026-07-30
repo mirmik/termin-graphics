@@ -3,6 +3,8 @@
 #include <cassert>
 #include <string>
 
+#include "widgets_test_support.hpp"
+
 using namespace termin::gui_native;
 
 namespace {
@@ -20,6 +22,11 @@ root:
       offset: [-10, 10]
       spacing: 4
       children:
+        - type: termin.gui.Label
+          name: title
+          text: Native HUD
+          font_size: 18
+          color: [0.9, 0.95, 1, 1]
         - type: termin.gui.IconButton
           name: inspect_btn
           icon: I
@@ -34,14 +41,17 @@ void test_parse_and_independent_materialization() {
     assert(description.version == 2);
     assert(description.root.type_name == "termin.gui.OverlayLayout");
     assert(description.root.children.size() == 1);
-    assert(description.type_dependencies.size() == 3);
+    assert(description.type_dependencies.size() == 4);
 
     LoadedUiScript first = loader.materialize(description);
     LoadedUiScript second = loader.materialize(description);
+    termin_gui_native_test::install_test_text_measurer(first.document());
+    termin_gui_native_test::install_test_text_measurer(second.document());
     assert(first.document().valid());
     assert(second.document().valid());
     assert(!(first.document() == second.document()));
     assert(first.named("inspect_btn").type_name == "termin.gui.IconButton");
+    assert(first.named("title").type_name == "termin.gui.Label");
     assert(
         tc_ui_document_resolve_widget(
             first.document().handle(), first.named("inspect_btn").handle) !=
@@ -55,6 +65,22 @@ void test_parse_and_independent_materialization() {
     const tc_ui_rect bounds = tc_widget_bounds(button);
     assert(bounds.x == 764.0f);
     assert(bounds.y == 10.0f);
+
+    tc_ui_pointer_event covered{};
+    covered.type = TC_UI_POINTER_DOWN;
+    covered.x = bounds.x + bounds.width * 0.5f;
+    covered.y = bounds.y + bounds.height * 0.5f;
+    assert(
+        tc_ui_document_dispatch_pointer_event(
+            first.document().handle(), &covered) == TC_UI_EVENT_HANDLED);
+
+    tc_ui_pointer_event uncovered{};
+    uncovered.type = TC_UI_POINTER_DOWN;
+    uncovered.x = 100.0f;
+    uncovered.y = 500.0f;
+    assert(
+        tc_ui_document_dispatch_pointer_event(
+            first.document().handle(), &uncovered) == TC_UI_EVENT_IGNORED);
 }
 
 void test_structural_diagnostics() {

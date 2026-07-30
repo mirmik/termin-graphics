@@ -64,11 +64,11 @@ void validate_property(
     }
     if (name == "background_color" || name == "hover_color" ||
         name == "pressed_color" || name == "active_color" ||
-        name == "icon_color") {
+        name == "icon_color" || name == "color") {
         validate_color(value, path);
         return;
     }
-    if (name == "icon" || name == "tooltip") {
+    if (name == "icon" || name == "tooltip" || name == "text") {
         if (!value.is_string()) fail(path, "expected a string");
         return;
     }

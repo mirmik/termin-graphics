@@ -453,6 +453,33 @@ void bind_gui_native_core(nb::module_& m) {
               return tc_widget_registry_has(type_name.c_str());
           },
           nb::arg("type_name"));
+    m.def(
+        "widget_type_info",
+        [](const std::string& type_name) {
+            if (!termin::gui_native::register_builtin_widget_types()) {
+                throw std::runtime_error(
+                    "failed to register built-in native UI widget types");
+            }
+            nb::dict result;
+            const bool registered =
+                tc_widget_registry_has(type_name.c_str());
+            result["registered"] = registered;
+            if (!registered) {
+                result["language"] = nb::none();
+                result["uiscript"] = false;
+                return result;
+            }
+            const tc_language language =
+                tc_widget_registry_language(type_name.c_str());
+            result["language"] =
+                language == TC_LANGUAGE_CXX ? nb::str("cxx") :
+                language == TC_LANGUAGE_PYTHON ? nb::str("python") :
+                nb::str("other");
+            result["uiscript"] =
+                tc_widget_registry_has_uiscript(type_name.c_str());
+            return result;
+        },
+        nb::arg("type_name"));
     m.def("registered_widget_types", []() {
         std::vector<std::string> result;
         const size_t count = tc_widget_registry_type_count();

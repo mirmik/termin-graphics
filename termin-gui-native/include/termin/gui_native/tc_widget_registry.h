@@ -71,6 +71,8 @@ TERMIN_GUI_NATIVE_API bool tc_widget_registry_unregister(const char* type_name);
 TERMIN_GUI_NATIVE_API size_t
 tc_widget_registry_unregister_owner(const char* owner, tc_widget_owner_reload_policy policy);
 TERMIN_GUI_NATIVE_API bool tc_widget_registry_has(const char* type_name);
+TERMIN_GUI_NATIVE_API tc_language tc_widget_registry_language(const char* type_name);
+TERMIN_GUI_NATIVE_API bool tc_widget_registry_has_uiscript(const char* type_name);
 TERMIN_GUI_NATIVE_API size_t tc_widget_registry_type_count(void);
 TERMIN_GUI_NATIVE_API const char* tc_widget_registry_type_at(size_t index);
 
