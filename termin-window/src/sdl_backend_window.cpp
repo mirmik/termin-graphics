@@ -7,6 +7,7 @@
 #include <cstring>
 #include <deque>
 #include <cstdlib>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -45,6 +46,12 @@ namespace {
 void configure_sdl_window_hints() {
 #ifdef SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+#endif
+#ifdef SDL_HINT_WINDOWS_DPI_SCALING
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "1");
+#endif
+#ifdef SDL_HINT_WINDOWS_DPI_AWARENESS
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
 #endif
 }
 
@@ -305,6 +312,10 @@ struct SDLBackendWindow::Impl {
 SDLWindowSystem::SDLWindowSystem()
     : impl_(std::make_unique<Impl>())
 {
+    // Windows DPI awareness must be selected before the video subsystem
+    // initializes. SDL ignores these hints here when an embedding host has
+    // already selected a higher-priority policy.
+    configure_sdl_window_hints();
     if (tgfx2_interop_get_device() != nullptr) {
         throw std::runtime_error(
             "SDLWindowSystem: an application graphics device is already installed");
@@ -312,8 +323,6 @@ SDLWindowSystem::SDLWindowSystem()
     if (SDL_WasInit(SDL_INIT_VIDEO) == 0 && SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         throw std::runtime_error(std::string("SDL_InitSubSystem failed: ") + SDL_GetError());
     }
-    configure_sdl_window_hints();
-
     impl_->backend = tgfx::default_backend_from_env();
 
     if (impl_->backend == tgfx::BackendType::OpenGL) {
@@ -518,7 +527,8 @@ SDLBackendWindow::SDLBackendWindow(
     try {
     if (impl_->backend == tgfx::BackendType::OpenGL) {
 #ifdef TGFX2_HAS_OPENGL
-        Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+        Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+            SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
         window_ = SDL_CreateWindow(title.c_str(),
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
@@ -547,7 +557,8 @@ SDLBackendWindow::SDLBackendWindow(
     }
 #ifdef TGFX2_HAS_VULKAN
     else if (impl_->backend == tgfx::BackendType::Vulkan) {
-        Uint32 flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+        Uint32 flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
+            SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
         window_ = SDL_CreateWindow(title.c_str(),
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
@@ -577,7 +588,8 @@ SDLBackendWindow::SDLBackendWindow(
 #endif
 #ifdef TGFX2_HAS_D3D11
     else if (impl_->backend == tgfx::BackendType::D3D11) {
-        Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+        Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN |
+            SDL_WINDOW_ALLOW_HIGHDPI;
         window_ = SDL_CreateWindow(title.c_str(),
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                     width, height, flags);
@@ -587,7 +599,7 @@ SDLBackendWindow::SDLBackendWindow(
         }
 
         int fb_w = 0, fb_h = 0;
-        SDL_GetWindowSize(window_, &fb_w, &fb_h);
+        SDL_GetWindowSizeInPixels(window_, &fb_w, &fb_h);
         if (fb_w <= 0 || fb_h <= 0) {
             fb_w = width;
             fb_h = height;
@@ -838,7 +850,7 @@ std::pair<int, int> SDLBackendWindow::framebuffer_size() const {
     }
 #endif
     else {
-        SDL_GetWindowSize(window_, &w, &h);
+        SDL_GetWindowSizeInPixels(window_, &w, &h);
     }
     return {w, h};
 }
@@ -849,6 +861,25 @@ std::pair<int, int> SDLBackendWindow::window_size() const {
     int height = 0;
     SDL_GetWindowSize(window_, &width, &height);
     return {width, height};
+}
+
+float SDLBackendWindow::content_scale() const {
+    const auto [logical_width, logical_height] = window_size();
+    const auto [pixel_width, pixel_height] = framebuffer_size();
+    if (logical_width <= 0 || logical_height <= 0 ||
+        pixel_width <= 0 || pixel_height <= 0) {
+        return 1.0f;
+    }
+
+    // The two ratios can differ by a pixel after fractional desktop scaling.
+    // Average them, then quantize to 1/64 so ordinary resizes do not produce
+    // spurious scale changes while 1.25/1.5/1.75 remain exact.
+    const double horizontal =
+        static_cast<double>(pixel_width) / static_cast<double>(logical_width);
+    const double vertical =
+        static_cast<double>(pixel_height) / static_cast<double>(logical_height);
+    const double quantized = std::round((horizontal + vertical) * 32.0) / 64.0;
+    return quantized > 0.0 ? static_cast<float>(quantized) : 1.0f;
 }
 
 // ---------------------------------------------------------------------------
@@ -885,6 +916,17 @@ bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
                     out_event.type = WindowEventType::FocusLost;
                     return true;
                 }
+                if (ev.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED) {
+                    out_event.type = WindowEventType::DisplayScaleChanged;
+                    const auto [logical_width, logical_height] = window_size();
+                    const auto [pixel_width, pixel_height] = framebuffer_size();
+                    out_event.resize.width = logical_width;
+                    out_event.resize.height = logical_height;
+                    out_event.resize.framebuffer_width = pixel_width;
+                    out_event.resize.framebuffer_height = pixel_height;
+                    out_event.resize.content_scale = content_scale();
+                    return true;
+                }
                 if (ev.window.event != SDL_WINDOWEVENT_RESIZED &&
                     ev.window.event != SDL_WINDOWEVENT_SIZE_CHANGED) {
                     continue;
@@ -897,6 +939,7 @@ bool SDLBackendWindow::poll_event(WindowEvent& out_event) {
                     out_event.resize.framebuffer_width = width;
                     out_event.resize.framebuffer_height = height;
                 }
+                out_event.resize.content_scale = content_scale();
                 return true;
 
             case SDL_MOUSEMOTION:

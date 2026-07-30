@@ -22,6 +22,10 @@ Windows consume `termin::WindowEvent`; the public application path covers
 title, logical/framebuffer size, text input, event polling, semantic system
 cursors, clipboard text, and presentation without exposing
 SDL types.
+Each window also reports its current per-window `content_scale` (physical
+framebuffer pixels per logical coordinate). Resize events include the sampled
+scale, and moving an SDL window to a display with another scale emits
+`DisplayScaleChanged`; no process-global UI scale is stored.
 SDL's process-global queue is routed through per-window pending queues, so
 polling one `BackendWindow` does not consume events addressed to another and a
 global quit request reaches every registered window.

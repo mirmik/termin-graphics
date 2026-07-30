@@ -73,10 +73,20 @@ class BorrowedTestWindow final : public termin::BackendWindow {
     }
     bool poll_event(termin::WindowEvent&) override { return false; }
     std::pair<int, int> window_size() const override { return size_; }
-    std::pair<int, int> framebuffer_size() const override { return {640, 400}; }
+    std::pair<int, int> framebuffer_size() const override {
+        return framebuffer_size_;
+    }
+    float content_scale() const override { return content_scale_; }
     void present(tgfx::TextureHandle texture) override {
         last_presented = texture;
         ++present_count;
+    }
+    void set_presentation(
+        std::pair<int, int> framebuffer_size,
+        float content_scale
+    ) {
+        framebuffer_size_ = framebuffer_size;
+        content_scale_ = content_scale;
     }
 
     bool text_input_enabled = false;
@@ -90,6 +100,8 @@ class BorrowedTestWindow final : public termin::BackendWindow {
     tgfx::GraphicsHost* graphics_;
     tgfx::BackendType backend_;
     std::pair<int, int> size_{320, 200};
+    std::pair<int, int> framebuffer_size_{640, 400};
+    float content_scale_ = 2.0f;
     bool should_close_ = false;
 };
 
@@ -137,6 +149,16 @@ int main() {
             std::fprintf(stderr, "adapter did not establish borrowed services\n");
             return 1;
         }
+        tc_ui_presentation_metrics initial_metrics{};
+        if (!document.presentation_metrics(initial_metrics) ||
+            initial_metrics.density_scale != 2.0f ||
+            initial_metrics.physical_extent.width != 640.0f ||
+            initial_metrics.physical_extent.height != 400.0f) {
+            std::fprintf(
+                stderr,
+                "adapter did not publish initial per-window presentation metrics\n");
+            return 1;
+        }
         window.set_should_close(true);
         if (!adapter.should_close()) {
             std::fprintf(stderr, "adapter did not expose borrowed close state\n");
@@ -170,11 +192,10 @@ int main() {
             return 1;
         }
         document.layout_roots(tc_ui_rect{
-            0.0f, 0.0f, static_cast<float>(framebuffer_size.first),
-            static_cast<float>(framebuffer_size.second)});
-        if (input->c_widget()->bounds.width != 640.0f ||
-            input->c_widget()->bounds.height != 400.0f) {
-            std::fprintf(stderr, "document layout did not use framebuffer pixels\n");
+            0.0f, 0.0f, 320.0f, 200.0f});
+        if (input->c_widget()->bounds.width != 320.0f ||
+            input->c_widget()->bounds.height != 200.0f) {
+            std::fprintf(stderr, "document layout did not use logical window points\n");
             return 1;
         }
 
@@ -287,6 +308,48 @@ int main() {
             tgfx::backend_name(backend),
             non_background_pixels,
             text_pixels);
+
+        const uint64_t initial_revision = document.presentation_revision();
+        window.set_presentation({480, 300}, 1.5f);
+        termin::WindowEvent scale_changed;
+        scale_changed.type = termin::WindowEventType::DisplayScaleChanged;
+        if (adapter.consume_events(
+                std::span<const termin::WindowEvent>(&scale_changed, 1)) != 1 ||
+            !adapter.repaint_requested()) {
+            std::fprintf(stderr, "display-scale event did not request relayout/repaint\n");
+            return 1;
+        }
+        tc_ui_presentation_metrics changed_metrics{};
+        tc_ui_rect changed_rect{};
+        if (!document.presentation_metrics(changed_metrics) ||
+            changed_metrics.density_scale != 1.5f ||
+            changed_metrics.physical_extent.width != 480.0f ||
+            changed_metrics.physical_extent.height != 300.0f ||
+            document.presentation_revision() <= initial_revision ||
+            !document.presentation_layout_rect(changed_rect) ||
+            changed_rect.width != 320.0f || changed_rect.height != 200.0f) {
+            std::fprintf(
+                stderr,
+                "runtime display scale did not preserve logical document extent\n");
+            return 1;
+        }
+        if (!adapter.render_and_present()) {
+            std::fprintf(stderr, "adapter did not render after display-scale change\n");
+            return 1;
+        }
+
+        window.set_presentation({320, 200}, 1.0f);
+        scale_changed.type = termin::WindowEventType::Resized;
+        adapter.consume_events(
+            std::span<const termin::WindowEvent>(&scale_changed, 1));
+        if (!document.presentation_metrics(changed_metrics) ||
+            changed_metrics.density_scale != 1.0f ||
+            !document.presentation_layout_rect(changed_rect) ||
+            changed_rect.width != 320.0f || changed_rect.height != 200.0f ||
+            !adapter.render_and_present()) {
+            std::fprintf(stderr, "identity desktop scale lost geometry compatibility\n");
+            return 1;
+        }
 
         termin::WindowEvent pointer_away;
         pointer_away.type = termin::WindowEventType::PointerMoved;

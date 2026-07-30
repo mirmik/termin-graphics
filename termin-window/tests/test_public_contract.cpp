@@ -51,6 +51,7 @@ public:
     }
     std::pair<int, int> window_size() const override { return {320, 200}; }
     std::pair<int, int> framebuffer_size() const override { return {640, 400}; }
+    float content_scale() const override { return 2.0f; }
     void present(tgfx::TextureHandle) override {}
 
 private:

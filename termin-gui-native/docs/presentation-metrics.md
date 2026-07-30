@@ -58,6 +58,30 @@ font atlas dimensions, and the per-integer-size metrics cache is capped at 256
 entries so repeated scale changes cannot grow it for the lifetime of the
 process.
 
+## Desktop window source
+
+`termin-window` exposes `BackendWindow::content_scale()` as physical
+framebuffer pixels per logical window coordinate. `GuiWindowAdapter` reads that
+value when it is created, before input batches, and before every rendered
+frame. A resize or display-scale event invalidates the document and requests a
+repaint, so root, overlay, clip, pointer and effective font bounds change as
+one document-local presentation revision. Offscreen sinks and other hosts
+without a platform scale source explicitly retain `1.0`.
+
+The SDL backend creates visible windows with high-DPI drawables. On Windows it
+requests per-monitor-v2 DPI-scaled coordinates before SDL video
+initialization, and `SDL_WINDOWEVENT_DISPLAY_CHANGED` publishes a runtime
+scale change. On Linux the available SDL video backend defines the result:
+Wayland/high-DPI-capable backends expose the drawable/window ratio, while an
+X11 configuration that reports identical logical and pixel sizes remains
+identity rather than guessing from physical monitor DPI.
+
+For fractional scaling, horizontal and vertical drawable/window ratios may
+differ by one pixel. The SDL adapter averages them and rounds to the nearest
+`1/64`; logical layout itself remains fractional, and only the existing
+renderer-boundary policy snaps final physical edges. This keeps common
+`1.25`, `1.5`, `1.75` and `2.0` scales stable across ordinary window resizes.
+
 ## Root policy and invalidation
 
 Each document chooses `TC_UI_ROOT_LAYOUT_FULL_VIEWPORT` (the default) or

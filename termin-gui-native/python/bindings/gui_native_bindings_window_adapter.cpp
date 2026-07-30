@@ -72,6 +72,14 @@ nb::dict python_window_event(const termin::WindowEvent& event) {
     case termin::WindowEventType::CloseRequested:
         result["type"] = "window_close";
         break;
+    case termin::WindowEventType::DisplayScaleChanged:
+        result["type"] = "display_scale_changed";
+        result["width"] = event.resize.width;
+        result["height"] = event.resize.height;
+        result["framebuffer_width"] = event.resize.framebuffer_width;
+        result["framebuffer_height"] = event.resize.framebuffer_height;
+        result["content_scale"] = event.resize.content_scale;
+        break;
     default:
         result["type"] = "other";
         break;

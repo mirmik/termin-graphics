@@ -13,6 +13,7 @@ enum class WindowEventType : uint8_t {
     None,
     CloseRequested,
     Resized,
+    DisplayScaleChanged,
     PointerMoved,
     PointerButtonPressed,
     PointerButtonReleased,
@@ -153,6 +154,7 @@ struct WindowResizeEvent {
     int height = 0;
     int framebuffer_width = 0;
     int framebuffer_height = 0;
+    float content_scale = 1.0f;
 };
 
 struct WindowFileDropEvent {

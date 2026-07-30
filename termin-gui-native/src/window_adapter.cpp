@@ -27,6 +27,10 @@ class BorrowedWindowEndpoint final : public DocumentFrameSink {
         return window_->framebuffer_size();
     }
 
+    float content_scale() const override {
+        return window_->content_scale();
+    }
+
     void publish_frame(tgfx::TextureHandle color_texture) override {
         window_->present(color_texture);
     }
@@ -100,6 +104,7 @@ struct GuiWindowAdapter::Impl {
         }
         renderer = std::make_unique<DocumentRenderer>(
             *graphics, document, std::move(config), endpoint, platform);
+        renderer->sync_presentation_metrics();
     }
 
     void require_open(const char* operation) const {
@@ -162,7 +167,13 @@ const DocumentRenderer& GuiWindowAdapter::renderer() const {
 
 size_t GuiWindowAdapter::consume_events(std::span<const WindowEvent> events) {
     impl_->require_open("consume_events");
+    impl_->renderer->sync_presentation_metrics();
     for (const WindowEvent& event : events) {
+        if (event.type == WindowEventType::Resized ||
+            event.type == WindowEventType::DisplayScaleChanged) {
+            impl_->renderer->request_repaint();
+            continue;
+        }
         if (const auto pointer = make_pointer_event(event)) {
             impl_->renderer->dispatch_pointer(*pointer);
         } else if (const auto key = make_key_event(event)) {

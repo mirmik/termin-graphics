@@ -74,6 +74,10 @@ public:
     void set_event_handler(std::function<void(const WindowEvent&)> handler);
     virtual std::pair<int, int> window_size() const = 0;
     virtual std::pair<int, int> framebuffer_size() const = 0;
+    // Physical framebuffer pixels per logical window coordinate. This is
+    // presentation-local state and may change when the window moves between
+    // displays. Hosts without a platform scale source return 1.0 explicitly.
+    virtual float content_scale() const = 0;
     virtual void present(tgfx::TextureHandle color_tex) = 0;
 
 protected:

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <exception>
+#include <cmath>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -320,10 +321,35 @@ std::pair<int, int> DocumentRenderer::framebuffer_size() const {
     return impl_->frame_sink->framebuffer_size();
 }
 
+bool DocumentRenderer::sync_presentation_metrics() {
+    impl_->require_open("sync_presentation_metrics");
+    const auto [width, height] = framebuffer_size();
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    const float density_scale = impl_->frame_sink->content_scale();
+    const tc_ui_presentation_metrics metrics{
+        density_scale,
+        1.0f,
+        tc_ui_size{
+            static_cast<float>(width),
+            static_cast<float>(height),
+        },
+        tc_ui_insets{},
+    };
+    if (!std::isfinite(density_scale) || density_scale <= 0.0f ||
+        !impl_->document.set_presentation_metrics(metrics)) {
+        renderer_error(
+            "DocumentRenderer received invalid per-window presentation metrics");
+    }
+    return true;
+}
+
 bool DocumentRenderer::render_frame() {
     impl_->require_open("render_frame");
     const auto [width, height] = framebuffer_size();
     if (width <= 0 || height <= 0) return false;
+    if (!sync_presentation_metrics()) return false;
     impl_->repaint_requested.store(false, std::memory_order_release);
     impl_->ensure_target(width, height);
 
@@ -363,15 +389,16 @@ bool DocumentRenderer::render_frame() {
     impl_->context->begin_pass(
         impl_->color_target, tgfx::TextureHandle{},
         impl_->config.clear_color.data(), 1.0f, false);
+    tc_ui_presentation_metrics presentation_metrics{};
+    if (!impl_->document.presentation_metrics(presentation_metrics)) {
+        renderer_error(
+            "DocumentRenderer failed to read synchronized presentation metrics");
+    }
     const UiDocumentSubmission submission{
         impl_->document,
         0,
         0,
-        tc_ui_presentation_metrics_identity(
-            tc_ui_size{
-                static_cast<float>(width),
-                static_cast<float>(height),
-            }),
+        presentation_metrics,
     };
     impl_->painter.paint_documents(
         *impl_->context, width, height,

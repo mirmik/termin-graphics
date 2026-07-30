@@ -61,6 +61,7 @@ public:
     bool poll_event(WindowEvent& out_event) override;
     std::pair<int, int> window_size() const override;
     std::pair<int, int> framebuffer_size() const override;
+    float content_scale() const override;
     void present(tgfx::TextureHandle color_tex) override;
 };
 

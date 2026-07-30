@@ -36,6 +36,7 @@ class TERMIN_GUI_NATIVE_RENDERER_API DocumentFrameSink {
   public:
     virtual ~DocumentFrameSink() = default;
     virtual std::pair<int, int> framebuffer_size() const = 0;
+    virtual float content_scale() const { return 1.0f; }
     virtual void publish_frame(tgfx::TextureHandle color_texture) = 0;
 };
 
@@ -80,6 +81,7 @@ class TERMIN_GUI_NATIVE_RENDERER_API DocumentRenderer {
     tc_ui_event_result dispatch_key(const tc_ui_key_event& event);
     tc_ui_event_result dispatch_text(const std::string& utf8);
     std::pair<int, int> framebuffer_size() const;
+    bool sync_presentation_metrics();
     bool render_frame();
 
     void set_unhandled_key_handler(UnhandledKeyHandler handler);
