@@ -49,6 +49,25 @@ typedef struct tc_ui_point {
     float y;
 } tc_ui_point;
 
+typedef struct tc_ui_insets {
+    float left;
+    float top;
+    float right;
+    float bottom;
+} tc_ui_insets;
+
+typedef struct tc_ui_presentation_metrics {
+    float density_scale;
+    float font_scale;
+    tc_ui_size physical_extent;
+    tc_ui_insets physical_safe_insets;
+} tc_ui_presentation_metrics;
+
+typedef enum tc_ui_root_layout_policy {
+    TC_UI_ROOT_LAYOUT_FULL_VIEWPORT = 0,
+    TC_UI_ROOT_LAYOUT_SAFE_AREA = 1
+} tc_ui_root_layout_policy;
+
 typedef struct tc_ui_color {
     float r;
     float g;
@@ -521,6 +540,23 @@ struct tc_widget {
 TERMIN_GUI_NATIVE_API tc_widget_handle tc_widget_handle_invalid_value(void);
 TERMIN_GUI_NATIVE_API bool tc_widget_handle_valid_value(tc_widget_handle handle);
 
+TERMIN_GUI_NATIVE_API tc_ui_presentation_metrics
+tc_ui_presentation_metrics_identity(tc_ui_size physical_extent);
+TERMIN_GUI_NATIVE_API bool tc_ui_presentation_metrics_is_valid(
+    const tc_ui_presentation_metrics* metrics
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_presentation_metrics_logical_viewport(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_rect* out_rect
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_presentation_metrics_logical_safe_rect(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_rect* out_rect
+);
+TERMIN_GUI_NATIVE_API float tc_ui_presentation_metrics_effective_font_scale(
+    const tc_ui_presentation_metrics* metrics
+);
+
 TERMIN_GUI_NATIVE_API void tc_widget_init_unowned(
     tc_widget* widget,
     const tc_widget_vtable* vtable,
@@ -609,6 +645,31 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_set_theme(
     const tc_ui_theme* theme
 );
 TERMIN_GUI_NATIVE_API uint64_t tc_ui_document_theme_revision(tc_ui_document_handle document);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_presentation_metrics(
+    tc_ui_document_handle document,
+    const tc_ui_presentation_metrics* metrics
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_has_presentation_metrics(
+    tc_ui_document_handle document
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_presentation_metrics(
+    tc_ui_document_handle document,
+    tc_ui_presentation_metrics* out_metrics
+);
+TERMIN_GUI_NATIVE_API uint64_t tc_ui_document_presentation_revision(
+    tc_ui_document_handle document
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_set_root_layout_policy(
+    tc_ui_document_handle document,
+    tc_ui_root_layout_policy policy
+);
+TERMIN_GUI_NATIVE_API tc_ui_root_layout_policy tc_ui_document_root_layout_policy(
+    tc_ui_document_handle document
+);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_presentation_layout_rect(
+    tc_ui_document_handle document,
+    tc_ui_rect* out_rect
+);
 TERMIN_GUI_NATIVE_API uint32_t tc_ui_document_widget_style_state(
     tc_ui_document_handle document,
     const tc_widget* widget

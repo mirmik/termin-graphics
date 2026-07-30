@@ -332,6 +332,62 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                    [](const termin::gui_native::TcDocument &self) {
                      return tc_ui_document_theme_revision(checked_document_handle(self));
                    })
+      .def_prop_rw(
+          "presentation_metrics",
+          [](const termin::gui_native::TcDocument &self) {
+            tc_ui_presentation_metrics metrics{};
+            if (!tc_ui_document_presentation_metrics(
+                    checked_document_handle(self), &metrics)) {
+              throw std::runtime_error(
+                  "native UI document has no explicit presentation metrics");
+            }
+            return metrics;
+          },
+          [](termin::gui_native::TcDocument &self,
+             const tc_ui_presentation_metrics &metrics) {
+            if (!tc_ui_document_set_presentation_metrics(
+                    checked_document_handle(self), &metrics)) {
+              throw std::invalid_argument(
+                  "invalid native UI presentation metrics");
+            }
+          })
+      .def_prop_ro(
+          "has_presentation_metrics",
+          [](const termin::gui_native::TcDocument &self) {
+            return tc_ui_document_has_presentation_metrics(
+                checked_document_handle(self));
+          })
+      .def_prop_ro(
+          "presentation_revision",
+          [](const termin::gui_native::TcDocument &self) {
+            return tc_ui_document_presentation_revision(
+                checked_document_handle(self));
+          })
+      .def_prop_rw(
+          "root_layout_policy",
+          [](const termin::gui_native::TcDocument &self) {
+            return tc_ui_document_root_layout_policy(
+                checked_document_handle(self));
+          },
+          [](termin::gui_native::TcDocument &self,
+             tc_ui_root_layout_policy policy) {
+            if (!tc_ui_document_set_root_layout_policy(
+                    checked_document_handle(self), policy)) {
+              throw std::invalid_argument(
+                  "invalid native UI root layout policy");
+            }
+          })
+      .def_prop_ro(
+          "presentation_layout_rect",
+          [](const termin::gui_native::TcDocument &self) {
+            tc_ui_rect rect{};
+            if (!tc_ui_document_presentation_layout_rect(
+                    checked_document_handle(self), &rect)) {
+              throw std::runtime_error(
+                  "native UI document has no presentation layout rect");
+            }
+            return rect;
+          })
       .def("adopt", &document_adopt,
           nb::arg("widget"), nb::arg("debug_name") = "")
       .def("create_registered_widget", &document_create_registered_widget,

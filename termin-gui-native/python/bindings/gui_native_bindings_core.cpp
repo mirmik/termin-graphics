@@ -43,6 +43,68 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("x", &tc_ui_point::x)
         .def_rw("y", &tc_ui_point::y);
 
+    nb::class_<tc_ui_insets>(m, "PhysicalInsets")
+        .def(nb::init<float, float, float, float>(),
+             nb::arg("left") = 0.0f, nb::arg("top") = 0.0f,
+             nb::arg("right") = 0.0f, nb::arg("bottom") = 0.0f)
+        .def_rw("left", &tc_ui_insets::left)
+        .def_rw("top", &tc_ui_insets::top)
+        .def_rw("right", &tc_ui_insets::right)
+        .def_rw("bottom", &tc_ui_insets::bottom);
+
+    nb::class_<tc_ui_presentation_metrics>(m, "PresentationMetrics")
+        .def(
+            "__init__",
+            [](tc_ui_presentation_metrics* self,
+               float density_scale,
+               float font_scale,
+               tc_ui_size physical_extent,
+               tc_ui_insets physical_safe_insets) {
+                new (self) tc_ui_presentation_metrics{
+                    density_scale,
+                    font_scale,
+                    physical_extent,
+                    physical_safe_insets,
+                };
+            },
+            nb::arg("density_scale"),
+            nb::arg("font_scale"),
+            nb::arg("physical_extent"),
+            nb::arg("physical_safe_insets") = tc_ui_insets{})
+        .def_static(
+            "identity",
+            &tc_ui_presentation_metrics_identity,
+            nb::arg("physical_extent"))
+        .def_rw("density_scale", &tc_ui_presentation_metrics::density_scale)
+        .def_rw("font_scale", &tc_ui_presentation_metrics::font_scale)
+        .def_rw("physical_extent", &tc_ui_presentation_metrics::physical_extent)
+        .def_rw(
+            "physical_safe_insets",
+            &tc_ui_presentation_metrics::physical_safe_insets)
+        .def_prop_ro("valid", [](const tc_ui_presentation_metrics& self) {
+            return tc_ui_presentation_metrics_is_valid(&self);
+        })
+        .def_prop_ro("logical_viewport", [](const tc_ui_presentation_metrics& self) {
+            tc_ui_rect rect{};
+            if (!tc_ui_presentation_metrics_logical_viewport(&self, &rect)) {
+                throw std::invalid_argument("invalid native UI presentation metrics");
+            }
+            return rect;
+        })
+        .def_prop_ro("logical_safe_rect", [](const tc_ui_presentation_metrics& self) {
+            tc_ui_rect rect{};
+            if (!tc_ui_presentation_metrics_logical_safe_rect(&self, &rect)) {
+                throw std::invalid_argument("invalid native UI presentation metrics");
+            }
+            return rect;
+        })
+        .def_prop_ro("effective_font_scale",
+                     &tc_ui_presentation_metrics_effective_font_scale);
+
+    nb::enum_<tc_ui_root_layout_policy>(m, "RootLayoutPolicy")
+        .value("FullViewport", TC_UI_ROOT_LAYOUT_FULL_VIEWPORT)
+        .value("SafeArea", TC_UI_ROOT_LAYOUT_SAFE_AREA);
+
     nb::class_<tc_ui_color>(m, "Color")
         .def(nb::init<float, float, float, float>(), nb::arg("r") = 0.0f, nb::arg("g") = 0.0f,
              nb::arg("b") = 0.0f, nb::arg("a") = 1.0f)

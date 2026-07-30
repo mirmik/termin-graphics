@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 #include <type_traits>
@@ -435,6 +436,105 @@ static void test_document_handles_become_stale_after_destroy() {
     const tc_ui_document_handle invalid = tc_ui_document_handle_invalid();
     assert(!tc_ui_document_is_valid(invalid));
     tc_ui_document_destroy(invalid);
+}
+
+static void test_presentation_metrics_value_and_document_contract() {
+    tc_ui_presentation_metrics identity =
+        tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
+    tc_ui_rect rect{};
+    assert(tc_ui_presentation_metrics_is_valid(&identity));
+    assert(tc_ui_presentation_metrics_logical_viewport(&identity, &rect));
+    assert(rect.x == 0.0f && rect.y == 0.0f);
+    assert(rect.width == 800.0f && rect.height == 600.0f);
+    assert(tc_ui_presentation_metrics_logical_safe_rect(&identity, &rect));
+    assert(rect.x == 0.0f && rect.y == 0.0f);
+    assert(rect.width == 800.0f && rect.height == 600.0f);
+    assert(tc_ui_presentation_metrics_effective_font_scale(&identity) == 1.0f);
+
+    tc_ui_presentation_metrics scaled{
+        3.0f,
+        1.5f,
+        tc_ui_size{1080.0f, 1920.0f},
+        tc_ui_insets{30.0f, 60.0f, 90.0f, 120.0f},
+    };
+    assert(tc_ui_presentation_metrics_is_valid(&scaled));
+    assert(tc_ui_presentation_metrics_logical_viewport(&scaled, &rect));
+    assert(rect.width == 360.0f && rect.height == 640.0f);
+    assert(tc_ui_presentation_metrics_logical_safe_rect(&scaled, &rect));
+    assert(rect.x == 10.0f && rect.y == 20.0f);
+    assert(rect.width == 320.0f && rect.height == 580.0f);
+    assert(tc_ui_presentation_metrics_effective_font_scale(&scaled) == 4.5f);
+
+    tc_ui_presentation_metrics fractional{
+        1.5f,
+        1.3f,
+        tc_ui_size{1200.0f, 900.0f},
+        tc_ui_insets{},
+    };
+    assert(tc_ui_presentation_metrics_logical_viewport(&fractional, &rect));
+    assert(rect.width == 800.0f && rect.height == 600.0f);
+
+    tc_ui_presentation_metrics invalid = identity;
+    invalid.density_scale = 0.0f;
+    assert(!tc_ui_presentation_metrics_is_valid(&invalid));
+    invalid = identity;
+    invalid.font_scale = std::numeric_limits<float>::infinity();
+    assert(!tc_ui_presentation_metrics_is_valid(&invalid));
+    invalid = identity;
+    invalid.physical_extent.width = -1.0f;
+    assert(!tc_ui_presentation_metrics_is_valid(&invalid));
+    invalid = identity;
+    invalid.physical_safe_insets = tc_ui_insets{500.0f, 0.0f, 400.0f, 0.0f};
+    assert(!tc_ui_presentation_metrics_is_valid(&invalid));
+
+    const tc_ui_document_handle handle = tc_ui_document_create();
+    termin::gui_native::TcDocument document{handle};
+    TestWidget child;
+    tc_widget_init_unowned(
+        &child.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &child);
+    assert(!tc_widget_handle_is_invalid(
+        tc_ui_document_attach_borrowed_widget(handle, &child.widget)));
+    tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
+
+    assert(!document.has_presentation_metrics());
+    assert(document.presentation_revision() == 0);
+    assert(document.root_layout_policy() == TC_UI_ROOT_LAYOUT_FULL_VIEWPORT);
+    assert(document.set_presentation_metrics(identity));
+    assert(document.has_presentation_metrics());
+    assert(document.presentation_revision() == 1);
+    assert(tc_widget_has_dirty_flags(
+        &child.widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
+
+    tc_ui_presentation_metrics stored{};
+    assert(document.presentation_metrics(stored));
+    assert(stored.density_scale == 1.0f);
+    assert(stored.physical_extent.width == 800.0f);
+    assert(document.presentation_layout_rect(rect));
+    assert(rect.width == 800.0f && rect.height == 600.0f);
+
+    tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
+    assert(document.set_presentation_metrics(identity));
+    assert(document.presentation_revision() == 1);
+    assert(tc_widget_dirty_flags(&child.widget) == 0);
+
+    assert(document.set_presentation_metrics(scaled));
+    assert(document.presentation_revision() == 2);
+    assert(document.presentation_layout_rect(rect));
+    assert(rect.width == 360.0f && rect.height == 640.0f);
+    assert(document.set_root_layout_policy(TC_UI_ROOT_LAYOUT_SAFE_AREA));
+    assert(document.presentation_revision() == 3);
+    assert(document.presentation_layout_rect(rect));
+    assert(rect.x == 10.0f && rect.y == 20.0f);
+    assert(rect.width == 320.0f && rect.height == 580.0f);
+
+    const uint64_t revision = document.presentation_revision();
+    assert(!document.set_presentation_metrics(invalid));
+    assert(document.presentation_revision() == revision);
+    assert(!document.set_root_layout_policy(
+        static_cast<tc_ui_root_layout_policy>(99)));
+    assert(document.presentation_revision() == revision);
+
+    tc_ui_document_destroy(handle);
 }
 
 static void test_document_pool_enumeration_reports_live_documents() {
@@ -1264,6 +1364,7 @@ int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
     test_document_handles_become_stale_after_destroy();
+    test_presentation_metrics_value_and_document_contract();
     test_document_pool_enumeration_reports_live_documents();
     test_document_destroy_invalidates_widgets_once();
     test_owned_adoption_requires_deleter_and_is_atomic();

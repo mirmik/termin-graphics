@@ -30,7 +30,9 @@ from termin.gui_native import (
     OverlayGeometry,
     OverlayPlacement,
     PaintContext,
+    PhysicalInsets,
     Point,
+    PresentationMetrics,
     PointerEvent,
     PointerCancelReason,
     PointerEventType,
@@ -38,6 +40,7 @@ from termin.gui_native import (
     RichTextModel,
     RichTextSegment,
     RichTextStyle,
+    RootLayoutPolicy,
     ScrollBarPolicy,
     Size,
     StyleField,
@@ -59,6 +62,41 @@ from termin.gui_native import (
     unregister_widget_type,
     widget_type_info,
 )
+
+
+def test_presentation_metrics_project_to_python_document():
+    identity = PresentationMetrics.identity(Size(800.0, 600.0))
+    assert identity.valid
+    assert identity.logical_viewport.width == pytest.approx(800.0)
+    assert identity.logical_safe_rect.height == pytest.approx(600.0)
+    assert identity.effective_font_scale == pytest.approx(1.0)
+
+    metrics = PresentationMetrics(
+        density_scale=2.0,
+        font_scale=1.3,
+        physical_extent=Size(1080.0, 1920.0),
+        physical_safe_insets=PhysicalInsets(20.0, 40.0, 60.0, 80.0),
+    )
+    assert metrics.valid
+    assert metrics.logical_viewport.width == pytest.approx(540.0)
+    assert metrics.logical_safe_rect.x == pytest.approx(10.0)
+    assert metrics.logical_safe_rect.width == pytest.approx(500.0)
+    assert metrics.effective_font_scale == pytest.approx(2.6)
+
+    document = tc_ui_document_create()
+    try:
+        assert not document.has_presentation_metrics
+        assert document.presentation_revision == 0
+        assert document.root_layout_policy == RootLayoutPolicy.FullViewport
+        document.presentation_metrics = metrics
+        assert document.has_presentation_metrics
+        assert document.presentation_metrics.density_scale == pytest.approx(2.0)
+        assert document.presentation_layout_rect.width == pytest.approx(540.0)
+        document.root_layout_policy = RootLayoutPolicy.SafeArea
+        assert document.presentation_layout_rect.x == pytest.approx(10.0)
+        assert document.presentation_layout_rect.height == pytest.approx(900.0)
+    finally:
+        tc_ui_document_destroy(document)
 
 
 def _bundled_font_path() -> Path:

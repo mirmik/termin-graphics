@@ -32,6 +32,119 @@ static tc_handle document_base_handle(tc_ui_document_handle handle) {
     return (tc_handle){handle.index, handle.generation};
 }
 
+tc_ui_presentation_metrics
+tc_ui_presentation_metrics_identity(tc_ui_size physical_extent) {
+    tc_ui_presentation_metrics metrics;
+    memset(&metrics, 0, sizeof(metrics));
+    metrics.density_scale = 1.0f;
+    metrics.font_scale = 1.0f;
+    metrics.physical_extent = physical_extent;
+    return metrics;
+}
+
+bool tc_ui_presentation_metrics_is_valid(
+    const tc_ui_presentation_metrics* metrics
+) {
+    float logical_width;
+    float logical_height;
+    float effective_font_scale;
+    if (!metrics ||
+        !isfinite(metrics->density_scale) || metrics->density_scale <= 0.0f ||
+        !isfinite(metrics->font_scale) || metrics->font_scale <= 0.0f ||
+        !isfinite(metrics->physical_extent.width) ||
+        metrics->physical_extent.width <= 0.0f ||
+        !isfinite(metrics->physical_extent.height) ||
+        metrics->physical_extent.height <= 0.0f ||
+        !isfinite(metrics->physical_safe_insets.left) ||
+        metrics->physical_safe_insets.left < 0.0f ||
+        !isfinite(metrics->physical_safe_insets.top) ||
+        metrics->physical_safe_insets.top < 0.0f ||
+        !isfinite(metrics->physical_safe_insets.right) ||
+        metrics->physical_safe_insets.right < 0.0f ||
+        !isfinite(metrics->physical_safe_insets.bottom) ||
+        metrics->physical_safe_insets.bottom < 0.0f ||
+        metrics->physical_safe_insets.left +
+                metrics->physical_safe_insets.right >
+            metrics->physical_extent.width ||
+        metrics->physical_safe_insets.top +
+                metrics->physical_safe_insets.bottom >
+            metrics->physical_extent.height) {
+        return false;
+    }
+    logical_width = metrics->physical_extent.width / metrics->density_scale;
+    logical_height = metrics->physical_extent.height / metrics->density_scale;
+    effective_font_scale = metrics->density_scale * metrics->font_scale;
+    return isfinite(logical_width) && logical_width > 0.0f &&
+        isfinite(logical_height) && logical_height > 0.0f &&
+        isfinite(effective_font_scale) && effective_font_scale > 0.0f;
+}
+
+bool tc_ui_presentation_metrics_logical_viewport(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_rect* out_rect
+) {
+    if (!out_rect) {
+        tc_log_error(
+            "[termin-gui-native] logical viewport output cannot be null");
+        return false;
+    }
+    if (!tc_ui_presentation_metrics_is_valid(metrics)) {
+        tc_log_error(
+            "[termin-gui-native] cannot derive logical viewport from invalid "
+            "presentation metrics");
+        memset(out_rect, 0, sizeof(*out_rect));
+        return false;
+    }
+    *out_rect = (tc_ui_rect){
+        0.0f,
+        0.0f,
+        metrics->physical_extent.width / metrics->density_scale,
+        metrics->physical_extent.height / metrics->density_scale,
+    };
+    return true;
+}
+
+bool tc_ui_presentation_metrics_logical_safe_rect(
+    const tc_ui_presentation_metrics* metrics,
+    tc_ui_rect* out_rect
+) {
+    tc_ui_rect viewport;
+    if (!out_rect) {
+        tc_log_error(
+            "[termin-gui-native] logical safe rect output cannot be null");
+        return false;
+    }
+    if (!tc_ui_presentation_metrics_logical_viewport(metrics, &viewport)) {
+        memset(out_rect, 0, sizeof(*out_rect));
+        return false;
+    }
+    *out_rect = (tc_ui_rect){
+        metrics->physical_safe_insets.left / metrics->density_scale,
+        metrics->physical_safe_insets.top / metrics->density_scale,
+        viewport.width -
+            (metrics->physical_safe_insets.left +
+             metrics->physical_safe_insets.right) /
+                metrics->density_scale,
+        viewport.height -
+            (metrics->physical_safe_insets.top +
+             metrics->physical_safe_insets.bottom) /
+                metrics->density_scale,
+    };
+    return true;
+}
+
+float tc_ui_presentation_metrics_effective_font_scale(
+    const tc_ui_presentation_metrics* metrics
+) {
+    if (!tc_ui_presentation_metrics_is_valid(metrics)) {
+        tc_log_error(
+            "[termin-gui-native] cannot derive effective font scale from "
+            "invalid presentation metrics");
+        return 0.0f;
+    }
+    return metrics->density_scale * metrics->font_scale;
+}
+
 tc_ui_document* tc_ui_internal_resolve_document(tc_ui_document_handle handle) {
     tc_ui_document_pool_slot* slot;
     if (!g_ui_document_pool_initialized || tc_ui_document_handle_is_invalid(handle)) {
@@ -686,6 +799,7 @@ tc_ui_document_handle tc_ui_document_create(void) {
     document->cursor_intent = TC_UI_CURSOR_DEFAULT;
     tc_ui_theme_init_default(&document->theme);
     document->theme_revision = 1;
+    document->root_layout_policy = TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
     return handle;
 }
 
@@ -794,6 +908,203 @@ uint64_t tc_ui_document_theme_revision(tc_ui_document_handle document_handle) {
     tc_ui_document* document = tc_ui_internal_resolve_document_checked(
         document_handle, "tc_ui_document_theme_revision");
     return document ? document->theme_revision : 0;
+}
+
+static bool same_presentation_metrics(
+    const tc_ui_presentation_metrics* lhs,
+    const tc_ui_presentation_metrics* rhs
+) {
+    return lhs->density_scale == rhs->density_scale &&
+        lhs->font_scale == rhs->font_scale &&
+        lhs->physical_extent.width == rhs->physical_extent.width &&
+        lhs->physical_extent.height == rhs->physical_extent.height &&
+        lhs->physical_safe_insets.left == rhs->physical_safe_insets.left &&
+        lhs->physical_safe_insets.top == rhs->physical_safe_insets.top &&
+        lhs->physical_safe_insets.right == rhs->physical_safe_insets.right &&
+        lhs->physical_safe_insets.bottom == rhs->physical_safe_insets.bottom;
+}
+
+static void invalidate_presentation_layout(tc_ui_document* document) {
+    size_t index;
+    document->has_layout_rect = false;
+    for (index = 0; index < document->slot_count; ++index) {
+        tc_widget* widget = document->slots[index].widget;
+        if (widget && !document->slots[index].destroying) {
+            tc_widget_mark_dirty(
+                widget,
+                TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT
+            );
+        }
+    }
+}
+
+static void advance_presentation_revision(tc_ui_document* document) {
+    document->presentation_revision += 1;
+    if (document->presentation_revision == 0) {
+        document->presentation_revision = 1;
+    }
+}
+
+bool tc_ui_document_set_presentation_metrics(
+    tc_ui_document_handle document_handle,
+    const tc_ui_presentation_metrics* metrics
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_set_presentation_metrics"
+    );
+    if (!document) {
+        return false;
+    }
+    if (!tc_ui_presentation_metrics_is_valid(metrics)) {
+        tc_log_error(
+            "[termin-gui-native] UI document '%s' rejected invalid "
+            "presentation metrics: density/font scales and physical extents "
+            "must be finite and positive, and safe insets must be finite, "
+            "non-negative and bounded by the physical extent",
+            document->debug_name
+        );
+        return false;
+    }
+    if (document->has_presentation_metrics &&
+        same_presentation_metrics(&document->presentation_metrics, metrics)) {
+        return true;
+    }
+    document->presentation_metrics = *metrics;
+    document->has_presentation_metrics = true;
+    advance_presentation_revision(document);
+    invalidate_presentation_layout(document);
+    return true;
+}
+
+bool tc_ui_document_has_presentation_metrics(
+    tc_ui_document_handle document_handle
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_has_presentation_metrics"
+    );
+    return document && document->has_presentation_metrics;
+}
+
+bool tc_ui_document_presentation_metrics(
+    tc_ui_document_handle document_handle,
+    tc_ui_presentation_metrics* out_metrics
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_presentation_metrics"
+    );
+    if (!document) {
+        return false;
+    }
+    if (!out_metrics) {
+        tc_log_error(
+            "[termin-gui-native] UI document presentation metrics output "
+            "cannot be null");
+        return false;
+    }
+    if (!document->has_presentation_metrics) {
+        tc_log_error(
+            "[termin-gui-native] UI document '%s' has no explicit "
+            "presentation metrics",
+            document->debug_name
+        );
+        memset(out_metrics, 0, sizeof(*out_metrics));
+        return false;
+    }
+    *out_metrics = document->presentation_metrics;
+    return true;
+}
+
+uint64_t tc_ui_document_presentation_revision(
+    tc_ui_document_handle document_handle
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_presentation_revision"
+    );
+    return document ? document->presentation_revision : 0;
+}
+
+bool tc_ui_document_set_root_layout_policy(
+    tc_ui_document_handle document_handle,
+    tc_ui_root_layout_policy policy
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_set_root_layout_policy"
+    );
+    if (!document) {
+        return false;
+    }
+    if (policy != TC_UI_ROOT_LAYOUT_FULL_VIEWPORT &&
+        policy != TC_UI_ROOT_LAYOUT_SAFE_AREA) {
+        tc_log_error(
+            "[termin-gui-native] UI document '%s' rejected unknown root "
+            "layout policy %d",
+            document->debug_name,
+            (int)policy
+        );
+        return false;
+    }
+    if (document->root_layout_policy == policy) {
+        return true;
+    }
+    document->root_layout_policy = policy;
+    advance_presentation_revision(document);
+    invalidate_presentation_layout(document);
+    return true;
+}
+
+tc_ui_root_layout_policy tc_ui_document_root_layout_policy(
+    tc_ui_document_handle document_handle
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_root_layout_policy"
+    );
+    return document
+        ? document->root_layout_policy
+        : TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
+}
+
+bool tc_ui_document_presentation_layout_rect(
+    tc_ui_document_handle document_handle,
+    tc_ui_rect* out_rect
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle,
+        "tc_ui_document_presentation_layout_rect"
+    );
+    if (!document) {
+        return false;
+    }
+    if (!out_rect) {
+        tc_log_error(
+            "[termin-gui-native] UI document presentation layout rect output "
+            "cannot be null");
+        return false;
+    }
+    if (!document->has_presentation_metrics) {
+        tc_log_error(
+            "[termin-gui-native] UI document '%s' cannot derive a root layout "
+            "rect without explicit presentation metrics",
+            document->debug_name
+        );
+        memset(out_rect, 0, sizeof(*out_rect));
+        return false;
+    }
+    if (document->root_layout_policy == TC_UI_ROOT_LAYOUT_SAFE_AREA) {
+        return tc_ui_presentation_metrics_logical_safe_rect(
+            &document->presentation_metrics,
+            out_rect
+        );
+    }
+    return tc_ui_presentation_metrics_logical_viewport(
+        &document->presentation_metrics,
+        out_rect
+    );
 }
 
 uint32_t tc_ui_document_widget_style_state(

@@ -60,6 +60,11 @@ struct tc_ui_document {
     tc_ui_theme theme;
     uint64_t theme_revision;
 
+    tc_ui_presentation_metrics presentation_metrics;
+    uint64_t presentation_revision;
+    tc_ui_root_layout_policy root_layout_policy;
+    bool has_presentation_metrics;
+
     tc_ui_text_measure_fn measure_text;
     void* text_measurer_user_data;
     bool missing_text_measurer_logged;

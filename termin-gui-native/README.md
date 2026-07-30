@@ -7,6 +7,9 @@ The maintained public C++/Python widget and signal inventory is
 return typed wrappers; common widget state is available through `.widget`.
 The standard pointer, focus, keyboard and visual-state contract is maintained
 in [`docs/input-conformance.md`](docs/input-conformance.md).
+Presentation density, font scaling, safe insets and logical root bounds use the
+explicit per-document contract in
+[`docs/presentation-metrics.md`](docs/presentation-metrics.md).
 
 Declarative native documents use the deliberately limited, versioned
 [`uiscript: 2` dialect](docs/uiscript-v2.md). The native loader parses and

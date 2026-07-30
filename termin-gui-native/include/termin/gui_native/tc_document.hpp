@@ -127,6 +127,27 @@ class TcDocument {
     uint64_t theme_revision() const {
         return tc_ui_document_theme_revision(handle_);
     }
+    bool set_presentation_metrics(const tc_ui_presentation_metrics& metrics) const {
+        return tc_ui_document_set_presentation_metrics(handle_, &metrics);
+    }
+    bool has_presentation_metrics() const {
+        return tc_ui_document_has_presentation_metrics(handle_);
+    }
+    bool presentation_metrics(tc_ui_presentation_metrics& out_metrics) const {
+        return tc_ui_document_presentation_metrics(handle_, &out_metrics);
+    }
+    uint64_t presentation_revision() const {
+        return tc_ui_document_presentation_revision(handle_);
+    }
+    bool set_root_layout_policy(tc_ui_root_layout_policy policy) const {
+        return tc_ui_document_set_root_layout_policy(handle_, policy);
+    }
+    tc_ui_root_layout_policy root_layout_policy() const {
+        return tc_ui_document_root_layout_policy(handle_);
+    }
+    bool presentation_layout_rect(tc_ui_rect& out_rect) const {
+        return tc_ui_document_presentation_layout_rect(handle_, &out_rect);
+    }
     TERMIN_GUI_NATIVE_API tc::trent serialize() const;
     TERMIN_GUI_NATIVE_API void restore(const tc::trent& serialized) const;
     TERMIN_GUI_NATIVE_API tc_ui_style
