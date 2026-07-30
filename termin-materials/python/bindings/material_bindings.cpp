@@ -330,12 +330,23 @@ tc_shader_surface_producer_desc parser_surface_producer_desc(
         fragment_inputs.push_back(input);
     }
 
-    resources = parser_shader_resource_requirements(
-        shader_phase,
-        shader_phase.material_ubo_layout,
-        material_fields);
-    for (tc_shader_resource_requirement& resource : resources) {
-        resource.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    resources.clear();
+    resources.reserve(producer.resources.size());
+    for (const SurfaceProducerResourceDecl& parsed_resource :
+         producer.resources) {
+        ResourceRequirementInfo info;
+        info.name = parsed_resource.name;
+        info.kind = parsed_resource.kind;
+        info.scope = parsed_resource.scope;
+        info.stage_mask = parsed_resource.stage_mask;
+        info.size = parsed_resource.size;
+        if (parsed_resource.name == TC_SHADER_RESOURCE_MATERIAL) {
+            info.fields =
+                material_fields.empty() ? nullptr : material_fields.data();
+            info.field_count =
+                static_cast<uint32_t>(material_fields.size());
+        }
+        append_resource_requirement(resources, info);
     }
 
     tc_shader_surface_producer_desc desc{};

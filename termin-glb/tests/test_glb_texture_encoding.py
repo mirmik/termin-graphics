@@ -289,6 +289,9 @@ def test_collision_lookup_builds_and_reuses_two_native_encodings() -> None:
 
 
 def test_collision_lookup_binds_native_encodings_to_real_pbr_material() -> None:
+    from termin.materials import SurfaceContractRegistry
+
+    assert SurfaceContractRegistry.register_builtins()
     DefaultResourceManager._reset_for_testing()
     rm = DefaultResourceManager.instance()
     shader_path = stdlib_root() / "shaders" / "CookTorrancePBR.shader"

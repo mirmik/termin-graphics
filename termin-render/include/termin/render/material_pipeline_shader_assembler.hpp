@@ -22,6 +22,7 @@ enum class MaterialFragmentComposition : uint8_t {
     FinalColor,
     SurfaceConsumer,
     PassOwned,
+    SurfaceConsumerOrFinalColor,
 };
 
 struct MaterialSurfaceConsumerContract {

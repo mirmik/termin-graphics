@@ -582,6 +582,81 @@ TEST_CASE("surface producer composes with distinct pass consumers") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("hybrid color composition keeps final-color and surface materials compatible") {
+    tc_shader_init();
+    tc_surface_contract_registry_clear();
+    register_test_surface_contract("test.surface.synthetic@1:interface:v1");
+
+    termin::MaterialPipelinePassContract pass = surface_consumer_pass(
+        "hybrid_color",
+        kTestSurfaceConsumerA,
+        "consume_test_surface_a",
+        "consumer:a:v1");
+    pass.fragment_composition =
+        termin::MaterialFragmentComposition::SurfaceConsumerOrFinalColor;
+
+    termin::MaterialPipelineShaderAssemblyRequest request{};
+    request.pass = pass;
+    request.vertex_transform = *pass.static_vertex_transform;
+
+    termin::MaterialPipelineMaterialContract final_material =
+        material_contract();
+    request.material = final_material;
+    request.shader_name = "hybrid-final-color";
+    request.shader_uuid = "hybrid-final-color";
+    termin::MaterialPipelineShaderAssemblyResult final_color =
+        termin::material_pipeline_assemble_shader(request);
+    REQUIRE(final_color.ok());
+    CHECK(
+        std::string(final_color.shader.fragment_source()).find("fs_main") !=
+        std::string::npos);
+
+    termin::MaterialPipelineMaterialContract surface_material =
+        surface_material_contract(
+            "hybrid-surface-producer");
+    request.material = surface_material;
+    request.shader_name = "hybrid-surface";
+    request.shader_uuid = "hybrid-surface";
+    termin::MaterialPipelineShaderAssemblyResult surface =
+        termin::material_pipeline_assemble_shader(request);
+    REQUIRE(surface.ok());
+    CHECK(
+        std::string(surface.shader.fragment_source()).find(
+            "consume_test_surface_a") != std::string::npos);
+
+    termin::MaterialPipelinePassContract explicit_pass = pass;
+    explicit_pass.fragment_composition =
+        termin::MaterialFragmentComposition::FinalColor;
+    CHECK(
+        termin::material_pipeline_shader_intent_fingerprint(
+            final_material.shader,
+            TC_SHADER_VARIANT_NONE,
+            *pass.static_vertex_transform,
+            pass) ==
+        termin::material_pipeline_shader_intent_fingerprint(
+            final_material.shader,
+            TC_SHADER_VARIANT_NONE,
+            *explicit_pass.static_vertex_transform,
+            explicit_pass));
+
+    explicit_pass.fragment_composition =
+        termin::MaterialFragmentComposition::SurfaceConsumer;
+    CHECK(
+        termin::material_pipeline_shader_intent_fingerprint(
+            surface_material.shader,
+            TC_SHADER_VARIANT_NONE,
+            *pass.static_vertex_transform,
+            pass) ==
+        termin::material_pipeline_shader_intent_fingerprint(
+            surface_material.shader,
+            TC_SHADER_VARIANT_NONE,
+            *explicit_pass.static_vertex_transform,
+            explicit_pass));
+
+    tc_surface_contract_registry_clear();
+    tc_shader_shutdown();
+}
+
 TEST_CASE("surface composition rejects incompatible fragment roles and contracts") {
     tc_shader_init();
     tc_surface_contract_registry_clear();

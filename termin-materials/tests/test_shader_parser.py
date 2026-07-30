@@ -878,6 +878,7 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
 
 
 def test_builtin_pbr_shader_uses_slang_scope_model():
+    _register_surface_contracts()
     expected_material_textures = [
         "u_albedo_texture",
         "u_normal_texture",
@@ -892,7 +893,7 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     )
     assert program.program == "CookTorrancePBR"
     assert program.language == "slang"
-    assert "lighting_ubo" in program.features
+    assert "lighting_ubo" not in program.features
     assert len(program.phases) == 2
 
     phase = next(phase for phase in program.phases if phase.phase_mark == "opaque")
@@ -917,12 +918,17 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     assert "Sampler2D u_albedo_texture;" in fragment
     assert "Sampler2D u_normal_texture;" in fragment
     assert "Sampler2D u_metallic_roughness_texture;" in fragment
-    assert "import termin_lighting;" in fragment
-    assert "import termin_shadows;" in fragment
+    assert "import termin_lighting;" not in fragment
+    assert "import termin_shadows;" not in fragment
     assert "struct LightingBlock" not in fragment
     assert "struct ShadowBlock" not in fragment
-    assert "get_camera_position() - input.world_pos" in fragment
     assert "material.u_metallic" in fragment
+    assert "material.u_subsurface" not in fragment
+    assert "material.u_diffuse_mul" not in fragment
+    assert phase.surface_producer is not None
+    assert phase.surface_producer.contract_id == "termin.surface.standard-pbr"
+    assert phase.surface_producer.contract_version == 1
+    assert phase.surface_producer.evaluator_entry == "evaluate_standard_surface"
     assert "#version" not in fragment
     assert "layout(" not in fragment
 
@@ -930,6 +936,31 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     assert shadow_phase.phase_mark == "shadow"
     assert "[[TerminScope(\"frame\")]]" in shadow_phase.stages["vertex"].source
     assert "[[TerminScope(\"draw\")]]" in shadow_phase.stages["vertex"].source
+
+
+def test_subsurface_pbr_preserves_the_artistic_final_color_model():
+    stdlib = stdlib_root()
+    program = parse_shader_text(
+        (
+            stdlib / "shaders" / "CookTorrancePBRSubsurface.shader"
+        ).read_text(encoding="utf-8")
+    )
+    assert program.program == "CookTorrancePBRSubsurface"
+    assert "lighting_ubo" in program.features
+    assert len(program.phases) == 2
+
+    phase = next(phase for phase in program.phases if phase.phase_mark == "opaque")
+    assert phase.surface_producer is None
+    assert {prop.name for prop in program.material_properties} >= {
+        "u_subsurface",
+        "u_diffuse_mul",
+    }
+    fragment = phase.stages["fragment"].source
+    assert "import termin_lighting;" in fragment
+    assert "import termin_shadows;" in fragment
+    assert "material.u_subsurface" in fragment
+    assert "material.u_diffuse_mul" in fragment
+    assert "wrap_diffuse" in fragment
 
 
 def test_surface_producer_metadata_parses_and_publishes_to_tc_shader():
@@ -1055,6 +1086,22 @@ def test_surface_producer_rejects_invalid_contract_or_evaluator(
 ):
     _register_surface_contracts()
     with pytest.raises(RuntimeError, match=message):
+        parse_shader_text(shader_text)
+
+
+def test_surface_evaluator_rejects_engine_uniforms():
+    _register_surface_contracts()
+    shader_text = _surface_shader().replace(
+        "result.normal_world = input.normal_world;",
+        (
+            "result.normal_world = input.normal_world;\n"
+            "    result.emission = mul(u_model, float4(input.world_pos, 1.0)).xyz;"
+        ),
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="must receive world/pass data through @surfaceInput",
+    ):
         parse_shader_text(shader_text)
 
 

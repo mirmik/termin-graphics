@@ -1537,6 +1537,14 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             // and inject matching PerFrame / draw-data resources.
             EngineUniformDeclUsage eng_usage =
                 collect_engine_uniform_usage(kv.second.source);
+            if (phase.surface_producer.has_value() &&
+                kv.first == "fragment" &&
+                eng_usage.any()) {
+                throw std::runtime_error(
+                    "Surface evaluator fragment source must receive world/pass "
+                    "data through @surfaceInput and cannot use engine "
+                    "u_view/u_projection/u_model uniforms");
+            }
             phase.uses_engine_per_frame =
                 phase.uses_engine_per_frame ||
                 eng_usage.per_frame;
@@ -1612,24 +1620,6 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
                     TC_SHADER_RESOURCE_SCOPE_MATERIAL,
                     TC_SHADER_STAGE_FRAGMENT,
                     phase.material_ubo_layout.block_size,
-                });
-            }
-            if (phase.uses_engine_per_frame) {
-                producer.resources.push_back({
-                    TC_SHADER_RESOURCE_PER_FRAME,
-                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                    TC_SHADER_RESOURCE_SCOPE_FRAME,
-                    TC_SHADER_STAGE_FRAGMENT,
-                    0,
-                });
-            }
-            if (phase.uses_engine_draw_data) {
-                producer.resources.push_back({
-                    TC_SHADER_RESOURCE_DRAW_DATA,
-                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                    TC_SHADER_RESOURCE_SCOPE_DRAW,
-                    TC_SHADER_STAGE_FRAGMENT,
-                    64,
                 });
             }
             for (const std::string& texture_name :

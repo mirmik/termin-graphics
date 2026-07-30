@@ -156,10 +156,18 @@ void append_surface_composition_to_hash(
     const MaterialPipelinePassContract& pass_contract,
     uint64_t& hash)
 {
+    MaterialFragmentComposition fragment_composition =
+        pass_contract.fragment_composition;
+    if (fragment_composition ==
+        MaterialFragmentComposition::SurfaceConsumerOrFinalColor) {
+        fragment_composition = original_shader.has_surface_producer()
+            ? MaterialFragmentComposition::SurfaceConsumer
+            : MaterialFragmentComposition::FinalColor;
+    }
     hash = fnv1a_append_u32(
-        static_cast<uint32_t>(pass_contract.fragment_composition),
+        static_cast<uint32_t>(fragment_composition),
         hash);
-    if (pass_contract.fragment_composition !=
+    if (fragment_composition !=
         MaterialFragmentComposition::SurfaceConsumer) {
         return;
     }
@@ -417,6 +425,13 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
     }
 
     MaterialPipelinePassContract pass_contract = *request.pass_contract;
+    if (pass_contract.fragment_composition ==
+        MaterialFragmentComposition::SurfaceConsumerOrFinalColor) {
+        pass_contract.fragment_composition =
+            original_shader.has_surface_producer()
+            ? MaterialFragmentComposition::SurfaceConsumer
+            : MaterialFragmentComposition::FinalColor;
+    }
 
     // A static authored vertex stage already is the transform contract for
     // the material. Reassembling it through the pass's generic Material

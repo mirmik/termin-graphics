@@ -397,7 +397,15 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     std::string fragment_source;
     std::string fragment_entry;
     std::vector<MaterialPipelineResourceDecl> fragment_resources;
-    switch (request.pass.fragment_composition) {
+    MaterialFragmentComposition fragment_composition =
+        request.pass.fragment_composition;
+    if (fragment_composition ==
+        MaterialFragmentComposition::SurfaceConsumerOrFinalColor) {
+        fragment_composition = request.material.shader.has_surface_producer()
+            ? MaterialFragmentComposition::SurfaceConsumer
+            : MaterialFragmentComposition::FinalColor;
+    }
+    switch (fragment_composition) {
     case MaterialFragmentComposition::FinalColor: {
         if (!request.material.shader.is_valid() ||
             request.material.shader.fragment_source()[0] == '\0') {
@@ -561,6 +569,8 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
             "pass-owned",
             request.vertex_transform,
             result.diagnostics);
+        break;
+    case MaterialFragmentComposition::SurfaceConsumerOrFinalColor:
         break;
     }
 
