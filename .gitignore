@@ -152,3 +152,4 @@ tmp
 
 # Generated Termin Data
 .termin
+test-projects/**/stdlib
