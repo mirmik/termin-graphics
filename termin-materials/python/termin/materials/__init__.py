@@ -4,6 +4,7 @@ preload_sdk_libs("termin_base", "termin_graphics", "termin_graphics2", "termin_m
 
 from ._materials_native import (
     MaterialProperty,
+    MaterialSurfaceProducer,
     MaterialUboEntry,
     MaterialUboLayout,
     PhaseRenderSettings,
@@ -11,6 +12,11 @@ from ._materials_native import (
     ShaderMultyPhaseProgramm,
     ShaderPhase,
     ShaderStage,
+    SurfaceContractDescriptor,
+    SurfaceContractKey,
+    SurfaceContractRegistry,
+    SurfaceFragmentInput,
+    SurfaceProducerResourceDecl,
     TcMaterial,
     TcMaterialPhase,
     TcRenderState,
@@ -30,6 +36,7 @@ from termin.materials.unknown_material import (
 
 __all__ = [
     "MaterialProperty",
+    "MaterialSurfaceProducer",
     "MaterialUboEntry",
     "MaterialUboLayout",
     "PhaseRenderSettings",
@@ -37,6 +44,11 @@ __all__ = [
     "ShaderMultyPhaseProgramm",
     "ShaderPhase",
     "ShaderStage",
+    "SurfaceContractDescriptor",
+    "SurfaceContractKey",
+    "SurfaceContractRegistry",
+    "SurfaceFragmentInput",
+    "SurfaceProducerResourceDecl",
     "TcMaterial",
     "TcMaterialPhase",
     "TcRenderState",

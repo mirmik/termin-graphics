@@ -368,7 +368,8 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         },
         request.shader_uuid.empty() ? nullptr : request.shader_uuid.c_str(),
         language,
-        artifact_policy
+        artifact_policy,
+        nullptr
     };
     tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     if (tc_shader_handle_is_invalid(handle)) {

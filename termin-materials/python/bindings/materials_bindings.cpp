@@ -1,10 +1,12 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/string_view.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 #include <termin/materials/shader_parser.hpp>
+#include <termin/materials/surface_contract_registry.hpp>
 #include <tcbase/tc_log.hpp>
 
 namespace termin {
@@ -188,6 +190,76 @@ void bind_shader_parser(nb::module_& m) {
                    " entries, " + std::to_string(l.block_size) + " bytes>";
         });
 
+    nb::class_<SurfaceFragmentInput>(m, "SurfaceFragmentInput")
+        .def(nb::init<>())
+        .def(nb::init<std::string, std::string>(),
+             nb::arg("semantic"), nb::arg("value_type"))
+        .def_rw("semantic", &SurfaceFragmentInput::semantic)
+        .def_rw("value_type", &SurfaceFragmentInput::value_type);
+
+    nb::class_<SurfaceProducerResourceDecl>(m, "SurfaceProducerResourceDecl")
+        .def(nb::init<>())
+        .def_rw("name", &SurfaceProducerResourceDecl::name)
+        .def_rw("kind", &SurfaceProducerResourceDecl::kind)
+        .def_rw("scope", &SurfaceProducerResourceDecl::scope)
+        .def_rw("stage_mask", &SurfaceProducerResourceDecl::stage_mask)
+        .def_rw("size", &SurfaceProducerResourceDecl::size);
+
+    nb::class_<MaterialSurfaceProducer>(m, "MaterialSurfaceProducer")
+        .def(nb::init<>())
+        .def_rw("contract_id", &MaterialSurfaceProducer::contract_id)
+        .def_rw("contract_version", &MaterialSurfaceProducer::contract_version)
+        .def_rw("surface_type_name", &MaterialSurfaceProducer::surface_type_name)
+        .def_rw("evaluator_entry", &MaterialSurfaceProducer::evaluator_entry)
+        .def_rw("evaluator_source", &MaterialSurfaceProducer::evaluator_source)
+        .def_rw("source_identity", &MaterialSurfaceProducer::source_identity)
+        .def_rw(
+            "required_fragment_inputs",
+            &MaterialSurfaceProducer::required_fragment_inputs)
+        .def_rw("resources", &MaterialSurfaceProducer::resources);
+
+    nb::class_<SurfaceContractKey>(m, "SurfaceContractKey")
+        .def(nb::init<>())
+        .def(nb::init<std::string, uint32_t>(),
+             nb::arg("id"), nb::arg("version"))
+        .def_rw("id", &SurfaceContractKey::id)
+        .def_rw("version", &SurfaceContractKey::version);
+
+    nb::class_<SurfaceContractDescriptor>(m, "SurfaceContractDescriptor")
+        .def(nb::init<>())
+        .def_rw("key", &SurfaceContractDescriptor::key)
+        .def_rw("debug_name", &SurfaceContractDescriptor::debug_name)
+        .def_rw("surface_type_name", &SurfaceContractDescriptor::surface_type_name)
+        .def_rw("interface_source", &SurfaceContractDescriptor::interface_source)
+        .def_rw("source_identity", &SurfaceContractDescriptor::source_identity);
+
+    nb::class_<SurfaceContractRegistry>(m, "SurfaceContractRegistry")
+        .def_static(
+            "register_contract",
+            &SurfaceContractRegistry::register_contract,
+            nb::arg("descriptor"),
+            nb::arg("owner"))
+        .def_static(
+            "find",
+            &SurfaceContractRegistry::find,
+            nb::arg("key"))
+        .def_static(
+            "owner_of",
+            &SurfaceContractRegistry::owner_of,
+            nb::arg("key"))
+        .def_static(
+            "unregister_contract",
+            &SurfaceContractRegistry::unregister_contract,
+            nb::arg("key"),
+            nb::arg("owner"))
+        .def_static(
+            "unregister_owner",
+            &SurfaceContractRegistry::unregister_owner,
+            nb::arg("owner"))
+        .def_static(
+            "register_builtins",
+            &SurfaceContractRegistry::register_builtins);
+
     // --- ShaderPhase ---
     nb::class_<ShaderPhase>(m, "ShaderPhase")
         .def(nb::init<>())
@@ -243,6 +315,7 @@ void bind_shader_parser(nb::module_& m) {
         .def_rw("material_texture_resources", &ShaderPhase::material_texture_resources)
         .def_rw("uses_engine_per_frame", &ShaderPhase::uses_engine_per_frame)
         .def_rw("uses_engine_draw_data", &ShaderPhase::uses_engine_draw_data)
+        .def_rw("surface_producer", &ShaderPhase::surface_producer)
         .def_rw("mark_settings", &ShaderPhase::mark_settings)
         // Backward compatibility: identity transform
         .def_static("from_tree", [](const ShaderPhase& phase) {

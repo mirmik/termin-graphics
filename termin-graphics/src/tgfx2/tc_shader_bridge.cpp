@@ -1785,6 +1785,9 @@ bool tc_shader_ensure_tgfx2(
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: shader is NULL");
         return false;
     }
+    if (!tc_shader_require_executable(shader, "tc_shader_ensure_tgfx2")) {
+        return false;
+    }
     if (!device) {
         tc_log(TC_LOG_ERROR, "tc_shader_ensure_tgfx2: device is NULL");
         return false;

@@ -79,6 +79,13 @@
       ]
     },
     {
+      "path": "termin-inspect",
+      "distribution": "termin-inspect",
+      "native_extensions": [
+        {"extension": "termin.inspect._inspect_native", "target": "_inspect_native"}
+      ]
+    },
+    {
       "path": "termin-materials",
       "distribution": "termin-materials",
       "native_extensions": [
@@ -104,13 +111,6 @@
           "optional": true,
           "features": ["sdl"]
         }
-      ]
-    },
-    {
-      "path": "termin-inspect",
-      "distribution": "termin-inspect",
-      "native_extensions": [
-        {"extension": "termin.inspect._inspect_native", "target": "_inspect_native"}
       ]
     },
     {

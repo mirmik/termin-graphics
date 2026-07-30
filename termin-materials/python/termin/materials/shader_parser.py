@@ -1,5 +1,6 @@
 from . import (
     MaterialProperty,
+    MaterialSurfaceProducer,
     MaterialUboEntry,
     MaterialUboLayout,
     PhaseRenderSettings,
@@ -7,6 +8,8 @@ from . import (
     ShaderMultyPhaseProgramm,
     ShaderPhase,
     ShaderStage,
+    SurfaceFragmentInput,
+    SurfaceProducerResourceDecl,
     UniformProperty,
     parse_property_directive,
     parse_shader_text,
@@ -14,6 +17,7 @@ from . import (
 
 __all__ = [
     "MaterialProperty",
+    "MaterialSurfaceProducer",
     "MaterialUboEntry",
     "MaterialUboLayout",
     "PhaseRenderSettings",
@@ -21,6 +25,8 @@ __all__ = [
     "ShaderMultyPhaseProgramm",
     "ShaderPhase",
     "ShaderStage",
+    "SurfaceFragmentInput",
+    "SurfaceProducerResourceDecl",
     "UniformProperty",
     "parse_property_directive",
     "parse_shader_text",

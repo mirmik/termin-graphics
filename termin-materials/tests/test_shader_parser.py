@@ -4,12 +4,66 @@ from termin.materials import (
     ShasderStage,
     ShaderMultyPhaseProgramm,
     ShaderPhase,
+    SurfaceContractDescriptor,
+    SurfaceContractKey,
+    SurfaceContractRegistry,
     MaterialProperty,
     create_material_from_parsed,
     parse_shader_text,
     parse_property_directive,
 )
 from termin.stdlib import stdlib_root
+
+
+def _register_surface_contracts() -> None:
+    assert SurfaceContractRegistry.register_builtins()
+
+
+def _surface_shader(
+    *,
+    contract: str = "termin.surface.standard-pbr",
+    version: int = 1,
+    surface_type: str = "TerminStandardSurfaceV1",
+    entry: str = "evaluate_surface",
+    evaluator_name: str = "evaluate_surface",
+) -> str:
+    return "\n".join(
+        [
+            "@program surface-demo",
+            "@language slang",
+            '@property Texture2D albedo = "white" encoding(srgb)',
+            "@property Float roughness = 0.5",
+            "@phase opaque",
+            (
+                f"@surface contract={contract} version={version} "
+                f"type={surface_type} entry={entry}"
+            ),
+            "@surfaceInput world_pos float3",
+            "@surfaceInput normal_world float3",
+            "@stage vertex vs_main",
+            "struct VertexInput { float3 position : POSITION; };",
+            "float4 vs_main(VertexInput input) : SV_Position {",
+            "    return float4(input.position, 1.0);",
+            "}",
+            "@endstage",
+            "@stage fragment",
+            (
+                f"{surface_type} {evaluator_name}(FragmentInput input) {{"
+            ),
+            f"    {surface_type} result;",
+            "    result.base_color = albedo.Sample(albedo_sampler, float2(0.0)).rgb;",
+            "    result.normal_world = input.normal_world;",
+            "    result.metallic = 0.0;",
+            "    result.perceptual_roughness = roughness;",
+            "    result.occlusion = 1.0;",
+            "    result.emission = float3(0.0);",
+            "    result.opacity = 1.0;",
+            "    return result;",
+            "}",
+            "@endstage",
+            "@endphase",
+        ]
+    )
 
 
 def test_parse_render_state_directives():
@@ -876,3 +930,170 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     assert shadow_phase.phase_mark == "shadow"
     assert "[[TerminScope(\"frame\")]]" in shadow_phase.stages["vertex"].source
     assert "[[TerminScope(\"draw\")]]" in shadow_phase.stages["vertex"].source
+
+
+def test_surface_producer_metadata_parses_and_publishes_to_tc_shader():
+    _register_surface_contracts()
+
+    program = parse_shader_text(_surface_shader())
+    producer = program.phases[0].surface_producer
+    assert producer is not None
+    assert producer.contract_id == "termin.surface.standard-pbr"
+    assert producer.contract_version == 1
+    assert producer.surface_type_name == "TerminStandardSurfaceV1"
+    assert producer.evaluator_entry == "evaluate_surface"
+    assert "evaluate_surface(FragmentInput input)" in producer.evaluator_source
+    assert producer.source_identity.startswith(
+        "termin.surface.standard-pbr@1:evaluator-fnv1a64:"
+    )
+    assert [
+        (item.semantic, item.value_type)
+        for item in producer.required_fragment_inputs
+    ] == [
+        ("world_pos", "float3"),
+        ("normal_world", "float3"),
+    ]
+    assert {resource.name for resource in producer.resources} == {
+        "material",
+        "albedo",
+    }
+
+    material = create_material_from_parsed(program)
+    shader = material.phases[0].shader
+    assert shader.is_executable is False
+    assert shader.program_role.name == "SURFACE_PRODUCER"
+    runtime = shader.surface_producer
+    assert runtime["contract_id"] == "termin.surface.standard-pbr"
+    assert runtime["contract_version"] == 1
+    assert runtime["surface_type_name"] == "TerminStandardSurfaceV1"
+    assert runtime["evaluator_entry"] == "evaluate_surface"
+    assert [item["semantic"] for item in runtime["fragment_inputs"]] == [
+        "world_pos",
+        "normal_world",
+    ]
+    assert {resource["name"] for resource in runtime["resources"]} == {
+        "material",
+        "albedo",
+    }
+
+
+def test_surface_producer_accepts_project_owned_exact_contract():
+    descriptor = SurfaceContractDescriptor()
+    descriptor.key = SurfaceContractKey("game.surface.weathered", 3)
+    descriptor.debug_name = "Weathered Surface v3"
+    descriptor.surface_type_name = "GameWeatheredSurfaceV3"
+    descriptor.interface_source = (
+        "struct GameWeatheredSurfaceV3 { float wetness; };"
+    )
+    descriptor.source_identity = "game-weathered-v3-a"
+    assert SurfaceContractRegistry.register_contract(
+        descriptor,
+        "shader-parser-project-test",
+    )
+    try:
+        program = parse_shader_text(
+            "\n".join(
+                [
+                    "@program project-surface",
+                    "@language slang",
+                    "@phase opaque",
+                    (
+                        "@surface contract=game.surface.weathered version=3 "
+                        "type=GameWeatheredSurfaceV3 entry=evaluate_weathered"
+                    ),
+                    "@surfaceInput world_pos float3",
+                    "@stage vertex vs_main",
+                    "float4 vs_main(float3 position : POSITION) : SV_Position {",
+                    "    return float4(position, 1.0);",
+                    "}",
+                    "@endstage",
+                    "@stage fragment",
+                    (
+                        "GameWeatheredSurfaceV3 "
+                        "evaluate_weathered(FragmentInput input) {"
+                    ),
+                    "    GameWeatheredSurfaceV3 result;",
+                    "    result.wetness = input.world_pos.y;",
+                    "    return result;",
+                    "}",
+                    "@endstage",
+                    "@endphase",
+                ]
+            )
+        )
+        producer = program.phases[0].surface_producer
+        assert producer is not None
+        assert producer.contract_id == "game.surface.weathered"
+        assert producer.contract_version == 3
+    finally:
+        assert SurfaceContractRegistry.unregister_contract(
+            SurfaceContractKey("game.surface.weathered", 3),
+            "shader-parser-project-test",
+        )
+
+
+@pytest.mark.parametrize(
+    ("shader_text", "message"),
+    [
+        (
+            _surface_shader(contract="missing.surface.contract"),
+            "Unknown surface contract",
+        ),
+        (
+            _surface_shader(surface_type="WrongSurfaceType"),
+            "Surface contract type mismatch",
+        ),
+        (
+            _surface_shader(evaluator_name="not_the_declared_entry"),
+            "Surface evaluator entry",
+        ),
+    ],
+)
+def test_surface_producer_rejects_invalid_contract_or_evaluator(
+    shader_text: str,
+    message: str,
+):
+    _register_surface_contracts()
+    with pytest.raises(RuntimeError, match=message):
+        parse_shader_text(shader_text)
+
+
+def test_surface_input_requires_surface_declaration():
+    with pytest.raises(RuntimeError, match="must follow @surface"):
+        parse_shader_text(
+            "\n".join(
+                [
+                    "@language slang",
+                    "@phase opaque",
+                    "@surfaceInput world_pos float3",
+                    "@endphase",
+                ]
+            )
+        )
+
+
+def test_final_color_shader_remains_executable_without_surface_metadata():
+    program = parse_shader_text(
+        "\n".join(
+            [
+                "@program final-color",
+                "@language slang",
+                "@phase opaque",
+                "@stage vertex vs_main",
+                "float4 vs_main(float3 position : POSITION) : SV_Position {",
+                "    return float4(position, 1.0);",
+                "}",
+                "@endstage",
+                "@stage fragment fs_main",
+                "float4 fs_main() : SV_Target0 { return float4(1.0); }",
+                "@endstage",
+                "@endphase",
+            ]
+        )
+    )
+    assert program.phases[0].surface_producer is None
+    material = create_material_from_parsed(program)
+    shader = material.phases[0].shader
+    assert shader.is_executable is True
+    assert shader.program_role.name == "EXECUTABLE"
+    assert shader.surface_producer is None

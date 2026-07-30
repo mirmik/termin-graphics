@@ -49,6 +49,9 @@ typedef struct tc_shader_create_desc {
     const char* uuid;
     tc_shader_language language;
     tc_shader_artifact_policy artifact_policy;
+    // Optional evaluator-only material program metadata. The registry copies
+    // it before returning and includes it in hash-based identity.
+    const tc_shader_surface_producer_desc* surface_producer;
 } tc_shader_create_desc;
 
 TGFX_API bool tc_shader_set_sources(

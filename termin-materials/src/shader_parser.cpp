@@ -1,12 +1,16 @@
 #include <termin/materials/shader_parser.hpp>
+#include <termin/materials/surface_contract_registry.h>
 
 #include <tcbase/tc_log.hpp>
+#include <tgfx/resources/tc_shader.h>
 
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <regex>
+#include <unordered_set>
 #include <utility>
 
 namespace termin {
@@ -44,6 +48,129 @@ std::vector<std::string> split_whitespace(const std::string& s) {
         result.push_back(word);
     }
     return result;
+}
+
+std::string require_key_value(
+    const std::string& token,
+    std::unordered_set<std::string>& seen,
+    const char* directive,
+    std::string& key)
+{
+    const size_t equals = token.find('=');
+    if (equals == std::string::npos || equals == 0 ||
+        equals + 1 >= token.size()) {
+        throw std::runtime_error(
+            std::string(directive) +
+            " expects key=value tokens; invalid token: " + token);
+    }
+    key = token.substr(0, equals);
+    if (!seen.insert(key).second) {
+        throw std::runtime_error(
+            std::string(directive) + " has duplicate key: " + key);
+    }
+    return token.substr(equals + 1);
+}
+
+MaterialSurfaceProducer parse_surface_directive(const std::string& line) {
+    const std::vector<std::string> parts = split_whitespace(line);
+    if (parts.size() != 5) {
+        throw std::runtime_error(
+            "@surface requires contract, version, type and entry");
+    }
+
+    MaterialSurfaceProducer result;
+    std::unordered_set<std::string> seen;
+    for (size_t index = 1; index < parts.size(); ++index) {
+        std::string key;
+        std::string value =
+            require_key_value(parts[index], seen, "@surface", key);
+        if (key == "contract") {
+            result.contract_id = std::move(value);
+        } else if (key == "version") {
+            size_t consumed = 0;
+            const unsigned long parsed = std::stoul(value, &consumed);
+            if (consumed != value.size() || parsed == 0 ||
+                parsed > UINT32_MAX) {
+                throw std::runtime_error(
+                    "@surface version must be a non-zero uint32");
+            }
+            result.contract_version = static_cast<uint32_t>(parsed);
+        } else if (key == "type") {
+            result.surface_type_name = std::move(value);
+        } else if (key == "entry") {
+            result.evaluator_entry = std::move(value);
+        } else {
+            throw std::runtime_error("@surface has unknown key: " + key);
+        }
+    }
+    if (result.contract_id.empty() || result.contract_version == 0 ||
+        result.surface_type_name.empty() || result.evaluator_entry.empty()) {
+        throw std::runtime_error(
+            "@surface requires contract=<id> version=<n> type=<type> entry=<entry>");
+    }
+    return result;
+}
+
+bool valid_surface_input_type(const std::string& value_type) {
+    return value_type == "float" || value_type == "float2" ||
+        value_type == "float3" || value_type == "float4" ||
+        value_type == "float4x4";
+}
+
+SurfaceFragmentInput parse_surface_input_directive(const std::string& line) {
+    const std::vector<std::string> parts = split_whitespace(line);
+    if (parts.size() != 3 || parts[1].empty() ||
+        !valid_surface_input_type(parts[2])) {
+        throw std::runtime_error(
+            "@surfaceInput expects <semantic> "
+            "<float|float2|float3|float4|float4x4>");
+    }
+    return {parts[1], parts[2]};
+}
+
+std::string regex_escape(const std::string& text) {
+    static const std::regex special(R"([.^$|()\\[\]{}*+?])");
+    return std::regex_replace(text, special, R"(\\$&)");
+}
+
+std::string surface_producer_source_identity(
+    const MaterialSurfaceProducer& producer)
+{
+    uint64_t hash = 14695981039346656037ull;
+    auto append = [&hash](const std::string& value) {
+        for (const unsigned char ch : value) {
+            hash ^= ch;
+            hash *= 1099511628211ull;
+        }
+        hash ^= 0xffu;
+        hash *= 1099511628211ull;
+    };
+    append(producer.contract_id);
+    append(std::to_string(producer.contract_version));
+    append(producer.surface_type_name);
+    append(producer.evaluator_entry);
+    append(producer.evaluator_source);
+    for (const SurfaceFragmentInput& input :
+         producer.required_fragment_inputs) {
+        append(input.semantic);
+        append(input.value_type);
+    }
+    for (const SurfaceProducerResourceDecl& resource : producer.resources) {
+        append(resource.name);
+        append(std::to_string(resource.kind));
+        append(std::to_string(resource.scope));
+        append(std::to_string(resource.stage_mask));
+        append(std::to_string(resource.size));
+    }
+    char buffer[80] = {};
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "%s@%u:evaluator-fnv1a64:%016llx",
+        producer.contract_id.c_str(),
+        producer.contract_version,
+        static_cast<unsigned long long>(hash));
+    return buffer;
 }
 
 // Parse property value from string
@@ -949,6 +1076,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
     std::unordered_map<std::string, ShaderStage> shared_stages;
     std::vector<MaterialProperty> material_properties;
     std::unordered_map<std::string, ShaderPhase> phase_settings;  // Per-phase overrides
+    std::optional<MaterialSurfaceProducer> shared_surface_producer;
 
     ShaderPhase* current_phase = nullptr;
     std::string current_settings_phase;  // Which phase @settings applies to
@@ -1034,6 +1162,11 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             else if (starts_with(line, "@settings ")) {
                 close_current_stage();
                 // Fall through to handle @settings below
+            }
+            else if (starts_with(line, "@surface ") ||
+                     starts_with(line, "@surfaceInput ")) {
+                throw std::runtime_error(
+                    "@surface metadata must be declared before @stage");
             }
             else if (starts_with(line, "@endsettings")) {
                 close_current_stage();
@@ -1240,6 +1373,47 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         else if (directive == "@endstage") {
             close_current_stage();
         }
+        else if (directive == "@surface") {
+            if (!current_settings_phase.empty()) {
+                throw std::runtime_error("@surface is not valid inside @settings");
+            }
+            std::optional<MaterialSurfaceProducer>& target =
+                current_phase
+                    ? current_phase->surface_producer
+                    : shared_surface_producer;
+            if (target.has_value()) {
+                throw std::runtime_error(
+                    "Duplicate @surface declaration in one shader phase");
+            }
+            target = parse_surface_directive(line);
+        }
+        else if (directive == "@surfaceInput") {
+            if (!current_settings_phase.empty()) {
+                throw std::runtime_error(
+                    "@surfaceInput is not valid inside @settings");
+            }
+            std::optional<MaterialSurfaceProducer>& target =
+                current_phase
+                    ? current_phase->surface_producer
+                    : shared_surface_producer;
+            if (!target.has_value()) {
+                throw std::runtime_error(
+                    "@surfaceInput must follow @surface in the same phase");
+            }
+            SurfaceFragmentInput input =
+                parse_surface_input_directive(line);
+            const auto duplicate = std::find_if(
+                target->required_fragment_inputs.begin(),
+                target->required_fragment_inputs.end(),
+                [&input](const SurfaceFragmentInput& existing) {
+                    return existing.semantic == input.semantic;
+                });
+            if (duplicate != target->required_fragment_inputs.end()) {
+                throw std::runtime_error(
+                    "Duplicate @surfaceInput semantic: " + input.semantic);
+            }
+            target->required_fragment_inputs.push_back(std::move(input));
+        }
         else if (directive == "@property") {
             add_material_property(parse_property_directive(line));
         }
@@ -1260,6 +1434,7 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
         // Copy shared stages
         phase.stages = shared_stages;
+        phase.surface_producer = std::move(shared_surface_producer);
 
         // Apply default opaque settings
         phase.gl_depth_test = true;
@@ -1314,6 +1489,9 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
         }
 
         phases.push_back(std::move(phase));
+    } else if (shared_surface_producer.has_value()) {
+        throw std::runtime_error(
+            "Shared @surface requires a @phases declaration");
     }
 
     if (!language_seen) {
@@ -1359,6 +1537,11 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
             // and inject matching PerFrame / draw-data resources.
             EngineUniformDeclUsage eng_usage =
                 collect_engine_uniform_usage(kv.second.source);
+            phase.uses_engine_per_frame =
+                phase.uses_engine_per_frame ||
+                eng_usage.per_frame;
+            phase.uses_engine_draw_data =
+                phase.uses_engine_draw_data || eng_usage.model;
             std::string eng_slang;
             if (eng_usage.any()) {
                 kv.second.source =
@@ -1376,6 +1559,91 @@ ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
 
         if (!layout.empty()) {
             phase.material_ubo_layout = std::move(layout);
+        }
+
+        if (phase.surface_producer.has_value()) {
+            MaterialSurfaceProducer& producer = *phase.surface_producer;
+            auto fragment = phase.stages.find("fragment");
+            if (fragment == phase.stages.end()) {
+                throw std::runtime_error(
+                    "@surface phase '" + phase.phase_mark +
+                    "' has no fragment evaluator source");
+            }
+
+            const tc_surface_contract_desc* registered =
+                tc_surface_contract_registry_find({
+                    producer.contract_id.c_str(),
+                    producer.contract_version,
+                });
+            if (!registered) {
+                throw std::runtime_error(
+                    "Unknown surface contract: " + producer.contract_id +
+                    "@" + std::to_string(producer.contract_version));
+            }
+            if (producer.surface_type_name != registered->surface_type_name) {
+                throw std::runtime_error(
+                    "Surface contract type mismatch for " +
+                    producer.contract_id + "@" +
+                    std::to_string(producer.contract_version) +
+                    ": declared '" + producer.surface_type_name +
+                    "', registered '" + registered->surface_type_name + "'");
+            }
+
+            producer.evaluator_source = fragment->second.source;
+            const std::regex evaluator_signature(
+                "\\b" + regex_escape(producer.surface_type_name) +
+                "\\s+" + regex_escape(producer.evaluator_entry) +
+                "\\s*\\(");
+            if (!std::regex_search(
+                    producer.evaluator_source,
+                    evaluator_signature)) {
+                throw std::runtime_error(
+                    "Surface evaluator entry '" + producer.evaluator_entry +
+                    "' returning '" + producer.surface_type_name +
+                    "' was not found in fragment source");
+            }
+            fragment->second.entry = producer.evaluator_entry;
+
+            producer.resources.clear();
+            if (!phase.material_ubo_layout.empty()) {
+                producer.resources.push_back({
+                    TC_SHADER_RESOURCE_MATERIAL,
+                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                    TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                    TC_SHADER_STAGE_FRAGMENT,
+                    phase.material_ubo_layout.block_size,
+                });
+            }
+            if (phase.uses_engine_per_frame) {
+                producer.resources.push_back({
+                    TC_SHADER_RESOURCE_PER_FRAME,
+                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                    TC_SHADER_RESOURCE_SCOPE_FRAME,
+                    TC_SHADER_STAGE_FRAGMENT,
+                    0,
+                });
+            }
+            if (phase.uses_engine_draw_data) {
+                producer.resources.push_back({
+                    TC_SHADER_RESOURCE_DRAW_DATA,
+                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                    TC_SHADER_RESOURCE_SCOPE_DRAW,
+                    TC_SHADER_STAGE_FRAGMENT,
+                    64,
+                });
+            }
+            for (const std::string& texture_name :
+                 phase.material_texture_resources) {
+                producer.resources.push_back({
+                    texture_name,
+                    TC_SHADER_RESOURCE_TEXTURE,
+                    TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                    TC_SHADER_STAGE_FRAGMENT,
+                    0,
+                });
+            }
+            producer.source_identity =
+                surface_producer_source_identity(producer);
         }
     }
 

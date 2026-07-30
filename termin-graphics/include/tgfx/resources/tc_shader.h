@@ -240,6 +240,69 @@ typedef struct tc_shader_contract {
     char* source_debug_name;
 } tc_shader_contract;
 
+// ============================================================================
+// Shader program role and material surface producer metadata
+// ============================================================================
+
+typedef enum tc_shader_program_role {
+    // A complete GPU program whose fragment entry can be compiled and bound.
+    TC_SHADER_PROGRAM_EXECUTABLE = 0,
+    // Material-owned evaluator source that requires a pass-owned consumer
+    // before it becomes an executable fragment program.
+    TC_SHADER_PROGRAM_SURFACE_PRODUCER = 1,
+} tc_shader_program_role;
+
+#define TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION 1u
+
+typedef struct tc_shader_fragment_input {
+    char semantic[TC_SHADER_RESOURCE_NAME_MAX];
+    uint32_t type; // tc_shader_contract_value_type
+} tc_shader_fragment_input;
+
+typedef struct tc_shader_surface_producer_desc {
+    uint32_t schema_version;
+    const char* contract_id;
+    uint32_t contract_version;
+    const char* surface_type_name;
+    const char* evaluator_entry;
+    const char* evaluator_source;
+    const char* source_identity;
+    const tc_shader_fragment_input* fragment_inputs;
+    uint32_t fragment_input_count;
+    const tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+} tc_shader_surface_producer_desc;
+
+typedef struct tc_shader_surface_producer_view {
+    uint32_t schema_version;
+    tc_shader_handle shader;
+    const char* contract_id;
+    uint32_t contract_version;
+    const char* surface_type_name;
+    const char* evaluator_entry;
+    const char* evaluator_source;
+    const char* source_identity;
+    const tc_shader_fragment_input* fragment_inputs;
+    uint32_t fragment_input_count;
+    const tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+} tc_shader_surface_producer_view;
+
+typedef struct tc_shader_surface_producer {
+    uint32_t schema_version;
+    tc_shader_handle shader;
+    char* contract_id;
+    uint32_t contract_version;
+    char* surface_type_name;
+    char* evaluator_entry;
+    char* evaluator_source;
+    char* source_identity;
+    tc_shader_fragment_input* fragment_inputs;
+    uint32_t fragment_input_count;
+    tc_shader_resource_requirement* resources;
+    uint32_t resource_count;
+} tc_shader_surface_producer;
+
 // One field inside a shader's generated std140 material UBO block.
 // Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
 // and pushed onto the shader via tc_shader_set_material_ubo_layout() so that
@@ -276,6 +339,7 @@ typedef struct tc_shader {
     uint32_t features;           // tc_shader_feature bitflags
     uint32_t language;           // tc_shader_language
     uint32_t artifact_policy;    // tc_shader_artifact_policy
+    uint32_t program_role;       // tc_shader_program_role
     uint32_t pool_index;         // index in shader pool (for GPUContext lookup)
 
     // Optional std140 material UBO layout, populated by the shader parser
@@ -299,6 +363,13 @@ typedef struct tc_shader {
     uint8_t has_contract;
     uint8_t _contract_reserved[3];
     tc_shader_contract contract;
+
+    // Optional material-owned surface evaluator. This is authoring metadata,
+    // not a directly executable fragment stage. All storage is owned by the
+    // shader and copied at publication.
+    uint8_t has_surface_producer;
+    uint8_t _surface_producer_reserved[3];
+    tc_shader_surface_producer surface_producer;
 } tc_shader;
 
 // ============================================================================
@@ -439,6 +510,33 @@ TGFX_API bool tc_shader_get_contract_view(
 // reflection contracts are refreshed as additional stage sidecars are merged.
 // Assembled/generated contracts are intentionally left unchanged.
 TGFX_API bool tc_shader_sync_reflected_contract_resources(tc_shader* shader);
+
+// ============================================================================
+// Material surface producer authoring metadata
+// ============================================================================
+
+// Replace the shader's surface producer metadata with an owned deep copy.
+// Passing NULL clears it and restores TC_SHADER_PROGRAM_EXECUTABLE.
+TGFX_API bool tc_shader_set_surface_producer(
+    tc_shader* shader,
+    const tc_shader_surface_producer_desc* desc
+);
+TGFX_API void tc_shader_clear_surface_producer(tc_shader* shader);
+TGFX_API bool tc_shader_has_surface_producer(const tc_shader* shader);
+TGFX_API bool tc_shader_get_surface_producer_view(
+    const tc_shader* shader,
+    tc_shader_surface_producer_view* out
+);
+TGFX_API tc_shader_program_role tc_shader_get_program_role(
+    const tc_shader* shader
+);
+TGFX_API bool tc_shader_is_executable(const tc_shader* shader);
+// Validate a compile/bind boundary and emit an actionable error for
+// evaluator-only programs. operation is included in the diagnostic.
+TGFX_API bool tc_shader_require_executable(
+    const tc_shader* shader,
+    const char* operation
+);
 
 #ifdef __cplusplus
 }

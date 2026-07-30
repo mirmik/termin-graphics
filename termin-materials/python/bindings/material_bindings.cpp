@@ -77,6 +77,19 @@ tc_shader_artifact_policy artifact_policy_for_language(tc_shader_language langua
         : TC_SHADER_ARTIFACT_OPTIONAL;
 }
 
+uint32_t surface_input_value_type(const std::string& value_type) {
+    if (value_type == "float") return TC_SHADER_CONTRACT_VALUE_FLOAT;
+    if (value_type == "float2") return TC_SHADER_CONTRACT_VALUE_FLOAT2;
+    if (value_type == "float3") return TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    if (value_type == "float4") return TC_SHADER_CONTRACT_VALUE_FLOAT4;
+    if (value_type == "float4x4") return TC_SHADER_CONTRACT_VALUE_MATRIX4;
+    tc::Log::error(
+        "Unsupported parsed surface input type '%s'",
+        value_type.c_str());
+    throw std::runtime_error(
+        "Unsupported parsed surface input type: " + value_type);
+}
+
 void put_uniform_value(nb::dict& result, const std::string& name, tc_uniform_value& u) {
     switch (u.type) {
         case TC_UNIFORM_BOOL:
@@ -292,6 +305,56 @@ std::vector<tc_shader_resource_requirement> parser_shader_resource_requirements(
     return requirements;
 }
 
+tc_shader_surface_producer_desc parser_surface_producer_desc(
+    const ShaderPhase& shader_phase,
+    const std::vector<tc_shader_resource_field>& material_fields,
+    std::vector<tc_shader_fragment_input>& fragment_inputs,
+    std::vector<tc_shader_resource_requirement>& resources)
+{
+    if (!shader_phase.surface_producer.has_value()) {
+        return {};
+    }
+    const MaterialSurfaceProducer& producer = *shader_phase.surface_producer;
+
+    fragment_inputs.clear();
+    fragment_inputs.reserve(producer.required_fragment_inputs.size());
+    for (const SurfaceFragmentInput& parsed_input :
+         producer.required_fragment_inputs) {
+        tc_shader_fragment_input input{};
+        std::strncpy(
+            input.semantic,
+            parsed_input.semantic.c_str(),
+            TC_SHADER_RESOURCE_NAME_MAX - 1);
+        input.semantic[TC_SHADER_RESOURCE_NAME_MAX - 1] = '\0';
+        input.type = surface_input_value_type(parsed_input.value_type);
+        fragment_inputs.push_back(input);
+    }
+
+    resources = parser_shader_resource_requirements(
+        shader_phase,
+        shader_phase.material_ubo_layout,
+        material_fields);
+    for (tc_shader_resource_requirement& resource : resources) {
+        resource.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+    }
+
+    tc_shader_surface_producer_desc desc{};
+    desc.schema_version = TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION;
+    desc.contract_id = producer.contract_id.c_str();
+    desc.contract_version = producer.contract_version;
+    desc.surface_type_name = producer.surface_type_name.c_str();
+    desc.evaluator_entry = producer.evaluator_entry.c_str();
+    desc.evaluator_source = producer.evaluator_source.c_str();
+    desc.source_identity = producer.source_identity.c_str();
+    desc.fragment_inputs =
+        fragment_inputs.empty() ? nullptr : fragment_inputs.data();
+    desc.fragment_input_count =
+        static_cast<uint32_t>(fragment_inputs.size());
+    desc.resources = resources.empty() ? nullptr : resources.data();
+    desc.resource_count = static_cast<uint32_t>(resources.size());
+    return desc;
+}
+
 void apply_parser_shader_contract(
     tc_shader* shader,
     const ShaderPhase& shader_phase,
@@ -460,6 +523,20 @@ TcMaterial create_material_from_parsed(
         phase_info.phase_mark = shader_phase.phase_mark;
         phase_info.priority = shader_phase.priority;
         phase_info.state = rs;
+
+        std::vector<tc_shader_resource_field> producer_material_fields =
+            material_fields_from_layout(shader_phase.material_ubo_layout);
+        std::vector<tc_shader_fragment_input> producer_fragment_inputs;
+        std::vector<tc_shader_resource_requirement> producer_resources;
+        tc_shader_surface_producer_desc producer_desc{};
+        if (shader_phase.surface_producer.has_value()) {
+            producer_desc = parser_surface_producer_desc(
+                shader_phase,
+                producer_material_fields,
+                producer_fragment_inputs,
+                producer_resources);
+            phase_info.shader.surface_producer = &producer_desc;
+        }
 
         tc_material_phase* phase = mat.add_phase_from_sources(phase_info);
 
@@ -689,6 +766,27 @@ void configure_shader_from_parsed(
     }
 
     apply_parser_resource_layout(raw, phase, phase.material_ubo_layout);
+    if (phase.surface_producer.has_value()) {
+        std::vector<tc_shader_resource_field> producer_material_fields =
+            material_fields_from_layout(phase.material_ubo_layout);
+        std::vector<tc_shader_fragment_input> producer_fragment_inputs;
+        std::vector<tc_shader_resource_requirement> producer_resources;
+        const tc_shader_surface_producer_desc producer_desc =
+            parser_surface_producer_desc(
+                phase,
+                producer_material_fields,
+                producer_fragment_inputs,
+                producer_resources);
+        if (!tc_shader_set_surface_producer(raw, &producer_desc)) {
+            tc::Log::error(
+                "Failed to publish surface producer for shader phase '%s'",
+                phase.phase_mark.c_str());
+            throw std::runtime_error(
+                "Failed to publish parsed surface producer");
+        }
+    } else {
+        tc_shader_clear_surface_producer(raw);
+    }
     if (!tc_shader_has_contract(raw)) {
         tc::Log::error(
             "Failed to publish interface contract for shader phase '%s'",

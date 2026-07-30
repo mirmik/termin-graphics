@@ -122,6 +122,46 @@ struct PhaseRenderSettings {
 };
 
 /**
+ * One explicitly declared vertex-to-fragment value required by a surface
+ * evaluator. Names are pipeline semantics (for example `world_pos`), not
+ * backend locations. value_type uses Slang spellings accepted by the parser:
+ * float, float2, float3, float4, float4x4.
+ */
+struct SurfaceFragmentInput {
+    std::string semantic;
+    std::string value_type;
+};
+
+/**
+ * Resource contract retained with an evaluator-only surface program.
+ */
+struct SurfaceProducerResourceDecl {
+    std::string name;
+    uint32_t kind = 0;
+    uint32_t scope = 0;
+    uint32_t stage_mask = 0;
+    uint32_t size = 0;
+};
+
+/**
+ * Phase-level material surface evaluator declaration.
+ *
+ * evaluator_source and source_identity are populated after parser
+ * preprocessing. The contract registry is matched by exact id/version and
+ * surface_type_name before the parsed program is returned.
+ */
+struct MaterialSurfaceProducer {
+    std::string contract_id;
+    uint32_t contract_version = 0;
+    std::string surface_type_name;
+    std::string evaluator_entry;
+    std::string evaluator_source;
+    std::string source_identity;
+    std::vector<SurfaceFragmentInput> required_fragment_inputs;
+    std::vector<SurfaceProducerResourceDecl> resources;
+};
+
+/**
  * Shader phase: stages + render state flags + compiled material interface.
  */
 struct ShaderPhase {
@@ -160,6 +200,10 @@ struct ShaderPhase {
     std::vector<std::string> material_texture_resources;
     bool uses_engine_per_frame = false;
     bool uses_engine_draw_data = false;
+
+    // Present only for evaluator-only material fragment programs. Absence
+    // means the fragment stage is an ordinary executable final-color shader.
+    std::optional<MaterialSurfaceProducer> surface_producer;
 
     ShaderPhase() = default;
     ShaderPhase(std::string mark) : phase_mark(std::move(mark)) {
@@ -238,6 +282,10 @@ public:
  *      Material-level property. Inside @phase is accepted for legacy syntax,
  *      but per-phase properties are not supported.
  *   @stage <stage_name> [entry_name|entry=<entry_name>]
+ *   @surface contract=<id> version=<exact> type=<shader-type> entry=<function>
+ *   @surfaceInput <semantic> <float|float2|float3|float4|float4x4>
+ *      Declares an evaluator-only fragment program. @surfaceInput is
+ *      repeatable and must follow @surface in the same phase/shared block.
  *   @endstage
  *   @endphase
  *

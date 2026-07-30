@@ -271,6 +271,10 @@ void bind_shader(nb::module_& m) {
         .value("OPTIONAL", TC_SHADER_ARTIFACT_OPTIONAL)
         .value("REQUIRED", TC_SHADER_ARTIFACT_REQUIRED);
 
+    nb::enum_<tc_shader_program_role>(m, "ShaderProgramRole")
+        .value("EXECUTABLE", TC_SHADER_PROGRAM_EXECUTABLE)
+        .value("SURFACE_PRODUCER", TC_SHADER_PROGRAM_SURFACE_PRODUCER);
+
     nb::enum_<tc_shader_resource_kind>(m, "ShaderResourceKind")
         .value("NONE", TC_SHADER_RESOURCE_NONE)
         .value("CONSTANT_BUFFER", TC_SHADER_RESOURCE_CONSTANT_BUFFER)
@@ -321,6 +325,42 @@ void bind_shader(nb::module_& m) {
         .def_prop_ro("language", &TcShader::language)
         .def_prop_ro("artifact_policy", &TcShader::artifact_policy)
         .def_prop_ro("requires_artifacts", &TcShader::requires_artifacts)
+        .def_prop_ro("program_role", &TcShader::program_role)
+        .def_prop_ro("is_executable", &TcShader::is_executable)
+        .def_prop_ro("has_surface_producer", &TcShader::has_surface_producer)
+        .def_prop_ro("surface_producer", [](const TcShader& s) -> nb::object {
+            tc_shader_surface_producer_view view{};
+            if (!tc_shader_get_surface_producer_view(s.get(), &view)) {
+                return nb::none();
+            }
+
+            nb::dict result;
+            result["schema_version"] = view.schema_version;
+            result["contract_id"] = std::string(view.contract_id);
+            result["contract_version"] = view.contract_version;
+            result["surface_type_name"] = std::string(view.surface_type_name);
+            result["evaluator_entry"] = std::string(view.evaluator_entry);
+            result["evaluator_source"] = std::string(view.evaluator_source);
+            result["source_identity"] = std::string(view.source_identity);
+
+            nb::list inputs;
+            for (uint32_t i = 0; i < view.fragment_input_count; ++i) {
+                nb::dict input;
+                input["semantic"] =
+                    std::string(view.fragment_inputs[i].semantic);
+                input["type"] = view.fragment_inputs[i].type;
+                inputs.append(input);
+            }
+            result["fragment_inputs"] = inputs;
+
+            nb::list resources;
+            for (uint32_t i = 0; i < view.resource_count; ++i) {
+                resources.append(
+                    shader_resource_requirement_to_dict(view.resources[i]));
+            }
+            result["resources"] = resources;
+            return result;
+        })
         .def_prop_ro("has_contract", [](const TcShader& s) {
             return tc_shader_has_contract(s.get());
         })

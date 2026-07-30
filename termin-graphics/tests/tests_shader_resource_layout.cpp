@@ -254,6 +254,140 @@ TEST_CASE("shader contract clears when shader sources change") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("surface producer metadata is owned and changes shader identity") {
+    tc_shader_init();
+
+    char contract_id[] = "game.surface.weathered";
+    char surface_type[] = "GameWeatheredSurfaceV1";
+    char evaluator_entry[] = "evaluate_surface";
+    char evaluator_source[] =
+        "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
+        "return GameWeatheredSurfaceV1(0.5); }";
+    char source_identity[] = "weathered-evaluator-a";
+
+    tc_shader_fragment_input inputs[2]{};
+    std::snprintf(inputs[0].semantic, sizeof(inputs[0].semantic), "%s", "world_pos");
+    inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    std::snprintf(inputs[1].semantic, sizeof(inputs[1].semantic), "%s", "normal_world");
+    inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+
+    tc_shader_resource_requirement resource{};
+    std::snprintf(resource.name, sizeof(resource.name), "%s", "weather_map");
+    resource.kind = TC_SHADER_RESOURCE_TEXTURE;
+    resource.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
+    resource.stage_mask = TC_SHADER_STAGE_FRAGMENT;
+
+    tc_shader_surface_producer_desc producer{};
+    producer.schema_version = TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION;
+    producer.contract_id = contract_id;
+    producer.contract_version = 1;
+    producer.surface_type_name = surface_type;
+    producer.evaluator_entry = evaluator_entry;
+    producer.evaluator_source = evaluator_source;
+    producer.source_identity = source_identity;
+    producer.fragment_inputs = inputs;
+    producer.fragment_input_count = 2;
+    producer.resources = &resource;
+    producer.resource_count = 1;
+
+    tc_shader_create_desc create{};
+    create.sources.vertex_source = "void vs_main() {}";
+    create.sources.fragment_source = evaluator_source;
+    create.sources.vertex_entry = "vs_main";
+    create.sources.fragment_entry = evaluator_entry;
+    create.language = TC_SHADER_LANGUAGE_SLANG;
+    create.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    create.surface_producer = &producer;
+
+    tc_shader_handle handle = tc_shader_from_sources_desc(&create);
+    REQUIRE(!tc_shader_handle_is_invalid(handle));
+    tc_shader* shader = tc_shader_get(handle);
+    REQUIRE(shader != nullptr);
+    CHECK_EQ(
+        tc_shader_get_program_role(shader),
+        TC_SHADER_PROGRAM_SURFACE_PRODUCER);
+    CHECK(!tc_shader_is_executable(shader));
+    CHECK(!tc_shader_require_executable(shader, "unit-test compile"));
+    CHECK(tc_shader_has_surface_producer(shader));
+    const std::string producer_hash = shader->source_hash;
+
+    contract_id[0] = 'X';
+    surface_type[0] = 'X';
+    evaluator_entry[0] = 'X';
+    evaluator_source[0] = 'X';
+    source_identity[0] = 'X';
+    std::snprintf(inputs[0].semantic, sizeof(inputs[0].semantic), "%s", "mutated");
+    std::snprintf(resource.name, sizeof(resource.name), "%s", "mutated");
+
+    tc_shader_surface_producer_view view{};
+    REQUIRE(tc_shader_get_surface_producer_view(shader, &view));
+    CHECK(std::strcmp(view.contract_id, "game.surface.weathered") == 0);
+    CHECK_EQ(view.contract_version, 1u);
+    CHECK(std::strcmp(view.surface_type_name, "GameWeatheredSurfaceV1") == 0);
+    CHECK(std::strcmp(view.evaluator_entry, "evaluate_surface") == 0);
+    CHECK(std::strcmp(view.source_identity, "weathered-evaluator-a") == 0);
+    REQUIRE_EQ(view.fragment_input_count, 2u);
+    CHECK(std::strcmp(view.fragment_inputs[0].semantic, "world_pos") == 0);
+    REQUIRE_EQ(view.resource_count, 1u);
+    CHECK(std::strcmp(view.resources[0].name, "weather_map") == 0);
+
+    tc_shader_surface_producer_desc same{};
+    same.schema_version = view.schema_version;
+    same.contract_id = view.contract_id;
+    same.contract_version = view.contract_version;
+    same.surface_type_name = view.surface_type_name;
+    same.evaluator_entry = view.evaluator_entry;
+    same.evaluator_source = view.evaluator_source;
+    same.source_identity = view.source_identity;
+    same.fragment_inputs = view.fragment_inputs;
+    same.fragment_input_count = view.fragment_input_count;
+    same.resources = view.resources;
+    same.resource_count = view.resource_count;
+    tc_shader_create_desc same_create = create;
+    same_create.sources.fragment_source = view.evaluator_source;
+    same_create.sources.fragment_entry = view.evaluator_entry;
+    same_create.surface_producer = &same;
+    tc_shader_handle same_handle = tc_shader_from_sources_desc(&same_create);
+    CHECK(tc_shader_handle_eq(same_handle, handle));
+
+    tc_shader_surface_producer_desc different = producer;
+    different.contract_id = "game.surface.other";
+    different.surface_type_name = "GameWeatheredSurfaceV1";
+    different.evaluator_entry = "evaluate_surface";
+    different.evaluator_source =
+        "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
+        "return GameWeatheredSurfaceV1(0.5); }";
+    different.source_identity = "weathered-evaluator-a";
+    different.fragment_inputs = view.fragment_inputs;
+    different.resources = view.resources;
+
+    tc_shader_create_desc different_create = create;
+    different_create.sources.fragment_source = different.evaluator_source;
+    different_create.sources.fragment_entry = different.evaluator_entry;
+    different_create.surface_producer = &different;
+    tc_shader_handle different_handle =
+        tc_shader_from_sources_desc(&different_create);
+    REQUIRE(!tc_shader_handle_is_invalid(different_handle));
+    CHECK_FALSE(tc_shader_handle_eq(different_handle, handle));
+    CHECK(std::strcmp(
+        tc_shader_get(different_handle)->source_hash,
+        producer_hash.c_str()) != 0);
+
+    REQUIRE(tc_shader_set_sources(
+        shader,
+        "void vs_main() {}",
+        "float4 fs_main() : SV_Target0 { return 1.0; }",
+        nullptr,
+        "final color",
+        nullptr));
+    CHECK(tc_shader_is_executable(shader));
+    CHECK(!tc_shader_has_surface_producer(shader));
+
+    tc_shader_destroy(different_handle);
+    tc_shader_destroy(handle);
+    tc_shader_shutdown();
+}
+
 TEST_CASE("shader contract resources are independent from shader resource layout updates") {
     tc_shader_init();
 

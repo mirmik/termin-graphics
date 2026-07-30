@@ -9,7 +9,12 @@ _DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 class BuildExt(TerminCMakeBuildExt):
-    upstream_packages = {"tcbase": "libtermin_base", "tgfx": "libtermin_graphics", "termin_nanobind": "libnanobind"}
+    upstream_packages = {
+        "tcbase": "libtermin_base",
+        "tgfx": "libtermin_graphics",
+        "termin_inspect": "libtermin_inspect",
+        "termin_nanobind": "libnanobind",
+    }
     source_dir = _DIR
 
 
@@ -23,7 +28,7 @@ setup(
     python_requires=">=3.14",
     packages=["termin.materials"],
     package_dir={"termin.materials": "python/termin/materials"},
-    install_requires=["tcbase", "tgfx", "termin-nanobind"],
+    install_requires=["tcbase", "tgfx", "termin-inspect", "termin-nanobind"],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,

@@ -48,13 +48,15 @@ struct TcShaderCreateInfo {
     // references only need to remain alive for the duration of from_sources();
     // the shader registry takes an owned copy.
     const tc_shader_contract_desc* declared_contract = nullptr;
+    const tc_shader_surface_producer_desc* surface_producer = nullptr;
 
     tc_shader_create_desc to_c_desc() const {
         return {
             sources.to_c_desc(),
             uuid.empty() ? nullptr : uuid.c_str(),
             language,
-            artifact_policy
+            artifact_policy,
+            surface_producer
         };
     }
 };
@@ -223,6 +225,18 @@ public:
     bool requires_artifacts() const {
         tc_shader* s = get();
         return tc_shader_requires_artifacts(s);
+    }
+
+    tc_shader_program_role program_role() const {
+        return tc_shader_get_program_role(get());
+    }
+
+    bool is_executable() const {
+        return tc_shader_is_executable(get());
+    }
+
+    bool has_surface_producer() const {
+        return tc_shader_has_surface_producer(get());
     }
 
     uint32_t resource_binding_count() const {
