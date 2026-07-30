@@ -263,9 +263,27 @@ std::string TcUiDocumentAsset::uuid() const {
     return asset ? asset->uuid() : std::string{};
 }
 
+std::string TcUiDocumentAsset::name() const {
+    const auto asset = resolve();
+    return asset ? asset->name() : std::string{};
+}
+
 std::uint64_t TcUiDocumentAsset::revision() const {
     const auto asset = resolve();
     return asset ? asset->revision() : 0;
+}
+
+tc_value TcUiDocumentAsset::serialize_to_value() const {
+    tc_value result = tc_value_dict_new();
+    const auto asset = resolve();
+    if (!asset) {
+        return result;
+    }
+    tc_value_dict_set(
+        &result, "uuid", tc_value_string(asset->uuid().c_str()));
+    tc_value_dict_set(
+        &result, "name", tc_value_string(asset->name().c_str()));
+    return result;
 }
 
 LoadedUiScript TcUiDocumentAsset::instantiate(TcDocument document) const {

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include <tc_value.h>
 #include <termin/gui_native/export.h>
 #include <termin/gui_native/uiscript.hpp>
 
@@ -60,9 +61,12 @@ public:
 
     UiDocumentAssetHandle handle() const { return handle_; }
     bool valid() const;
+    bool is_valid() const { return valid(); }
     std::shared_ptr<const UiDocumentAsset> resolve() const;
     std::string uuid() const;
+    std::string name() const;
     std::uint64_t revision() const;
+    tc_value serialize_to_value() const;
 
     LoadedUiScript instantiate(TcDocument document = {}) const;
     LoadedUiScript reload_instance(LoadedUiScript& loaded) const;

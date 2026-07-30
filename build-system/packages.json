@@ -231,7 +231,10 @@
     },
     {
       "path": "termin-components/termin-components-ui",
-      "distribution": "termin-components-ui"
+      "distribution": "termin-components-ui",
+      "native_extensions": [
+        {"extension": "termin.ui_components._ui_components_native", "target": "_ui_components_native"}
+      ]
     },
     {
       "path": "termin-render-passes",

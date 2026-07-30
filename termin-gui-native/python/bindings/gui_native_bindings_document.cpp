@@ -1172,10 +1172,7 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def_prop_ro("uuid", &termin::gui_native::TcUiDocumentAsset::uuid)
       .def_prop_ro(
           "name",
-          [](const termin::gui_native::TcUiDocumentAsset &self) {
-            const auto asset = self.resolve();
-            return asset ? asset->name() : std::string{};
-          })
+          &termin::gui_native::TcUiDocumentAsset::name)
       .def_prop_ro(
           "source_identity",
           [](const termin::gui_native::TcUiDocumentAsset &self) {
