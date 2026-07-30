@@ -396,7 +396,8 @@ void RenderContext2::set_blend(bool enabled) {
 }
 
 void RenderContext2::set_blend_func(BlendFactor src, BlendFactor dst) {
-    if (blend_.src_color != src || blend_.dst_color != dst) {
+    if (blend_.src_color != src || blend_.dst_color != dst ||
+        blend_.src_alpha != src || blend_.dst_alpha != dst) {
         blend_.src_color = src;
         blend_.dst_color = dst;
         blend_.src_alpha = src;
