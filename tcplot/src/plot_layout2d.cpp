@@ -1,7 +1,9 @@
 #include "tcplot/plot_layout2d.hpp"
+#include "tcplot/tc_plot_layout2d.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <exception>
 
 #include <tcbase/tc_log.hpp>
@@ -112,3 +114,80 @@ std::optional<PlotTextMetrics2D> measure_plot_text2d(tgfx::FontAtlas &font,
 }
 
 } // namespace tcplot
+
+extern "C" {
+
+bool tc_plot_fit_range2d(tc_plot_range2d data_bounds, double padding_fraction,
+                         tc_plot_range2d *out_range) {
+  if (out_range == nullptr) {
+    tc::Log::error("tc_plot_fit_range2d requires output");
+    return false;
+  }
+  const auto fitted = tcplot::fit_plot_range2d(
+      {data_bounds.x_min, data_bounds.x_max, data_bounds.y_min,
+       data_bounds.y_max},
+      padding_fraction);
+  if (!fitted)
+    return false;
+  *out_range = {
+      fitted->x_min(),
+      fitted->x_max(),
+      fitted->y_min(),
+      fitted->y_max(),
+  };
+  return true;
+}
+
+size_t tc_plot_axis_ticks2d_copy(const tc_plot_axis_ticks_desc2d *desc,
+                                 double *out_values, size_t capacity) {
+  if (desc == nullptr || !std::isfinite(desc->minimum) ||
+      !std::isfinite(desc->maximum) ||
+      desc->maximum <= desc->minimum || !std::isfinite(desc->extent_px) ||
+      desc->extent_px <= 0.0f ||
+      !std::isfinite(desc->spacing_logical_px) ||
+      desc->spacing_logical_px <= 0.0f ||
+      !std::isfinite(desc->pixel_scale) || desc->pixel_scale <= 0.0f ||
+      desc->minimum_tick_count < 1) {
+    tc::Log::error("tc_plot_axis_ticks2d_copy rejected invalid input");
+    return 0;
+  }
+  const float physical_spacing =
+      desc->spacing_logical_px * desc->pixel_scale;
+  if (!std::isfinite(physical_spacing) || physical_spacing <= 0.0f) {
+    tc::Log::error("tc_plot_axis_ticks2d_copy spacing overflowed");
+    return 0;
+  }
+  const int maximum_tick_count =
+      std::max(static_cast<int>(desc->extent_px / physical_spacing),
+               static_cast<int>(desc->minimum_tick_count));
+  const std::vector<double> values =
+      tcplot::axes::nice_ticks(desc->minimum, desc->maximum,
+                              maximum_tick_count);
+  if (out_values == nullptr)
+    return values.size();
+  if (capacity < values.size()) {
+    tc::Log::error("tc_plot_axis_ticks2d_copy output is too small");
+    return 0;
+  }
+  std::copy(values.begin(), values.end(), out_values);
+  return values.size();
+}
+
+size_t tc_plot_format_tick2d(double value, char *out_utf8, size_t capacity) {
+  if (!std::isfinite(value)) {
+    tc::Log::error("tc_plot_format_tick2d rejected non-finite value");
+    return 0;
+  }
+  const std::string label = tcplot::axes::format_tick(value);
+  const size_t required = label.size() + 1;
+  if (out_utf8 == nullptr)
+    return required;
+  if (capacity < required) {
+    tc::Log::error("tc_plot_format_tick2d output is too small");
+    return 0;
+  }
+  std::memcpy(out_utf8, label.c_str(), required);
+  return required;
+}
+
+} // extern "C"

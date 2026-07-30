@@ -83,6 +83,14 @@ text metrics не содержат borrowed backend pointers. Пересчиты
 изменении текста, font, logical size или pixel scale. `PlotEngine2D` использует
 эти же utilities как reference path.
 
+C ABI `tc_plot_layout2d.h` экспортирует fit, detached tick values и UTF-8
+formatting без переноса layout policy в native composer. C# слой
+`RetainedPlot2D` использует этот ABI вместе с typed handle-only wrappers для
+`PlotProjection2D`, `PlotGridItem2D`, `PlotLineSeriesItem2D` и
+`PlotScatterSeriesItem2D`. Измерение текста выполняется через тот же
+`GpuHost`/`FontAtlas`, который будет рисовать подписи; managed-код не получает
+font или backend pointer.
+
 `PlotAnnotationLayer2D` принадлежит plot engine и хранит semantic annotations
 через generation handles. Одна annotation может проецироваться в несколько
 visual items с независимыми фазами `Underlay`, `Overlay`, `Chrome` и clipping

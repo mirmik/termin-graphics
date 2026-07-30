@@ -10,6 +10,7 @@
 #include <tgfx2/font_atlas.hpp>
 
 #include "tcplot/plot_layout2d.hpp"
+#include "tcplot/tc_plot_layout2d.h"
 
 namespace {
 
@@ -62,6 +63,24 @@ int main() {
   assert(scale_two->x.values.size() <= scale_one->x.values.size());
   assert(scale_two->y.values.size() <= scale_one->y.values.size());
   assert(!make_plot_ticks2d(frame(1.0f), 0.0f, 50.0f));
+
+  tc_plot_range2d c_fitted{};
+  assert(tc_plot_fit_range2d({0.0, 10.0, -5.0, 5.0}, 0.05, &c_fitted));
+  assert(near(c_fitted.x_min, -0.5));
+  const tc_plot_axis_ticks_desc2d tick_desc{
+      -4.0, 8.0, 800.0f, 80.0f, 1.0f, 3};
+  const size_t c_tick_count =
+      tc_plot_axis_ticks2d_copy(&tick_desc, nullptr, 0);
+  assert(c_tick_count > 0);
+  std::vector<double> c_ticks(c_tick_count);
+  assert(tc_plot_axis_ticks2d_copy(&tick_desc, c_ticks.data(),
+                                   c_ticks.size()) == c_tick_count);
+  const size_t label_size = tc_plot_format_tick2d(c_ticks.front(), nullptr, 0);
+  assert(label_size > 1);
+  std::string label(label_size, '\0');
+  assert(tc_plot_format_tick2d(c_ticks.front(), label.data(), label.size()) ==
+         label_size);
+  assert(!label.empty() && label.back() == '\0');
 
   tgfx::FontAtlas font(TCPLOT_TEST_FONT, 14);
   const auto narrow = measure_plot_text2d(font, "iii", 14.0f);
