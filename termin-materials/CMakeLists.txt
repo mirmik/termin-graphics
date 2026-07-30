@@ -19,16 +19,24 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_graphics REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(termin_inspect termin_inspect::termin_inspect)
+else()
+    find_package(termin_inspect REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 set(TERMIN_MATERIALS_SOURCES
     src/shader_parser.cpp
+    src/surface_contract_registry.cpp
 )
 
 set(TERMIN_MATERIALS_HEADERS
     include/termin/materials/shader_parser.hpp
+    include/termin/materials/surface_contract_registry.h
+    include/termin/materials/surface_contract_registry.hpp
 )
 
 if(TERMIN_MATERIALS_BUILD_SHARED)
@@ -66,6 +74,7 @@ target_link_libraries(termin_materials
         tcbase::termin_base
         tgfx::termin_graphics
         tgfx::termin_graphics2
+        termin_inspect::termin_inspect
 )
 
 if(MSVC)
@@ -73,6 +82,40 @@ if(MSVC)
     target_compile_definitions(termin_materials PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(termin_materials PRIVATE -Wall -Wextra)
+endif()
+
+if(TERMIN_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(
+        termin_materials_surface_contract_registry_test
+        tests/test_surface_contract_registry.c
+    )
+    target_link_libraries(
+        termin_materials_surface_contract_registry_test
+        PRIVATE termin_materials
+    )
+    add_test(
+        NAME termin_materials_surface_contract_registry_test
+        COMMAND termin_materials_surface_contract_registry_test
+    )
+
+    add_executable(
+        termin_materials_surface_contract_registry_cpp_test
+        tests/test_surface_contract_registry_cpp.cpp
+    )
+    target_link_libraries(
+        termin_materials_surface_contract_registry_cpp_test
+        PRIVATE termin_materials
+    )
+    add_test(
+        NAME termin_materials_surface_contract_registry_cpp_test
+        COMMAND termin_materials_surface_contract_registry_cpp_test
+    )
+
+    if(COMMAND termin_label_tests_in_directory)
+        termin_label_tests_in_directory("termin-materials")
+    endif()
 endif()
 
 if(TERMIN_BUILD_PYTHON)
