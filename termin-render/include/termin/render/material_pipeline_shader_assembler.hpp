@@ -7,12 +7,28 @@
 #include <termin/render/material_pipeline_contracts.hpp>
 #include <termin/render/render_export.hpp>
 #include <termin/render/vertex_transform_contracts.hpp>
+#include <termin/materials/surface_contract_registry.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 
 namespace termin {
 
 struct MaterialPipelineMaterialContract {
     TcShader shader;
+    MaterialFragmentInterface required_fragment_input;
+    std::vector<MaterialPipelineResourceDecl> resources;
+};
+
+enum class MaterialFragmentComposition : uint8_t {
+    FinalColor,
+    SurfaceConsumer,
+    PassOwned,
+};
+
+struct MaterialSurfaceConsumerContract {
+    SurfaceContractKey accepted_surface;
+    std::string consumer_source;
+    std::string fragment_entry;
+    std::string source_identity;
     MaterialFragmentInterface required_fragment_input;
     std::vector<MaterialPipelineResourceDecl> resources;
 };
@@ -24,8 +40,15 @@ struct MaterialPipelinePassContract {
     // independent from drawable phase labels: a pass with phase_mark="opaque",
     // "depth", "actor_attribute", or any project-owned label can request any
     // compatible vertex transform/resource/fragment contract explicitly.
+    MaterialFragmentComposition fragment_composition =
+        MaterialFragmentComposition::FinalColor;
+
+    // Transitional final-color declaration for authored shaders that predate
+    // phase-owned fragment-input metadata. Surface producers always carry
+    // their own requirements on tc_shader and never use this field.
     MaterialFragmentInterface required_material_fragment_input;
-    bool uses_material_fragment = true;
+
+    std::optional<MaterialSurfaceConsumerContract> surface_consumer;
     std::string fragment_source_override;
     std::string fragment_entry_override = "fs_main";
     std::vector<MaterialPipelineResourceDecl> resources;
@@ -62,7 +85,7 @@ struct MaterialPipelineShaderAssemblyResult {
 
 RENDER_API MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
     TcShader shader,
-    MaterialFragmentInterface required_fragment_input);
+    MaterialFragmentInterface final_color_required_fragment_input = {});
 
 RENDER_API MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     const MaterialPipelineShaderAssemblyRequest& request);

@@ -126,6 +126,14 @@ const char* material_pipeline_diagnostic_code_name(
         return "missing_vertex_transform_template";
     case MaterialPipelineDiagnosticCode::MissingFragmentSource:
         return "missing_fragment_source";
+    case MaterialPipelineDiagnosticCode::MissingFragmentEntry:
+        return "missing_fragment_entry";
+    case MaterialPipelineDiagnosticCode::FragmentCompositionMismatch:
+        return "fragment_composition_mismatch";
+    case MaterialPipelineDiagnosticCode::UnknownSurfaceContract:
+        return "unknown_surface_contract";
+    case MaterialPipelineDiagnosticCode::SurfaceContractMismatch:
+        return "surface_contract_mismatch";
     case MaterialPipelineDiagnosticCode::ShaderCreationFailed:
         return "shader_creation_failed";
     }

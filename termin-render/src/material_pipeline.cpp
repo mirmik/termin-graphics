@@ -60,11 +60,6 @@ uint64_t fnv1a_append_u32(uint32_t value, uint64_t hash)
     return fnv1a_append(buffer, hash);
 }
 
-uint64_t fnv1a_append_bool(bool value, uint64_t hash)
-{
-    return fnv1a_append(value ? "1" : "0", hash);
-}
-
 void append_semantics_to_hash(
     const std::vector<MaterialPipelineSemantic>& semantics,
     uint64_t& hash)
@@ -154,6 +149,71 @@ void append_vertex_output_adapter_to_hash(
     append_semantics_to_hash(adapter->produced_output_semantics.semantics, hash);
     hash = fnv1a_append(":resources:", hash);
     append_resources_to_hash(adapter->resources, hash);
+}
+
+void append_surface_composition_to_hash(
+    TcShader original_shader,
+    const MaterialPipelinePassContract& pass_contract,
+    uint64_t& hash)
+{
+    hash = fnv1a_append_u32(
+        static_cast<uint32_t>(pass_contract.fragment_composition),
+        hash);
+    if (pass_contract.fragment_composition !=
+        MaterialFragmentComposition::SurfaceConsumer) {
+        return;
+    }
+
+    const tc_shader* shader = original_shader.get();
+    tc_shader_surface_producer_view producer{};
+    if (tc_shader_get_surface_producer_view(shader, &producer)) {
+        hash = fnv1a_append(":producer_contract:", hash);
+        hash = fnv1a_append(producer.contract_id, hash);
+        hash = fnv1a_append_u32(producer.contract_version, hash);
+        hash = fnv1a_append(":producer_type:", hash);
+        hash = fnv1a_append(producer.surface_type_name, hash);
+        hash = fnv1a_append(":producer_entry:", hash);
+        hash = fnv1a_append(producer.evaluator_entry, hash);
+        hash = fnv1a_append(":producer_identity:", hash);
+        hash = fnv1a_append(producer.source_identity, hash);
+        hash = fnv1a_append(":producer_inputs:", hash);
+        for (uint32_t i = 0; i < producer.fragment_input_count; ++i) {
+            hash = fnv1a_append(producer.fragment_inputs[i].semantic, hash);
+            hash = fnv1a_append_u32(producer.fragment_inputs[i].type, hash);
+        }
+    } else {
+        hash = fnv1a_append(":missing_producer:", hash);
+    }
+
+    if (!pass_contract.surface_consumer.has_value()) {
+        hash = fnv1a_append(":missing_consumer:", hash);
+        return;
+    }
+    const MaterialSurfaceConsumerContract& consumer =
+        *pass_contract.surface_consumer;
+    hash = fnv1a_append(":consumer_contract:", hash);
+    hash = fnv1a_append(consumer.accepted_surface.id.c_str(), hash);
+    hash = fnv1a_append_u32(consumer.accepted_surface.version, hash);
+    hash = fnv1a_append(":consumer_entry:", hash);
+    hash = fnv1a_append(consumer.fragment_entry.c_str(), hash);
+    hash = fnv1a_append(":consumer_identity:", hash);
+    hash = fnv1a_append(consumer.source_identity.c_str(), hash);
+    hash = fnv1a_append(":consumer_inputs:", hash);
+    append_semantics_to_hash(
+        consumer.required_fragment_input.semantics,
+        hash);
+    hash = fnv1a_append(":consumer_resources:", hash);
+    append_resources_to_hash(consumer.resources, hash);
+
+    const tc_surface_contract_desc* surface =
+        tc_surface_contract_registry_find({
+            consumer.accepted_surface.id.c_str(),
+            consumer.accepted_surface.version,
+        });
+    hash = fnv1a_append(":interface_identity:", hash);
+    hash = fnv1a_append(
+        surface ? surface->source_identity : "<unregistered>",
+        hash);
 }
 
 bool material_shader_override_supported(VertexTransformKind kind)
@@ -296,8 +356,11 @@ std::string material_pipeline_shader_intent_fingerprint(
     append_vertex_transform_to_hash(vertex_transform, hash);
     hash = fnv1a_append("::pass::", hash);
     hash = fnv1a_append(pass_contract.debug_name.c_str(), hash);
-    hash = fnv1a_append(":matfrag:", hash);
-    hash = fnv1a_append_bool(pass_contract.uses_material_fragment, hash);
+    hash = fnv1a_append(":fragment_composition:", hash);
+    append_surface_composition_to_hash(
+        original_shader,
+        pass_contract,
+        hash);
     hash = fnv1a_append(":fragment_source:", hash);
     hash = fnv1a_append(pass_contract.fragment_source_override.c_str(), hash);
     hash = fnv1a_append(":fragment_entry:", hash);
@@ -365,7 +428,9 @@ TcShader assemble_material_shader_override(const MaterialShaderOverrideRequest& 
         request.vertex_transform_kind == VertexTransformKind::StaticMesh &&
         !request.vertex_transform_contract.has_value() &&
         shader_variant_op == TC_SHADER_VARIANT_NONE &&
-        pass_contract.uses_material_fragment &&
+        pass_contract.fragment_composition ==
+            MaterialFragmentComposition::FinalColor &&
+        original_shader.is_executable() &&
         pass_contract.fragment_source_override.empty() &&
         original_shader.vertex_source()[0] != '\0';
     if (authored_static_material_shader) {

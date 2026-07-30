@@ -1,6 +1,7 @@
 #include <termin/render/material_pipeline_shader_assembler.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <utility>
 
@@ -51,6 +52,39 @@ MaterialPipelineResourceDecl resource_decl_from_binding(
     return result;
 }
 
+MaterialPipelineResourceDecl resource_decl_from_requirement(
+    const tc_shader_resource_requirement& requirement,
+    MaterialPipelineResourceOwner owner)
+{
+    MaterialPipelineResourceDecl result{};
+    result.requirement.name = requirement.name;
+    result.requirement.kind = requirement.kind;
+    result.requirement.scope = requirement.scope;
+    result.requirement.stage_mask = requirement.stage_mask;
+    result.requirement.size = requirement.size;
+    result.owner = owner;
+    return result;
+}
+
+std::optional<MaterialPipelineValueType> material_pipeline_value_type(
+    uint32_t type)
+{
+    switch (type) {
+    case TC_SHADER_CONTRACT_VALUE_FLOAT:
+        return MaterialPipelineValueType::Float;
+    case TC_SHADER_CONTRACT_VALUE_FLOAT2:
+        return MaterialPipelineValueType::Float2;
+    case TC_SHADER_CONTRACT_VALUE_FLOAT3:
+        return MaterialPipelineValueType::Float3;
+    case TC_SHADER_CONTRACT_VALUE_FLOAT4:
+        return MaterialPipelineValueType::Float4;
+    case TC_SHADER_CONTRACT_VALUE_MATRIX4:
+        return MaterialPipelineValueType::Matrix4;
+    default:
+        return std::nullopt;
+    }
+}
+
 tc_shader_resource_requirement resource_requirement_from_decl(
     const MaterialPipelineResourceDecl& decl)
 {
@@ -76,13 +110,14 @@ void append_resources(
 }
 
 bool validate_fragment_interface(
-    const MaterialPipelineMaterialContract& material,
+    const MaterialFragmentInterface& fragment_input,
+    const char* input_owner,
     const VertexTransformContract& vertex_transform,
     std::vector<MaterialPipelineDiagnostic>& diagnostics)
 {
     bool ok = true;
     for (const MaterialPipelineSemantic& semantic :
-         material.required_fragment_input.semantics) {
+         fragment_input.semantics) {
         if (!material_pipeline_interface_produces(
                 vertex_transform.produced_fragment_input,
                 semantic.name,
@@ -91,7 +126,7 @@ bool validate_fragment_interface(
             diagnostics.push_back(diagnostic(
                 MaterialPipelineDiagnosticCode::MissingVertexOutputSemantic,
                 "vertex transform '" + vertex_transform.debug_name +
-                    "' does not produce material fragment semantic '" +
+                    "' does not produce " + input_owner + " fragment semantic '" +
                     semantic.name + "'"));
         }
     }
@@ -209,17 +244,109 @@ std::string default_shader_name(const MaterialPipelineShaderAssemblyRequest& req
     return name;
 }
 
+bool shader_identifier_character(char character)
+{
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalnum(value) != 0 || character == '_';
+}
+
+bool source_defines_entry(
+    const std::string& source,
+    const std::string& entry)
+{
+    if (source.empty() || entry.empty()) {
+        return false;
+    }
+    size_t position = 0;
+    while ((position = source.find(entry, position)) != std::string::npos) {
+        const bool has_identifier_before =
+            position > 0 && shader_identifier_character(source[position - 1]);
+        size_t after = position + entry.size();
+        const bool has_identifier_after =
+            after < source.size() && shader_identifier_character(source[after]);
+        if (!has_identifier_before && !has_identifier_after) {
+            while (after < source.size() &&
+                   std::isspace(static_cast<unsigned char>(source[after])) != 0) {
+                ++after;
+            }
+            if (after < source.size() && source[after] == '(') {
+                return true;
+            }
+        }
+        position += entry.size();
+    }
+    return false;
+}
+
+std::string compose_surface_fragment_source(
+    const tc_surface_contract_desc& surface,
+    const tc_shader_surface_producer_view& producer,
+    const MaterialSurfaceConsumerContract& consumer)
+{
+    std::string source;
+    source.reserve(
+        std::char_traits<char>::length(surface.interface_source) +
+        std::char_traits<char>::length(producer.evaluator_source) +
+        consumer.consumer_source.size() + 256u);
+    source += "// Termin surface contract: ";
+    source += surface.source_identity;
+    source += "\n";
+    source += surface.interface_source;
+    source += "\n\n// Termin material evaluator: ";
+    source += producer.source_identity;
+    source += "\n";
+    source += producer.evaluator_source;
+    source += "\n\n// Termin pass consumer: ";
+    source += consumer.source_identity;
+    source += "\n";
+    source += consumer.consumer_source;
+    source += "\n";
+    return source;
+}
+
 } // namespace
 
 MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
     TcShader shader,
-    MaterialFragmentInterface required_fragment_input)
+    MaterialFragmentInterface final_color_required_fragment_input)
 {
     MaterialPipelineMaterialContract contract;
     contract.shader = shader;
-    contract.required_fragment_input = std::move(required_fragment_input);
+    contract.required_fragment_input =
+        std::move(final_color_required_fragment_input);
 
     if (tc_shader* raw = shader.get()) {
+        tc_shader_surface_producer_view producer{};
+        if (tc_shader_get_surface_producer_view(raw, &producer)) {
+            contract.required_fragment_input.semantics.clear();
+            contract.required_fragment_input.semantics.reserve(
+                producer.fragment_input_count);
+            for (uint32_t i = 0; i < producer.fragment_input_count; ++i) {
+                const std::optional<MaterialPipelineValueType> type =
+                    material_pipeline_value_type(producer.fragment_inputs[i].type);
+                if (!type.has_value()) {
+                    tc::Log::error(
+                        "Surface producer '%s@%u' has unsupported fragment input type %u for '%s'",
+                        producer.contract_id,
+                        producer.contract_version,
+                        producer.fragment_inputs[i].type,
+                        producer.fragment_inputs[i].semantic);
+                    continue;
+                }
+                contract.required_fragment_input.semantics.push_back({
+                    producer.fragment_inputs[i].semantic,
+                    *type,
+                });
+            }
+            contract.resources.reserve(producer.resource_count);
+            for (uint32_t i = 0; i < producer.resource_count; ++i) {
+                contract.resources.push_back(resource_decl_from_requirement(
+                    producer.resources[i],
+                    MaterialPipelineResourceOwner::Material));
+            }
+            return contract;
+        }
+
         const uint32_t count = tc_shader_resource_binding_count(raw);
         const tc_shader_resource_binding* bindings =
             tc_shader_resource_bindings(raw);
@@ -245,15 +372,6 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
 {
     MaterialPipelineShaderAssemblyResult result;
 
-    if (!request.pass.uses_material_fragment &&
-        request.pass.fragment_source_override.empty()) {
-        result.diagnostics.push_back(diagnostic(
-            MaterialPipelineDiagnosticCode::MissingFragmentSource,
-            "pass '" + request.pass.debug_name +
-                "' does not use material fragment and has no fragment override"));
-        return result;
-    }
-
     const bool has_modular_provider =
         vertex_transform_provider_is_modular(request.vertex_transform);
     const bool has_output_adapter = request.pass.vertex_output_adapter.has_value();
@@ -276,19 +394,176 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
         return result;
     }
 
-    if (request.pass.uses_material_fragment &&
-        (!request.material.shader.is_valid() ||
-         request.material.shader.fragment_source()[0] == '\0')) {
-        result.diagnostics.push_back(diagnostic(
-            MaterialPipelineDiagnosticCode::MissingFragmentSource,
-            "material fragment source is empty"));
-        return result;
+    std::string fragment_source;
+    std::string fragment_entry;
+    std::vector<MaterialPipelineResourceDecl> fragment_resources;
+    switch (request.pass.fragment_composition) {
+    case MaterialFragmentComposition::FinalColor: {
+        if (!request.material.shader.is_valid() ||
+            request.material.shader.fragment_source()[0] == '\0') {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentSource,
+                "final-color material fragment source is empty"));
+            break;
+        }
+        if (!request.material.shader.is_executable()) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::FragmentCompositionMismatch,
+                "pass '" + request.pass.debug_name +
+                    "' requires a final-color fragment but the material is a "
+                    "surface producer"));
+            break;
+        }
+        fragment_source = request.material.shader.fragment_source();
+        const tc_shader* raw = request.material.shader.get();
+        fragment_entry = raw && raw->fragment_entry
+            ? raw->fragment_entry
+            : "main";
+        if (!source_defines_entry(fragment_source, fragment_entry)) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentEntry,
+                "final-color entry '" + fragment_entry +
+                    "' was not found in material fragment source"));
+        }
+        validate_fragment_interface(
+            request.material.required_fragment_input,
+            "material",
+            request.vertex_transform,
+            result.diagnostics);
+        fragment_resources = request.material.resources;
+        break;
+    }
+    case MaterialFragmentComposition::SurfaceConsumer: {
+        if (!request.material.shader.is_valid()) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentSource,
+                "surface material shader is missing"));
+            break;
+        }
+        if (request.material.shader.language() != TC_SHADER_LANGUAGE_SLANG) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::FragmentCompositionMismatch,
+                "surface producer/consumer composition requires Slang source"));
+            break;
+        }
+        tc_shader_surface_producer_view producer{};
+        if (!tc_shader_get_surface_producer_view(
+                request.material.shader.get(),
+                &producer)) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::FragmentCompositionMismatch,
+                "pass '" + request.pass.debug_name +
+                    "' requires a surface producer but the material is final-color"));
+            break;
+        }
+        if (!request.pass.surface_consumer.has_value()) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentSource,
+                "pass '" + request.pass.debug_name +
+                    "' selected SurfaceConsumer without a consumer descriptor"));
+            break;
+        }
+        const MaterialSurfaceConsumerContract& consumer =
+            *request.pass.surface_consumer;
+        if (consumer.accepted_surface.id != producer.contract_id ||
+            consumer.accepted_surface.version != producer.contract_version) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::SurfaceContractMismatch,
+                "pass '" + request.pass.debug_name + "' accepts '" +
+                    consumer.accepted_surface.id + "@" +
+                    std::to_string(consumer.accepted_surface.version) +
+                    "' but material produces '" + producer.contract_id + "@" +
+                    std::to_string(producer.contract_version) + "'"));
+            break;
+        }
+        const tc_surface_contract_desc* surface =
+            tc_surface_contract_registry_find({
+                producer.contract_id,
+                producer.contract_version,
+            });
+        if (!surface) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::UnknownSurfaceContract,
+                "surface contract '" + std::string(producer.contract_id) + "@" +
+                    std::to_string(producer.contract_version) +
+                    "' is not registered"));
+            break;
+        }
+        if (std::string(surface->surface_type_name) !=
+            producer.surface_type_name) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::SurfaceContractMismatch,
+                "registered surface type '" +
+                    std::string(surface->surface_type_name) +
+                    "' does not match producer type '" +
+                    producer.surface_type_name + "'"));
+            break;
+        }
+        if (!source_defines_entry(
+                producer.evaluator_source,
+                producer.evaluator_entry)) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentEntry,
+                "surface evaluator entry '" +
+                    std::string(producer.evaluator_entry) +
+                    "' was not found in evaluator source"));
+        }
+        if (!source_defines_entry(
+                consumer.consumer_source,
+                consumer.fragment_entry)) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentEntry,
+                "surface consumer entry '" + consumer.fragment_entry +
+                    "' was not found in consumer source"));
+        }
+        if (consumer.source_identity.empty()) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentSource,
+                "surface consumer source identity is empty"));
+        }
+        validate_fragment_interface(
+            request.material.required_fragment_input,
+            "surface producer",
+            request.vertex_transform,
+            result.diagnostics);
+        validate_fragment_interface(
+            consumer.required_fragment_input,
+            "surface consumer",
+            request.vertex_transform,
+            result.diagnostics);
+        fragment_source = compose_surface_fragment_source(
+            *surface,
+            producer,
+            consumer);
+        fragment_entry = consumer.fragment_entry;
+        fragment_resources = request.material.resources;
+        append_resources(fragment_resources, consumer.resources);
+        break;
+    }
+    case MaterialFragmentComposition::PassOwned:
+        if (request.pass.fragment_source_override.empty()) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentSource,
+                "pass '" + request.pass.debug_name +
+                    "' selected PassOwned without a fragment source"));
+            break;
+        }
+        fragment_source = request.pass.fragment_source_override;
+        fragment_entry = request.pass.fragment_entry_override;
+        if (!source_defines_entry(fragment_source, fragment_entry)) {
+            result.diagnostics.push_back(diagnostic(
+                MaterialPipelineDiagnosticCode::MissingFragmentEntry,
+                "pass-owned entry '" + fragment_entry +
+                    "' was not found in fragment source"));
+        }
+        validate_fragment_interface(
+            request.pass.required_material_fragment_input,
+            "pass-owned",
+            request.vertex_transform,
+            result.diagnostics);
+        break;
     }
 
-    validate_fragment_interface(
-        request.material,
-        request.vertex_transform,
-        result.diagnostics);
     if (has_modular_provider != has_output_adapter) {
         result.diagnostics.push_back(diagnostic(
             MaterialPipelineDiagnosticCode::MissingVertexTransformTemplate,
@@ -304,7 +579,7 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     }
 
     std::vector<MaterialPipelineResourceDecl> resource_decls;
-    append_resources(resource_decls, request.material.resources);
+    append_resources(resource_decls, fragment_resources);
     append_resources(resource_decls, request.vertex_transform.resources);
     if (has_output_adapter) {
         append_resources(resource_decls, request.pass.vertex_output_adapter->resources);
@@ -332,14 +607,6 @@ MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
     append_contract_inputs(request.vertex_transform, vertex_inputs);
 
     const std::string shader_name = default_shader_name(request);
-    const std::string fragment_source = request.pass.uses_material_fragment
-        ? request.material.shader.fragment_source()
-        : request.pass.fragment_source_override;
-    const std::string fragment_entry = request.pass.uses_material_fragment
-        ? (request.material.shader.get() && request.material.shader.get()->fragment_entry
-            ? request.material.shader.get()->fragment_entry
-            : "main")
-        : request.pass.fragment_entry_override;
     const std::string vertex_entry = request.vertex_entry_override.empty()
         ? request.vertex_transform.vertex_entry
         : request.vertex_entry_override;

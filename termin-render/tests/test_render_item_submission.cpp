@@ -10,6 +10,7 @@ GUARD_TEST_MAIN();
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace {
 
@@ -54,6 +55,98 @@ bool other_test_encoder(
     // Keep this callback observably different from test_encoder: MSVC's
     // identical COMDAT folding otherwise aliases their function pointers.
     return false;
+}
+
+constexpr const char* kPlannerSurfaceInterface =
+    "struct PlannerSurface { float3 color; };";
+constexpr const char* kPlannerSurfaceEvaluator = R"(
+struct FragmentInput {
+    float4 screen_pos : SV_Position;
+    float3 world_pos : TEXCOORD0;
+    float3 normal_world : TEXCOORD1;
+};
+PlannerSurface evaluate_planner_surface(FragmentInput input) {
+    PlannerSurface surface;
+    surface.color = abs(input.normal_world) + input.world_pos * 0.0;
+    return surface;
+}
+)";
+constexpr const char* kPlannerSurfaceConsumer = R"(
+struct FragmentOutput { float4 color : SV_Target0; };
+[shader("fragment")]
+FragmentOutput consume_planner_surface(FragmentInput input) {
+    PlannerSurface surface = evaluate_planner_surface(input);
+    FragmentOutput output;
+    output.color = float4(surface.color, 1.0);
+    return output;
+}
+)";
+
+termin::TcShader planner_surface_producer()
+{
+    tc_shader_fragment_input inputs[2]{};
+    std::snprintf(
+        inputs[0].semantic,
+        sizeof(inputs[0].semantic),
+        "%s",
+        "world_pos");
+    inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    std::snprintf(
+        inputs[1].semantic,
+        sizeof(inputs[1].semantic),
+        "%s",
+        "normal_world");
+    inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    const tc_shader_surface_producer_desc producer = {
+        TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION,
+        "test.surface.planner",
+        1u,
+        "PlannerSurface",
+        "evaluate_planner_surface",
+        kPlannerSurfaceEvaluator,
+        "test.surface.planner@1:evaluator:v1",
+        inputs,
+        2u,
+        nullptr,
+        0u,
+    };
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = "";
+    create_info.sources.fragment = kPlannerSurfaceEvaluator;
+    create_info.sources.name = "planner-surface-producer";
+    create_info.sources.fragment_entry = "evaluate_planner_surface";
+    create_info.uuid = "planner-surface-producer";
+    create_info.language = TC_SHADER_LANGUAGE_SLANG;
+    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    create_info.surface_producer = &producer;
+    return termin::TcShader::from_sources(create_info);
+}
+
+termin::MaterialPipelinePassContract planner_surface_pass(uint32_t version)
+{
+    termin::MaterialPipelinePassContract pass{};
+    pass.debug_name = "planner_surface_consumer";
+    pass.fragment_composition =
+        termin::MaterialFragmentComposition::SurfaceConsumer;
+    termin::MaterialSurfaceConsumerContract consumer{};
+    consumer.accepted_surface = {"test.surface.planner", version};
+    consumer.consumer_source = kPlannerSurfaceConsumer;
+    consumer.fragment_entry = "consume_planner_surface";
+    consumer.source_identity = "test.surface.planner:consumer:v1";
+    pass.surface_consumer = std::move(consumer);
+    pass.vertex_output_adapter =
+        termin::material_pipeline_standard_material_vertex_output_adapter();
+    pass.static_vertex_transform =
+        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+            "planner_surface_static",
+            termin::MeshVertexTransformProfile::Material,
+            "draw_data.u_model");
+    pass.static_vertex_transform->resources.push_back(
+        termin::material_pipeline_draw_resource_decl(
+            "draw_data",
+            TC_SHADER_STAGE_VERTEX,
+            64u));
+    return pass;
 }
 
 termin::RenderItemTaskRejection selecting_test_shader_planner(
@@ -372,7 +465,6 @@ FragmentOutput fs_main() {
 
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "planner_test";
-    shader_contract.uses_material_fragment = true;
     shader_contract.vertex_output_adapter =
         termin::material_pipeline_standard_material_vertex_output_adapter();
     shader_contract.static_vertex_transform =
@@ -434,6 +526,97 @@ FragmentOutput fs_main() {
     REQUIRE(planned_material != nullptr);
     CHECK(planned_material->stage_mask == TC_SHADER_STAGE_FRAGMENT);
 
+    tc_mesh_shutdown();
+    tc_shader_shutdown();
+}
+
+TEST_CASE("RenderItem planner assembles surface consumers without fallback") {
+    tc_shader_init();
+    tc_mesh_init();
+    tc_surface_contract_registry_clear();
+
+    const tc_surface_contract_desc descriptor = {
+        TC_SURFACE_CONTRACT_DESCRIPTOR_ABI_VERSION,
+        {"test.surface.planner", 1u},
+        "Planner surface",
+        "PlannerSurface",
+        kPlannerSurfaceInterface,
+        "test.surface.planner@1:interface:v1",
+    };
+    REQUIRE(tc_surface_contract_registry_register(
+        "termin-render-item-tests",
+        &descriptor));
+    termin::TcShader candidate = planner_surface_producer();
+    REQUIRE(candidate.is_valid());
+    REQUIRE(candidate.has_surface_producer());
+
+    tc_render_item item{};
+    item.kind = TC_RENDER_ITEM_KIND_MESH;
+    item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
+    const tc_mesh_handle mesh_handle = tc_mesh_create(
+        "surface-consumer-render-item-planner-test");
+    REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
+    tc_mesh* mesh = tc_mesh_get(mesh_handle);
+    REQUIRE(mesh != nullptr);
+    mesh->layout = tc_vertex_layout_pos_normal_uv_tangent();
+    item.payload.mesh.mesh_handle = mesh_handle;
+    tc_material_phase phase{};
+
+    termin::MaterialPipelinePassContract shader_contract =
+        planner_surface_pass(1u);
+    termin::RenderItemTaskPlanningContract contract{};
+    contract.phase = TC_PHASE_OPAQUE;
+    contract.material_phase_policy =
+        termin::RenderItemMaterialPhasePolicy::Required;
+    contract.provided_input_mask =
+        termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask =
+        termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+    contract.accepted_vertex_transform_kind_mask =
+        termin::render_item_vertex_transform_kind_bit(
+            termin::VertexTransformKind::StaticMesh);
+    contract.shader_contract = &shader_contract;
+    contract.debug_pass_name = "SurfacePlanner";
+
+    termin::RenderItemTaskPlanningRequest request{};
+    request.item = &item;
+    request.material_phase = &phase;
+    request.candidate_shader = candidate.handle;
+    request.contract = &contract;
+
+    termin::RenderTaskList tasks;
+    termin::RenderItemTaskPlanningResult accepted =
+        termin::plan_render_item_task(request, tasks);
+    REQUIRE(accepted.accepted());
+    REQUIRE(tasks.size() == 1u);
+    const tc_shader_handle final_shader =
+        tasks.at(accepted.task_index).final_shader;
+    CHECK_FALSE(tc_shader_handle_eq(final_shader, candidate.handle));
+    REQUIRE(tc_shader_is_valid(final_shader));
+    CHECK(tc_shader_is_executable(tc_shader_get(final_shader)));
+    CHECK(
+        std::string(tc_shader_get(final_shader)->fragment_source).find(
+            "consume_planner_surface") != std::string::npos);
+
+    termin::MaterialPipelinePassContract incompatible =
+        planner_surface_pass(2u);
+    contract.shader_contract = &incompatible;
+    termin::RenderTaskList rejected_tasks;
+    termin::RenderItemTaskPlanningResult rejected =
+        termin::plan_render_item_task(request, rejected_tasks);
+    CHECK(
+        rejected.rejection ==
+        termin::RenderItemTaskRejection::ShaderPlanningRejected);
+    CHECK(rejected_tasks.empty());
+    CHECK(rejected.detail != nullptr);
+    CHECK(
+        std::strcmp(
+            rejected.detail,
+            "failed to assemble the mesh shader") == 0);
+
+    tc_surface_contract_registry_clear();
     tc_mesh_shutdown();
     tc_shader_shutdown();
 }
@@ -506,7 +689,6 @@ FragmentOutput fs_main() {
     shader_contract.debug_name = "static_color";
     shader_contract.required_material_fragment_input =
         termin::material_pipeline_standard_material_fragment_interface();
-    shader_contract.uses_material_fragment = true;
     shader_contract.vertex_output_adapter =
         termin::material_pipeline_standard_material_vertex_output_adapter();
     shader_contract.static_vertex_transform =
