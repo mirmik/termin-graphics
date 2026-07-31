@@ -85,6 +85,7 @@
     "termin-nodegraph/docs",
     "termin-physics-fem/docs",
     "termin-physics/docs",
+    "termin-profiler-remote/docs",
     "termin-prefab/docs",
     "termin-render-passes/docs",
     "termin-render/docs",

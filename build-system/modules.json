@@ -50,6 +50,11 @@
       "kinds": ["cmake", "platform"]
     },
     {
+      "id": "termin-profiler-remote",
+      "path": "termin-profiler-remote",
+      "kinds": ["cmake", "documentation"]
+    },
+    {
       "id": "termin-python-host",
       "path": "termin-python-host",
       "kinds": ["cmake", "runtime"]
