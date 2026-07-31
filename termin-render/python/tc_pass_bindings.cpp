@@ -6,9 +6,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <cstring>
-#include <memory>
 #include <string>
-#include <unordered_map>
 
 extern "C" {
 #include "render/tc_frame_graph.h"
@@ -30,7 +28,6 @@ extern "C" {
 #include "termin/render/tc_pass.hpp"
 #include "termin/render/unknown_pass.hpp"
 #include "unknown_pass_serialization.hpp"
-#include <tcbase/tc_string.h>
 
 namespace nb = nanobind;
 
@@ -76,9 +73,18 @@ static std::vector<const char*> collect_frame_graph_alias_names(
     return values;
 }
 
-static std::unordered_map<std::string, std::shared_ptr<nb::object>>& python_pass_classes() {
-    static std::unordered_map<std::string, std::shared_ptr<nb::object>> classes;
-    return classes;
+constexpr const char* kPythonPassClassProjectionBinding =
+    "termin.python.frame_pass_class_projection";
+
+struct PythonPassFactoryContext {
+    nb::object cls;
+    std::string type_name;
+};
+
+static void destroy_python_pass_factory_context(void* context) {
+    if (!context) return;
+    nb::gil_scoped_acquire gil;
+    delete static_cast<PythonPassFactoryContext*>(context);
 }
 
 static void py_owned_pass_deleter(tc_pass* p) {
@@ -111,18 +117,15 @@ static bool adopt_pass_from_python_api(
         : tc_pipeline_adopt_pass(pipeline, pass, pass->deleter);
 }
 
-static tc_pass* python_pass_factory(void* userdata) {
-    const char* type_name = static_cast<const char*>(userdata);
-
-    auto& py_classes = python_pass_classes();
-    auto it = py_classes.find(type_name);
-    if (it == py_classes.end()) {
-        tc_log(TC_LOG_ERROR, "python_pass_factory: class not found for type %s", type_name);
-        return nullptr;
+static bool python_pass_factory(void* context, const void*, void* out_result) {
+    auto* factory = static_cast<PythonPassFactoryContext*>(context);
+    if (!factory || !out_result) {
+        tc_log(TC_LOG_ERROR, "python_pass_factory: invalid owned factory context");
+        return false;
     }
-
+    *static_cast<tc_pass**>(out_result) = nullptr;
     try {
-        nb::object py_obj = (*(it->second))();
+        nb::object py_obj = factory->cls();
 
         nb::object tc_pass_ref_obj = py_obj.attr("_tc_pass");
         if (nb::isinstance<TcPassRef>(tc_pass_ref_obj)) {
@@ -132,17 +135,25 @@ static tc_pass* python_pass_factory(void* userdata) {
                 Py_INCREF(py_obj.ptr());
                 p->deleter = &py_owned_pass_deleter;
                 p->bindings[TC_LANGUAGE_PYTHON] = py_obj.ptr();
-                return p;
+                *static_cast<tc_pass**>(out_result) = p;
+                return true;
             }
         }
 
-        tc_log(TC_LOG_ERROR, "python_pass_factory: %s has no valid _tc_pass", type_name);
+        tc_log(
+            TC_LOG_ERROR,
+            "python_pass_factory: %s has no valid _tc_pass",
+            factory->type_name.c_str());
     } catch (const nb::python_error& e) {
-        tc_log(TC_LOG_ERROR, "python_pass_factory: failed to create %s: %s", type_name, e.what());
+        tc_log(
+            TC_LOG_ERROR,
+            "python_pass_factory: failed to create %s: %s",
+            factory->type_name.c_str(),
+            e.what());
         PyErr_Clear();
     }
 
-    return nullptr;
+    return false;
 }
 
 inline nb::object tc_pass_to_python(tc_pass* p) {
@@ -1059,12 +1070,11 @@ void bind_tc_pass_runtime(nb::module_& m) {
     });
 
     m.def("tc_pass_registry_get_class", [](const std::string& type_name) {
-        auto& classes = python_pass_classes();
-        auto it = classes.find(type_name);
-        if (it == classes.end()) {
-            return nb::object(nb::none());
-        }
-        return nb::object(*(it->second));
+        void* context = tc_runtime_type_registry_get_binding(
+            type_name.c_str(), kPythonPassClassProjectionBinding);
+        return context
+            ? static_cast<PythonPassFactoryContext*>(context)->cls
+            : nb::object(nb::none());
     }, nb::arg("type_name"));
 
     m.def("tc_pass_registry_bind_class_projection", [](
@@ -1084,9 +1094,13 @@ void bind_tc_pass_runtime(nb::module_& m) {
                 type_name.c_str());
             return false;
         }
-        python_pass_classes()[type_name] =
-            std::make_shared<nb::object>(std::move(cls));
-        return true;
+        auto* projection = new PythonPassFactoryContext{
+            std::move(cls), type_name};
+        return tc_runtime_type_registry_set_binding(
+            type_name.c_str(),
+            kPythonPassClassProjectionBinding,
+            projection,
+            destroy_python_pass_factory_context);
     }, nb::arg("type_name"), nb::arg("cls"));
 
     m.def("tc_pass_registry_register_python", [](
@@ -1107,11 +1121,6 @@ void bind_tc_pass_runtime(nb::module_& m) {
             parent_storage = nb::cast<std::string>(parent);
             parent_name = parent_storage.c_str();
         }
-        const char* stable_name = tc_intern_string(type_name.c_str());
-        if (!stable_name) {
-            tc_log(TC_LOG_ERROR, "[PythonFramePass] failed to intern type '%s'", type_name.c_str());
-            return false;
-        }
         const char* existing_owner = tc_runtime_type_registry_get_owner(type_name.c_str());
         const bool allow_same_owner_replacement =
             existing_owner && owner == existing_owner;
@@ -1124,24 +1133,28 @@ void bind_tc_pass_runtime(nb::module_& m) {
             );
             return false;
         }
+        auto* factory_context = new PythonPassFactoryContext{
+            std::move(cls), type_name};
+        tc_runtime_owned_factory factory = tc_runtime_owned_factory_make(
+            python_pass_factory,
+            factory_context,
+            destroy_python_pass_factory_context);
         auto descriptor = FramePassTypeDescriptorBuilder(
             type_name.c_str(),
             owner.c_str(),
             parent_name,
-            python_pass_factory,
-            const_cast<char*>(stable_name),
+            factory,
             TC_EXTERNAL_PASS,
             allow_same_owner_replacement);
+        descriptor.runtime_binding(
+            kPythonPassClassProjectionBinding, factory_context, nullptr);
         auto inspect = tc::build_python_inspect_facet(type_name, std::move(fields));
         tc_value metadata_value = tc::nb_to_tc_value(std::move(metadata));
         const bool metadata_ok = inspect.set_metadata(&metadata_value);
         tc_value_free(&metadata_value);
         if (!metadata_ok) return false;
         descriptor.set_inspect(std::move(inspect));
-        if (!descriptor.commit()) return false;
-        python_pass_classes()[type_name] =
-            std::make_shared<nb::object>(std::move(cls));
-        return true;
+        return descriptor.commit();
     },
     nb::arg("type_name"),
     nb::arg("cls"),
@@ -1151,27 +1164,45 @@ void bind_tc_pass_runtime(nb::module_& m) {
     nb::arg("metadata") = nb::dict());
 
     m.def("tc_pass_registry_unregister_python", [](const std::string& type_name) {
-        if (tc_pass_registry_has(type_name.c_str()) &&
-            tc_pass_registry_get_kind(type_name.c_str()) == TC_EXTERNAL_PASS) {
-            tc_pass_registry_unregister(type_name.c_str());
+        if (!tc_pass_registry_has(type_name.c_str())) {
+            return true;
         }
-        python_pass_classes().erase(type_name);
+        if (tc_pass_registry_get_kind(type_name.c_str()) != TC_EXTERNAL_PASS) {
+            tc_log(
+                TC_LOG_ERROR,
+                "[PythonFramePass] refusing Python unregister for native pass '%s'",
+                type_name.c_str());
+            return false;
+        }
+        return tc_runtime_type_registry_unregister_type_with_context(
+            type_name.c_str(), nullptr);
     });
 
     m.def("tc_pass_registry_clear_python", []() {
         std::vector<std::string> type_names;
-        type_names.reserve(python_pass_classes().size());
-        for (const auto& item : python_pass_classes()) {
-            type_names.push_back(item.first);
+        const size_t count = tc_pass_registry_type_count();
+        type_names.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            const char* type_name = tc_pass_registry_type_at(i);
+            if (type_name) type_names.emplace_back(type_name);
         }
 
         for (const auto& type_name : type_names) {
             if (tc_pass_registry_has(type_name.c_str()) &&
                 tc_pass_registry_get_kind(type_name.c_str()) == TC_EXTERNAL_PASS) {
-                tc_pass_registry_unregister(type_name.c_str());
+                if (!tc_runtime_type_registry_unregister_type_with_context(
+                        type_name.c_str(), nullptr)) {
+                    tc_log(
+                        TC_LOG_ERROR,
+                        "[PythonFramePass] failed to unregister '%s' during cleanup",
+                        type_name.c_str());
+                }
+            } else if (tc_pass_registry_has(type_name.c_str()) &&
+                       tc_pass_registry_get_kind(type_name.c_str()) == TC_NATIVE_PASS) {
+                tc_runtime_type_registry_remove_binding(
+                    type_name.c_str(), kPythonPassClassProjectionBinding);
             }
         }
-        python_pass_classes().clear();
     });
 
     m.def("tc_pass_registry_has", [](const std::string& type_name) {

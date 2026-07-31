@@ -52,7 +52,10 @@ def shutdown_python_passes() -> None:
     """Unregister Python-authored pass classes from the process registry."""
     for type_name in list(_registered_python_pass_types):
         try:
-            tc_pass_registry_unregister_python(type_name)
+            if not tc_pass_registry_unregister_python(type_name):
+                _log_cleanup_error(
+                    f"[PythonFramePass] descriptor refused unregister '{type_name}'"
+                )
         except Exception as exc:
             _log_cleanup_error(f"[PythonFramePass] failed to unregister pass type '{type_name}': {exc}")
     _registered_python_pass_types.clear()

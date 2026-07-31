@@ -169,7 +169,6 @@ TC_API void tc_pass_set_enabled(tc_pass* p, bool enabled);
 TC_API void tc_pass_set_passthrough(tc_pass* p, bool passthrough);
 TC_API void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name);
 
-typedef tc_pass* (*tc_pass_factory)(void* userdata);
 typedef bool (*tc_pass_prepare_unload_fn)(
     const char* type_name,
     void* context,
@@ -181,8 +180,7 @@ typedef bool (*tc_pass_prepare_unload_fn)(
 // the descriptor itself is committed.
 TC_API bool tc_pass_type_descriptor_add_facet(
     tc_runtime_type_descriptor* descriptor,
-    tc_pass_factory factory,
-    void* factory_userdata,
+    tc_runtime_owned_factory* factory,
     tc_pass_kind kind
 );
 

@@ -127,8 +127,11 @@ void test_owned_factory_identity_and_unload_invalidation() {
     assert(tc_runtime_type_registry_instance_count("test.ui.OwnedWidget") == 2);
     assert(state.creates == 2 && state.adopts == 2);
 
+    FactoryState rejected_state;
+    const tc_widget_factory_descriptor rejected_factory = descriptor(rejected_state);
     assert(!tc_widget_registry_register("test.ui.OwnedWidget", "test.module", "termin.gui.Widget",
-                                        &factory));
+                                        &rejected_factory));
+    assert(rejected_state.userdata_destroys == 1);
     assert(tc_widget_registry_unregister("test.ui.OwnedWidget"));
     assert(!tc_ui_document_is_alive(document, parent));
     assert(!tc_ui_document_is_alive(document, child));
@@ -141,18 +144,24 @@ void test_owned_factory_identity_and_unload_invalidation() {
 
 void test_descriptor_validation_leaves_no_partial_widget_type() {
     tc_runtime_type_registry_clear();
-    FactoryState state;
-    const tc_widget_factory_descriptor factory = descriptor(state);
+    FactoryState no_owner_state;
+    FactoryState missing_parent_state;
+    FactoryState self_parent_state;
+    const tc_widget_factory_descriptor no_owner = descriptor(no_owner_state);
+    const tc_widget_factory_descriptor missing_parent = descriptor(missing_parent_state);
+    const tc_widget_factory_descriptor self_parent = descriptor(self_parent_state);
 
-    assert(!tc_widget_registry_register("test.ui.NoOwner", nullptr, nullptr, &factory));
+    assert(!tc_widget_registry_register("test.ui.NoOwner", nullptr, nullptr, &no_owner));
     assert(!tc_runtime_type_registry_has_type("test.ui.NoOwner"));
     assert(!tc_widget_registry_register("test.ui.MissingParent", "test.module",
-                                        "test.ui.DoesNotExist", &factory));
+                                        "test.ui.DoesNotExist", &missing_parent));
     assert(!tc_runtime_type_registry_has_type("test.ui.MissingParent"));
     assert(!tc_widget_registry_register("test.ui.SelfParent", "test.module",
-                                        "test.ui.SelfParent", &factory));
+                                        "test.ui.SelfParent", &self_parent));
     assert(!tc_runtime_type_registry_has_type("test.ui.SelfParent"));
-    assert(state.userdata_destroys == 0);
+    assert(no_owner_state.userdata_destroys == 1);
+    assert(missing_parent_state.userdata_destroys == 1);
+    assert(self_parent_state.userdata_destroys == 1);
     tc_runtime_type_registry_clear();
 }
 
@@ -291,8 +300,11 @@ void test_owner_reload_invalidates_documents_nested_trees_and_factory_userdata()
         tc_ui_document_create_registered_widget(first_document, "test.ui.ForeignChild");
     assert(!tc_widget_handle_is_invalid(fresh_foreign));
     assert(fresh_foreign.generation != foreign_child.generation);
+    FactoryState replacement_parent_state;
+    const tc_widget_factory_descriptor replacement_parent_factory =
+        descriptor(replacement_parent_state);
     assert(tc_widget_registry_register("test.ui.ReloadParent", "test.module.reload", nullptr,
-                                       &parent_factory));
+                                       &replacement_parent_factory));
     const tc_widget_handle fresh_parent =
         tc_ui_document_create_registered_widget(first_document, "test.ui.ReloadParent");
     assert(!tc_widget_handle_is_invalid(fresh_parent));
@@ -300,6 +312,7 @@ void test_owner_reload_invalidates_documents_nested_trees_and_factory_userdata()
 
     assert(tc_widget_registry_unregister_owner("test.module.reload",
                                                TC_WIDGET_OWNER_RELOAD_INVALIDATE) == 1);
+    assert(replacement_parent_state.userdata_destroys == 1);
     assert(tc_widget_registry_unregister_owner("test.module.foreign",
                                                TC_WIDGET_OWNER_RELOAD_INVALIDATE) == 1);
     tc_ui_document_destroy(second_document);
