@@ -767,6 +767,16 @@ if(BUILD_TGFX2_TESTS)
             SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
         termin_add_test_labels(tgfx2_vulkan_smoke "termin:capability:vulkan")
 
+        add_executable(tgfx2_vulkan_dirty_range_test
+            tests/test_tgfx2_vulkan_dirty_range.cpp)
+        target_link_libraries(tgfx2_vulkan_dirty_range_test PRIVATE termin_graphics2)
+        termin_set_rpath_test(tgfx2_vulkan_dirty_range_test)
+        add_test(NAME tgfx2_vulkan_dirty_range_test
+            COMMAND tgfx2_vulkan_dirty_range_test)
+        set_tests_properties(tgfx2_vulkan_dirty_range_test PROPERTIES TIMEOUT 10)
+        termin_add_test_labels(tgfx2_vulkan_dirty_range_test
+            "termin:capability:vulkan")
+
         add_executable(tgfx2_draw_list2d_pixel_smoke
             tests/test_draw_list2d_pixel_smoke.cpp)
         target_compile_definitions(tgfx2_draw_list2d_pixel_smoke

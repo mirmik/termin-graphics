@@ -21,6 +21,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 
 #include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/vulkan/internal/non_coherent_dirty_range.hpp"
 
 // `tc_texture` / `tc_mesh` are forward-declared in i_render_device.hpp.
 // Method signatures here just reuse them.
@@ -39,6 +40,9 @@ struct VkBufferResource {
     // VMA_ALLOCATION_CREATE_MAPPED_BIT — upload_buffer just memcpy's
     // into this pointer, no map/unmap churn per upload.
     void* mapped_ptr = nullptr;
+    bool host_coherent = true;
+    bool host_write_pending = false;
+    vulkan_detail::NonCoherentDirtyRange host_dirty_range;
 };
 
 struct VkTextureResource {
@@ -302,6 +306,7 @@ private:
     std::vector<const char*> device_extensions_;
 
     VmaAllocator allocator_ = VK_NULL_HANDLE;
+    VkPhysicalDeviceMemoryProperties memory_properties_ = {};
     VkCommandPool command_pool_ = VK_NULL_HANDLE;
 
     // Per-frame-slot descriptor pools. Each frame allocates descriptor
@@ -333,6 +338,7 @@ private:
     VkHandlePool<VkShaderResource> shaders_;
     VkHandlePool<VkPipelineResource> pipelines_;
     VkHandlePool<VkResourceSetResource> resource_sets_;
+    std::vector<BufferHandle> pending_mapped_buffer_writes_;
 
     std::unique_ptr<VulkanSwapchain> swapchain_;
 
@@ -398,6 +404,9 @@ private:
     // removes ~1 function call × hundreds of writes/frame from the hot
     // path. Queried once in create_ring_ubo().
     bool ring_ubo_coherent_ = false;
+    std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount>
+        ring_ubo_dirty_ranges_ = {};
+    uint64_t non_coherent_atom_size_ = 1;
     std::atomic_bool ring_ubo_overflow_warned_{false};
 
     // Transient vertex ring for immediate draws. Same frame-slot lifetime
@@ -412,6 +421,8 @@ private:
     uint32_t transient_vb_slot_idx_ = 0;
     BufferHandle transient_vb_handle_ = {};
     bool transient_vb_coherent_ = false;
+    std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount>
+        transient_vb_dirty_ranges_ = {};
     bool transient_vb_overflow_warned_ = false;
 
     struct SubmitStats {
@@ -681,6 +692,7 @@ private:
         uint64_t cache_domain);
     void create_ring_ubo();
     void create_transient_vertex_ring();
+    void flush_pending_host_writes(uint32_t slot);
 
     // Get or create a VkPipelineLayout from the current reflected
     // VkDescriptorSetLayout plus the standard 128-byte push constant range.

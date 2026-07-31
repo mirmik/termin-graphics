@@ -603,6 +603,9 @@ void VulkanRenderDevice::create_logical_device() {
 // --- VMA ---
 
 void VulkanRenderDevice::create_allocator() {
+    vkGetPhysicalDeviceMemoryProperties(
+        physical_device_, &memory_properties_);
+
     VmaAllocatorCreateInfo ci{};
     ci.physicalDevice = physical_device_;
     ci.device = device_;
@@ -678,6 +681,8 @@ void VulkanRenderDevice::create_ring_ubo() {
     vkGetPhysicalDeviceProperties(physical_device_, &props);
     ubo_alignment_ = static_cast<uint32_t>(
         std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 1));
+    non_coherent_atom_size_ = static_cast<uint64_t>(
+        std::max<VkDeviceSize>(props.limits.nonCoherentAtomSize, 1));
 
     // Round the requested per-frame budget up to the device's dynamic-offset
     // alignment so every frame slot starts at a legal UBO offset.
@@ -697,6 +702,9 @@ void VulkanRenderDevice::create_ring_ubo() {
     VmaAllocationCreateInfo ai{};
     ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
     ai.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    ai.requiredFlags =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
     VmaAllocationInfo alloc_info{};
     if (vmaCreateBuffer(allocator_, &bi, &ai, &ring_ubo_buffer_,
@@ -708,10 +716,8 @@ void VulkanRenderDevice::create_ring_ubo() {
     // Query the memory type's coherency flag so writes can skip
     // vmaFlushAllocation on desktop Linux drivers (always coherent on
     // NVIDIA/AMD discrete).
-    VkPhysicalDeviceMemoryProperties mem_props;
-    vkGetPhysicalDeviceMemoryProperties(physical_device_, &mem_props);
     ring_ubo_coherent_ =
-        (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
+        (memory_properties_.memoryTypes[alloc_info.memoryType].propertyFlags
          & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     for (auto& head : ring_ubo_heads_) {
         head.store(0, std::memory_order_relaxed);
@@ -767,7 +773,13 @@ bool VulkanRenderDevice::ring_ubo_write(const void* data, uint32_t size,
     // ring_ubo_write()s per frame.
     std::memcpy(static_cast<uint8_t*>(ring_ubo_mapped_) + offset, data, size);
     if (!ring_ubo_coherent_) {
-        vmaFlushAllocation(allocator_, ring_ubo_allocation_, offset, size);
+        if (!ring_ubo_dirty_ranges_[slot].include(offset, size, ring_ubo_size_)) {
+            tc_log(TC_LOG_ERROR,
+                   "[RingUBO] invalid dirty range: offset=%llu size=%u allocation=%llu",
+                   (unsigned long long)offset, size,
+                   (unsigned long long)ring_ubo_size_);
+            return false;
+        }
     }
     out_offset = static_cast<uint32_t>(offset);
     return true;
@@ -788,6 +800,9 @@ void VulkanRenderDevice::create_transient_vertex_ring() {
     VmaAllocationCreateInfo ai{};
     ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
     ai.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    ai.requiredFlags =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
     VmaAllocationInfo alloc_info{};
     if (vmaCreateBuffer(allocator_, &bi, &ai, &transient_vb_buffer_,
@@ -796,10 +811,8 @@ void VulkanRenderDevice::create_transient_vertex_ring() {
     }
     transient_vb_mapped_ = alloc_info.pMappedData;
 
-    VkPhysicalDeviceMemoryProperties mem_props;
-    vkGetPhysicalDeviceMemoryProperties(physical_device_, &mem_props);
     transient_vb_coherent_ =
-        (mem_props.memoryTypes[alloc_info.memoryType].propertyFlags
+        (memory_properties_.memoryTypes[alloc_info.memoryType].propertyFlags
          & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
     for (auto& head : transient_vb_heads_) {
         head.store(0, std::memory_order_relaxed);
@@ -843,9 +856,98 @@ uint64_t VulkanRenderDevice::transient_vertex_write(const void* data, uint32_t s
     const uint64_t offset = base + offset_in_slot;
     std::memcpy(static_cast<uint8_t*>(transient_vb_mapped_) + offset, data, size);
     if (!transient_vb_coherent_) {
-        vmaFlushAllocation(allocator_, transient_vb_allocation_, offset, size);
+        if (!transient_vb_dirty_ranges_[slot].include(
+                offset, size, transient_vb_size_)) {
+            tc_log(TC_LOG_ERROR,
+                   "[TransientVB] invalid dirty range: offset=%llu size=%u allocation=%llu",
+                   (unsigned long long)offset, size,
+                   (unsigned long long)transient_vb_size_);
+            return UINT64_MAX;
+        }
     }
     return offset;
+}
+
+void VulkanRenderDevice::flush_pending_host_writes(uint32_t slot) {
+    std::vector<VmaAllocation> allocations;
+    std::vector<VkDeviceSize> offsets;
+    std::vector<VkDeviceSize> sizes;
+    allocations.reserve(2 + pending_mapped_buffer_writes_.size());
+    offsets.reserve(allocations.capacity());
+    sizes.reserve(allocations.capacity());
+
+    const auto append_range = [&](
+        VmaAllocation allocation,
+        uint64_t allocation_size,
+        const vulkan_detail::NonCoherentDirtyRange& dirty)
+    {
+        if (dirty.empty()) {
+            return;
+        }
+        const auto aligned = dirty.aligned(
+            non_coherent_atom_size_, allocation_size);
+        allocations.push_back(allocation);
+        offsets.push_back(static_cast<VkDeviceSize>(aligned.begin));
+        sizes.push_back(static_cast<VkDeviceSize>(aligned.end - aligned.begin));
+    };
+
+    if (!ring_ubo_coherent_) {
+        append_range(
+            ring_ubo_allocation_, ring_ubo_size_, ring_ubo_dirty_ranges_[slot]);
+    }
+    if (!transient_vb_coherent_) {
+        append_range(
+            transient_vb_allocation_, transient_vb_size_,
+            transient_vb_dirty_ranges_[slot]);
+    }
+    for (BufferHandle handle : pending_mapped_buffer_writes_) {
+        VkBufferResource* resource = buffers_.get(handle.id);
+        if (!resource || resource->host_coherent ||
+            resource->host_dirty_range.empty()) {
+            continue;
+        }
+        append_range(
+            resource->allocation,
+            resource->desc.size,
+            resource->host_dirty_range);
+    }
+
+    if (allocations.empty()) {
+        for (BufferHandle handle : pending_mapped_buffer_writes_) {
+            if (VkBufferResource* resource = buffers_.get(handle.id)) {
+                resource->host_dirty_range.clear();
+                resource->host_write_pending = false;
+            }
+        }
+        pending_mapped_buffer_writes_.clear();
+        return;
+    }
+
+    const VkResult result = vmaFlushAllocations(
+        allocator_,
+        static_cast<uint32_t>(allocations.size()),
+        allocations.data(),
+        offsets.data(),
+        sizes.data());
+    if (result != VK_SUCCESS) {
+        tc_log(TC_LOG_ERROR,
+               "[VulkanRenderDevice] failed to flush %u mapped dirty range(s) "
+               "for frame slot %u: VkResult=%d",
+               static_cast<unsigned>(allocations.size()), slot,
+               static_cast<int>(result));
+        throw std::runtime_error(
+            "VulkanRenderDevice: failed to flush mapped host writes");
+    }
+
+    ring_ubo_dirty_ranges_[slot].clear();
+    transient_vb_dirty_ranges_[slot].clear();
+    for (BufferHandle handle : pending_mapped_buffer_writes_) {
+        if (VkBufferResource* resource = buffers_.get(handle.id)) {
+            resource->host_dirty_range.clear();
+            resource->host_write_pending = false;
+        }
+    }
+    pending_mapped_buffer_writes_.clear();
 }
 
 VkSampler VulkanRenderDevice::ensure_default_sampler() {
@@ -945,6 +1047,13 @@ BufferHandle VulkanRenderDevice::create_buffer(const BufferDesc& desc) {
     // vmaMapMemory/vmaUnmapMemory and does a plain memcpy.
     if (want_host_visible) {
         alloc_ci.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        // Vulkan guarantees a HOST_VISIBLE|HOST_COHERENT memory type. Small,
+        // frequently-updated UBOs benefit much more from direct visibility
+        // than from a cached non-coherent type whose flush may enter a costly
+        // driver cache-maintenance ioctl on older mobile GPUs.
+        alloc_ci.requiredFlags =
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     }
 
     VmaAllocationInfo alloc_info{};
@@ -953,6 +1062,11 @@ BufferHandle VulkanRenderDevice::create_buffer(const BufferDesc& desc) {
         throw std::runtime_error("Failed to create Vulkan buffer");
     }
     res.mapped_ptr = alloc_info.pMappedData;  // NULL for GPU-only buffers
+    if (res.mapped_ptr) {
+        res.host_coherent =
+            (memory_properties_.memoryTypes[alloc_info.memoryType].propertyFlags
+             & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+    }
 
     return {buffers_.add(std::move(res))};
 }
@@ -1255,6 +1369,8 @@ void VulkanRenderDevice::prepare_frame_slot(uint32_t slot, SubmitStats* stats) {
 
     ring_ubo_heads_[slot].store(0, std::memory_order_relaxed);
     transient_vb_heads_[slot].store(0, std::memory_order_relaxed);
+    ring_ubo_dirty_ranges_[slot].clear();
+    transient_vb_dirty_ranges_[slot].clear();
 }
 
 void VulkanRenderDevice::submit(ICommandList& cmd) {
@@ -1268,6 +1384,7 @@ void VulkanRenderDevice::submit(ICommandList& cmd) {
     // after startup if the PipelineCache is doing its job; resource
     // sets should scale with draws (one per pipeline-state change).
     const uint32_t submitted_slot = current_pool_idx_;
+    flush_pending_host_writes(submitted_slot);
     PendingDestroyQueue submitted_destroy = std::move(pending_destroy_current_);
     pending_destroy_current_ = {};
 

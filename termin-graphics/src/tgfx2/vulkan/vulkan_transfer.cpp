@@ -159,18 +159,45 @@ void VulkanRenderDevice::transition_image_layout(
 
 void VulkanRenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset) {
     auto* res = buffers_.get(dst.id);
-    if (!res) return;
+    if (!res) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_buffer: invalid buffer handle %u", dst.id);
+        return;
+    }
+    if (offset > res->desc.size || data.size() > res->desc.size - offset) {
+        tc_log(TC_LOG_ERROR,
+               "VulkanRenderDevice::upload_buffer: write out of bounds for buffer %u "
+               "(offset=%llu size=%zu capacity=%llu)",
+               dst.id, (unsigned long long)offset, data.size(),
+               (unsigned long long)res->desc.size);
+        return;
+    }
+    if (data.empty()) {
+        return;
+    }
 
     if (res->mapped_ptr) {
         // Persistently-mapped host-visible buffer. The common path for
         // every per-frame UBO (PerFrame / ShadowBlock / BoneBlock /
         // material params). One memcpy — no map/unmap, no submit, no
-        // stall. vmaFlushAllocation covers non-coherent memory types
-        // (NVIDIA/AMD desktop Linux is coherent in practice, but flush
-        // is a no-op when the allocation is coherent, so always call).
+        // stall. Non-coherent writes are merged per allocation and all
+        // allocations are flushed together immediately before submit.
         std::memcpy(static_cast<uint8_t*>(res->mapped_ptr) + offset,
                     data.data(), data.size());
-        vmaFlushAllocation(allocator_, res->allocation, offset, data.size());
+        if (!res->host_coherent) {
+            if (!res->host_dirty_range.include(
+                    offset, data.size(), res->desc.size)) {
+                tc_log(TC_LOG_ERROR,
+                       "VulkanRenderDevice::upload_buffer: invalid mapped dirty "
+                       "range for buffer %u",
+                       dst.id);
+                return;
+            }
+            if (!res->host_write_pending) {
+                res->host_write_pending = true;
+                pending_mapped_buffer_writes_.push_back(dst);
+            }
+        }
     } else if (res->desc.cpu_visible) {
         // Fallback: host-visible but not persistently mapped (e.g. buffer
         // registered externally). Keep the old explicit map path.
