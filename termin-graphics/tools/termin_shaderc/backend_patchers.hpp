@@ -77,6 +77,7 @@ bool patch_slang_d3d11_hlsl_resource_bindings(
 bool filter_slang_vulkan_resources_for_spirv(
     const CompileOptions& options,
     std::vector<ShaderResourceBinding>& resources);
+bool strip_slang_vulkan_spirv_source_metadata(const CompileOptions& options);
 bool patch_slang_vulkan_spirv_descriptor_decorations(
     const CompileOptions& options,
     const std::vector<ShaderResourceBinding>& resources);

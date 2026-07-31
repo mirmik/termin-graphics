@@ -6,9 +6,11 @@ from shaderc_test_helpers import (
     _expected_scoped_bindings,
     _run_shaderc,
     _spirv_decoration_value,
+    _spirv_opcodes,
     _write_fake_fxc,
     _write_fake_slangc,
 )
+
 
 def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     result = _run_shaderc(["--help"])
@@ -212,6 +214,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         "#!/usr/bin/env python3\n"
         "import json, pathlib, struct, sys\n"
         "OP_NAME = 5\n"
+        "OP_SOURCE = 3\n"
         "OP_DECORATE = 71\n"
         "DECORATION_BINDING = 33\n"
         "DECORATION_DESCRIPTOR_SET = 34\n"
@@ -226,6 +229,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
         "out.parent.mkdir(parents=True, exist_ok=True)\n"
         "resource_id = 17\n"
         "words = [0x07230203, 0x00010500, 0, 32, 0]\n"
+        "words += inst(OP_SOURCE, [11, 1])\n"
         "words += inst(OP_NAME, [resource_id] + string_words('custom_params'))\n"
         "words += inst(OP_DECORATE, [resource_id, DECORATION_BINDING, 1])\n"
         "words += inst(OP_DECORATE, [resource_id, DECORATION_DESCRIPTOR_SET, 0])\n"
@@ -276,6 +280,7 @@ def test_termin_shaderc_writes_slang_resource_layout_sidecar(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / "out.spv.reflection.json").exists()
+    assert 3 not in _spirv_opcodes(output)
     layout = json.loads((tmp_path / "out.spv.layout.json").read_text(encoding="utf-8"))
     assert layout["version"] == 1
     assert layout["language"] == "slang"

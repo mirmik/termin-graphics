@@ -177,3 +177,20 @@ def _spirv_decoration_value(path: Path, resource_id: int, decoration: int) -> in
                 return words[index + 3]
         index += word_count
     return None
+
+
+def _spirv_opcodes(path: Path) -> list[int]:
+    data = path.read_bytes()
+    assert len(data) % 4 == 0
+    words = struct.unpack("<" + "I" * (len(data) // 4), data)
+    assert words[0] == 0x07230203
+    opcodes: list[int] = []
+    index = 5
+    while index < len(words):
+        instruction = words[index]
+        word_count = instruction >> 16
+        assert word_count > 0
+        assert index + word_count <= len(words)
+        opcodes.append(instruction & 0xFFFF)
+        index += word_count
+    return opcodes

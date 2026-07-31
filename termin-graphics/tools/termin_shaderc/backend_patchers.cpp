@@ -901,6 +901,51 @@ static bool spirv_resource_has_descriptor_decorations(
     return has_binding && has_set;
 }
 
+bool strip_slang_vulkan_spirv_source_metadata(const CompileOptions& options) {
+    std::vector<uint32_t> words;
+    if (!read_spirv_words(options.output, words)) {
+        // Fake/offline compiler tests may produce placeholder bytes.
+        return true;
+    }
+    constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
+    if (words.empty() || words[0] != SPIRV_MAGIC) {
+        return true;
+    }
+
+    // OpSource is debug metadata and has no effect on shader execution. Slang
+    // uses source-language values newer than the parser bundled with older
+    // Android Emulator SwiftShader releases, which reject the otherwise valid
+    // module before compilation. Remove only this non-semantic instruction and
+    // leave validation of all executable SPIR-V intact.
+    constexpr uint16_t OP_SOURCE = 3;
+    std::vector<uint32_t> filtered;
+    filtered.reserve(words.size());
+    filtered.insert(filtered.end(), words.begin(), words.begin() + 5);
+    bool changed = false;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t instruction = words[i];
+        const uint16_t word_count = static_cast<uint16_t>(instruction >> 16);
+        const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+        if (word_count == 0 || i + word_count > words.size()) {
+            std::cerr
+                << "termin_shaderc: invalid SPIR-V instruction stream while "
+                   "removing Slang source metadata\n";
+            return false;
+        }
+        if (opcode == OP_SOURCE) {
+            changed = true;
+        } else {
+            filtered.insert(
+                filtered.end(),
+                words.begin() + i,
+                words.begin() + i + word_count);
+        }
+        i += word_count;
+    }
+
+    return !changed || write_spirv(options.output, filtered);
+}
+
 bool filter_slang_vulkan_resources_for_spirv(
     const CompileOptions& options,
     std::vector<ShaderResourceBinding>& resources

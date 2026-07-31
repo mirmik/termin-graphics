@@ -1745,6 +1745,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         // and fragment compiles can collide. Normalize both the sidecar and
         // SPIR-V descriptor decorations to the same scope-first placement.
         wrote_layout =
+            strip_slang_vulkan_spirv_source_metadata(options) &&
             filter_slang_vulkan_resources_for_spirv(options, resources) &&
             patch_slang_vulkan_spirv_descriptor_decorations(options, resources) &&
             write_resource_layout_sidecar(options, resources);
