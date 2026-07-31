@@ -15,6 +15,7 @@
 // ============================================================================
 
 static tc_pool g_shader_pool;
+static tc_pool_generation_epoch g_shader_generation_epoch;
 static tc_resource_map* g_shader_uuid_to_index = NULL;   // UUID -> uint32_t index
 static tc_resource_map* g_shader_hash_to_index = NULL;   // source_hash -> uint32_t index
 static uint64_t g_shader_next_uuid = 1;
@@ -336,7 +337,11 @@ void tc_shader_update_hash(tc_shader* shader) {
 void tc_shader_init(void) {
     TC_REGISTRY_INIT_GUARD(g_shader_initialized, "tc_shader");
 
-    if (!tc_pool_init(&g_shader_pool, sizeof(tc_shader), 64)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_shader_pool,
+            sizeof(tc_shader),
+            64,
+            &g_shader_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_shader_init: failed to init pool");
         return;
     }

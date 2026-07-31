@@ -11,6 +11,7 @@
 #include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_animation_pool;
+static tc_pool_generation_epoch g_animation_generation_epoch;
 static tc_resource_map* g_uuid_to_index = NULL;
 static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
@@ -31,7 +32,11 @@ static void animation_free_data(tc_animation* animation) {
 void tc_animation_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_animation");
 
-    if (!tc_pool_init(&g_animation_pool, sizeof(tc_animation), 64)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_animation_pool,
+            sizeof(tc_animation),
+            64,
+            &g_animation_generation_epoch)) {
         tc_log_error("tc_animation_init: failed to init pool");
         return;
     }

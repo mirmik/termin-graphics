@@ -10,6 +10,7 @@
 #include <tcbase/tc_string.h>
 
 static tc_pool g_pool;
+static tc_pool_generation_epoch g_generation_epoch;
 static tc_resource_map* g_uuid_to_index = NULL;
 static bool g_initialized = false;
 
@@ -41,7 +42,11 @@ static void clear_payload(tc_pipeline_template* pipeline_template) {
 
 void tc_pipeline_template_init(void) {
     if (g_initialized) return;
-    if (!tc_pool_init(&g_pool, sizeof(tc_pipeline_template), 32)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_pool,
+            sizeof(tc_pipeline_template),
+            32,
+            &g_generation_epoch)) {
         tc_log_error("tc_pipeline_template_init: failed to initialize pool");
         return;
     }

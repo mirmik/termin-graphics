@@ -14,6 +14,7 @@
 // ============================================================================
 
 static tc_pool g_mesh_pool;
+static tc_pool_generation_epoch g_mesh_generation_epoch;
 static tc_resource_map* g_uuid_to_index = NULL;
 static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
@@ -89,7 +90,11 @@ static void tc_mesh_make_default_submesh(tc_mesh* mesh, tc_submesh* out) {
 void tc_mesh_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_mesh");
 
-    if (!tc_pool_init(&g_mesh_pool, sizeof(tc_mesh), 64)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_mesh_pool,
+            sizeof(tc_mesh),
+            64,
+            &g_mesh_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_mesh_init: failed to init pool");
         return;
     }

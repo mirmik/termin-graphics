@@ -14,11 +14,9 @@
 // ============================================================================
 
 static tc_pool g_texture_pool;
+static tc_pool_generation_epoch g_texture_generation_epoch;
 static tc_resource_map* g_texture_uuid_to_index = NULL;
 static uint64_t g_texture_next_uuid = 1;
-// Survives registry shutdown so handles from a previous runtime generation
-// cannot alias newly allocated slots after reinitialization.
-static uint32_t g_texture_generation_floor = 1;
 static bool g_texture_initialized = false;
 
 // Destroy-hook subscription table. See tc_texture_registry.h.
@@ -41,12 +39,13 @@ static void texture_free_data(tc_texture* tex) {
 void tc_texture_init(void) {
     TC_REGISTRY_INIT_GUARD(g_texture_initialized, "tc_texture");
 
-    if (!tc_pool_init(&g_texture_pool, sizeof(tc_texture), 64)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_texture_pool,
+            sizeof(tc_texture),
+            64,
+            &g_texture_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_texture_init: failed to init pool");
         return;
-    }
-    for (uint32_t i = 0; i < g_texture_pool.capacity; i++) {
-        g_texture_pool.generations[i] = g_texture_generation_floor;
     }
 
     g_texture_uuid_to_index = tc_resource_map_new(NULL);
@@ -63,17 +62,6 @@ void tc_texture_init(void) {
 void tc_texture_shutdown(void) {
     TC_REGISTRY_SHUTDOWN_GUARD(g_texture_initialized, "tc_texture");
 
-    uint32_t max_generation = g_texture_generation_floor;
-    for (uint32_t i = 0; i < g_texture_pool.capacity; i++) {
-        if (g_texture_pool.generations[i] > max_generation) {
-            max_generation = g_texture_pool.generations[i];
-        }
-    }
-    g_texture_generation_floor = max_generation + 1;
-    if (g_texture_generation_floor == 0) {
-        g_texture_generation_floor = 1;
-    }
-
     // Free texture data for all occupied slots
     for (uint32_t i = 0; i < g_texture_pool.capacity; i++) {
         if (g_texture_pool.states[i] == TC_SLOT_OCCUPIED) {
@@ -87,16 +75,6 @@ void tc_texture_shutdown(void) {
     g_texture_uuid_to_index = NULL;
     g_texture_next_uuid = 1;
     g_texture_initialized = false;
-}
-
-static tc_handle texture_pool_alloc(void) {
-    tc_handle handle = tc_pool_alloc(&g_texture_pool);
-    if (!tc_handle_is_invalid(handle) &&
-        handle.generation < g_texture_generation_floor) {
-        g_texture_pool.generations[handle.index] = g_texture_generation_floor;
-        handle.generation = g_texture_generation_floor;
-    }
-    return handle;
 }
 
 // ============================================================================
@@ -122,7 +100,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
         final_uuid = uuid_buf;
     }
 
-    tc_handle h = texture_pool_alloc();
+    tc_handle h = tc_pool_alloc(&g_texture_pool);
     if (tc_handle_is_invalid(h)) {
         tc_log(TC_LOG_ERROR, "tc_texture_create: pool alloc failed");
         return tc_texture_handle_invalid();
@@ -279,7 +257,7 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
         return existing;
     }
 
-    tc_handle h = texture_pool_alloc();
+    tc_handle h = tc_pool_alloc(&g_texture_pool);
     if (tc_handle_is_invalid(h)) {
         tc_log(TC_LOG_ERROR, "tc_texture_declare: pool alloc failed");
         return tc_texture_handle_invalid();

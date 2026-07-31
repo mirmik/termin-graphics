@@ -56,6 +56,7 @@ typedef struct {
      | TC_TEXTURE_USAGE_COPY_SRC | TC_TEXTURE_USAGE_COPY_DST)
 
 static tc_pool g_render_target_pool;
+static tc_pool_generation_epoch g_render_target_generation_epoch;
 static bool g_render_target_pool_initialized = false;
 
 #define RT_SLOTS ((RenderTargetSlot*)g_render_target_pool.data)
@@ -139,6 +140,7 @@ void tc_render_target_pool_init(void) {
         .initial_generation = 0u,
         .allocate_low_indices_first = true,
         .name = "tc_render_target_pool",
+        .generation_epoch = &g_render_target_generation_epoch,
     };
     if (!tc_pool_init_ex(
             &g_render_target_pool,

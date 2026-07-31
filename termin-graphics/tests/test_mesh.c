@@ -154,6 +154,27 @@ static int test_ref_counting(void) {
     return 0;
 }
 
+static int test_mesh_handle_rebootstrap(void) {
+    printf("Testing Mesh Handle Rebootstrap...\n");
+
+    tc_mesh_init();
+    tc_mesh_handle stale = tc_mesh_create("mesh-before-rebootstrap");
+    TEST_ASSERT(tc_mesh_is_valid(stale), "initial handle is valid");
+    tc_mesh_shutdown();
+
+    tc_mesh_init();
+    tc_mesh_handle replacement = tc_mesh_create("mesh-after-rebootstrap");
+    TEST_ASSERT(tc_mesh_is_valid(replacement), "replacement handle is valid");
+    TEST_ASSERT(stale.index == replacement.index, "slot index is reused");
+    TEST_ASSERT(stale.generation != replacement.generation,
+                "generation advances across rebootstrap");
+    TEST_ASSERT(!tc_mesh_is_valid(stale), "stale handle stays invalid");
+    tc_mesh_shutdown();
+
+    printf("  Mesh Handle Rebootstrap: PASS\n");
+    return 0;
+}
+
 int main(void) {
     printf("=== Mesh Tests ===\n\n");
 
@@ -162,6 +183,7 @@ int main(void) {
     result |= test_mesh_global_api();
     result |= test_mesh_data();
     result |= test_ref_counting();
+    result |= test_mesh_handle_rebootstrap();
 
     printf("\n");
     if (result == 0) {
