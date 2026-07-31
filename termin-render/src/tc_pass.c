@@ -19,8 +19,7 @@ static void* g_prepare_unload_user_data = NULL;
 #define TC_RUNTIME_TYPE_FACET_FRAME_PASS "termin.render.frame_pass"
 
 typedef struct tc_frame_pass_facet_payload {
-    tc_pass_factory factory;
-    void* factory_userdata;
+    tc_runtime_owned_factory factory;
     tc_pass_kind kind;
 } tc_frame_pass_facet_payload;
 
@@ -32,7 +31,10 @@ static tc_frame_pass_facet_payload* pass_facet(const char* type_name) {
 }
 
 static void destroy_pass_facet(void* payload) {
-    free(payload);
+    tc_frame_pass_facet_payload* facet = (tc_frame_pass_facet_payload*)payload;
+    if (!facet) return;
+    tc_runtime_owned_factory_reset(&facet->factory);
+    free(facet);
 }
 
 static bool prepare_pass_facet_unload(
@@ -64,22 +66,23 @@ static bool prepare_pass_facet_unload(
 
 bool tc_pass_type_descriptor_add_facet(
     tc_runtime_type_descriptor* descriptor,
-    tc_pass_factory factory,
-    void* factory_userdata,
+    tc_runtime_owned_factory* factory,
     tc_pass_kind kind
 ) {
+    tc_runtime_owned_factory owned_factory = tc_runtime_owned_factory_take(factory);
     if (!descriptor) {
         tc_log(TC_LOG_ERROR, "[tc_pass] cannot attach a pass facet to a null descriptor");
+        tc_runtime_owned_factory_reset(&owned_factory);
         return false;
     }
     tc_frame_pass_facet_payload* facet =
         (tc_frame_pass_facet_payload*)calloc(1, sizeof(*facet));
     if (!facet) {
         tc_log(TC_LOG_ERROR, "[tc_pass] failed to allocate staged pass facet");
+        tc_runtime_owned_factory_reset(&owned_factory);
         return false;
     }
-    facet->factory = factory;
-    facet->factory_userdata = factory_userdata;
+    facet->factory = tc_runtime_owned_factory_take(&owned_factory);
     facet->kind = kind;
     if (!tc_runtime_type_descriptor_add_facet(
             descriptor,
@@ -211,15 +214,17 @@ bool tc_pass_registry_has(const char* type_name) {
 
 tc_pass* tc_pass_registry_create(const char* type_name) {
     tc_frame_pass_facet_payload* facet = pass_facet(type_name);
-    if (!facet || !facet->factory) {
+    if (!facet || !facet->factory.create) {
         tc_log(TC_LOG_ERROR, "[tc_pass] Unknown type or no factory: %s", type_name);
         return NULL;
     }
 
-    tc_pass* p = facet->factory(facet->factory_userdata);
-    if (p) {
+    tc_pass* p = NULL;
+    if (tc_runtime_owned_factory_invoke(&facet->factory, NULL, &p) && p) {
         p->kind = facet->kind;
         tc_pass_link_registered_type(p, type_name);
+    } else {
+        tc_log(TC_LOG_ERROR, "[tc_pass] factory for '%s' failed", type_name);
     }
     return p;
 }

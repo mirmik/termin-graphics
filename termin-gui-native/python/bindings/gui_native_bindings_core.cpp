@@ -583,7 +583,6 @@ void bind_gui_native_core(nb::module_& m) {
                     owner.empty() ? nullptr : owner.c_str(),
                     parent_type.empty() ? nullptr : parent_type.c_str(),
                     &descriptor)) {
-                destroy_python_widget_factory(payload);
                 throw std::runtime_error("failed to register widget type '" + type_name + "'");
             }
         },

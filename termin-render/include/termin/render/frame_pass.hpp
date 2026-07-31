@@ -247,8 +247,7 @@ public:
         const char* type_name,
         const char* owner,
         const char* parent,
-        tc_pass_factory factory,
-        void* factory_userdata,
+        tc_runtime_owned_factory factory,
         tc_pass_kind kind,
         bool allow_same_owner_replacement = false
     );
@@ -261,6 +260,10 @@ public:
 
     tc::InspectFacetBuilder& inspect() { return _inspect; }
     void set_inspect(tc::InspectFacetBuilder&& inspect) { _inspect = std::move(inspect); }
+    FramePassTypeDescriptorBuilder& runtime_binding(
+        const char* binding_id,
+        void* payload,
+        tc_runtime_type_facet_destroy_fn destroy = nullptr);
     bool commit();
 
     template<typename PassClass>
@@ -273,13 +276,14 @@ public:
             type_name,
             owner,
             parent,
-            [](void*) -> tc_pass* {
+            tc_runtime_owned_factory_make([](void*, const void*, void* out_result) -> bool {
+                if (!out_result) return false;
                 auto* pass = new PassClass();
                 tc_pass* raw = pass->tc_pass_ptr();
                 raw->deleter = &CxxFramePass::delete_owned_pass;
-                return raw;
-            },
-            nullptr,
+                *static_cast<tc_pass**>(out_result) = raw;
+                return true;
+            }, nullptr, nullptr),
             TC_NATIVE_PASS);
     }
 
@@ -289,7 +293,7 @@ public:
         const char* parent = nullptr
     ) {
         return FramePassTypeDescriptorBuilder(
-            type_name, owner, parent, nullptr, nullptr, TC_NATIVE_PASS);
+            type_name, owner, parent, tc_runtime_owned_factory{}, TC_NATIVE_PASS);
     }
 };
 

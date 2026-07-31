@@ -131,9 +131,10 @@ The current foundation includes:
   registered. Recursive topology wins over module ownership: unloading a parent
   also invalidates descendants owned by another module, while their factories
   remain registered and can create fresh generation handles;
-- factory ABI v2 carries optional paired serialize/deserialize hooks. Hooks
-  exchange owned `tc_value` dictionaries and share the factory lifecycle, so
-  module unload cannot leave state callbacks pointing at released userdata;
+- widget factory ABI carries optional paired serialize/deserialize hooks. Its
+  callable, state hooks and userdata are wrapped by the common
+  `tc_runtime_owned_factory` lifecycle, so failed publication and module unload
+  cannot leave callbacks pointing at released userdata;
 - `tc_ui_document_capture_snapshot` produces an owned, language-neutral C
   snapshot of widget identity/metadata, slot-order records, canonical child and
   root ordering, geometry, flags, overlays and interaction handles. Copied

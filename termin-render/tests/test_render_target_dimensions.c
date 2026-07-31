@@ -93,10 +93,10 @@ static bool init_test_component(tc_component* component, const char* type_name) 
         tc_runtime_type_descriptor* descriptor = tc_runtime_type_descriptor_create(
             type_name, "termin-render-test", NULL);
         if (!descriptor) return false;
+        tc_runtime_owned_factory no_factory = {0};
         if (!tc_component_type_descriptor_add_facet(
             descriptor,
-            NULL,
-            NULL,
+            &no_factory,
             TC_CXX_COMPONENT,
             true,
             NULL,

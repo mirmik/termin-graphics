@@ -8,8 +8,7 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
     const char* type_name,
     const char* owner,
     const char* parent,
-    tc_pass_factory factory,
-    void* factory_userdata,
+    tc_runtime_owned_factory factory,
     tc_pass_kind kind,
     bool allow_same_owner_replacement
 )
@@ -23,12 +22,14 @@ FramePassTypeDescriptorBuilder::FramePassTypeDescriptorBuilder(
     }
     _descriptor = tc_runtime_type_descriptor_create(
         _type_name.c_str(), _owner.c_str(), parent && parent[0] ? parent : nullptr);
-    if (_descriptor && allow_same_owner_replacement &&
+    if (!_descriptor) {
+        tc_runtime_owned_factory_reset(&factory);
+    } else if (allow_same_owner_replacement &&
         !tc_runtime_type_descriptor_allow_same_owner_replacement(_descriptor)) {
         _valid = false;
     }
     if (!_descriptor || !tc_pass_type_descriptor_add_facet(
-            _descriptor, factory, factory_userdata, kind)) {
+            _descriptor, &factory, kind)) {
         tc_log(TC_LOG_ERROR, "[FramePassTypeDescriptor] failed to stage pass facet for '%s'", _type_name.c_str());
         _valid = false;
     }
@@ -58,6 +59,18 @@ FramePassTypeDescriptorBuilder& FramePassTypeDescriptorBuilder::operator=(
     _owner = std::move(other._owner);
     _valid = other._valid;
     other._descriptor = nullptr;
+    return *this;
+}
+
+FramePassTypeDescriptorBuilder& FramePassTypeDescriptorBuilder::runtime_binding(
+    const char* binding_id,
+    void* payload,
+    tc_runtime_type_facet_destroy_fn destroy
+) {
+    if (!_descriptor || !tc_runtime_type_descriptor_add_binding(
+            _descriptor, binding_id, payload, destroy)) {
+        _valid = false;
+    }
     return *this;
 }
 

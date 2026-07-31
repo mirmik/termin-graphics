@@ -103,3 +103,48 @@ print("released")
 
     assert result.stdout == "released\n"
     assert "nanobind: leaked" not in result.stderr
+
+
+def test_python_pass_descriptor_owns_and_releases_factory_class() -> None:
+    script = """
+import gc
+import weakref
+
+from termin.bootstrap import bootstrap_player, shutdown_player
+bootstrap_player()
+from termin.render_framework import (
+    tc_pass_registry_get_class,
+    tc_pass_registry_register_python,
+    tc_pass_registry_unregister_python,
+)
+
+type_name = "OwnedFactoryLifetimePass"
+factory_class = type(type_name, (), {})
+factory_ref = weakref.ref(factory_class)
+assert tc_pass_registry_register_python(
+    type_name,
+    factory_class,
+    "pass-owned-factory-lifetime-test",
+    None,
+    {},
+    {},
+)
+assert tc_pass_registry_get_class(type_name) is factory_class
+assert tc_pass_registry_unregister_python(type_name)
+del factory_class
+gc.collect()
+assert factory_ref() is None
+shutdown_player()
+print("released")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO_ROOT,
+        env={**os.environ, "TERMIN_SDK": str(REPO_ROOT / "sdk")},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout == "released\n"
+    assert "nanobind: leaked" not in result.stderr
