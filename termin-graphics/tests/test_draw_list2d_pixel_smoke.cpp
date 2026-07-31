@@ -217,7 +217,18 @@ int main(int argc, char** argv) {
         return 0;
     }
     tc_shader_init();
-    const int result = run(argc > 0 ? argv[0] : "");
+    const int first_result = run(argc > 0 ? argv[0] : "");
     tc_shader_shutdown();
-    return result;
+    if (first_result != 0) {
+        return first_result;
+    }
+
+    // Process-scoped render hosts may replace their device and restart the
+    // global registries across an Activity/surface lifecycle. Exercise a
+    // second render in the same process so static built-in shader caches must
+    // reject generation-stale handles and reacquire the new registry slots.
+    tc_shader_init();
+    const int second_result = run(argc > 0 ? argv[0] : "");
+    tc_shader_shutdown();
+    return second_result;
 }

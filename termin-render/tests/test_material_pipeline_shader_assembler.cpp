@@ -8,10 +8,20 @@ GUARD_TEST_MAIN();
 #include <string>
 #include <utility>
 
+#include <tcbase/tc_log.h>
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/material_pipeline_shader_assembler.hpp>
 
 namespace {
+
+int stale_shader_log_count = 0;
+
+void capture_stale_shader_log(tc_log_level level, const char* message) {
+    if (level == TC_LOG_ERROR && message &&
+        std::strstr(message, "stale resource handle dereference: type=tc_shader")) {
+        ++stale_shader_log_count;
+    }
+}
 
 constexpr const char* kVertexSource = R"(
 import termin_prelude;
@@ -1349,6 +1359,27 @@ TEST_CASE("material shader overrides stay canonical across frame-local owners") 
     CHECK(tc_shader_handle_eq(refreshed.handle, first_handle));
     CHECK_FALSE(tc_shader_variant_is_stale(refreshed.handle));
 
+    tc_shader_shutdown();
+}
+
+TEST_CASE("destroyed variant originals are quiet cache invalidation probes") {
+    tc_shader_init();
+
+    const tc_shader_handle original = tc_shader_create("variant-original");
+    const tc_shader_handle variant = tc_shader_create("variant-derived");
+    REQUIRE(tc_shader_is_valid(original));
+    REQUIRE(tc_shader_is_valid(variant));
+    tc_shader_set_variant_info(
+        tc_shader_get(variant), original, TC_SHADER_VARIANT_SKINNING);
+    REQUIRE(tc_shader_destroy(original));
+
+    stale_shader_log_count = 0;
+    tc_log_set_callback(capture_stale_shader_log);
+    CHECK(tc_shader_variant_is_stale(variant));
+    tc_log_set_callback(nullptr);
+    CHECK_EQ(stale_shader_log_count, 0);
+
+    REQUIRE(tc_shader_destroy(variant));
     tc_shader_shutdown();
 }
 

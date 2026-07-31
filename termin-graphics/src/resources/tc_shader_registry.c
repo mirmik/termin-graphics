@@ -999,11 +999,14 @@ bool tc_shader_variant_is_stale(tc_shader_handle variant) {
         return false;
     }
 
-    tc_shader* orig = tc_shader_get(v->original_handle);
-    if (!orig) {
+    // Original replacement is an expected cache-invalidation probe. Avoid a
+    // checked dereference here: it would report a stale handle as an engine
+    // error even though the caller is about to rebuild the variant.
+    if (!tc_shader_is_valid(v->original_handle)) {
         // Original was destroyed, variant is stale
         return true;
     }
+    tc_shader* orig = tc_shader_get(v->original_handle);
 
     return orig->version != v->original_version;
 }

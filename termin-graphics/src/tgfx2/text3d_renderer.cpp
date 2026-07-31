@@ -26,6 +26,7 @@
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 extern "C" {
@@ -93,7 +94,7 @@ void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
     vs_ = ShaderHandle{};
     fs_ = ShaderHandle{};
 
-    if (tc_shader_handle_is_invalid(shader_handle_)) {
+    if (!tc_shader_is_valid(shader_handle_)) {
         shader_handle_ = register_builtin_shader_from_catalog(TEXT3D_SHADER_UUID);
     }
 

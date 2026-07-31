@@ -18,6 +18,7 @@
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 namespace tcplot {
@@ -54,20 +55,20 @@ static_assert(sizeof(ScatterPush) == 96);
 tc_shader_handle shader_handle(const char *uuid) {
   if (std::strcmp(uuid, kLineShader) == 0) {
     static tc_shader_handle value = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(value)) {
+    if (!tc_shader_is_valid(value)) {
       value = tgfx::register_builtin_shader_from_catalog(uuid);
     }
     return value;
   }
   if (std::strcmp(uuid, kStyledLineShader) == 0) {
     static tc_shader_handle value = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(value)) {
+    if (!tc_shader_is_valid(value)) {
       value = tgfx::register_builtin_shader_from_catalog(uuid);
     }
     return value;
   }
   static tc_shader_handle value = tc_shader_handle_invalid();
-  if (tc_shader_handle_is_invalid(value)) {
+  if (!tc_shader_is_valid(value)) {
     value = tgfx::register_builtin_shader_from_catalog(kScatterShader);
   }
   return value;

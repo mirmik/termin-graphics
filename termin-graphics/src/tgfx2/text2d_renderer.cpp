@@ -24,6 +24,7 @@ extern "C" {
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 #include <tcbase/tc_log.hpp>
@@ -102,7 +103,7 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
     compiled_on_ = &device;
 
     // Bitmap shader pair.
-    if (tc_shader_handle_is_invalid(shader_handle_)) {
+    if (!tc_shader_is_valid(shader_handle_)) {
         shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SHADER_UUID);
     }
 
@@ -122,7 +123,7 @@ void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
     }
 
     // SDF shader pair uses a larger push block than the bitmap path.
-    if (tc_shader_handle_is_invalid(sdf_shader_handle_)) {
+    if (!tc_shader_is_valid(sdf_shader_handle_)) {
         sdf_shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SDF_SHADER_UUID);
     }
 

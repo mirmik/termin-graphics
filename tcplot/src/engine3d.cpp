@@ -35,7 +35,7 @@
 #include "tcplot/axes.hpp"
 
 extern "C" {
-#include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 #include <tcbase/tc_log.hpp>
@@ -69,7 +69,7 @@ constexpr const char* IMMEDIATE_ENGINE_SHADER_UUID = "termin-engine-immediate";
 
 tc_shader_handle tcplot3d_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(handle)) {
+    if (!tc_shader_is_valid(handle)) {
         handle = tgfx::register_builtin_shader_from_catalog(TCPLOT_3D_SHADER_UUID);
     }
     return handle;
@@ -77,7 +77,7 @@ tc_shader_handle tcplot3d_shader_handle() {
 
 tc_shader_handle immediate_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(handle)) {
+    if (!tc_shader_is_valid(handle)) {
         handle = tgfx::register_builtin_shader_from_catalog(IMMEDIATE_ENGINE_SHADER_UUID);
     }
     return handle;

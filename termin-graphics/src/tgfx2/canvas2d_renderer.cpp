@@ -19,6 +19,7 @@
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 #include <tcbase/tc_log.hpp>
@@ -39,7 +40,7 @@ constexpr const char* CANVAS2D_TEXTURE_SHADER_UUID = "termin-engine-canvas2d-tex
 
 tc_shader_handle solid_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(handle)) {
+    if (!tc_shader_is_valid(handle)) {
         handle = register_builtin_shader_from_catalog(CANVAS2D_SOLID_SHADER_UUID);
     }
     return handle;
@@ -47,7 +48,7 @@ tc_shader_handle solid_shader_handle() {
 
 tc_shader_handle texture_shader_handle() {
     static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (tc_shader_handle_is_invalid(handle)) {
+    if (!tc_shader_is_valid(handle)) {
         handle = register_builtin_shader_from_catalog(CANVAS2D_TEXTURE_SHADER_UUID);
     }
     return handle;
