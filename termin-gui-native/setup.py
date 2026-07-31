@@ -27,6 +27,7 @@ setup(
     install_requires=[
         "PyYAML",
         "termin-nanobind",
+        "termin-visual-scene",
         "tcbase",
         "tgfx",
     ],
