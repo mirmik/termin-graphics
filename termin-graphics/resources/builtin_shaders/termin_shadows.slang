@@ -5,7 +5,10 @@ public static const int MAX_SHADOW_MAPS = 16;
 
 public struct ShadowBlock {
     int u_shadow_map_count;
-    column_major float4x4 u_light_space_matrix[MAX_SHADOW_MAPS];
+    // Explicit matrix rows keep the std140 footprint stable without nested
+    // RowMajor/MatrixStride decorations, which older mobile Vulkan drivers
+    // can miscompile for arrays of matrices.
+    float4 u_light_space_matrix[MAX_SHADOW_MAPS * 4];
     int u_shadow_light_index[MAX_SHADOW_MAPS];
     int u_shadow_cascade_index[MAX_SHADOW_MAPS];
     float u_shadow_split_near[MAX_SHADOW_MAPS];
@@ -53,8 +56,13 @@ public float compute_shadow_candidate(int sm, int light_index, float3 world_pos)
         return -1.0;
     }
 
-    float4 light_space_pos =
-        mul(shadow_block.u_light_space_matrix[sm], float4(world_pos, 1.0));
+    float4 world = float4(world_pos, 1.0);
+    int row = sm * 4;
+    float4 light_space_pos = float4(
+        dot(shadow_block.u_light_space_matrix[row + 0], world),
+        dot(shadow_block.u_light_space_matrix[row + 1], world),
+        dot(shadow_block.u_light_space_matrix[row + 2], world),
+        dot(shadow_block.u_light_space_matrix[row + 3], world));
     float3 proj_coords = light_space_pos.xyz / light_space_pos.w;
     proj_coords.xy = proj_coords.xy * 0.5 + 0.5;
 

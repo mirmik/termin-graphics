@@ -777,6 +777,18 @@ if(BUILD_TGFX2_TESTS)
         termin_add_test_labels(tgfx2_vulkan_dirty_range_test
             "termin:capability:vulkan")
 
+        add_executable(tgfx2_vulkan_image_transition_sync_test
+            tests/test_tgfx2_vulkan_image_transition_sync.cpp)
+        target_link_libraries(tgfx2_vulkan_image_transition_sync_test
+            PRIVATE termin_graphics2 Vulkan::Vulkan)
+        termin_set_rpath_test(tgfx2_vulkan_image_transition_sync_test)
+        add_test(NAME tgfx2_vulkan_image_transition_sync_test
+            COMMAND tgfx2_vulkan_image_transition_sync_test)
+        set_tests_properties(tgfx2_vulkan_image_transition_sync_test
+            PROPERTIES TIMEOUT 10)
+        termin_add_test_labels(tgfx2_vulkan_image_transition_sync_test
+            "termin:capability:vulkan")
+
         add_executable(tgfx2_draw_list2d_pixel_smoke
             tests/test_draw_list2d_pixel_smoke.cpp)
         target_compile_definitions(tgfx2_draw_list2d_pixel_smoke

@@ -2,6 +2,7 @@
 
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+#include "tgfx2/vulkan/internal/image_transition_sync.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
 
 #include <vk_mem_alloc.h>
@@ -131,7 +132,7 @@ void VulkanRenderDevice::transition_image_layout(
         src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (old_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
         barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        src_stage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        src_stage = vulkan_detail::depth_stencil_attachment_stages();
     } else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
         barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -148,7 +149,7 @@ void VulkanRenderDevice::transition_image_layout(
         dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
         barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dst_stage = vulkan_detail::depth_stencil_attachment_stages();
     }
 
     vkCmdPipelineBarrier(cmd, src_stage, dst_stage, 0,
