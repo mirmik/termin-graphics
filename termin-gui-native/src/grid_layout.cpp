@@ -2,6 +2,26 @@
 
 namespace termin::gui_native {
 using namespace detail;
+namespace {
+
+void allocate_grid_axis(
+    GridAxisLayout& axis,
+    float available_extent
+) {
+    const float base_extent = axis_total_extent(axis.extents, 0.0f);
+    if (available_extent > base_extent) {
+        distribute_grow(
+            axis.extents, axis.max_extents, axis.grow_weights,
+            available_extent - base_extent);
+    } else if (available_extent < base_extent) {
+        distribute_shrink(
+            axis.extents, axis.min_extents, axis.shrink_weights,
+            base_extent - available_extent);
+    }
+}
+
+}  // namespace
+
 GridLayout::GridLayout(const char* debug_name)
     : NativeWidget(debug_name ? debug_name : "GridLayout") {}
 
@@ -106,11 +126,46 @@ bool GridLayout::set_row_extent_limits(size_t row, float min_extent, float max_e
 }
 
 tc_ui_size GridLayout::measure(tc_ui_document_handle document, tc_ui_constraints constraints) {
-    GridAxisLayout columns = build_grid_axis(document, c_widget(), columns_, items_, true, column_spacing_);
-    GridAxisLayout rows = build_grid_axis(document, c_widget(), rows_, items_, false, row_spacing_);
+    const tc_ui_size padding_extent{
+        padding_.left + padding_.right,
+        padding_.top + padding_.bottom};
+    const tc_ui_size parent_extent{
+        std::max(0.0f, constraints.max_size.width - padding_extent.width),
+        std::max(0.0f, constraints.max_size.height - padding_extent.height)};
+    const bool width_definite =
+        constraints.max_size.width > 0.0f &&
+        constraints.max_size.width < kHuge;
+    const bool height_definite =
+        constraints.max_size.height > 0.0f &&
+        constraints.max_size.height < kHuge;
+    GridAxisLayout columns = build_grid_axis(
+        document, c_widget(), columns_, items_, true, column_spacing_,
+        parent_extent, width_definite, height_definite);
+    const float column_spacing_total =
+        column_spacing_ *
+        static_cast<float>(
+            columns.extents.empty() ? 0 : columns.extents.size() - 1);
+    if (width_definite) {
+        allocate_grid_axis(
+            columns,
+            std::max(0.0f, parent_extent.width - column_spacing_total));
+    }
+    GridAxisLayout rows = build_grid_axis(
+        document, c_widget(), rows_, items_, false, row_spacing_,
+        parent_extent, width_definite, height_definite, &columns.extents,
+        column_spacing_);
+    const float row_spacing_total =
+        row_spacing_ *
+        static_cast<float>(
+            rows.extents.empty() ? 0 : rows.extents.size() - 1);
+    if (height_definite) {
+        allocate_grid_axis(
+            rows,
+            std::max(0.0f, parent_extent.height - row_spacing_total));
+    }
     tc_ui_size measured {
-        axis_total_extent(columns.extents, column_spacing_) + padding_.left + padding_.right,
-        axis_total_extent(rows.extents, row_spacing_) + padding_.top + padding_.bottom
+        axis_total_extent(columns.extents, column_spacing_) + padding_extent.width,
+        axis_total_extent(rows.extents, row_spacing_) + padding_extent.height
     };
     measured.width = std::max(measured.width, min_size().width);
     measured.height = std::max(measured.height, min_size().height);
@@ -124,25 +179,20 @@ void GridLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
     }
 
     tc_ui_rect content = inset_rect(rect, padding_);
-    GridAxisLayout columns = build_grid_axis(document, c_widget(), columns_, items_, true, column_spacing_);
-    GridAxisLayout rows = build_grid_axis(document, c_widget(), rows_, items_, false, row_spacing_);
+    const tc_ui_size parent_extent{content.width, content.height};
+    GridAxisLayout columns = build_grid_axis(
+        document, c_widget(), columns_, items_, true, column_spacing_,
+        parent_extent, true, true);
 
     const float column_spacing_total = column_spacing_ * static_cast<float>(columns.extents.empty() ? 0 : columns.extents.size() - 1);
-    const float row_spacing_total = row_spacing_ * static_cast<float>(rows.extents.empty() ? 0 : rows.extents.size() - 1);
     const float available_width = std::max(0.0f, content.width - column_spacing_total);
+    allocate_grid_axis(columns, available_width);
+    GridAxisLayout rows = build_grid_axis(
+        document, c_widget(), rows_, items_, false, row_spacing_,
+        parent_extent, true, true, &columns.extents, column_spacing_);
+    const float row_spacing_total = row_spacing_ * static_cast<float>(rows.extents.empty() ? 0 : rows.extents.size() - 1);
     const float available_height = std::max(0.0f, content.height - row_spacing_total);
-    const float base_width = axis_total_extent(columns.extents, 0.0f);
-    const float base_height = axis_total_extent(rows.extents, 0.0f);
-    if (available_width > base_width) {
-        distribute_grow(columns.extents, columns.max_extents, columns.grow_weights, available_width - base_width);
-    } else if (available_width < base_width) {
-        distribute_shrink(columns.extents, columns.min_extents, columns.shrink_weights, base_width - available_width);
-    }
-    if (available_height > base_height) {
-        distribute_grow(rows.extents, rows.max_extents, rows.grow_weights, available_height - base_height);
-    } else if (available_height < base_height) {
-        distribute_shrink(rows.extents, rows.min_extents, rows.shrink_weights, base_height - available_height);
-    }
+    allocate_grid_axis(rows, available_height);
 
     std::vector<float> column_offsets(columns.extents.size(), content.x);
     std::vector<float> row_offsets(rows.extents.size(), content.y);
@@ -177,6 +227,29 @@ void GridLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
         }
         child_rect.width += column_spacing_ * static_cast<float>(column_end - item.column - 1);
         child_rect.height += row_spacing_ * static_cast<float>(row_end - item.row - 1);
+        const tc_ui_insets margin = tc_widget_layout_spec(child).margin;
+        child_rect.x += margin.left;
+        child_rect.y += margin.top;
+        child_rect.width = std::max(
+            0.0f, child_rect.width - margin.left - margin.right);
+        child_rect.height = std::max(
+            0.0f, child_rect.height - margin.top - margin.bottom);
+        tc_ui_constraints child_constraints{
+            tc_ui_size{0.0f, 0.0f},
+            tc_ui_size{child_rect.width, child_rect.height}};
+        const tc_ui_widget_layout_spec spec = tc_widget_layout_spec(child);
+        if (spec.width.mode == TC_UI_LENGTH_AUTO ||
+            spec.width.mode == TC_UI_LENGTH_FILL) {
+            child_constraints.min_size.width = child_rect.width;
+        }
+        if (spec.height.mode == TC_UI_LENGTH_AUTO ||
+            spec.height.mode == TC_UI_LENGTH_FILL) {
+            child_constraints.min_size.height = child_rect.height;
+        }
+        const tc_ui_size child_size = measure_widget(
+            child, document, child_constraints, parent_extent, true, true);
+        child_rect.width = child_size.width;
+        child_rect.height = child_size.height;
         layout_widget(child, document, child_rect);
     }
 }

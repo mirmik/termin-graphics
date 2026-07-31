@@ -39,6 +39,14 @@ tc_widget* resolve_child(tc_ui_document_handle document, const tc_widget* expect
 tc_widget* attach_child(tc_widget* parent, tc_widget_handle child_handle, size_t index, const char* owner);
 void detach_if_child(tc_widget* parent, tc_widget_handle child_handle);
 tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_constraints constraints);
+tc_ui_size measure_widget(
+    tc_widget* widget,
+    tc_ui_document_handle document,
+    tc_ui_constraints constraints,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite
+);
 NativeWidget* native_widget_body(tc_widget* widget);
 void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect);
 void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
@@ -69,7 +77,19 @@ struct GridAxisLayout {
     std::vector<float> shrink_weights;
 };
 
-GridAxisLayout build_grid_axis(tc_ui_document_handle document, const tc_widget* expected_parent, const std::vector<GridTrack>& tracks, const std::vector<GridItem>& items, bool columns, float spacing);
+GridAxisLayout build_grid_axis(
+    tc_ui_document_handle document,
+    const tc_widget* expected_parent,
+    const std::vector<GridTrack>& tracks,
+    const std::vector<GridItem>& items,
+    bool columns,
+    float spacing,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite,
+    const std::vector<float>* column_extents = nullptr,
+    float column_spacing = 0.0f
+);
 float axis_total_extent(const std::vector<float>& extents, float spacing);
 
 } // namespace termin::gui_native::detail

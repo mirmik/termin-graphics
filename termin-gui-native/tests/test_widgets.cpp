@@ -11,6 +11,8 @@ int main() {
   test_box_layout_child_policies_allocate_primary_axis();
   test_hstack_vstack_wrappers_use_expected_orientation();
   test_grid_layout_tracks_spans_and_hit_test();
+  test_box_grid_and_scroll_remeasure_width_dependent_children();
+  test_box_layout_resolves_percent_and_limits_from_definite_parent();
   test_grid_layout_recursive_destroy_children();
   test_group_box_lays_out_content_and_routes_hit_test();
   test_group_box_recursive_destroy_content();

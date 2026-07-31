@@ -60,3 +60,26 @@ other accepted length forms. Margin accepts either one non-negative number or
 or `[width, height]`; `true` is rejected because it has no deterministic size.
 Unknown fields and invalid combinations fail parsing before materialization,
 so reload remains transactional.
+
+## Constrained container measurement
+
+Native child measurement has one shared boundary that applies the normalized
+layout spec, validates constraints and rejects non-finite or negative results.
+An exact constraint supplied by a container is the final allocation and wins
+over a requested size; this lets grow/shrink and track allocation remeasure the
+child at the geometry it will actually receive. Explicit minimums still
+participate in Box and Grid allocation before that final pass.
+
+The bounded pass contract is:
+
+- Box measures each child once for its basis, allocates the primary axis, then
+  measures it once at the final primary/cross extents;
+- Grid measures intrinsic column requirements, measures row requirements at
+  the allocated column span, then performs one final cell measurement;
+- ScrollArea measures content once with every non-scrollable viewport axis
+  exact, so the stored scroll extent includes width-dependent reflow.
+
+There is no convergence loop. Percentages and `fill` resolve only when the
+container explicitly marks the corresponding parent content extent definite.
+Margins are external space consumed by Box, Grid and ScrollArea; the widget is
+measured and laid out inside the remaining rectangle.

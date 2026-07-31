@@ -3,6 +3,39 @@
 #include "widgets_test_support.hpp"
 
 namespace termin_gui_native_test {
+namespace {
+
+class WidthDependentWidget final : public NativeWidget {
+public:
+  std::vector<tc_ui_constraints> measurements;
+
+  explicit WidthDependentWidget(const char *debug_name = nullptr)
+      : NativeWidget(debug_name) {}
+
+  tc_ui_size measure(tc_ui_document_handle,
+                     tc_ui_constraints constraints) override {
+    measurements.push_back(constraints);
+    const float max_width =
+        constraints.max_size.width > 0.0f
+            ? constraints.max_size.width
+            : 200.0f;
+    const float width = std::max(
+        constraints.min_size.width, std::min(200.0f, max_width));
+    const float reflow_height =
+        std::ceil(200.0f / std::max(1.0f, width)) * 10.0f;
+    const float max_height =
+        constraints.max_size.height > 0.0f
+            ? constraints.max_size.height
+            : reflow_height;
+    return tc_ui_size{
+        width,
+        std::max(constraints.min_size.height,
+                 std::min(reflow_height, max_height))};
+  }
+};
+
+}  // namespace
+
 void test_box_layout_sets_child_bounds_and_paints() {
   tc_ui_document_handle document_handle = tc_ui_document_create();
   TcDocument document(document_handle);
@@ -211,6 +244,117 @@ void test_grid_layout_tracks_spans_and_hit_test() {
   assert(near(bottom.bounds().height, 66.0f));
   assert(
       tc_widget_handle_eq(document.hit_test(125.0f, 35.0f), bottom.handle()));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_box_grid_and_scroll_remeasure_width_dependent_children() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &box = ui.make_root<BoxLayout>(Orientation::Vertical, "reflow-box");
+  auto &box_child = ui.make<WidthDependentWidget>("box-child");
+  box.add_preferred_child(box_child);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
+  assert(near(box_child.bounds().width, 100.0f));
+  assert(near(box_child.bounds().height, 20.0f));
+  assert(box_child.measurements.size() == 2);
+  assert(near(box_child.measurements.back().min_size.width, 100.0f));
+  assert(near(box_child.measurements.back().max_size.width, 100.0f));
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 50.0f, 100.0f});
+  assert(near(box_child.bounds().width, 50.0f));
+  assert(near(box_child.bounds().height, 40.0f));
+  assert(box_child.measurements.size() == 4);
+
+  assert(tc_ui_document_destroy_widget_recursive(document.get(), box.handle()));
+
+  auto &row = ui.make_root<BoxLayout>(Orientation::Horizontal, "reflow-row");
+  row.set_cross_axis_alignment(CrossAxisAlignment::Start);
+  auto &left = ui.make<WidthDependentWidget>("row-left");
+  auto &right = ui.make<WidthDependentWidget>("row-right");
+  row.add_flex_child(left, 1.0f);
+  row.add_flex_child(right, 1.0f);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
+  assert(near(left.bounds().width, 50.0f));
+  assert(near(right.bounds().width, 50.0f));
+  assert(near(left.bounds().height, 40.0f));
+  assert(near(right.bounds().height, 40.0f));
+  assert(left.measurements.size() == 2);
+  assert(right.measurements.size() == 2);
+
+  assert(tc_ui_document_destroy_widget_recursive(document.get(), row.handle()));
+
+  auto &grid = ui.make_root<GridLayout>("reflow-grid");
+  grid.add_column(LayoutPolicy::Stretch);
+  grid.add_row(LayoutPolicy::Preferred);
+  auto &grid_child = ui.make<WidthDependentWidget>("grid-child");
+  grid.add_child(grid_child, 0, 0);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 50.0f, 100.0f});
+  assert(near(grid_child.bounds().width, 50.0f));
+  assert(near(grid_child.bounds().height, 40.0f));
+  assert(grid_child.measurements.size() == 3);
+  assert(near(grid_child.measurements.back().min_size.width, 50.0f));
+  assert(near(grid_child.measurements.back().max_size.width, 50.0f));
+
+  assert(
+      tc_ui_document_destroy_widget_recursive(document.get(), grid.handle()));
+
+  auto &scroll = ui.make_root<ScrollArea>("reflow-scroll");
+  scroll.set_scroll_axes(false, true);
+  auto &scroll_child = ui.make<WidthDependentWidget>("scroll-child");
+  scroll.set_content(scroll_child);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 50.0f, 30.0f});
+  assert(near(scroll.content_size().width, 50.0f));
+  assert(near(scroll.content_size().height, 40.0f));
+  assert(near(scroll_child.bounds().width, 50.0f));
+  assert(near(scroll_child.bounds().height, 40.0f));
+  scroll.set_scroll(0.0f, 100.0f);
+  assert(near(scroll.scroll_y(), 10.0f));
+
+  tc_ui_document_destroy(document_handle);
+}
+
+void test_box_layout_resolves_percent_and_limits_from_definite_parent() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &box = ui.make_root<BoxLayout>(Orientation::Vertical, "percent-box");
+  box.set_cross_axis_alignment(CrossAxisAlignment::Start);
+  auto &child = ui.make<Spacer>(tc_ui_size{20.0f, 10.0f});
+  tc_ui_widget_layout_spec spec = tc_ui_widget_layout_spec_default();
+  spec.width = tc_ui_length{TC_UI_LENGTH_PERCENT, 0.5f};
+  spec.min_width = 60.0f;
+  spec.max_width = 80.0f;
+  spec.margin = tc_ui_insets{5.0f, 2.0f, 7.0f, 3.0f};
+  assert(child.set_layout_spec(spec));
+  box.add_preferred_child(child);
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 40.0f});
+  assert(near(child.bounds().x, 5.0f));
+  assert(near(child.bounds().y, 2.0f));
+  assert(near(child.bounds().width, 60.0f));
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 200.0f, 40.0f});
+  assert(near(child.bounds().width, 80.0f));
+
+  const tc_ui_size intrinsic = child.measure(
+      document.get(),
+      tc_ui_constraints{tc_ui_size{0.0f, 0.0f},
+                        tc_ui_size{1000000.0f, 1000000.0f}});
+  assert(near(intrinsic.width, 20.0f));
+
+  assert(tc_ui_document_destroy_widget_recursive(document.get(), box.handle()));
+  auto &grid = ui.make_root<GridLayout>("percent-grid");
+  grid.add_column(LayoutPolicy::Stretch);
+  grid.add_row(LayoutPolicy::Preferred);
+  auto &grid_child = ui.make<Spacer>(tc_ui_size{20.0f, 10.0f});
+  assert(grid_child.set_layout_spec(spec));
+  grid.add_child(grid_child, 0, 0);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 200.0f, 40.0f});
+  assert(near(grid_child.bounds().x, 5.0f));
+  assert(near(grid_child.bounds().width, 80.0f));
 
   tc_ui_document_destroy(document_handle);
 }

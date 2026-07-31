@@ -7,6 +7,8 @@ void test_dirty_flags_track_layout_paint_and_state_changes();
 void test_box_layout_child_policies_allocate_primary_axis();
 void test_hstack_vstack_wrappers_use_expected_orientation();
 void test_grid_layout_tracks_spans_and_hit_test();
+void test_box_grid_and_scroll_remeasure_width_dependent_children();
+void test_box_layout_resolves_percent_and_limits_from_definite_parent();
 void test_grid_layout_recursive_destroy_children();
 void test_group_box_lays_out_content_and_routes_hit_test();
 void test_group_box_recursive_destroy_content();

@@ -252,10 +252,147 @@ void detach_if_child(tc_widget* parent, tc_widget_handle child_handle) {
 }
 
 tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_constraints constraints) {
-    if (widget && widget->vtable && widget->vtable->measure) {
-        return widget->vtable->measure(widget, document, constraints);
+    const bool width_definite =
+        constraints.max_size.width > 0.0f &&
+        constraints.max_size.width < kHuge;
+    const bool height_definite =
+        constraints.max_size.height > 0.0f &&
+        constraints.max_size.height < kHuge;
+    return measure_widget(
+        widget,
+        document,
+        constraints,
+        constraints.max_size,
+        width_definite,
+        height_definite
+    );
+}
+
+tc_ui_size measure_widget(
+    tc_widget* widget,
+    tc_ui_document_handle document,
+    tc_ui_constraints constraints,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite
+) {
+    if (!widget || !widget->vtable || !widget->vtable->measure) {
+        return constraints.min_size;
     }
-    return constraints.min_size;
+    const auto valid_extent = [](float value) {
+        return std::isfinite(value) && value >= 0.0f;
+    };
+    if (!valid_extent(constraints.min_size.width) ||
+        !valid_extent(constraints.min_size.height) ||
+        !valid_extent(constraints.max_size.width) ||
+        !valid_extent(constraints.max_size.height) ||
+        (constraints.max_size.width > 0.0f &&
+         constraints.max_size.width < constraints.min_size.width) ||
+        (constraints.max_size.height > 0.0f &&
+         constraints.max_size.height < constraints.min_size.height) ||
+        (width_definite && !valid_extent(parent_extent.width)) ||
+        (height_definite && !valid_extent(parent_extent.height))) {
+        tc_log_error(
+            "[termin-gui-native] rejected invalid child measurement constraints");
+        return tc_ui_size{0.0f, 0.0f};
+    }
+
+    const tc_ui_widget_layout_spec spec = tc_widget_layout_spec(widget);
+    tc_ui_constraints measure_constraints = constraints;
+    const bool width_exact =
+        constraints.max_size.width > 0.0f &&
+        constraints.min_size.width == constraints.max_size.width;
+    const bool height_exact =
+        constraints.max_size.height > 0.0f &&
+        constraints.min_size.height == constraints.max_size.height;
+    if (!width_exact) {
+        measure_constraints.min_size.width =
+            std::max(measure_constraints.min_size.width, spec.min_width);
+    }
+    if (!height_exact) {
+        measure_constraints.min_size.height =
+            std::max(measure_constraints.min_size.height, spec.min_height);
+    }
+    if (!width_exact && spec.max_width > 0.0f) {
+        measure_constraints.max_size.width =
+            std::min(effective_max(measure_constraints.max_size.width),
+                     spec.max_width);
+    }
+    if (!height_exact && spec.max_height > 0.0f) {
+        measure_constraints.max_size.height =
+            std::min(effective_max(measure_constraints.max_size.height),
+                     spec.max_height);
+    }
+
+    const auto resolved_axis = [](tc_ui_length length, float parent, bool definite,
+                                  float& value) {
+        if (length.mode == TC_UI_LENGTH_FIXED) {
+            value = length.value;
+            return true;
+        }
+        if (definite && length.mode == TC_UI_LENGTH_FILL) {
+            value = parent;
+            return true;
+        }
+        if (definite && length.mode == TC_UI_LENGTH_PERCENT) {
+            value = parent * length.value;
+            return true;
+        }
+        return false;
+    };
+    float requested_width = 0.0f;
+    float requested_height = 0.0f;
+    if (!width_exact &&
+        resolved_axis(spec.width, parent_extent.width, width_definite,
+                      requested_width)) {
+        requested_width =
+            clamp_float(requested_width, spec.min_width,
+                        effective_max(spec.max_width));
+        measure_constraints.min_size.width = requested_width;
+        measure_constraints.max_size.width = requested_width;
+    }
+    if (!height_exact &&
+        resolved_axis(spec.height, parent_extent.height, height_definite,
+                      requested_height)) {
+        requested_height =
+            clamp_float(requested_height, spec.min_height,
+                        effective_max(spec.max_height));
+        measure_constraints.min_size.height = requested_height;
+        measure_constraints.max_size.height = requested_height;
+    }
+    measure_constraints.max_size.width =
+        std::max(measure_constraints.min_size.width,
+                 measure_constraints.max_size.width);
+    measure_constraints.max_size.height =
+        std::max(measure_constraints.min_size.height,
+                 measure_constraints.max_size.height);
+
+    const tc_ui_size intrinsic =
+        widget->vtable->measure(widget, document, measure_constraints);
+    if (!valid_extent(intrinsic.width) || !valid_extent(intrinsic.height)) {
+        tc_log_error(
+            "[termin-gui-native] widget measurement returned a non-finite or "
+            "negative size");
+        return measure_constraints.min_size;
+    }
+    tc_ui_size resolved{};
+    if (!tc_ui_widget_layout_spec_resolve_size(
+            &spec,
+            intrinsic,
+            parent_extent,
+            width_definite,
+            height_definite,
+            &resolved)) {
+        return measure_constraints.min_size;
+    }
+    resolved = clamp_size(resolved, constraints);
+    if (!valid_extent(resolved.width) || !valid_extent(resolved.height)) {
+        tc_log_error(
+            "[termin-gui-native] resolved widget measurement is non-finite or "
+            "negative");
+        return measure_constraints.min_size;
+    }
+    return resolved;
 }
 
 NativeWidget* native_widget_body(tc_widget* widget) {
@@ -501,7 +638,12 @@ GridAxisLayout build_grid_axis(
     const std::vector<GridTrack>& tracks,
     const std::vector<GridItem>& items,
     bool columns,
-    float spacing
+    float spacing,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite,
+    const std::vector<float>* column_extents,
+    float column_spacing
 ) {
     GridAxisLayout axis;
     axis.extents.reserve(tracks.size());
@@ -534,14 +676,76 @@ GridAxisLayout build_grid_axis(
         if (!child) {
             continue;
         }
-        const tc_ui_size measured = measure_widget(child, document, unconstrained());
+        const tc_ui_insets margin = tc_widget_layout_spec(child).margin;
+        tc_ui_constraints child_constraints = unconstrained();
+        child_constraints.max_size = parent_extent;
+        if (!columns && column_extents &&
+            item.column < column_extents->size()) {
+            const size_t column_end = std::min(
+                column_extents->size(), item.column + item.column_span);
+            float allocated_width =
+                column_spacing *
+                static_cast<float>(column_end - item.column - 1);
+            for (size_t column = item.column; column < column_end; ++column) {
+                allocated_width += (*column_extents)[column];
+            }
+            allocated_width = std::max(
+                0.0f, allocated_width - margin.left - margin.right);
+            child_constraints.max_size.width = allocated_width;
+            const tc_ui_length_mode width_mode =
+                tc_widget_layout_spec(child).width.mode;
+            if (width_mode == TC_UI_LENGTH_AUTO ||
+                width_mode == TC_UI_LENGTH_FILL) {
+                child_constraints.min_size.width = allocated_width;
+            }
+        }
+        const tc_ui_size measured = measure_widget(
+            child,
+            document,
+            child_constraints,
+            parent_extent,
+            width_definite,
+            height_definite
+        );
+        const tc_ui_widget_layout_spec spec = tc_widget_layout_spec(child);
+        const float explicit_min =
+            columns
+                ? std::max(
+                      spec.min_width,
+                      spec.touch_target_policy ==
+                              TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM
+                          ? spec.minimum_touch_target.width
+                          : 0.0f) +
+                      margin.left + margin.right
+                : std::max(
+                      spec.min_height,
+                      spec.touch_target_policy ==
+                              TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM
+                          ? spec.minimum_touch_target.height
+                          : 0.0f) +
+                      margin.top + margin.bottom;
+        apply_span_requirement(
+            axis.min_extents,
+            axis.max_extents,
+            start,
+            span,
+            spacing,
+            explicit_min
+        );
+        for (size_t index = start;
+             index < std::min(axis.extents.size(), start + span);
+             ++index) {
+            axis.extents[index] =
+                std::max(axis.extents[index], axis.min_extents[index]);
+        }
         apply_span_requirement(
             axis.extents,
             axis.max_extents,
             start,
             span,
             spacing,
-            columns ? measured.width : measured.height
+            columns ? measured.width + margin.left + margin.right
+                    : measured.height + margin.top + margin.bottom
         );
     }
     return axis;

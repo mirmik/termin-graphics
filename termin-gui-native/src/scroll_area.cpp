@@ -127,15 +127,42 @@ tc_ui_size ScrollArea::measure(
     if (!tc_widget_handle_is_invalid(this->content())) {
         if (tc_widget* content =
                 resolve_child(document, c_widget(), this->content(), "ScrollArea::measure")) {
-            const tc_ui_size content_size =
-                measure_widget(content, document, unconstrained());
+            const tc_ui_insets margin = tc_widget_layout_spec(content).margin;
+            const bool width_definite =
+                constraints.max_size.width > 0.0f &&
+                constraints.max_size.width < kHuge;
+            const bool height_definite =
+                constraints.max_size.height > 0.0f &&
+                constraints.max_size.height < kHuge;
+            tc_ui_constraints content_constraints = unconstrained();
+            if (!horizontal_scroll_enabled_ && width_definite) {
+                const float width = std::max(
+                    0.0f,
+                    constraints.max_size.width - margin.left - margin.right);
+                content_constraints.min_size.width = width;
+                content_constraints.max_size.width = width;
+            }
+            if (!vertical_scroll_enabled_ && height_definite) {
+                const float height = std::max(
+                    0.0f,
+                    constraints.max_size.height - margin.top - margin.bottom);
+                content_constraints.min_size.height = height;
+                content_constraints.max_size.height = height;
+            }
+            const tc_ui_size content_size = measure_widget(
+                content, document, content_constraints,
+                constraints.max_size, width_definite, height_definite);
             measured.width = std::max(
                 measured.width,
-                std::min(content_size.width, preferred_size().width)
+                std::min(
+                    content_size.width + margin.left + margin.right,
+                    preferred_size().width)
             );
             measured.height = std::max(
                 measured.height,
-                std::min(content_size.height, preferred_size().height)
+                std::min(
+                    content_size.height + margin.top + margin.bottom,
+                    preferred_size().height)
             );
         }
     }
@@ -151,14 +178,33 @@ void ScrollArea::layout(tc_ui_document_handle document, tc_ui_rect rect) {
         tc_widget* content =
             resolve_child(document, c_widget(), this->content(), "ScrollArea::layout");
         if (content) {
-            const tc_ui_size measured =
-                measure_widget(content, document, unconstrained());
+            const tc_ui_insets margin = tc_widget_layout_spec(content).margin;
+            tc_ui_constraints content_constraints = unconstrained();
+            if (!horizontal_scroll_enabled_) {
+                const float width =
+                    std::max(0.0f, rect.width - margin.left - margin.right);
+                content_constraints.min_size.width = width;
+                content_constraints.max_size.width = width;
+            }
+            if (!vertical_scroll_enabled_) {
+                const float height =
+                    std::max(0.0f, rect.height - margin.top - margin.bottom);
+                content_constraints.min_size.height = height;
+                content_constraints.max_size.height = height;
+            }
+            const tc_ui_size measured = measure_widget(
+                content, document, content_constraints,
+                tc_ui_size{rect.width, rect.height}, true, true);
             content_size_ = tc_ui_size {
                 horizontal_scroll_enabled_
-                    ? std::max(measured.width, rect.width)
+                    ? std::max(
+                          measured.width + margin.left + margin.right,
+                          rect.width)
                     : rect.width,
                 vertical_scroll_enabled_
-                    ? std::max(measured.height, rect.height)
+                    ? std::max(
+                          measured.height + margin.top + margin.bottom,
+                          rect.height)
                     : rect.height
             };
         }
@@ -182,14 +228,19 @@ void ScrollArea::layout_content(tc_ui_document_handle document) {
     if (!content) {
         return;
     }
+    const tc_ui_insets margin = tc_widget_layout_spec(content).margin;
     layout_widget(
         content,
         document,
         tc_ui_rect {
-            bounds().x - scroll_x_,
-            bounds().y - scroll_y_,
-            content_size_.width,
-            content_size_.height
+            bounds().x - scroll_x_ + margin.left,
+            bounds().y - scroll_y_ + margin.top,
+            std::max(
+                0.0f,
+                content_size_.width - margin.left - margin.right),
+            std::max(
+                0.0f,
+                content_size_.height - margin.top - margin.bottom)
         }
     );
 }
