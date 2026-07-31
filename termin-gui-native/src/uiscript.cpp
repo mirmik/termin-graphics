@@ -187,8 +187,50 @@ void validate_property(
         return;
     }
     if (name == "spacing" || name == "size" || name == "font_size" ||
-        name == "border_radius") {
+        name == "border_radius" || name == "grow" || name == "shrink" ||
+        name == "min_extent" || name == "max_extent") {
         validate_number(value, path, true);
+        return;
+    }
+    if (name == "padding") {
+        if (is_number(value)) {
+            validate_number(value, path, true);
+            return;
+        }
+        if (!value.is_list() || value.size() != 4) {
+            fail(path, "expected a number or [left, top, right, bottom]");
+        }
+        for (size_t index = 0; index < value.size(); ++index) {
+            validate_number(
+                value[index], path + "[" + std::to_string(index) + "]", true);
+        }
+        return;
+    }
+    if (name == "orientation") {
+        if (!value.is_string()) fail(path, "expected 'horizontal' or 'vertical'");
+        const std::string orientation = value.as_string();
+        if (orientation != "horizontal" && orientation != "vertical") {
+            fail(path, "unsupported orientation '" + orientation + "'");
+        }
+        return;
+    }
+    if (name == "align_items" || name == "align_self") {
+        if (!value.is_string()) fail(path, "expected an alignment string");
+        const std::string alignment = value.as_string();
+        const bool allow_auto = name == "align_self";
+        if (alignment != "stretch" && alignment != "start" &&
+            alignment != "center" && alignment != "end" &&
+            !(allow_auto && alignment == "auto")) {
+            fail(path, "unsupported alignment '" + alignment + "'");
+        }
+        return;
+    }
+    if (name == "basis") {
+        if (is_number(value)) {
+            validate_number(value, path, true);
+        } else if (!value.is_string() || value.as_string() != "preferred") {
+            fail(path, "expected 'preferred' or a non-negative fixed extent");
+        }
         return;
     }
     if (name == "background_color" || name == "hover_color" ||
@@ -235,12 +277,61 @@ bool contains_property(
     return false;
 }
 
+bool contains_child_property(
+    const tc_uiscript_type_descriptor& descriptor,
+    const std::string& name
+) {
+    for (size_t index = 0; index < descriptor.child_property_count; ++index) {
+        if (descriptor.child_properties[index] &&
+            name == descriptor.child_properties[index]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void validate_box_placement(
+    const UiScriptNode& node,
+    const tc_uiscript_type_descriptor* parent_descriptor
+) {
+    if (!parent_descriptor ||
+        !contains_child_property(*parent_descriptor, "basis")) {
+        return;
+    }
+    const tc::trent_view minimum = node.properties["min_extent"];
+    const tc::trent_view maximum = node.properties["max_extent"];
+    if (minimum && maximum && maximum.as_numer() > 0.0 &&
+        minimum.as_numer() > maximum.as_numer()) {
+        fail(node.source_path + ".max_extent",
+             "must be zero (unbounded) or >= min_extent");
+    }
+    const tc::trent_view basis = node.properties["basis"];
+    if (!basis || !is_number(basis)) {
+        return;
+    }
+    const double fixed = basis.as_numer();
+    const tc::trent_view grow = node.properties["grow"];
+    const tc::trent_view shrink = node.properties["shrink"];
+    if ((grow && grow.as_numer() != 0.0) ||
+        (shrink && shrink.as_numer() != 0.0)) {
+        fail(node.source_path + ".basis",
+             "a fixed basis cannot grow or shrink");
+    }
+    if ((minimum && minimum.as_numer() != fixed) ||
+        (maximum && maximum.as_numer() != 0.0 &&
+         maximum.as_numer() != fixed)) {
+        fail(node.source_path + ".basis",
+             "a fixed basis conflicts with min/max primary extent");
+    }
+}
+
 UiScriptNode parse_node(
     tc::trent_view source,
     const std::string& path,
     std::unordered_set<std::string>& names,
     std::vector<std::string>& dependencies,
-    std::unordered_set<std::string>& dependency_set
+    std::unordered_set<std::string>& dependency_set,
+    const tc_uiscript_type_descriptor* parent_descriptor = nullptr
 ) {
     if (!source.is_dict()) {
         fail(path, "expected a widget mapping");
@@ -280,18 +371,23 @@ UiScriptNode parse_node(
     static const std::unordered_set<std::string> structural{
         "type", "name", "children"};
     static const std::unordered_set<std::string> common{
-        "visible", "enabled", "anchor", "offset", "layout"};
+        "visible", "enabled", "layout"};
     for (const auto entry : source.as_dict()) {
         const std::string key = entry.key ? entry.key : "";
         if (structural.contains(key)) {
             continue;
         }
-        if (!common.contains(key) && !contains_property(*descriptor, key)) {
+        const bool parent_property =
+            parent_descriptor &&
+            contains_child_property(*parent_descriptor, key);
+        if (!common.contains(key) && !contains_property(*descriptor, key) &&
+            !parent_property) {
             fail(path, "unsupported " + type_name + " property '" + key + "'");
         }
         validate_property(key, entry.view(), path + "." + key);
         node.properties.set(key, tc::trent::copy_of(*entry.value));
     }
+    validate_box_placement(node, parent_descriptor);
 
     const tc::trent_view children = source["children"];
     if (children) {
@@ -308,7 +404,8 @@ UiScriptNode parse_node(
                 path + ".children[" + std::to_string(index) + "]",
                 names,
                 dependencies,
-                dependency_set
+                dependency_set,
+                descriptor
             ));
         }
     }

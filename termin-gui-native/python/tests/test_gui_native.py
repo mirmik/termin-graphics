@@ -8,6 +8,7 @@ import pytest
 from termin.gui_native import (
     Color,
     Constraints,
+    CrossAxisAlignment,
     CursorIntent,
     tc_ui_document_create,
     tc_ui_document_destroy,
@@ -25,6 +26,7 @@ from termin.gui_native import (
     KeyEventType,
     LayoutPolicy,
     ModifierFlag,
+    Orientation,
     OverlayDismissReason,
     OverlayFlag,
     OverlayGeometry,
@@ -201,6 +203,40 @@ def test_python_box_layout_policies_padding_spacing_and_limits():
         fixed.append_child(
             document.create_label("invalid"), LayoutPolicy.Fixed, 10.0
         )
+
+def test_python_box_layout_exact_placement_and_alignment():
+    document = tc_ui_document_create()
+    root = document.create_box_layout(True, "exact-root")
+    first = document.create_spacer(Size(20.0, 10.0))
+    second = document.create_spacer(Size(20.0, 20.0))
+    root.set_padding(EdgeInsets(5.0, 4.0, 5.0, 6.0))
+    root.set_spacing(2.0)
+    root.set_cross_axis_alignment(CrossAxisAlignment.Center)
+    root.add_child(first)
+    root.add_child(second)
+    assert root.set_child_placement(
+        first, LayoutPolicy.Fixed, 30.0, 0.0, 0.0, 0.0, 0.0,
+        CrossAxisAlignment.Start,
+    )
+    assert root.set_child_placement(
+        second, LayoutPolicy.Flex, 0.0, 1.0, 0.0, 0.0, 0.0,
+        CrossAxisAlignment.End,
+    )
+    assert document.add_root(root.handle)
+    document.layout_roots(Rect(0.0, 0.0, 100.0, 60.0))
+
+    assert root.orientation == Orientation.Horizontal
+    assert root.cross_axis_alignment == CrossAxisAlignment.Center
+    assert first.widget.bounds.x == pytest.approx(5.0)
+    assert first.widget.bounds.y == pytest.approx(4.0)
+    assert first.widget.bounds.width == pytest.approx(30.0)
+    assert first.widget.bounds.height == pytest.approx(10.0)
+    assert second.widget.bounds.x == pytest.approx(37.0)
+    assert second.widget.bounds.y == pytest.approx(34.0)
+    assert second.widget.bounds.width == pytest.approx(58.0)
+    assert second.widget.bounds.height == pytest.approx(20.0)
+    root.set_orientation(Orientation.Vertical)
+    assert root.orientation == Orientation.Vertical
 
 
 def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy():

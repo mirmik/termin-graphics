@@ -844,6 +844,56 @@ void test_box_layout_respects_child_extent_limits() {
   tc_ui_document_destroy(document_handle);
 }
 
+void test_box_layout_cross_axis_alignment_and_exact_placement() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  DocumentBuilder ui(document);
+
+  auto &root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
+  auto &start = ui.make<Spacer>(tc_ui_size{20.0f, 10.0f});
+  auto &center = ui.make<Spacer>(tc_ui_size{20.0f, 20.0f});
+  auto &end = ui.make<Spacer>(tc_ui_size{20.0f, 30.0f});
+  root.set_padding({5.0f, 4.0f, 5.0f, 6.0f})
+      .set_spacing(2.0f)
+      .set_cross_axis_alignment(CrossAxisAlignment::Center);
+  root.add_child(start);
+  root.add_child(center);
+  root.add_child(end);
+  assert(root.set_child_placement(
+      start, LayoutPolicy::Fixed, 30.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+      CrossAxisAlignment::Start));
+  assert(root.set_child_placement(
+      center, LayoutPolicy::Preferred, 0.0f, 1.0f, 1.0f, 0.0f, 40.0f));
+  assert(root.set_child_placement(
+      end, LayoutPolicy::Flex, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f,
+      CrossAxisAlignment::End));
+  assert(!root.set_child_placement(
+      end, LayoutPolicy::Fixed, 20.0f, 1.0f, 0.0f, 0.0f, 0.0f));
+  assert(root.items()[2].policy == LayoutPolicy::Flex);
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 144.0f, 60.0f});
+
+  assert(root.orientation() == Orientation::Horizontal);
+  assert(root.cross_axis_alignment() == CrossAxisAlignment::Center);
+  assert(near(start.bounds().x, 5.0f));
+  assert(near(start.bounds().y, 4.0f));
+  assert(near(start.bounds().width, 30.0f));
+  assert(near(start.bounds().height, 10.0f));
+  assert(near(center.bounds().x, 37.0f));
+  assert(near(center.bounds().y, 19.0f));
+  assert(near(center.bounds().width, 40.0f));
+  assert(near(center.bounds().height, 20.0f));
+  assert(near(end.bounds().x, 79.0f));
+  assert(near(end.bounds().y, 24.0f));
+  assert(near(end.bounds().width, 60.0f));
+  assert(near(end.bounds().height, 30.0f));
+
+  root.set_orientation(Orientation::Vertical);
+  assert(root.orientation() == Orientation::Vertical);
+
+  tc_ui_document_destroy(document_handle);
+}
+
 void test_box_layout_allows_preferred_overflow_when_no_child_can_shrink() {
   tc_ui_document_handle document_handle = tc_ui_document_create();
   TcDocument document(document_handle);

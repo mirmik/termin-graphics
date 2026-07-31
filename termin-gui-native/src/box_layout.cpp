@@ -5,6 +5,12 @@ using namespace detail;
 BoxLayout::BoxLayout(Orientation orientation, const char *debug_name)
     : NativeWidget(debug_name), orientation_(orientation) {}
 
+BoxLayout &BoxLayout::set_orientation(Orientation orientation) {
+  orientation_ = orientation;
+  mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+  return *this;
+}
+
 BoxLayout &BoxLayout::set_padding(EdgeInsets padding) {
   padding_ = padding;
   mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
@@ -13,6 +19,14 @@ BoxLayout &BoxLayout::set_padding(EdgeInsets padding) {
 
 BoxLayout &BoxLayout::set_spacing(float spacing) {
   spacing_ = std::max(0.0f, spacing);
+  mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+  return *this;
+}
+
+BoxLayout &BoxLayout::set_cross_axis_alignment(CrossAxisAlignment alignment) {
+  cross_axis_alignment_ = alignment == CrossAxisAlignment::Auto
+                              ? CrossAxisAlignment::Stretch
+                              : alignment;
   mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
   return *this;
 }
@@ -96,6 +110,55 @@ void BoxLayout::add_flex_child(tc_widget_handle handle, float flex) {
 
 void BoxLayout::add_stretch_child(tc_widget_handle handle) {
   add_child(handle, LayoutPolicy::Stretch);
+}
+
+bool BoxLayout::set_child_placement(
+    tc_widget_handle handle, LayoutPolicy policy, float basis, float grow,
+    float shrink, float min_extent, float max_extent,
+    CrossAxisAlignment align_self) {
+  const float normalized_basis = std::max(0.0f, basis);
+  const float normalized_min = std::max(0.0f, min_extent);
+  const float normalized_max = std::max(0.0f, max_extent);
+  if (policy == LayoutPolicy::Fixed &&
+      (grow > 0.0f || shrink > 0.0f ||
+       (normalized_min > 0.0f && normalized_min != normalized_basis) ||
+       (normalized_max > 0.0f && normalized_max != normalized_basis))) {
+    tc_log_error(
+        "[termin-gui-native] fixed BoxLayout child placement conflicts with "
+        "grow, shrink or extent limits");
+    return false;
+  }
+  if (policy != LayoutPolicy::Fixed && normalized_max > 0.0f &&
+      normalized_max < normalized_min) {
+    tc_log_error(
+        "[termin-gui-native] BoxLayout child max extent is smaller than its "
+        "min extent");
+    return false;
+  }
+  for (LayoutItem &item : items_) {
+    if (!tc_widget_handle_eq(item.handle, handle)) {
+      continue;
+    }
+    item.policy = policy;
+    item.fixed_extent =
+        policy == LayoutPolicy::Fixed ? normalized_basis : 0.0f;
+    item.flex = std::max(0.0f, grow);
+    item.grow = std::max(0.0f, grow);
+    item.shrink = std::max(0.0f, shrink);
+    item.min_extent = normalized_min;
+    item.max_extent = normalized_max;
+    if (policy == LayoutPolicy::Fixed) {
+      item.min_extent = item.fixed_extent;
+      item.max_extent = item.fixed_extent;
+    }
+    item.align_self = align_self;
+    mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    return true;
+  }
+  tc_log_error(
+      "[termin-gui-native] cannot configure a child that is not attached to "
+      "BoxLayout");
+  return false;
 }
 
 bool BoxLayout::set_child_extent_limits(tc_widget_handle handle,
@@ -190,11 +253,13 @@ void BoxLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
 
   struct LiveItem {
     tc_widget *widget = nullptr;
+    tc_ui_size measured{};
     float extent = 0.0f;
     float min_extent = 0.0f;
     float max_extent = kHuge;
     float grow = 0.0f;
     float shrink = 0.0f;
+    CrossAxisAlignment alignment = CrossAxisAlignment::Stretch;
   };
 
   std::vector<LiveItem> live_items;
@@ -215,10 +280,14 @@ void BoxLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
         std::max(min_extent, item_max_extent(item, native, orientation_));
     LiveItem live{};
     live.widget = child;
+    live.measured = measured;
     live.min_extent = min_extent;
     live.max_extent = max_extent;
     live.grow = std::max(0.0f, item.grow);
     live.shrink = std::max(0.0f, item.shrink);
+    live.alignment = item.align_self == CrossAxisAlignment::Auto
+                         ? cross_axis_alignment_
+                         : item.align_self;
     live.extent = clamp_float(item_basis(item, measured, orientation_),
                               min_extent, max_extent);
     base_extent += live.extent;
@@ -264,10 +333,27 @@ void BoxLayout::layout(tc_ui_document_handle document, tc_ui_rect rect) {
   for (size_t i = 0; i < live_items.size(); ++i) {
     const LiveItem &live = live_items[i];
     tc_ui_rect child_rect{};
+    const float cross_available = orientation_ == Orientation::Vertical
+                                      ? content.width
+                                      : content.height;
+    const float measured_cross =
+        std::min(cross_available, cross_size(live.measured, orientation_));
+    const float child_cross =
+        live.alignment == CrossAxisAlignment::Stretch
+            ? cross_available
+            : measured_cross;
+    float cross_offset = 0.0f;
+    if (live.alignment == CrossAxisAlignment::Center) {
+      cross_offset = (cross_available - child_cross) * 0.5f;
+    } else if (live.alignment == CrossAxisAlignment::End) {
+      cross_offset = cross_available - child_cross;
+    }
     if (orientation_ == Orientation::Vertical) {
-      child_rect = tc_ui_rect{content.x, cursor, content.width, extents[i]};
+      child_rect =
+          tc_ui_rect{content.x + cross_offset, cursor, child_cross, extents[i]};
     } else {
-      child_rect = tc_ui_rect{cursor, content.y, extents[i], content.height};
+      child_rect =
+          tc_ui_rect{cursor, content.y + cross_offset, extents[i], child_cross};
     }
     layout_widget(live.widget, document, child_rect);
     cursor += extents[i] + spacing_;

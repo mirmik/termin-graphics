@@ -294,14 +294,14 @@ float cross_size(tc_ui_size size, Orientation orientation) {
 }
 
 float item_basis(const LayoutItem& item, tc_ui_size measured, Orientation orientation) {
-    if (item.policy == LayoutPolicy::Fixed && item.fixed_extent > 0.0f) {
+    if (item.policy == LayoutPolicy::Fixed) {
         return item.fixed_extent;
     }
     return primary_size(measured, orientation);
 }
 
 float item_min_extent(const LayoutItem& item, const NativeWidget* native, Orientation orientation) {
-    if (item.policy == LayoutPolicy::Fixed && item.fixed_extent > 0.0f) {
+    if (item.policy == LayoutPolicy::Fixed) {
         return item.fixed_extent;
     }
     if (item.min_extent > 0.0f) {
@@ -311,7 +311,7 @@ float item_min_extent(const LayoutItem& item, const NativeWidget* native, Orient
 }
 
 float item_max_extent(const LayoutItem& item, const NativeWidget* native, Orientation orientation) {
-    if (item.policy == LayoutPolicy::Fixed && item.fixed_extent > 0.0f) {
+    if (item.policy == LayoutPolicy::Fixed) {
         return item.fixed_extent;
     }
     if (item.max_extent > 0.0f) {

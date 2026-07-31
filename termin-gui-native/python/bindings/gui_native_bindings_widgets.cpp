@@ -47,6 +47,43 @@ void bind_box_layout_api(nb::class_<Ref, Bases...>& cls) {
                  self.widget.throw_pending_exception();
              },
              nb::arg("child"))
+        .def("set_orientation",
+             [](const Ref& self, termin::gui_native::Orientation orientation) {
+                 self.get().set_orientation(orientation);
+             },
+             nb::arg("orientation"))
+        .def_prop_ro("orientation",
+                     [](const Ref& self) { return self.get().orientation(); })
+        .def("set_cross_axis_alignment",
+             [](const Ref& self,
+                termin::gui_native::CrossAxisAlignment alignment) {
+                 self.get().set_cross_axis_alignment(alignment);
+             },
+             nb::arg("alignment"))
+        .def_prop_ro(
+            "cross_axis_alignment",
+            [](const Ref& self) { return self.get().cross_axis_alignment(); })
+        .def("set_child_placement",
+             [](const Ref& self, const WidgetRef& child,
+                termin::gui_native::LayoutPolicy policy, float basis,
+                float grow, float shrink, float minimum, float maximum,
+                termin::gui_native::CrossAxisAlignment align_self) {
+                 if (self.widget.state != child.state) {
+                     throw std::invalid_argument(
+                         "BoxLayout child belongs to another document");
+                 }
+                 const bool applied = self.get().set_child_placement(
+                     child.handle, policy, basis, grow, shrink, minimum,
+                     maximum, align_self);
+                 self.widget.throw_pending_exception();
+                 return applied;
+             },
+             nb::arg("child"), nb::arg("policy"),
+             nb::arg("basis") = 0.0f, nb::arg("grow") = 0.0f,
+             nb::arg("shrink") = 0.0f, nb::arg("minimum") = 0.0f,
+             nb::arg("maximum") = 0.0f,
+             nb::arg("align_self") =
+                 termin::gui_native::CrossAxisAlignment::Auto)
         .def("set_padding",
              [](const Ref& self, termin::gui_native::EdgeInsets padding) {
                  self.get().set_padding(padding);

@@ -1,4 +1,5 @@
 #include <termin/gui_native/uiscript.hpp>
+#include <termin/gui_native/box_layout.hpp>
 
 #include <cassert>
 #include <string>
@@ -166,6 +167,96 @@ void test_generic_layout_spec_validation_and_materialization() {
     }
 }
 
+void test_box_properties_placement_and_strict_validation() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(
+        "uiscript: 2\n"
+        "root:\n"
+        "  type: termin.gui.BoxLayout\n"
+        "  name: box\n"
+        "  orientation: vertical\n"
+        "  padding: [10, 5, 20, 7]\n"
+        "  spacing: 3\n"
+        "  align_items: center\n"
+        "  children:\n"
+        "    - type: termin.gui.IconButton\n"
+        "      name: fixed\n"
+        "      icon: F\n"
+        "      size: 10\n"
+        "      basis: 20\n"
+        "    - type: termin.gui.IconButton\n"
+        "      name: capped\n"
+        "      icon: C\n"
+        "      size: 10\n"
+        "      basis: preferred\n"
+        "      grow: 1\n"
+        "      shrink: 0\n"
+        "      max_extent: 50\n"
+        "      align_self: end\n"
+        "    - type: termin.gui.IconButton\n"
+        "      name: flexible\n"
+        "      icon: X\n"
+        "      size: 10\n"
+        "      grow: 2\n"
+        "      shrink: 0\n"
+        "      align_self: stretch\n");
+    termin_gui_native_test::install_test_text_measurer(loaded.document());
+    loaded.document().layout_roots({0.0f, 0.0f, 100.0f, 200.0f});
+
+    tc_widget* root_widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    assert(root_widget);
+    const auto* box = static_cast<const BoxLayout*>(root_widget->body);
+    assert(box->orientation() == Orientation::Vertical);
+    assert(box->padding().left == 10.0f && box->padding().bottom == 7.0f);
+    assert(box->spacing() == 3.0f);
+    assert(box->cross_axis_alignment() == CrossAxisAlignment::Center);
+    assert(box->items().size() == 3);
+    assert(box->items()[0].policy == LayoutPolicy::Fixed);
+    assert(box->items()[1].grow == 1.0f &&
+           box->items()[1].max_extent == 50.0f);
+    assert(box->items()[2].grow == 2.0f);
+
+    const tc_ui_rect fixed = tc_widget_bounds(tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("fixed").handle));
+    const tc_ui_rect capped = tc_widget_bounds(tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("capped").handle));
+    const tc_ui_rect flexible = tc_widget_bounds(tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("flexible").handle));
+    assert(fixed.x == 40.0f && fixed.y == 5.0f &&
+           fixed.width == 10.0f && fixed.height == 20.0f);
+    assert(capped.x == 70.0f && capped.y == 28.0f &&
+           capped.width == 10.0f && capped.height == 50.0f);
+    assert(flexible.x == 10.0f && flexible.y == 81.0f &&
+           flexible.width == 70.0f && flexible.height == 112.0f);
+
+    const std::vector<std::string> invalid{
+        "      basis: 20\n      grow: 1\n",
+        "      min_extent: 30\n      max_extent: 20\n",
+    };
+    for (const std::string& placement : invalid) {
+        try {
+            loader.parser.parse(
+                "uiscript: 2\nroot:\n  type: termin.gui.HStack\n"
+                "  children:\n    - type: termin.gui.Panel\n" +
+                placement);
+            assert(false);
+        } catch (const UiScriptError& error) {
+            assert(std::string(error.what()).find("root.children[0]") !=
+                   std::string::npos);
+        }
+    }
+    try {
+        loader.parser.parse(
+            "uiscript: 2\nroot:\n  type: termin.gui.Panel\n  grow: 1\n");
+        assert(false);
+    } catch (const UiScriptError& error) {
+        assert(std::string(error.what()).find(
+                   "unsupported termin.gui.Panel property 'grow'") !=
+               std::string::npos);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -173,5 +264,6 @@ int main() {
     test_structural_diagnostics();
     test_materialization_rollback();
     test_generic_layout_spec_validation_and_materialization();
+    test_box_properties_placement_and_strict_validation();
     return 0;
 }

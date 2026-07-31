@@ -5,6 +5,7 @@
 #include <string>
 
 #include <tcbase/tc_log.h>
+#include <termin/gui_native/box_layout.hpp>
 #include <termin/gui_native/h_stack.hpp>
 #include <termin/gui_native/icon_button.hpp>
 #include <termin/gui_native/label.hpp>
@@ -100,6 +101,43 @@ float number_property(const tc_value* properties, const char* name, float fallba
         : fallback;
 }
 
+CrossAxisAlignment alignment_property(
+    const tc_value* properties,
+    const char* name,
+    CrossAxisAlignment fallback
+) {
+    const tc_value* value = property(properties, name);
+    const std::string text =
+        value && value->type == TC_VALUE_STRING && value->data.s
+            ? value->data.s
+            : "";
+    if (text == "auto") return CrossAxisAlignment::Auto;
+    if (text == "stretch") return CrossAxisAlignment::Stretch;
+    if (text == "start") return CrossAxisAlignment::Start;
+    if (text == "center") return CrossAxisAlignment::Center;
+    if (text == "end") return CrossAxisAlignment::End;
+    return fallback;
+}
+
+EdgeInsets padding_property(const tc_value* properties) {
+    const tc_value* value = property(properties, "padding");
+    if (!value) {
+        return {};
+    }
+    if (value->type == TC_VALUE_INT || value->type == TC_VALUE_FLOAT ||
+        value->type == TC_VALUE_DOUBLE) {
+        const float all = number_property(properties, "padding");
+        return {all, all, all, all};
+    }
+    auto number_at = [value](size_t index) {
+        const tc_value* item = &value->data.list.items[index];
+        if (item->type == TC_VALUE_INT) return static_cast<float>(item->data.i);
+        if (item->type == TC_VALUE_FLOAT) return item->data.f;
+        return static_cast<float>(item->data.d);
+    };
+    return {number_at(0), number_at(1), number_at(2), number_at(3)};
+}
+
 bool apply_panel_properties(tc_widget* widget, const tc_value* properties) {
     Color background;
     if (color_property(properties, "background_color", background)) {
@@ -122,8 +160,21 @@ bool apply_overlay_properties(tc_widget* widget, const tc_value* properties) {
 
 bool apply_box_properties(tc_widget* widget, const tc_value* properties) {
     auto* box = static_cast<BoxLayout*>(widget->body);
+    if (const tc_value* orientation = property(properties, "orientation")) {
+        const std::string text = orientation->data.s ? orientation->data.s : "";
+        box->set_orientation(
+            text == "vertical" ? Orientation::Vertical
+                               : Orientation::Horizontal);
+    }
+    if (property(properties, "padding")) {
+        box->set_padding(padding_property(properties));
+    }
     if (property(properties, "spacing")) {
         box->set_spacing(number_property(properties, "spacing"));
+    }
+    if (property(properties, "align_items")) {
+        box->set_cross_axis_alignment(alignment_property(
+            properties, "align_items", CrossAxisAlignment::Stretch));
     }
     return true;
 }
@@ -183,6 +234,20 @@ bool create_label(
     return true;
 }
 
+bool create_box_layout(
+    tc_ui_document_handle,
+    void*,
+    tc_widget_factory_result* result
+) {
+    if (!result) {
+        return false;
+    }
+    auto* widget = new BoxLayout(Orientation::Horizontal);
+    *result = tc_widget_factory_result{
+        widget->c_widget(), &delete_native_widget, TC_WIDGET_OWNED};
+    return true;
+}
+
 bool apply_label_properties(tc_widget* widget, const tc_value* properties) {
     auto* label = static_cast<Label*>(widget->body);
     if (const tc_value* text = property(properties, "text")) {
@@ -209,10 +274,44 @@ bool append_child(
 bool append_box_child(
     tc_widget* parent,
     tc_widget* child,
-    const tc_value*
+    const tc_value* properties
 ) {
-    static_cast<BoxLayout*>(parent->body)->add_child(child->handle);
-    return child->parent == parent;
+    auto* box = static_cast<BoxLayout*>(parent->body);
+    const tc_value* basis = property(properties, "basis");
+    LayoutPolicy policy = LayoutPolicy::Stretch;
+    float basis_value = 0.0f;
+    float grow = 1.0f;
+    float shrink = 1.0f;
+    if (basis) {
+        if (basis->type == TC_VALUE_STRING) {
+            policy = LayoutPolicy::Preferred;
+        } else {
+            policy = LayoutPolicy::Fixed;
+            basis_value = number_property(properties, "basis");
+        }
+        grow = 0.0f;
+        shrink = 0.0f;
+    }
+    if (property(properties, "grow")) {
+        grow = number_property(properties, "grow");
+    }
+    if (property(properties, "shrink")) {
+        shrink = number_property(properties, "shrink");
+    }
+    if (!basis && (property(properties, "grow") ||
+                   property(properties, "shrink"))) {
+        policy = LayoutPolicy::Flex;
+    }
+    box->add_child(child->handle);
+    if (child->parent != parent) {
+        return false;
+    }
+    return box->set_child_placement(
+        child->handle, policy, basis_value, grow, shrink,
+        number_property(properties, "min_extent"),
+        number_property(properties, "max_extent"),
+        alignment_property(
+            properties, "align_self", CrossAxisAlignment::Auto));
 }
 
 bool append_overlay_child(
@@ -343,7 +442,11 @@ bool register_declarative_widget(
 }
 
 constexpr const char* kPanelProperties[] = {"background_color"};
-constexpr const char* kBoxProperties[] = {"spacing"};
+constexpr const char* kBoxProperties[] = {
+    "orientation", "padding", "spacing", "align_items"};
+constexpr const char* kOverlayChildProperties[] = {"anchor", "offset"};
+constexpr const char* kBoxChildProperties[] = {
+    "basis", "grow", "shrink", "min_extent", "max_extent", "align_self"};
 constexpr const char* kIconButtonProperties[] = {
     "icon", "tooltip", "size", "font_size", "background_color",
     "hover_color", "pressed_color", "active_color", "icon_color",
@@ -357,6 +460,8 @@ const tc_uiscript_type_descriptor kOverlayUiScript{
     std::size(kPanelProperties),
     &apply_overlay_properties,
     &append_overlay_child,
+    kOverlayChildProperties,
+    std::size(kOverlayChildProperties),
 };
 const tc_uiscript_type_descriptor kPanelUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -364,6 +469,8 @@ const tc_uiscript_type_descriptor kPanelUiScript{
     std::size(kPanelProperties),
     &apply_panel_properties,
     &append_child,
+    nullptr,
+    0,
 };
 const tc_uiscript_type_descriptor kBoxUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -371,6 +478,8 @@ const tc_uiscript_type_descriptor kBoxUiScript{
     std::size(kBoxProperties),
     &apply_box_properties,
     &append_box_child,
+    kBoxChildProperties,
+    std::size(kBoxChildProperties),
 };
 const tc_uiscript_type_descriptor kIconButtonUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -378,6 +487,8 @@ const tc_uiscript_type_descriptor kIconButtonUiScript{
     std::size(kIconButtonProperties),
     &apply_icon_button_properties,
     nullptr,
+    nullptr,
+    0,
 };
 const tc_uiscript_type_descriptor kLabelUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -385,6 +496,8 @@ const tc_uiscript_type_descriptor kLabelUiScript{
     std::size(kLabelProperties),
     &apply_label_properties,
     nullptr,
+    nullptr,
+    0,
 };
 
 bool register_label_widget() {
@@ -407,6 +520,26 @@ bool register_label_widget() {
         type_name, kBuiltinOwner, kWidgetParent, &descriptor);
 }
 
+bool register_box_layout_widget() {
+    constexpr const char* type_name = NativeWidgetRuntimeType<BoxLayout>::name;
+    if (tc_widget_registry_has(type_name)) {
+        return true;
+    }
+    const tc_widget_factory_descriptor descriptor{
+        TC_WIDGET_FACTORY_ABI_VERSION,
+        TC_LANGUAGE_CXX,
+        &create_box_layout,
+        nullptr,
+        nullptr,
+        nullptr,
+        &reject_declarative_persistence,
+        &reject_declarative_restore,
+        &kBoxUiScript,
+    };
+    return tc_widget_registry_register(
+        type_name, kBuiltinOwner, kWidgetParent, &descriptor);
+}
+
 } // namespace
 
 bool register_builtin_widget_types() {
@@ -417,6 +550,7 @@ bool register_builtin_widget_types() {
             NativeWidgetRuntimeType<OverlayLayout>::name, &kOverlayUiScript) &&
         register_declarative_widget<Panel>(
             NativeWidgetRuntimeType<Panel>::name, &kPanelUiScript) &&
+        register_box_layout_widget() &&
         register_declarative_widget<HStack>(
             NativeWidgetRuntimeType<HStack>::name, &kBoxUiScript) &&
         register_declarative_widget<VStack>(

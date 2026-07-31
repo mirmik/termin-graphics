@@ -1,4 +1,5 @@
 #include <termin/gui_native/ui_document_asset.hpp>
+#include <termin/gui_native/box_layout.hpp>
 
 #include <cassert>
 #include <string>
@@ -10,14 +11,23 @@ namespace {
 constexpr const char* SOURCE = R"(
 uiscript: 2
 root:
-  type: termin.gui.Panel
+  type: termin.gui.BoxLayout
   name: root
-  background_color: [0.1, 0.2, 0.3, 1]
+  orientation: vertical
+  padding: 8
+  spacing: 4
+  align_items: stretch
   children:
     - type: termin.gui.IconButton
       name: action
       icon: A
       tooltip: Action
+      basis: preferred
+      grow: 1
+      shrink: 0
+      min_extent: 24
+      max_extent: 80
+      align_self: center
 )";
 
 void test_compiled_round_trip_and_independent_instances() {
@@ -43,6 +53,17 @@ void test_compiled_round_trip_and_independent_instances() {
     assert(restored.resolve()->compiled_json() == compiled);
     LoadedUiScript loaded = restored.instantiate();
     assert(loaded.named("action").type_name == "termin.gui.IconButton");
+    tc_widget* root = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    assert(root);
+    const auto* box = static_cast<const BoxLayout*>(root->body);
+    assert(box->orientation() == Orientation::Vertical);
+    assert(box->items().size() == 1);
+    assert(box->items()[0].grow == 1.0f);
+    assert(box->items()[0].shrink == 0.0f);
+    assert(box->items()[0].min_extent == 24.0f);
+    assert(box->items()[0].max_extent == 80.0f);
+    assert(box->items()[0].align_self == CrossAxisAlignment::Center);
 }
 
 void test_reload_is_transactional_for_recipe_and_instance() {
@@ -56,6 +77,13 @@ void test_reload_is_transactional_for_recipe_and_instance() {
 
     assert(!asset.reload_source(
         "uiscript: 2\nroot:\n  type: termin.gui.Missing\n"));
+    assert(asset.revision() == initial_revision);
+    assert(tc_ui_document_resolve_widget(
+        loaded.document().handle(), old_root));
+    assert(!asset.reload_source(
+        "uiscript: 2\nroot:\n  type: termin.gui.HStack\n"
+        "  children:\n    - type: termin.gui.Panel\n"
+        "      basis: 20\n      grow: 1\n"));
     assert(asset.revision() == initial_revision);
     assert(tc_ui_document_resolve_widget(
         loaded.document().handle(), old_root));
@@ -88,10 +116,10 @@ void test_generation_handle_and_compiled_validation() {
     assert(!stale.valid());
     assert(!TcUiDocumentAsset(stale).valid());
 
-    const std::size_t dependency = compiled.find("termin.gui.Panel");
+    const std::size_t dependency = compiled.find("termin.gui.BoxLayout");
     assert(dependency != std::string::npos);
     compiled.replace(
-        dependency, std::string("termin.gui.Panel").size(),
+        dependency, std::string("termin.gui.BoxLayout").size(),
         "termin.gui.Missing");
     assert(!TcUiDocumentAsset::declare_compiled_json(
         compiled, "ui-generation").valid());

@@ -29,6 +29,7 @@ int main() {
   test_tab_view_selected_hidden_or_disabled_page_has_no_focus_fallback();
   test_box_layout_shrinks_flexible_children_before_overflowing();
   test_box_layout_respects_child_extent_limits();
+  test_box_layout_cross_axis_alignment_and_exact_placement();
   test_box_layout_allows_preferred_overflow_when_no_child_can_shrink();
   test_document_hit_test_returns_deepest_child();
   test_document_hit_test_prefers_topmost_root();

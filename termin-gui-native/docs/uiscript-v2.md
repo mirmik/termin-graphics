@@ -25,15 +25,48 @@ The initial cross-platform baseline contains:
 
 - `termin.gui.OverlayLayout`;
 - `termin.gui.Panel`;
+- `termin.gui.BoxLayout`;
 - `termin.gui.HStack`;
 - `termin.gui.VStack`;
+- `termin.gui.Label`;
 - `termin.gui.IconButton`.
 
 Common properties are `visible`, `enabled`, and the normalized `layout`
 mapping documented in [widget-layout-spec.md](widget-layout-spec.md). `anchor`
 and `offset` describe placement in an `OverlayLayout`. Widget-specific
-properties are declared by the registered type's UiScript facet. Flex and
-alignment placement remain parent-owned and are not generic widget state.
+properties are declared by the registered type's UiScript facet.
+
+`BoxLayout`, `HStack`, and `VStack` accept `orientation` (`horizontal` or
+`vertical`), non-negative `spacing`, `padding` as one number or
+`[left, top, right, bottom]`, and `align_items` (`stretch`, `start`, `center`,
+or `end`). A child of a Box may additionally declare:
+
+```yaml
+root:
+  type: termin.gui.VStack
+  padding: [12, 8, 12, 8]
+  spacing: 6
+  align_items: stretch
+  children:
+    - type: termin.gui.Panel
+      basis: 48
+    - type: termin.gui.Panel
+      basis: preferred
+      grow: 1
+      shrink: 1
+      min_extent: 80
+      max_extent: 320
+      align_self: center
+```
+
+`basis` is either a non-negative fixed primary-axis extent or `preferred`.
+Without any placement fields, a child retains the historical Stretch policy:
+preferred basis with grow and shrink weights of one. An explicit basis starts
+with zero grow/shrink; weights can be supplied for a preferred basis.
+`max_extent: 0` means unbounded. `align_self` also accepts `auto`, which uses
+the container's `align_items`. Placement metadata belongs exclusively to the
+parent Box facet; using these fields under another parent fails during
+structural validation.
 
 An immutable `UiScriptDescription` records the validated tree and its native
 type dependencies. Materialization creates a fresh document tree for every
