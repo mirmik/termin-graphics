@@ -505,7 +505,7 @@ def test_python_registered_widget_document_serialization_round_trip_and_rollback
 
         serialized = source.serialize()
         assert serialized["$schema"] == "termin.gui.document"
-        assert serialized["version"] == 2
+        assert serialized["version"] == 3
         assert serialized["widgets"][0]["type"] == type_name
         assert serialized["widgets"][0]["state"]["value"] == 41
         assert serialized["widgets"][0]["children"] == [1]

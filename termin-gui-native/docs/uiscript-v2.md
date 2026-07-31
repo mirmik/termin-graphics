@@ -29,9 +29,11 @@ The initial cross-platform baseline contains:
 - `termin.gui.VStack`;
 - `termin.gui.IconButton`.
 
-Common properties are `visible` and `enabled`. `anchor` and `offset` describe
-placement in an `OverlayLayout`. Widget-specific properties are declared by
-the registered type's UiScript facet.
+Common properties are `visible`, `enabled`, and the normalized `layout`
+mapping documented in [widget-layout-spec.md](widget-layout-spec.md). `anchor`
+and `offset` describe placement in an `OverlayLayout`. Widget-specific
+properties are declared by the registered type's UiScript facet. Flex and
+alignment placement remain parent-owned and are not generic widget state.
 
 An immutable `UiScriptDescription` records the validated tree and its native
 type dependencies. Materialization creates a fresh document tree for every

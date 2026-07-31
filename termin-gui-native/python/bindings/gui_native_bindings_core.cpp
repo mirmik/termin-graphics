@@ -52,6 +52,67 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("right", &tc_ui_insets::right)
         .def_rw("bottom", &tc_ui_insets::bottom);
 
+    nb::enum_<tc_ui_length_mode>(m, "LengthMode")
+        .value("Auto", TC_UI_LENGTH_AUTO)
+        .value("Fixed", TC_UI_LENGTH_FIXED)
+        .value("Fill", TC_UI_LENGTH_FILL)
+        .value("Percent", TC_UI_LENGTH_PERCENT);
+
+    nb::class_<tc_ui_length>(m, "LayoutLength")
+        .def(nb::init<tc_ui_length_mode, float>(),
+             nb::arg("mode") = TC_UI_LENGTH_AUTO,
+             nb::arg("value") = 0.0f)
+        .def_rw("mode", &tc_ui_length::mode)
+        .def_rw("value", &tc_ui_length::value);
+
+    nb::enum_<tc_ui_touch_target_policy>(m, "TouchTargetPolicy")
+        .value("None_", TC_UI_TOUCH_TARGET_NONE)
+        .value("LayoutMinimum", TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM);
+
+    nb::class_<tc_ui_widget_layout_spec>(m, "WidgetLayoutSpec")
+        .def("__init__", [](tc_ui_widget_layout_spec* self) {
+            new (self) tc_ui_widget_layout_spec(tc_ui_widget_layout_spec_default());
+        })
+        .def_rw("width", &tc_ui_widget_layout_spec::width)
+        .def_rw("height", &tc_ui_widget_layout_spec::height)
+        .def_rw("min_width", &tc_ui_widget_layout_spec::min_width)
+        .def_rw("min_height", &tc_ui_widget_layout_spec::min_height)
+        .def_rw("max_width", &tc_ui_widget_layout_spec::max_width)
+        .def_rw("max_height", &tc_ui_widget_layout_spec::max_height)
+        .def_rw("margin", &tc_ui_widget_layout_spec::margin)
+        .def_rw("aspect_ratio", &tc_ui_widget_layout_spec::aspect_ratio)
+        .def_rw("touch_target_policy",
+                &tc_ui_widget_layout_spec::touch_target_policy)
+        .def_rw("minimum_touch_target",
+                &tc_ui_widget_layout_spec::minimum_touch_target)
+        .def_prop_ro("normalized", [](const tc_ui_widget_layout_spec& self) {
+            tc_ui_widget_layout_spec normalized;
+            if (!tc_ui_widget_layout_spec_normalize(&self, &normalized)) {
+                throw std::invalid_argument("invalid native UI widget layout spec");
+            }
+            return normalized;
+        })
+        .def(
+            "resolve_size",
+            [](const tc_ui_widget_layout_spec& self,
+               tc_ui_size intrinsic,
+               tc_ui_size parent_extent,
+               bool width_definite,
+               bool height_definite) {
+                tc_ui_size resolved;
+                if (!tc_ui_widget_layout_spec_resolve_size(
+                        &self, intrinsic, parent_extent,
+                        width_definite, height_definite, &resolved)) {
+                    throw std::invalid_argument(
+                        "invalid native UI widget layout size resolution");
+                }
+                return resolved;
+            },
+            nb::arg("intrinsic"),
+            nb::arg("parent_extent"),
+            nb::arg("width_definite"),
+            nb::arg("height_definite"));
+
     nb::class_<tc_ui_presentation_metrics>(m, "PresentationMetrics")
         .def(
             "__init__",

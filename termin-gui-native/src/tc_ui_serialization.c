@@ -28,6 +28,32 @@ static tc_value serialize_size(tc_ui_size value) {
     return serialize_float_list(values, 2);
 }
 
+static tc_value serialize_length(tc_ui_length value) {
+    tc_value result = tc_value_dict_new();
+    tc_value_dict_set(&result, "mode", tc_value_int(value.mode));
+    tc_value_dict_set(&result, "value", tc_value_double(value.value));
+    return result;
+}
+
+static tc_value serialize_layout_spec(tc_ui_widget_layout_spec value) {
+    const float margins[] = {
+        value.margin.left, value.margin.top, value.margin.right, value.margin.bottom};
+    tc_value result = tc_value_dict_new();
+    tc_value_dict_set(&result, "width", serialize_length(value.width));
+    tc_value_dict_set(&result, "height", serialize_length(value.height));
+    tc_value_dict_set(&result, "min_width", tc_value_double(value.min_width));
+    tc_value_dict_set(&result, "min_height", tc_value_double(value.min_height));
+    tc_value_dict_set(&result, "max_width", tc_value_double(value.max_width));
+    tc_value_dict_set(&result, "max_height", tc_value_double(value.max_height));
+    tc_value_dict_set(&result, "margin", serialize_float_list(margins, 4));
+    tc_value_dict_set(&result, "aspect_ratio", tc_value_double(value.aspect_ratio));
+    tc_value_dict_set(
+        &result, "touch_target_policy", tc_value_int(value.touch_target_policy));
+    tc_value_dict_set(
+        &result, "minimum_touch_target", serialize_size(value.minimum_touch_target));
+    return result;
+}
+
 static tc_value serialize_color(tc_ui_color value) {
     const float values[] = {value.r, value.g, value.b, value.a};
     return serialize_float_list(values, 4);
@@ -67,6 +93,7 @@ static tc_value serialize_common(const tc_ui_widget_snapshot* widget) {
     tc_value_dict_set(&result, "min_size", serialize_size(widget->min_size));
     tc_value_dict_set(&result, "preferred_size", serialize_size(widget->preferred_size));
     tc_value_dict_set(&result, "max_size", serialize_size(widget->max_size));
+    tc_value_dict_set(&result, "layout_spec", serialize_layout_spec(widget->layout_spec));
     tc_value_dict_set(&result, "flags", tc_value_int(widget->flags & persisted_flags));
     tc_value_dict_set(&result, "cursor_intent", tc_value_int(widget->cursor_intent));
     tc_value_dict_set(&result, "style_role", tc_value_int(widget->style_role));
@@ -247,6 +274,57 @@ static bool read_float_list(const tc_value* value, float* out, size_t count) {
     return true;
 }
 
+static bool read_length(const tc_value* data, tc_ui_length* out) {
+    tc_value* mode = required_value(data, "mode", TC_VALUE_INT);
+    tc_value* value = data && data->type == TC_VALUE_DICT
+        ? tc_value_dict_get((tc_value*)data, "value")
+        : NULL;
+    float parsed_value;
+    if (!mode || !read_float_value(value, &parsed_value) ||
+        mode->data.i < TC_UI_LENGTH_AUTO || mode->data.i > TC_UI_LENGTH_PERCENT) {
+        return false;
+    }
+    *out = (tc_ui_length){(tc_ui_length_mode)mode->data.i, parsed_value};
+    return true;
+}
+
+static bool read_layout_spec(const tc_value* data, tc_ui_widget_layout_spec* out) {
+    tc_value* width = required_value(data, "width", TC_VALUE_DICT);
+    tc_value* height = required_value(data, "height", TC_VALUE_DICT);
+    tc_value* margin = required_value(data, "margin", TC_VALUE_LIST);
+    tc_value* touch_policy = required_value(data, "touch_target_policy", TC_VALUE_INT);
+    tc_value* minimum_touch_target =
+        required_value(data, "minimum_touch_target", TC_VALUE_LIST);
+    tc_ui_widget_layout_spec parsed = tc_ui_widget_layout_spec_default();
+    float margins[4];
+    float touch_size[2];
+#define READ_LAYOUT_FLOAT(field)                                                                  \
+    do {                                                                                          \
+        tc_value* value = data && data->type == TC_VALUE_DICT                                     \
+            ? tc_value_dict_get((tc_value*)data, #field)                                          \
+            : NULL;                                                                               \
+        if (!read_float_value(value, &parsed.field))                                               \
+            return false;                                                                         \
+    } while (0)
+    if (!out || !width || !height || !margin || !touch_policy ||
+        !minimum_touch_target || !read_length(width, &parsed.width) ||
+        !read_length(height, &parsed.height) ||
+        !read_float_list(margin, margins, 4) ||
+        !read_float_list(minimum_touch_target, touch_size, 2)) {
+        return false;
+    }
+    READ_LAYOUT_FLOAT(min_width);
+    READ_LAYOUT_FLOAT(min_height);
+    READ_LAYOUT_FLOAT(max_width);
+    READ_LAYOUT_FLOAT(max_height);
+    READ_LAYOUT_FLOAT(aspect_ratio);
+    parsed.margin = (tc_ui_insets){margins[0], margins[1], margins[2], margins[3]};
+    parsed.touch_target_policy = (tc_ui_touch_target_policy)touch_policy->data.i;
+    parsed.minimum_touch_target = (tc_ui_size){touch_size[0], touch_size[1]};
+    return tc_ui_widget_layout_spec_normalize(&parsed, out);
+#undef READ_LAYOUT_FLOAT
+}
+
 static bool read_style(const tc_value* data, tc_ui_style* out) {
     tc_value* value;
     float color[4];
@@ -300,6 +378,7 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     tc_value* min_size = required_value(common, "min_size", TC_VALUE_LIST);
     tc_value* preferred_size = required_value(common, "preferred_size", TC_VALUE_LIST);
     tc_value* max_size = required_value(common, "max_size", TC_VALUE_LIST);
+    tc_value* layout_spec = required_value(common, "layout_spec", TC_VALUE_DICT);
     tc_value* flags = required_value(common, "flags", TC_VALUE_INT);
     tc_value* cursor_intent = required_value(common, "cursor_intent", TC_VALUE_INT);
     tc_value* style_role = required_value(common, "style_role", TC_VALUE_INT);
@@ -312,12 +391,14 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     tc_ui_size parsed_preferred;
     tc_ui_size parsed_max;
     tc_ui_style_override parsed_override = {0};
+    tc_ui_widget_layout_spec parsed_layout_spec;
     float parsed_rect_values[4];
     float parsed_min_values[2];
     float parsed_preferred_values[2];
     float parsed_max_values[2];
     if (!widget || !stable_id || !name || !debug_name || !bounds || !min_size || !preferred_size ||
-        !max_size || !flags || !cursor_intent || !style_role || !override || flags->data.i < 0 ||
+        !max_size || !layout_spec || !flags || !cursor_intent || !style_role || !override ||
+        flags->data.i < 0 ||
         ((uint64_t)flags->data.i & ~persisted_flags) != 0 || style_role->data.i < 0 ||
         style_role->data.i >= TC_UI_STYLE_ROLE_COUNT ||
         cursor_intent->data.i < TC_UI_CURSOR_INHERIT ||
@@ -327,7 +408,8 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     if (!read_float_list(bounds, parsed_rect_values, 4) ||
         !read_float_list(min_size, parsed_min_values, 2) ||
         !read_float_list(preferred_size, parsed_preferred_values, 2) ||
-        !read_float_list(max_size, parsed_max_values, 2)) {
+        !read_float_list(max_size, parsed_max_values, 2) ||
+        !read_layout_spec(layout_spec, &parsed_layout_spec)) {
         return false;
     }
     parsed_bounds = (tc_ui_rect){parsed_rect_values[0], parsed_rect_values[1],
@@ -356,6 +438,9 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     tc_widget_set_min_size(widget, parsed_min);
     tc_widget_set_preferred_size(widget, parsed_preferred);
     tc_widget_set_max_size(widget, parsed_max);
+    if (!tc_widget_set_layout_spec(widget, &parsed_layout_spec)) {
+        return false;
+    }
     tc_widget_set_focusable(widget, (flags->data.i & TC_WIDGET_FOCUSABLE) != 0);
     tc_widget_set_visible(widget, (flags->data.i & TC_WIDGET_VISIBLE) != 0);
     tc_widget_set_enabled(widget, (flags->data.i & TC_WIDGET_ENABLED) != 0);

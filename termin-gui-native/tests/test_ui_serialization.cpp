@@ -97,6 +97,12 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(tc_widget_set_debug_name(root_widget, "Root Debug"));
     tc_widget_set_bounds(root_widget, tc_ui_rect{1.0f, 2.0f, 300.0f, 200.0f});
     tc_widget_set_preferred_size(child_widget, tc_ui_size{80.0f, 24.0f});
+    tc_ui_widget_layout_spec layout_spec = tc_ui_widget_layout_spec_default();
+    layout_spec.width = tc_ui_length{TC_UI_LENGTH_PERCENT, 0.75f};
+    layout_spec.height = tc_ui_length{TC_UI_LENGTH_FILL, 0.0f};
+    layout_spec.min_width = 48.0f;
+    layout_spec.margin = tc_ui_insets{1.0f, 2.0f, 3.0f, 4.0f};
+    assert(tc_widget_set_layout_spec(child_widget, &layout_spec));
     tc_widget_set_focusable(child_widget, true);
     tc_widget_set_enabled(child_widget, false);
     assert(tc_widget_set_cursor_intent(child_widget, TC_UI_CURSOR_CROSSHAIR));
@@ -144,6 +150,13 @@ void test_document_round_trip_preserves_structure_common_and_type_state() {
     assert(!tc_widget_is_enabled(restored_child_widget));
     assert(tc_widget_cursor_intent(restored_child_widget) == TC_UI_CURSOR_CROSSHAIR);
     assert(tc_widget_style_role(restored_child_widget) == TC_UI_STYLE_BUTTON);
+    const tc_ui_widget_layout_spec restored_layout =
+        tc_widget_layout_spec(restored_child_widget);
+    assert(restored_layout.width.mode == TC_UI_LENGTH_PERCENT);
+    assert(restored_layout.width.value == 0.75f);
+    assert(restored_layout.height.mode == TC_UI_LENGTH_FILL);
+    assert(restored_layout.min_width == 48.0f);
+    assert(restored_layout.margin.bottom == 4.0f);
     const tc_ui_style_override restored_style = tc_widget_style_override(restored_child_widget);
     assert(restored_style.fields == style.fields);
     assert(restored_style.flags == style.flags);

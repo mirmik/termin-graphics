@@ -90,6 +90,12 @@ public:
     }
     void clear_style_override() { tc_widget_clear_style_override(&_widget); }
     tc_ui_style_override style_override() const { return tc_widget_style_override(&_widget); }
+    tc_ui_widget_layout_spec layout_spec() const {
+        return tc_widget_layout_spec(&_widget);
+    }
+    bool set_layout_spec(const tc_ui_widget_layout_spec& spec) {
+        return tc_widget_set_layout_spec(&_widget, &spec);
+    }
 
 protected:
     explicit Widget(const tc_widget_vtable* vtable, const char* debug_name = nullptr) {

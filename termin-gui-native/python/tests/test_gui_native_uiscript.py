@@ -7,9 +7,14 @@ from termin.gui_native import (
     tc_ui_document_create,
     DrawList,
     PaintContext,
+    LayoutLength,
+    LengthMode,
     PointerEvent,
     PointerEventType,
     Rect,
+    Size,
+    TouchTargetPolicy,
+    WidgetLayoutSpec,
     UiDocumentAsset,
     UiScriptError,
     UiScriptLoader,
@@ -21,6 +26,9 @@ uiscript: 2
 root:
   type: termin.gui.OverlayLayout
   name: overlay
+  layout:
+    width: fill
+    height: fill
   background_color: [0, 0, 0, 0]
   children:
     - type: termin.gui.HStack
@@ -40,11 +48,46 @@ root:
 """
 
 
+def test_generic_layout_spec_has_matching_python_and_uiscript_values():
+    spec = WidgetLayoutSpec()
+    assert spec.width.mode == LengthMode.Auto
+    spec.width = LayoutLength(LengthMode.Percent, 0.5)
+    spec.min_width = 100
+    spec.touch_target_policy = TouchTargetPolicy.LayoutMinimum
+    spec.minimum_touch_target = Size(48, 44)
+    resolved = spec.resolve_size(Size(20, 10), Size(320, 200), True, True)
+    assert (resolved.width, resolved.height) == pytest.approx((160, 44))
+
+    loaded = UiScriptLoader().load_string(
+        """
+uiscript: 2
+root:
+  type: termin.gui.Panel
+  layout:
+    width: 50%
+    min_width: 100
+    minimum_touch_target: [48, 44]
+"""
+    )
+    materialized = loaded.root.widget.layout_spec
+    assert materialized.width.mode == LengthMode.Percent
+    assert materialized.width.value == pytest.approx(spec.width.value)
+    assert materialized.min_width == spec.min_width
+    assert materialized.touch_target_policy == TouchTargetPolicy.LayoutMinimum
+    assert materialized.minimum_touch_target.height == 44
+    assert (
+        loaded.document.inspect_snapshot()["widgets"][0]["layout_spec"].width.value
+        == pytest.approx(0.5)
+    )
+    loaded.close()
+
+
 def test_uiscript_v2_parses_to_native_description():
     description = UiScriptLoader().parser.parse(CAMERA_SCRIPT)
 
     assert description.version == 2
     assert description.root.type_name == "termin.gui.OverlayLayout"
+    assert description.root.properties["layout"]["width"] == "fill"
     assert description.type_dependencies == [
         "termin.gui.OverlayLayout",
         "termin.gui.HStack",
@@ -95,6 +138,7 @@ def test_uiscript_materialization_lookup_reload_and_teardown():
     assert document.live_widget_count == 3
     assert document.root_count == 1
     assert loaded.root.widget.stable_id == "overlay"
+    assert loaded.root.widget.layout_spec.width.mode == LengthMode.Fill
     assert loaded.named("inspect_btn").widget.name == "inspect_btn"
     assert loaded.named("inspect_btn").tooltip == "Inspect"
     assert loaded.named("inspect_btn").widget.preferred_size.width == pytest.approx(26.0)

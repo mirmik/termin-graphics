@@ -1,6 +1,7 @@
 #include <termin/gui_native/uiscript.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
@@ -48,11 +49,139 @@ void validate_color(tc::trent_view value, const std::string& path) {
     }
 }
 
+tc_ui_length parse_layout_length(tc::trent_view value, const std::string& path) {
+    if (is_number(value)) {
+        validate_number(value, path, true);
+        return tc_ui_length{
+            TC_UI_LENGTH_FIXED, static_cast<float>(value.as_numer())};
+    }
+    if (!value.is_string()) {
+        fail(path, "expected 'auto', 'fill', a non-negative number, or a percentage");
+    }
+    const std::string text = value.as_string();
+    if (text == "auto") {
+        return tc_ui_length{TC_UI_LENGTH_AUTO, 0.0f};
+    }
+    if (text == "fill") {
+        return tc_ui_length{TC_UI_LENGTH_FILL, 0.0f};
+    }
+    if (text.size() > 1 && text.back() == '%') {
+        try {
+            size_t consumed = 0;
+            const double percent = std::stod(text.substr(0, text.size() - 1), &consumed);
+            if (consumed != text.size() - 1 || !std::isfinite(percent) ||
+                percent < 0.0 || percent > 100.0) {
+                fail(path, "percentage must be in the [0%, 100%] range");
+            }
+            return tc_ui_length{
+                TC_UI_LENGTH_PERCENT, static_cast<float>(percent / 100.0)};
+        } catch (const std::invalid_argument&) {
+            fail(path, "invalid percentage length '" + text + "'");
+        } catch (const std::out_of_range&) {
+            fail(path, "percentage length is out of range");
+        }
+    }
+    fail(path, "unsupported layout length '" + text + "'");
+}
+
+tc_ui_widget_layout_spec parse_layout_spec(
+    tc::trent_view value,
+    const std::string& path
+) {
+    if (!value.is_dict()) {
+        fail(path, "expected a layout mapping");
+    }
+    tc_ui_widget_layout_spec spec = tc_ui_widget_layout_spec_default();
+    static const std::unordered_set<std::string> supported{
+        "width", "height", "min_width", "min_height", "max_width",
+        "max_height", "margin", "aspect_ratio", "minimum_touch_target"};
+    for (const auto entry : value.as_dict()) {
+        const std::string key = entry.key ? entry.key : "";
+        if (!supported.contains(key)) {
+            fail(path, "unsupported layout property '" + key + "'");
+        }
+    }
+    if (tc::trent_view field = value["width"]; field) {
+        spec.width = parse_layout_length(field, path + ".width");
+    }
+    if (tc::trent_view field = value["height"]; field) {
+        spec.height = parse_layout_length(field, path + ".height");
+    }
+#define READ_NONNEGATIVE_LAYOUT_FIELD(field)                                                   \
+    if (tc::trent_view item = value[#field]; item) {                                           \
+        validate_number(item, path + "." #field, true);                                        \
+        spec.field = static_cast<float>(item.as_numer());                                      \
+    }
+    READ_NONNEGATIVE_LAYOUT_FIELD(min_width)
+    READ_NONNEGATIVE_LAYOUT_FIELD(min_height)
+    READ_NONNEGATIVE_LAYOUT_FIELD(max_width)
+    READ_NONNEGATIVE_LAYOUT_FIELD(max_height)
+#undef READ_NONNEGATIVE_LAYOUT_FIELD
+    if (tc::trent_view margin = value["margin"]; margin) {
+        if (is_number(margin)) {
+            validate_number(margin, path + ".margin", true);
+            const float all = static_cast<float>(margin.as_numer());
+            spec.margin = tc_ui_insets{all, all, all, all};
+        } else if (margin.is_list() && margin.size() == 4) {
+            validate_number(margin[0], path + ".margin[0]", true);
+            validate_number(margin[1], path + ".margin[1]", true);
+            validate_number(margin[2], path + ".margin[2]", true);
+            validate_number(margin[3], path + ".margin[3]", true);
+            spec.margin = tc_ui_insets{
+                static_cast<float>(margin[0].as_numer()),
+                static_cast<float>(margin[1].as_numer()),
+                static_cast<float>(margin[2].as_numer()),
+                static_cast<float>(margin[3].as_numer())};
+        } else {
+            fail(path + ".margin", "expected a number or [left, top, right, bottom]");
+        }
+    }
+    if (tc::trent_view ratio = value["aspect_ratio"]; ratio) {
+        validate_number(ratio, path + ".aspect_ratio");
+        if (ratio.as_numer() <= 0.0) {
+            fail(path + ".aspect_ratio", "expected a value > 0");
+        }
+        spec.aspect_ratio = static_cast<float>(ratio.as_numer());
+    }
+    if (tc::trent_view target = value["minimum_touch_target"]; target) {
+        if (target.is_bool()) {
+            if (target.as_bool()) {
+                fail(path + ".minimum_touch_target",
+                     "true is ambiguous; provide a size or use false");
+            }
+        } else if (is_number(target)) {
+            validate_number(target, path + ".minimum_touch_target", true);
+            const float both = static_cast<float>(target.as_numer());
+            spec.touch_target_policy = TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM;
+            spec.minimum_touch_target = tc_ui_size{both, both};
+        } else if (target.is_list() && target.size() == 2) {
+            validate_number(target[0], path + ".minimum_touch_target[0]", true);
+            validate_number(target[1], path + ".minimum_touch_target[1]", true);
+            spec.touch_target_policy = TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM;
+            spec.minimum_touch_target = tc_ui_size{
+                static_cast<float>(target[0].as_numer()),
+                static_cast<float>(target[1].as_numer())};
+        } else {
+            fail(path + ".minimum_touch_target",
+                 "expected false, a size, or [width, height]");
+        }
+    }
+    tc_ui_widget_layout_spec normalized;
+    if (!tc_ui_widget_layout_spec_normalize(&spec, &normalized)) {
+        fail(path, "invalid or over-constrained widget layout spec");
+    }
+    return normalized;
+}
+
 void validate_property(
     const std::string& name,
     tc::trent_view value,
     const std::string& path
 ) {
+    if (name == "layout") {
+        (void)parse_layout_spec(value, path);
+        return;
+    }
     if (name == "visible" || name == "enabled" || name == "active") {
         if (!value.is_bool()) fail(path, "expected a boolean");
         return;
@@ -151,7 +280,7 @@ UiScriptNode parse_node(
     static const std::unordered_set<std::string> structural{
         "type", "name", "children"};
     static const std::unordered_set<std::string> common{
-        "visible", "enabled", "anchor", "offset"};
+        "visible", "enabled", "anchor", "offset", "layout"};
     for (const auto entry : source.as_dict()) {
         const std::string key = entry.key ? entry.key : "";
         if (structural.contains(key)) {
@@ -218,6 +347,13 @@ MaterializedWidget materialize_node(
     }
     if (tc::trent_view enabled = node.properties["enabled"]; enabled) {
         tc_widget_set_enabled(widget, enabled.as_bool());
+    }
+    if (tc::trent_view layout = node.properties["layout"]; layout) {
+        const tc_ui_widget_layout_spec spec =
+            parse_layout_spec(layout, node.source_path + ".layout");
+        if (!tc_widget_set_layout_spec(widget, &spec)) {
+            fail(node.source_path + ".layout", "widget rejected normalized layout spec");
+        }
     }
     const tc_uiscript_type_descriptor* descriptor =
         tc_uiscript_type_descriptor_get(node.type_name.c_str());

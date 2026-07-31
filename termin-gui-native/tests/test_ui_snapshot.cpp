@@ -69,6 +69,10 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     tc_widget_set_bounds(&root.widget, tc_ui_rect{0.0f, 0.0f, 120.0f, 80.0f});
     tc_widget_set_bounds(&child.widget, tc_ui_rect{5.0f, 5.0f, 40.0f, 30.0f});
     tc_widget_set_preferred_size(&child.widget, tc_ui_size{40.0f, 30.0f});
+    tc_ui_widget_layout_spec child_layout = tc_ui_widget_layout_spec_default();
+    child_layout.width = tc_ui_length{TC_UI_LENGTH_FIXED, 40.0f};
+    child_layout.margin = tc_ui_insets{2.0f, 3.0f, 4.0f, 5.0f};
+    assert(tc_widget_set_layout_spec(&child.widget, &child_layout));
     tc_widget_set_focusable(&child.widget, true);
     assert(tc_widget_set_cursor_intent(&child.widget, TC_UI_CURSOR_CROSSHAIR));
 
@@ -121,6 +125,9 @@ void test_snapshot_copies_topology_metadata_and_interaction_state() {
     assert(tc_widget_handle_eq(snapshot.children()[root_data->child_offset], child_handle));
     assert(tc_widget_handle_eq(child_data->parent, root_handle));
     assert(child_data->preferred_size.width == 40.0f);
+    assert(child_data->layout_spec.width.mode == TC_UI_LENGTH_FIXED);
+    assert(child_data->layout_spec.width.value == 40.0f);
+    assert(child_data->layout_spec.margin.bottom == 5.0f);
     assert((child_data->flags & TC_WIDGET_FOCUSABLE) != 0);
     assert(child_data->cursor_intent == TC_UI_CURSOR_CROSSHAIR);
     assert(tc_widget_handle_eq(snapshot.data().hovered, child_handle));

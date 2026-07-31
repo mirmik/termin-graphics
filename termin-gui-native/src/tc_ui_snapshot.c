@@ -141,6 +141,7 @@ bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
         target->min_size = widget->min_size;
         target->preferred_size = widget->preferred_size;
         target->max_size = widget->max_size;
+        target->layout_spec = widget->layout_spec;
         target->flags = widget->flags;
         target->dirty_flags = tc_widget_dirty_flags(widget);
         target->cursor_intent = widget->cursor_intent;

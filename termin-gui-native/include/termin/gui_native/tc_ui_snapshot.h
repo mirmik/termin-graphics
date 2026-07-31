@@ -20,6 +20,7 @@ typedef struct tc_ui_widget_snapshot {
     tc_ui_size min_size;
     tc_ui_size preferred_size;
     tc_ui_size max_size;
+    tc_ui_widget_layout_spec layout_spec;
     uint32_t flags;
     uint32_t dirty_flags;
     tc_ui_cursor_intent cursor_intent;

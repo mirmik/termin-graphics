@@ -1383,6 +1383,70 @@ static void test_tc_document_is_a_non_owning_handle_value() {
     assert(!tc_ui_document_is_valid(handle));
 }
 
+static void test_generic_widget_layout_spec_contract() {
+    tc_ui_widget_layout_spec spec = tc_ui_widget_layout_spec_default();
+    assert(spec.width.mode == TC_UI_LENGTH_AUTO);
+    assert(spec.height.mode == TC_UI_LENGTH_AUTO);
+    assert(spec.touch_target_policy == TC_UI_TOUCH_TARGET_NONE);
+
+    TestWidget widget{};
+    tc_widget_init_unowned(&widget.widget, nullptr, TC_LANGUAGE_C, &widget);
+    tc_ui_size resolved{};
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, false, &resolved));
+    assert(resolved.width == 80.0f && resolved.height == 30.0f);
+
+    spec.width = {TC_UI_LENGTH_FIXED, 120.0f};
+    spec.height = {TC_UI_LENGTH_FILL, 91.0f};
+    spec.min_height = 40.0f;
+    spec.max_height = 150.0f;
+    spec.margin = {1.0f, 2.0f, 3.0f, 4.0f};
+    assert(tc_widget_set_layout_spec(&widget.widget, &spec));
+    const tc_ui_widget_layout_spec stored = tc_widget_layout_spec(&widget.widget);
+    assert(stored.width.mode == TC_UI_LENGTH_FIXED && stored.width.value == 120.0f);
+    assert(stored.height.mode == TC_UI_LENGTH_FILL && stored.height.value == 0.0f);
+    assert(stored.margin.bottom == 4.0f);
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
+    assert(resolved.width == 120.0f && resolved.height == 150.0f);
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, false, &resolved));
+    assert(resolved.width == 120.0f && resolved.height == 40.0f);
+
+    spec = tc_ui_widget_layout_spec_default();
+    spec.width = {TC_UI_LENGTH_PERCENT, 0.25f};
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
+    assert(resolved.width == 100.0f);
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, true, &resolved));
+    assert(resolved.width == 80.0f);
+
+    spec = tc_ui_widget_layout_spec_default();
+    spec.width = {TC_UI_LENGTH_FIXED, 160.0f};
+    spec.aspect_ratio = 2.0f;
+    spec.touch_target_policy = TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM;
+    spec.minimum_touch_target = {180.0f, 90.0f};
+    assert(tc_ui_widget_layout_spec_resolve_size(
+        &spec, {10.0f, 10.0f}, {}, false, false, &resolved));
+    assert(resolved.width == 180.0f && resolved.height == 90.0f);
+
+    const tc_ui_widget_layout_spec previous = tc_widget_layout_spec(&widget.widget);
+    spec.height = {TC_UI_LENGTH_FIXED, 50.0f};
+    assert(!tc_widget_set_layout_spec(&widget.widget, &spec));
+    const tc_ui_widget_layout_spec unchanged = tc_widget_layout_spec(&widget.widget);
+    assert(unchanged.width.mode == previous.width.mode);
+    assert(unchanged.height.mode == previous.height.mode);
+
+    spec = tc_ui_widget_layout_spec_default();
+    spec.width = {TC_UI_LENGTH_PERCENT, 1.1f};
+    assert(!tc_widget_set_layout_spec(&widget.widget, &spec));
+    spec = tc_ui_widget_layout_spec_default();
+    spec.min_width = 20.0f;
+    spec.max_width = 10.0f;
+    assert(!tc_widget_set_layout_spec(&widget.widget, &spec));
+}
+
 int main() {
     test_init_defaults_and_common_state();
     test_borrowed_widget_can_be_adopted_and_released();
@@ -1410,5 +1474,6 @@ int main() {
     test_cursor_intent_inheritance_transitions_and_lifetime();
     test_pointer_cancel_reasons_and_callback_mutation();
     test_tc_document_is_a_non_owning_handle_value();
+    test_generic_widget_layout_spec_contract();
     return EXIT_SUCCESS;
 }

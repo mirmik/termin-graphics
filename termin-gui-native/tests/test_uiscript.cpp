@@ -119,11 +119,59 @@ void test_materialization_rollback() {
     tc_ui_document_destroy(handle);
 }
 
+void test_generic_layout_spec_validation_and_materialization() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(
+        "uiscript: 2\n"
+        "root:\n"
+        "  type: termin.gui.Panel\n"
+        "  name: adaptive_panel\n"
+        "  layout:\n"
+        "    width: 50%\n"
+        "    height: fill\n"
+        "    min_width: 120\n"
+        "    max_width: 360\n"
+        "    margin: [4, 8, 12, 16]\n"
+        "    minimum_touch_target: [48, 44]\n");
+    tc_widget* widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    assert(widget);
+    const tc_ui_widget_layout_spec spec = tc_widget_layout_spec(widget);
+    assert(spec.width.mode == TC_UI_LENGTH_PERCENT);
+    assert(spec.width.value == 0.5f);
+    assert(spec.height.mode == TC_UI_LENGTH_FILL);
+    assert(spec.min_width == 120.0f && spec.max_width == 360.0f);
+    assert(spec.margin.left == 4.0f && spec.margin.bottom == 16.0f);
+    assert(spec.touch_target_policy == TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM);
+    assert(spec.minimum_touch_target.width == 48.0f);
+    assert(loaded.root().properties["layout"]["width"].as_string() == "50%");
+
+    const std::vector<std::string> invalid{
+        "    width: 110%\n",
+        "    min_width: 20\n    max_width: 10\n",
+        "    width: 10\n    height: 10\n    aspect_ratio: 2\n",
+        "    minimum_touch_target: true\n",
+        "    max_width: 40\n    minimum_touch_target: [48, 44]\n",
+        "    mystery: 1\n",
+    };
+    for (const std::string& layout : invalid) {
+        try {
+            loader.parser.parse(
+                "uiscript: 2\nroot:\n  type: termin.gui.Panel\n  layout:\n" +
+                layout);
+            assert(false);
+        } catch (const UiScriptError& error) {
+            assert(std::string(error.what()).find("root.layout") != std::string::npos);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
     test_parse_and_independent_materialization();
     test_structural_diagnostics();
     test_materialization_rollback();
+    test_generic_layout_spec_validation_and_materialization();
     return 0;
 }

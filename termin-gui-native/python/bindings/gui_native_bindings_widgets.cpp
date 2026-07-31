@@ -148,6 +148,16 @@ void bind_gui_native_widgets(nb::module_& m) {
                 tc_widget_set_max_size(self.resolve_checked(), value);
             })
         .def_prop_rw(
+            "layout_spec",
+            [](const WidgetRef& self) {
+                return tc_widget_layout_spec(self.resolve_checked());
+            },
+            [](const WidgetRef& self, const tc_ui_widget_layout_spec& value) {
+                if (!tc_widget_set_layout_spec(self.resolve_checked(), &value)) {
+                    throw std::invalid_argument("invalid native UI widget layout spec");
+                }
+            })
+        .def_prop_rw(
             "visible",
             [](const WidgetRef& self) { return tc_widget_is_visible(self.resolve_checked()); },
             [](const WidgetRef& self, bool value) {

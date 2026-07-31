@@ -941,6 +941,7 @@ nb::dict document_snapshot_to_python(
     item["min_size"] = widget.min_size;
     item["preferred_size"] = widget.preferred_size;
     item["max_size"] = widget.max_size;
+    item["layout_spec"] = widget.layout_spec;
     item["flags"] = widget.flags;
     item["dirty_flags"] = widget.dirty_flags;
     item["cursor_intent"] = widget.cursor_intent;

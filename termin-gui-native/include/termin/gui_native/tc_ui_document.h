@@ -56,6 +56,36 @@ typedef struct tc_ui_insets {
     float bottom;
 } tc_ui_insets;
 
+typedef enum tc_ui_length_mode {
+    TC_UI_LENGTH_AUTO = 0,
+    TC_UI_LENGTH_FIXED = 1,
+    TC_UI_LENGTH_FILL = 2,
+    TC_UI_LENGTH_PERCENT = 3
+} tc_ui_length_mode;
+
+typedef struct tc_ui_length {
+    tc_ui_length_mode mode;
+    float value;
+} tc_ui_length;
+
+typedef enum tc_ui_touch_target_policy {
+    TC_UI_TOUCH_TARGET_NONE = 0,
+    TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM = 1
+} tc_ui_touch_target_policy;
+
+typedef struct tc_ui_widget_layout_spec {
+    tc_ui_length width;
+    tc_ui_length height;
+    float min_width;
+    float min_height;
+    float max_width;
+    float max_height;
+    tc_ui_insets margin;
+    float aspect_ratio;
+    tc_ui_touch_target_policy touch_target_policy;
+    tc_ui_size minimum_touch_target;
+} tc_ui_widget_layout_spec;
+
 typedef struct tc_ui_presentation_metrics {
     float density_scale;
     float font_scale;
@@ -524,6 +554,7 @@ struct tc_widget {
     tc_ui_size min_size;
     tc_ui_size preferred_size;
     tc_ui_size max_size;
+    tc_ui_widget_layout_spec layout_spec;
 
     const char* stable_id;
     const char* name;
@@ -598,6 +629,30 @@ TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_preferred_size(const tc_widget* widge
 TERMIN_GUI_NATIVE_API void tc_widget_set_preferred_size(tc_widget* widget, tc_ui_size size);
 TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_max_size(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_max_size(tc_widget* widget, tc_ui_size size);
+TERMIN_GUI_NATIVE_API tc_ui_widget_layout_spec tc_ui_widget_layout_spec_default(void);
+/* Validates and canonicalizes a layout spec. On failure out_spec is unchanged. */
+TERMIN_GUI_NATIVE_API bool tc_ui_widget_layout_spec_normalize(
+    const tc_ui_widget_layout_spec* spec,
+    tc_ui_widget_layout_spec* out_spec
+);
+/*
+ * Resolves width and height against definite parent content extents. Percentage
+ * and fill lengths use intrinsic size when their axis is not definite.
+ */
+TERMIN_GUI_NATIVE_API bool tc_ui_widget_layout_spec_resolve_size(
+    const tc_ui_widget_layout_spec* spec,
+    tc_ui_size intrinsic_size,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite,
+    tc_ui_size* out_size
+);
+TERMIN_GUI_NATIVE_API tc_ui_widget_layout_spec
+tc_widget_layout_spec(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_layout_spec(
+    tc_widget* widget,
+    const tc_ui_widget_layout_spec* spec
+);
 TERMIN_GUI_NATIVE_API tc_widget* tc_widget_parent(tc_widget* widget);
 TERMIN_GUI_NATIVE_API const tc_widget* tc_widget_parent_const(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API size_t tc_widget_child_count(const tc_widget* widget);

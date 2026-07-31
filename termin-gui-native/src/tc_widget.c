@@ -1,5 +1,6 @@
 #include "tc_ui_document_internal.h"
 
+#include <math.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,7 @@ void tc_widget_init_unowned(
     widget->flags = TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED | TC_WIDGET_TREE_PARTICIPATING;
     widget->cursor_intent = TC_UI_CURSOR_INHERIT;
     widget->style_role = TC_UI_STYLE_GENERIC;
+    widget->layout_spec = tc_ui_widget_layout_spec_default();
 }
 
 static void mark_style_subtree_dirty(tc_widget* widget) {
@@ -413,6 +415,184 @@ void tc_widget_set_max_size(tc_widget* widget, tc_ui_size size) {
     }
     widget->max_size = size;
     tc_widget_mark_dirty(widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+}
+
+tc_ui_widget_layout_spec tc_ui_widget_layout_spec_default(void) {
+    tc_ui_widget_layout_spec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.width.mode = TC_UI_LENGTH_AUTO;
+    spec.height.mode = TC_UI_LENGTH_AUTO;
+    spec.touch_target_policy = TC_UI_TOUCH_TARGET_NONE;
+    return spec;
+}
+
+static bool normalize_length(tc_ui_length input, tc_ui_length* output) {
+    if (!output || input.mode < TC_UI_LENGTH_AUTO ||
+        input.mode > TC_UI_LENGTH_PERCENT || !isfinite(input.value)) {
+        return false;
+    }
+    if ((input.mode == TC_UI_LENGTH_FIXED && input.value < 0.0f) ||
+        (input.mode == TC_UI_LENGTH_PERCENT &&
+         (input.value < 0.0f || input.value > 1.0f))) {
+        return false;
+    }
+    *output = input;
+    if (input.mode == TC_UI_LENGTH_AUTO || input.mode == TC_UI_LENGTH_FILL) {
+        output->value = 0.0f;
+    } else if (output->value == 0.0f) {
+        output->value = 0.0f;
+    }
+    return true;
+}
+
+bool tc_ui_widget_layout_spec_normalize(
+    const tc_ui_widget_layout_spec* spec,
+    tc_ui_widget_layout_spec* out_spec
+) {
+    tc_ui_widget_layout_spec normalized;
+    if (!spec || !out_spec ||
+        !normalize_length(spec->width, &normalized.width) ||
+        !normalize_length(spec->height, &normalized.height) ||
+        !isfinite(spec->min_width) || spec->min_width < 0.0f ||
+        !isfinite(spec->min_height) || spec->min_height < 0.0f ||
+        !isfinite(spec->max_width) || spec->max_width < 0.0f ||
+        !isfinite(spec->max_height) || spec->max_height < 0.0f ||
+        (spec->max_width > 0.0f && spec->max_width < spec->min_width) ||
+        (spec->max_height > 0.0f && spec->max_height < spec->min_height) ||
+        !isfinite(spec->margin.left) || spec->margin.left < 0.0f ||
+        !isfinite(spec->margin.top) || spec->margin.top < 0.0f ||
+        !isfinite(spec->margin.right) || spec->margin.right < 0.0f ||
+        !isfinite(spec->margin.bottom) || spec->margin.bottom < 0.0f ||
+        !isfinite(spec->aspect_ratio) || spec->aspect_ratio < 0.0f ||
+        spec->touch_target_policy < TC_UI_TOUCH_TARGET_NONE ||
+        spec->touch_target_policy > TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM ||
+        !isfinite(spec->minimum_touch_target.width) ||
+        spec->minimum_touch_target.width < 0.0f ||
+        !isfinite(spec->minimum_touch_target.height) ||
+        spec->minimum_touch_target.height < 0.0f) {
+        return false;
+    }
+    if (spec->aspect_ratio > 0.0f &&
+        spec->width.mode != TC_UI_LENGTH_AUTO &&
+        spec->height.mode != TC_UI_LENGTH_AUTO) {
+        return false;
+    }
+    if (spec->touch_target_policy == TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM &&
+        spec->minimum_touch_target.width == 0.0f &&
+        spec->minimum_touch_target.height == 0.0f) {
+        return false;
+    }
+    if (spec->touch_target_policy == TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM &&
+        ((spec->max_width > 0.0f &&
+          spec->max_width < spec->minimum_touch_target.width) ||
+         (spec->max_height > 0.0f &&
+          spec->max_height < spec->minimum_touch_target.height))) {
+        return false;
+    }
+    normalized.min_width = spec->min_width == 0.0f ? 0.0f : spec->min_width;
+    normalized.min_height = spec->min_height == 0.0f ? 0.0f : spec->min_height;
+    normalized.max_width = spec->max_width == 0.0f ? 0.0f : spec->max_width;
+    normalized.max_height = spec->max_height == 0.0f ? 0.0f : spec->max_height;
+    normalized.margin = spec->margin;
+    normalized.aspect_ratio = spec->aspect_ratio == 0.0f ? 0.0f : spec->aspect_ratio;
+    normalized.touch_target_policy = spec->touch_target_policy;
+    normalized.minimum_touch_target = spec->minimum_touch_target;
+    if (normalized.touch_target_policy == TC_UI_TOUCH_TARGET_NONE) {
+        normalized.minimum_touch_target = (tc_ui_size){0.0f, 0.0f};
+    }
+    *out_spec = normalized;
+    return true;
+}
+
+static float resolve_length(
+    tc_ui_length length,
+    float intrinsic,
+    float parent_extent,
+    bool definite
+) {
+    switch (length.mode) {
+        case TC_UI_LENGTH_FIXED:
+            return length.value;
+        case TC_UI_LENGTH_FILL:
+            return definite ? parent_extent : intrinsic;
+        case TC_UI_LENGTH_PERCENT:
+            return definite ? parent_extent * length.value : intrinsic;
+        case TC_UI_LENGTH_AUTO:
+        default:
+            return intrinsic;
+    }
+}
+
+static float clamp_layout_extent(float value, float minimum, float maximum) {
+    value = fmaxf(value, minimum);
+    return maximum > 0.0f ? fminf(value, maximum) : value;
+}
+
+bool tc_ui_widget_layout_spec_resolve_size(
+    const tc_ui_widget_layout_spec* spec,
+    tc_ui_size intrinsic_size,
+    tc_ui_size parent_extent,
+    bool width_definite,
+    bool height_definite,
+    tc_ui_size* out_size
+) {
+    tc_ui_widget_layout_spec normalized;
+    tc_ui_size resolved;
+    if (!out_size || !tc_ui_widget_layout_spec_normalize(spec, &normalized) ||
+        !isfinite(intrinsic_size.width) || intrinsic_size.width < 0.0f ||
+        !isfinite(intrinsic_size.height) || intrinsic_size.height < 0.0f ||
+        (width_definite &&
+         (!isfinite(parent_extent.width) || parent_extent.width < 0.0f)) ||
+        (height_definite &&
+         (!isfinite(parent_extent.height) || parent_extent.height < 0.0f))) {
+        tc_log_error("[termin-gui-native] rejected invalid widget layout size resolution");
+        return false;
+    }
+    resolved.width = resolve_length(
+        normalized.width, intrinsic_size.width, parent_extent.width, width_definite);
+    resolved.height = resolve_length(
+        normalized.height, intrinsic_size.height, parent_extent.height, height_definite);
+    if (normalized.aspect_ratio > 0.0f) {
+        if (normalized.width.mode != TC_UI_LENGTH_AUTO) {
+            resolved.height = resolved.width / normalized.aspect_ratio;
+        } else if (normalized.height.mode != TC_UI_LENGTH_AUTO) {
+            resolved.width = resolved.height * normalized.aspect_ratio;
+        } else if (resolved.height > 0.0f) {
+            resolved.width = resolved.height * normalized.aspect_ratio;
+        }
+    }
+    if (normalized.touch_target_policy == TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM) {
+        resolved.width = fmaxf(resolved.width, normalized.minimum_touch_target.width);
+        resolved.height = fmaxf(resolved.height, normalized.minimum_touch_target.height);
+    }
+    resolved.width = clamp_layout_extent(
+        resolved.width, normalized.min_width, normalized.max_width);
+    resolved.height = clamp_layout_extent(
+        resolved.height, normalized.min_height, normalized.max_height);
+    *out_size = resolved;
+    return true;
+}
+
+tc_ui_widget_layout_spec tc_widget_layout_spec(const tc_widget* widget) {
+    return widget ? widget->layout_spec : tc_ui_widget_layout_spec_default();
+}
+
+bool tc_widget_set_layout_spec(
+    tc_widget* widget,
+    const tc_ui_widget_layout_spec* spec
+) {
+    tc_ui_widget_layout_spec normalized;
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set layout spec on null widget");
+        return false;
+    }
+    if (!tc_ui_widget_layout_spec_normalize(spec, &normalized)) {
+        tc_log_error("[termin-gui-native] rejected invalid widget layout spec");
+        return false;
+    }
+    widget->layout_spec = normalized;
+    tc_widget_mark_dirty(widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+    return true;
 }
 
 tc_widget* tc_widget_parent(tc_widget* widget) {
