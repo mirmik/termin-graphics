@@ -32,10 +32,14 @@ nb::object typed_uiscript_widget(const PythonMaterializedWidget &materialized) {
     return nb::cast(VStackRef{ref});
   if (type == "termin.gui.GridLayout")
     return nb::cast(GridLayoutRef{ref});
+  if (type == "termin.gui.WrapLayout")
+    return nb::cast(WrapLayoutRef{ref});
   if (type == "termin.gui.ScrollArea")
     return nb::cast(ScrollAreaRef{ref});
   if (type == "termin.gui.Panel")
     return nb::cast(PanelRef{ref});
+  if (type == "termin.gui.Label")
+    return nb::cast(LabelRef{ref});
   return nb::cast(ref);
 }
 
@@ -518,6 +522,18 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
                     self, debug_name.c_str())};
           },
           nb::arg("debug_name") = "GridLayout")
+      .def(
+          "create_wrap_layout",
+          [](termin::gui_native::TcDocument &self,
+             termin::gui_native::Orientation orientation,
+             const std::string &debug_name) {
+            return WrapLayoutRef{
+                document_make_native<termin::gui_native::WrapLayout>(
+                    self, orientation, debug_name.c_str())};
+          },
+          nb::arg("orientation") =
+              termin::gui_native::Orientation::Horizontal,
+          nb::arg("debug_name") = "WrapLayout")
       .def(
           "create_panel",
           [](termin::gui_native::TcDocument &self, const std::string &debug_name) {

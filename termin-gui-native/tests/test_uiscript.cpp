@@ -2,6 +2,7 @@
 #include <termin/gui_native/box_layout.hpp>
 #include <termin/gui_native/grid_layout.hpp>
 #include <termin/gui_native/scroll_area.hpp>
+#include <termin/gui_native/wrap_layout.hpp>
 
 #include <cassert>
 #include <string>
@@ -374,6 +375,64 @@ void test_grid_and_scroll_facets() {
     }
 }
 
+void test_wrapped_label_and_wrap_layout_facets() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(
+        "uiscript: 2\n"
+        "root:\n"
+        "  type: termin.gui.WrapLayout\n"
+        "  name: flow\n"
+        "  orientation: horizontal\n"
+        "  padding: 2\n"
+        "  spacing: 3\n"
+        "  line_spacing: 4\n"
+        "  line_alignment: center\n"
+        "  children:\n"
+        "    - type: termin.gui.Label\n"
+        "      name: wrapped\n"
+        "      text: one two three\n"
+        "      font_size: 10\n"
+        "      wrap: word\n"
+        "      overflow: ellipsis\n"
+        "      max_lines: 2\n");
+    termin_gui_native_test::install_test_text_measurer(loaded.document());
+    loaded.document().layout_roots({0.0f, 0.0f, 45.0f, 80.0f});
+
+    tc_widget* root_widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    tc_widget* label_widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("wrapped").handle);
+    assert(root_widget && label_widget);
+    const auto* flow = static_cast<const WrapLayout*>(root_widget->body);
+    const auto* label = static_cast<const Label*>(label_widget->body);
+    assert(flow->orientation() == Orientation::Horizontal);
+    assert(flow->padding().left == 2.0f);
+    assert(flow->spacing() == 3.0f);
+    assert(flow->line_spacing() == 4.0f);
+    assert(flow->line_alignment() == CrossAxisAlignment::Center);
+    assert(label->wrap_mode() == TextWrapMode::Word);
+    assert(label->overflow() == TextOverflow::Ellipsis);
+    assert(label->max_lines() == 2);
+    assert(loaded.named("wrapped").properties["wrap"].as_string() == "word");
+
+    const std::vector<std::string> invalid{
+        "  type: termin.gui.Label\n  wrap: anywhere\n",
+        "  type: termin.gui.Label\n  overflow: fade\n",
+        "  type: termin.gui.Label\n  max_lines: -1\n",
+        "  type: termin.gui.WrapLayout\n  line_alignment: auto\n",
+        "  type: termin.gui.WrapLayout\n  line_spacing: nope\n",
+    };
+    for (const std::string& root : invalid) {
+        try {
+            loader.parser.parse("uiscript: 2\nroot:\n" + root);
+            assert(false);
+        } catch (const UiScriptError& error) {
+            assert(std::string(error.what()).find("root") !=
+                   std::string::npos);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -383,5 +442,6 @@ int main() {
     test_generic_layout_spec_validation_and_materialization();
     test_box_properties_placement_and_strict_validation();
     test_grid_and_scroll_facets();
+    test_wrapped_label_and_wrap_layout_facets();
     return 0;
 }

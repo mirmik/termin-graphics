@@ -10,6 +10,7 @@ class OverlayLayout;
 class Panel;
 class BoxLayout;
 class GridLayout;
+class WrapLayout;
 class ScrollArea;
 class HStack;
 class VStack;
@@ -51,6 +52,11 @@ struct NativeWidgetRuntimeType<BoxLayout> {
 template <>
 struct NativeWidgetRuntimeType<GridLayout> {
     static constexpr const char* name = "termin.gui.GridLayout";
+};
+
+template <>
+struct NativeWidgetRuntimeType<WrapLayout> {
+    static constexpr const char* name = "termin.gui.WrapLayout";
 };
 
 template <>

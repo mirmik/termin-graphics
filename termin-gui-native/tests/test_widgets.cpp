@@ -50,6 +50,7 @@ int main() {
   test_text_input_focus_text_edit_and_submit();
   test_text_widgets_clip_text_paint();
   test_text_measurement_uses_proportional_metrics();
+  test_wrapped_label_and_wrap_layout_reflow();
   test_text_input_edits_utf8_at_codepoint_boundaries();
   test_text_input_scrolls_to_keep_caret_inside_clip();
   test_text_input_utf8_selection_and_host_clipboard();

@@ -2,6 +2,8 @@
 #include <termin/gui_native/box_layout.hpp>
 #include <termin/gui_native/grid_layout.hpp>
 #include <termin/gui_native/scroll_area.hpp>
+#include <termin/gui_native/label.hpp>
+#include <termin/gui_native/wrap_layout.hpp>
 
 #include <cassert>
 #include <string>
@@ -63,6 +65,24 @@ root:
           row: 0
           column: 0
           column_span: 2
+)";
+
+constexpr const char* WRAP_SOURCE = R"(
+uiscript: 2
+root:
+  type: termin.gui.WrapLayout
+  name: flow
+  orientation: vertical
+  spacing: 3
+  line_spacing: 5
+  line_alignment: end
+  children:
+    - type: termin.gui.Label
+      name: text
+      text: Adaptive text
+      wrap: character
+      overflow: ellipsis
+      max_lines: 3
 )";
 
 void test_compiled_round_trip_and_independent_instances() {
@@ -206,6 +226,32 @@ void test_grid_scroll_round_trip_and_transactional_reload() {
         instance.document().handle(), old_root));
 }
 
+void test_wrapped_label_package_round_trip() {
+    TcUiDocumentAsset::clear_registry_for_tests();
+    TcUiDocumentAsset asset = TcUiDocumentAsset::declare_source(
+        "ui-wrap", "Wrapped UI", "ui/wrap.uiscript", WRAP_SOURCE);
+    assert(asset.valid());
+    const std::string compiled = asset.resolve()->compiled_json();
+    TcUiDocumentAsset::clear_registry_for_tests();
+    asset = TcUiDocumentAsset::declare_compiled_json(compiled, "ui-wrap");
+    assert(asset.valid());
+    assert(asset.resolve()->compiled_json() == compiled);
+    LoadedUiScript restored = asset.instantiate();
+    tc_widget* flow_widget = tc_ui_document_resolve_widget(
+        restored.document().handle(), restored.root().handle);
+    tc_widget* label_widget = tc_ui_document_resolve_widget(
+        restored.document().handle(), restored.named("text").handle);
+    assert(flow_widget && label_widget);
+    const auto* flow = static_cast<const WrapLayout*>(flow_widget->body);
+    const auto* label = static_cast<const Label*>(label_widget->body);
+    assert(flow->orientation() == Orientation::Vertical);
+    assert(flow->line_spacing() == 5.0f);
+    assert(flow->line_alignment() == CrossAxisAlignment::End);
+    assert(label->wrap_mode() == TextWrapMode::Character);
+    assert(label->overflow() == TextOverflow::Ellipsis);
+    assert(label->max_lines() == 3);
+}
+
 } // namespace
 
 int main() {
@@ -213,6 +259,7 @@ int main() {
     test_reload_is_transactional_for_recipe_and_instance();
     test_generation_handle_and_compiled_validation();
     test_grid_scroll_round_trip_and_transactional_reload();
+    test_wrapped_label_package_round_trip();
     TcUiDocumentAsset::clear_registry_for_tests();
     return 0;
 }

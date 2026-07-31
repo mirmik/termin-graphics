@@ -211,6 +211,15 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Center", termin::gui_native::CrossAxisAlignment::Center)
         .value("End", termin::gui_native::CrossAxisAlignment::End);
 
+    nb::enum_<termin::gui_native::TextWrapMode>(m, "TextWrapMode")
+        .value("None_", termin::gui_native::TextWrapMode::None)
+        .value("Word", termin::gui_native::TextWrapMode::Word)
+        .value("Character", termin::gui_native::TextWrapMode::Character);
+
+    nb::enum_<termin::gui_native::TextOverflow>(m, "TextOverflow")
+        .value("Clip", termin::gui_native::TextOverflow::Clip)
+        .value("Ellipsis", termin::gui_native::TextOverflow::Ellipsis);
+
     nb::enum_<termin::gui_native::OverlayAnchor>(m, "OverlayAnchor")
         .value("Fill", termin::gui_native::OverlayAnchor::Fill)
         .value("TopLeft", termin::gui_native::OverlayAnchor::TopLeft)

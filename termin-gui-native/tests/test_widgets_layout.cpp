@@ -1630,6 +1630,104 @@ void test_text_measurement_uses_proportional_metrics() {
   tc_ui_document_destroy(document_handle);
 }
 
+void test_wrapped_label_and_wrap_layout_reflow() {
+  tc_ui_document_handle document_handle = tc_ui_document_create();
+  TcDocument document(document_handle);
+  install_test_text_measurer(document);
+  DocumentBuilder ui(document);
+
+  auto &label = ui.make<Label>("one two\nтри", 10.0f);
+  label.set_wrap_mode(TextWrapMode::Word);
+  const tc_ui_constraints narrow_constraints{
+      tc_ui_size{0.0f, 0.0f}, tc_ui_size{25.0f, 200.0f}};
+  const tc_ui_constraints wide_constraints{
+      tc_ui_size{0.0f, 0.0f}, tc_ui_size{100.0f, 200.0f}};
+  const tc_ui_size narrow =
+      label.measure(document.get(), narrow_constraints);
+  const tc_ui_size wide = label.measure(document.get(), wide_constraints);
+  assert(near(narrow.width, 18.0f));
+  assert(near(narrow.height, 36.0f));
+  assert(near(wide.width, 35.0f));
+  assert(near(wide.height, 24.0f));
+
+  auto metrics =
+      tc_ui_presentation_metrics_identity(tc_ui_size{200.0f, 200.0f});
+  metrics.font_scale = 2.0f;
+  assert(document.set_presentation_metrics(metrics));
+  const tc_ui_size accessible =
+      label.measure(document.get(), wide_constraints);
+  assert(accessible.height > wide.height);
+  assert(accessible.width <= wide_constraints.max_size.width);
+
+  auto &ellipsis = ui.make<Label>("неразрывныйтокен", 10.0f);
+  ellipsis.set_wrap_mode(TextWrapMode::Word)
+      .set_overflow(TextOverflow::Ellipsis)
+      .set_max_lines(1);
+  assert(document.add_root(ellipsis));
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 40.0f, 30.0f});
+  tc_ui_draw_list *draw_list = tc_ui_draw_list_create();
+  tc_ui_paint_context *context = tc_ui_paint_context_create(draw_list);
+  document.paint_roots(context);
+  bool saw_ellipsis = false;
+  for (size_t index = 0;
+       index < tc_ui_draw_list_command_count(draw_list); ++index) {
+    const tc_ui_draw_command *command =
+        tc_ui_draw_list_command_at(draw_list, index);
+    if (command && command->type == TC_UI_DRAW_TEXT && command->text &&
+        std::string(command->text).find("\xE2\x80\xA6") !=
+            std::string::npos) {
+      saw_ellipsis = true;
+    }
+  }
+  assert(saw_ellipsis);
+  tc_ui_paint_context_destroy(context);
+  tc_ui_draw_list_destroy(draw_list);
+
+  metrics.font_scale = 1.0f;
+  assert(document.set_presentation_metrics(metrics));
+  auto &flow =
+      ui.make_root<WrapLayout>(Orientation::Horizontal, "flow");
+  flow.set_spacing(5.0f).set_line_spacing(4.0f);
+  auto &first = ui.make<IconButton>("1");
+  auto &second = ui.make<IconButton>("2");
+  auto &third = ui.make<IconButton>("3");
+  first.set_preferred_size({30.0f, 20.0f});
+  second.set_preferred_size({30.0f, 20.0f});
+  third.set_preferred_size({30.0f, 20.0f});
+  flow.add_child(first);
+  flow.add_child(second);
+  flow.add_child(third);
+
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 70.0f, 100.0f});
+  assert(near(first.bounds().y, second.bounds().y));
+  assert(third.bounds().y > first.bounds().y);
+  assert(document.set_focus(second));
+  const tc_widget_handle focused = document.focused_widget();
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 34.0f, 100.0f});
+  assert(second.bounds().y > first.bounds().y);
+  assert(third.bounds().y > second.bounds().y);
+  assert(tc_widget_handle_eq(document.focused_widget(), focused));
+
+  flow.set_orientation(Orientation::Vertical);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 45.0f});
+  assert(near(first.bounds().x, second.bounds().x));
+  assert(third.bounds().x > first.bounds().x);
+  assert(tc_widget_handle_eq(document.focused_widget(), focused));
+
+  auto &scroll = ui.make_root<ScrollArea>();
+  scroll.set_scroll_axes(false, true);
+  auto &scroll_label =
+      ui.make<Label>("one two three four five six", 10.0f);
+  scroll_label.set_wrap_mode(TextWrapMode::Word);
+  scroll.set_content(scroll_label);
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 45.0f, 20.0f});
+  const float narrow_content_height = scroll.content_size().height;
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 20.0f});
+  assert(scroll.content_size().height < narrow_content_height);
+
+  tc_ui_document_destroy(document_handle);
+}
+
 void test_text_input_edits_utf8_at_codepoint_boundaries() {
   tc_ui_document_handle document_handle = tc_ui_document_create();
   TcDocument document(document_handle);

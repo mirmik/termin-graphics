@@ -63,3 +63,4 @@
 #include <termin/gui_native/v_stack.hpp>
 #include <termin/gui_native/viewport3d.hpp>
 #include <termin/gui_native/widget_types.hpp>
+#include <termin/gui_native/wrap_layout.hpp>

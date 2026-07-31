@@ -9,6 +9,8 @@
 namespace termin::gui_native {
 
 enum class Orientation { Horizontal, Vertical };
+enum class TextWrapMode { None, Word, Character };
+enum class TextOverflow { Clip, Ellipsis };
 enum class ImageFit { Stretch, Contain, Cover };
 struct EdgeInsets { float left = 0.0f; float top = 0.0f; float right = 0.0f; float bottom = 0.0f; };
 enum class LayoutPolicy { Fixed, Preferred, Flex, Stretch };

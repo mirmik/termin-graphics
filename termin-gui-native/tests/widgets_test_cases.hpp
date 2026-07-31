@@ -46,6 +46,7 @@ void test_separator_layout_and_paint_command();
 void test_text_input_focus_text_edit_and_submit();
 void test_text_widgets_clip_text_paint();
 void test_text_measurement_uses_proportional_metrics();
+void test_wrapped_label_and_wrap_layout_reflow();
 void test_text_input_edits_utf8_at_codepoint_boundaries();
 void test_text_input_scrolls_to_keep_caret_inside_clip();
 void test_text_input_utf8_selection_and_host_clipboard();

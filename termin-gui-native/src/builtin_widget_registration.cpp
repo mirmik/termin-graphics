@@ -17,6 +17,7 @@
 #include <termin/gui_native/text_area.hpp>
 #include <termin/gui_native/text_input.hpp>
 #include <termin/gui_native/v_stack.hpp>
+#include <termin/gui_native/wrap_layout.hpp>
 
 #include "widgets_internal.hpp"
 
@@ -247,6 +248,35 @@ bool apply_grid_properties(tc_widget* widget, const tc_value* properties) {
     return true;
 }
 
+bool apply_wrap_layout_properties(
+    tc_widget* widget,
+    const tc_value* properties
+) {
+    auto* layout = static_cast<WrapLayout*>(widget->body);
+    if (const tc_value* orientation = property(properties, "orientation")) {
+        const std::string text =
+            orientation->data.s ? orientation->data.s : "";
+        layout->set_orientation(
+            text == "vertical" ? Orientation::Vertical
+                               : Orientation::Horizontal);
+    }
+    if (property(properties, "padding")) {
+        layout->set_padding(padding_property(properties));
+    }
+    if (property(properties, "spacing")) {
+        layout->set_spacing(number_property(properties, "spacing"));
+    }
+    if (property(properties, "line_spacing")) {
+        layout->set_line_spacing(
+            number_property(properties, "line_spacing"));
+    }
+    if (property(properties, "line_alignment")) {
+        layout->set_line_alignment(alignment_property(
+            properties, "line_alignment", CrossAxisAlignment::Start));
+    }
+    return true;
+}
+
 ScrollBarPolicy scrollbar_policy_property(
     const tc_value* properties,
     const char* name
@@ -356,6 +386,26 @@ bool apply_label_properties(tc_widget* widget, const tc_value* properties) {
     Color color;
     if (color_property(properties, "color", color)) {
         label->set_color(color);
+    }
+    if (const tc_value* wrap = property(properties, "wrap")) {
+        const std::string text = wrap->data.s ? wrap->data.s : "none";
+        label->set_wrap_mode(
+            text == "word"
+                ? TextWrapMode::Word
+                : text == "character"
+                    ? TextWrapMode::Character
+                    : TextWrapMode::None);
+    }
+    if (const tc_value* overflow = property(properties, "overflow")) {
+        const std::string text =
+            overflow->data.s ? overflow->data.s : "clip";
+        label->set_overflow(
+            text == "ellipsis"
+                ? TextOverflow::Ellipsis
+                : TextOverflow::Clip);
+    }
+    if (const tc_value* max_lines = property(properties, "max_lines")) {
+        label->set_max_lines(static_cast<size_t>(max_lines->data.i));
     }
     return true;
 }
@@ -468,6 +518,15 @@ bool append_scroll_content(
     return child->parent == parent;
 }
 
+bool append_wrap_child(
+    tc_widget* parent,
+    tc_widget* child,
+    const tc_value*
+) {
+    static_cast<WrapLayout*>(parent->body)->add_child(child->handle);
+    return child->parent == parent;
+}
+
 bool reject_declarative_persistence(const tc_widget* widget, void*, tc_value*) {
     tc_log_error(
         "[termin-gui-native] widget type '%s' is declarative-only and has no durable state codec",
@@ -570,6 +629,8 @@ constexpr const char* kBoxProperties[] = {
     "orientation", "padding", "spacing", "align_items"};
 constexpr const char* kGridProperties[] = {
     "padding", "column_spacing", "row_spacing", "columns", "rows"};
+constexpr const char* kWrapProperties[] = {
+    "orientation", "padding", "spacing", "line_spacing", "line_alignment"};
 constexpr const char* kScrollAreaProperties[] = {
     "horizontal_scroll", "vertical_scroll",
     "horizontal_scrollbar", "vertical_scrollbar"};
@@ -583,7 +644,8 @@ constexpr const char* kIconButtonProperties[] = {
     "hover_color", "pressed_color", "active_color", "icon_color",
     "border_radius", "active",
 };
-constexpr const char* kLabelProperties[] = {"text", "font_size", "color"};
+constexpr const char* kLabelProperties[] = {
+    "text", "font_size", "color", "wrap", "overflow", "max_lines"};
 
 const tc_uiscript_type_descriptor kOverlayUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -623,6 +685,16 @@ const tc_uiscript_type_descriptor kGridUiScript{
     &append_grid_child,
     kGridChildProperties,
     std::size(kGridChildProperties),
+    SIZE_MAX,
+};
+const tc_uiscript_type_descriptor kWrapUiScript{
+    TC_UISCRIPT_TYPE_ABI_VERSION,
+    kWrapProperties,
+    std::size(kWrapProperties),
+    &apply_wrap_layout_properties,
+    &append_wrap_child,
+    nullptr,
+    0,
     SIZE_MAX,
 };
 const tc_uiscript_type_descriptor kScrollAreaUiScript{
@@ -709,6 +781,8 @@ bool register_builtin_widget_types() {
         register_box_layout_widget() &&
         register_declarative_widget<GridLayout>(
             NativeWidgetRuntimeType<GridLayout>::name, &kGridUiScript) &&
+        register_declarative_widget<WrapLayout>(
+            NativeWidgetRuntimeType<WrapLayout>::name, &kWrapUiScript) &&
         register_declarative_widget<ScrollArea>(
             NativeWidgetRuntimeType<ScrollArea>::name, &kScrollAreaUiScript) &&
         register_declarative_widget<HStack>(

@@ -268,7 +268,8 @@ void validate_property(
         return;
     }
     if (name == "spacing" || name == "column_spacing" ||
-        name == "row_spacing" || name == "size" || name == "font_size" ||
+        name == "row_spacing" || name == "line_spacing" ||
+        name == "size" || name == "font_size" ||
         name == "border_radius" || name == "grow" || name == "shrink" ||
         name == "min_extent" || name == "max_extent") {
         validate_number(value, path, true);
@@ -279,7 +280,8 @@ void validate_property(
         return;
     }
     if (name == "row" || name == "column" ||
-        name == "row_span" || name == "column_span") {
+        name == "row_span" || name == "column_span" ||
+        name == "max_lines") {
         if (!value.is_integer() || value.as_integer() < 0 ||
             ((name == "row_span" || name == "column_span") &&
              value.as_integer() == 0)) {
@@ -322,7 +324,8 @@ void validate_property(
         }
         return;
     }
-    if (name == "align_items" || name == "align_self") {
+    if (name == "align_items" || name == "align_self" ||
+        name == "line_alignment") {
         if (!value.is_string()) fail(path, "expected an alignment string");
         const std::string alignment = value.as_string();
         const bool allow_auto = name == "align_self";
@@ -349,6 +352,26 @@ void validate_property(
     }
     if (name == "icon" || name == "tooltip" || name == "text") {
         if (!value.is_string()) fail(path, "expected a string");
+        return;
+    }
+    if (name == "wrap") {
+        if (!value.is_string()) {
+            fail(path, "expected 'none', 'word', or 'character'");
+        }
+        const std::string mode = value.as_string();
+        if (mode != "none" && mode != "word" && mode != "character") {
+            fail(path, "unsupported text wrap mode '" + mode + "'");
+        }
+        return;
+    }
+    if (name == "overflow") {
+        if (!value.is_string()) {
+            fail(path, "expected 'clip' or 'ellipsis'");
+        }
+        const std::string mode = value.as_string();
+        if (mode != "clip" && mode != "ellipsis") {
+            fail(path, "unsupported text overflow mode '" + mode + "'");
+        }
         return;
     }
     if (name == "anchor") {

@@ -83,3 +83,49 @@ There is no convergence loop. Percentages and `fill` resolve only when the
 container explicitly marks the corresponding parent content extent definite.
 Margins are external space consumed by Box, Grid and ScrollArea; the widget is
 measured and laid out inside the remaining rectangle.
+
+## Wrapped text and flow layout
+
+`Label` remains a clipped, single soft line by default. Embedded newlines are
+hard line breaks. Soft wrapping is opt-in through `TextWrapMode::Word` or
+`TextWrapMode::Character`; word mode keeps an unbreakable token on one line,
+while character mode may break it at a UTF-8 codepoint boundary. The overflow
+policy is either `Clip` or `Ellipsis`, and an optional non-zero `max_lines`
+limits the result. Ellipsis never splits a UTF-8 sequence.
+
+Measurement uses the definite width supplied by the parent and the current
+presentation's effective font scale. Paint recomputes the same deterministic
+line list for the final bounds, emits one text command per visible line, and
+clips all glyphs to the label. A finite height can reduce the visible line
+count; with ellipsis overflow, the final visible line communicates that
+truncation.
+
+`WrapLayout` is a retained flow container. It measures existing children,
+breaks them into horizontal rows or vertical columns at the definite primary
+extent, and applies `spacing`, `line_spacing`, padding, margins, and
+start/center/end/stretch line alignment. Reflow changes child bounds only:
+handles, widget state, focus, and signal connections remain intact. It uses
+one planning pass in measure and one in final layout; there is no convergence
+loop.
+
+The strict UiScript forms are:
+
+```yaml
+type: termin.gui.WrapLayout
+orientation: horizontal
+padding: 8
+spacing: 6
+line_spacing: 8
+line_alignment: center
+children:
+  - type: termin.gui.Label
+    text: A width-dependent UTF-8 label
+    wrap: word
+    overflow: ellipsis
+    max_lines: 3
+```
+
+`wrap` accepts `none`, `word`, or `character`; `overflow` accepts `clip` or
+`ellipsis`; zero `max_lines` means unlimited. These properties are preserved
+by compiled UI document packages and are exposed by both the C++ and Python
+facades.

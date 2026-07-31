@@ -14,6 +14,8 @@ from termin.gui_native import (
     Rect,
     Size,
     TouchTargetPolicy,
+    TextOverflow,
+    TextWrapMode,
     WidgetLayoutSpec,
     UiDocumentAsset,
     UiScriptError,
@@ -147,6 +149,48 @@ root:
     - type: termin.gui.Panel
 """
         )
+
+
+def test_uiscript_wrapped_label_and_flow_facets_materialize_in_python():
+    loaded = UiScriptLoader().load_string(
+        """
+uiscript: 2
+root:
+  type: termin.gui.WrapLayout
+  name: flow
+  orientation: horizontal
+  spacing: 3
+  line_spacing: 4
+  line_alignment: center
+  children:
+    - type: termin.gui.Label
+      name: text
+      text: adaptive label
+      wrap: word
+      overflow: ellipsis
+      max_lines: 2
+"""
+    )
+    flow = loaded.root.public
+    label = loaded.widgets["text"].public
+    assert flow.spacing == pytest.approx(3.0)
+    assert flow.line_spacing == pytest.approx(4.0)
+    assert label.wrap_mode == TextWrapMode.Word
+    assert label.overflow == TextOverflow.Ellipsis
+    assert label.max_lines == 2
+    loaded.close()
+
+    for property_text in (
+        "wrap: anywhere",
+        "overflow: fade",
+        "max_lines: -1",
+    ):
+        with pytest.raises(UiScriptError, match="root"):
+            UiScriptLoader().parser.parse(
+                "uiscript: 2\nroot:\n"
+                "  type: termin.gui.Label\n"
+                f"  {property_text}\n"
+            )
 
 
 @pytest.mark.parametrize(

@@ -515,6 +515,64 @@ void bind_gui_native_widgets(nb::module_& m) {
              },
              nb::arg("row"), nb::arg("minimum"), nb::arg("maximum") = 0.0f);
 
+    nb::class_<WrapLayoutRef, WidgetRef>(m, "WrapLayout")
+        .def_prop_ro("widget", [](const WrapLayoutRef& self) {
+            return self.widget;
+        })
+        .def_prop_ro("handle", [](const WrapLayoutRef& self) {
+            return WidgetHandle {self.widget.handle};
+        })
+        .def("add_child",
+             [](const WrapLayoutRef& self, const WidgetRef& child) {
+                 if (self.widget.state != child.state) {
+                     throw std::invalid_argument(
+                         "WrapLayout child belongs to another document");
+                 }
+                 self.get().add_child(child.handle);
+                 self.widget.throw_pending_exception();
+             },
+             nb::arg("child"))
+        .def("set_orientation",
+             [](const WrapLayoutRef& self,
+                termin::gui_native::Orientation orientation) {
+                 self.get().set_orientation(orientation);
+             },
+             nb::arg("orientation"))
+        .def_prop_ro("orientation", [](const WrapLayoutRef& self) {
+            return self.get().orientation();
+        })
+        .def("set_padding",
+             [](const WrapLayoutRef& self,
+                termin::gui_native::EdgeInsets padding) {
+                 self.get().set_padding(padding);
+             },
+             nb::arg("padding"))
+        .def("set_spacing",
+             [](const WrapLayoutRef& self, float spacing) {
+                 self.get().set_spacing(spacing);
+             },
+             nb::arg("spacing"))
+        .def_prop_ro("spacing", [](const WrapLayoutRef& self) {
+            return self.get().spacing();
+        })
+        .def("set_line_spacing",
+             [](const WrapLayoutRef& self, float spacing) {
+                 self.get().set_line_spacing(spacing);
+             },
+             nb::arg("spacing"))
+        .def_prop_ro("line_spacing", [](const WrapLayoutRef& self) {
+            return self.get().line_spacing();
+        })
+        .def("set_line_alignment",
+             [](const WrapLayoutRef& self,
+                termin::gui_native::CrossAxisAlignment alignment) {
+                 self.get().set_line_alignment(alignment);
+             },
+             nb::arg("alignment"))
+        .def_prop_ro("line_alignment", [](const WrapLayoutRef& self) {
+            return self.get().line_alignment();
+        });
+
     nb::class_<PanelRef, WidgetRef>(m, "Panel")
         .def_prop_ro("widget", [](const PanelRef& self) { return self.widget; })
         .def_prop_ro("handle",
@@ -553,7 +611,33 @@ void bind_gui_native_widgets(nb::module_& m) {
              [](const LabelRef& self, float font_size) {
                  self.get().set_font_size(font_size);
              },
-             nb::arg("font_size"));
+             nb::arg("font_size"))
+        .def("set_wrap_mode",
+             [](const LabelRef& self,
+                termin::gui_native::TextWrapMode mode) {
+                 self.get().set_wrap_mode(mode);
+             },
+             nb::arg("mode"))
+        .def_prop_ro("wrap_mode", [](const LabelRef& self) {
+            return self.get().wrap_mode();
+        })
+        .def("set_overflow",
+             [](const LabelRef& self,
+                termin::gui_native::TextOverflow overflow) {
+                 self.get().set_overflow(overflow);
+             },
+             nb::arg("overflow"))
+        .def_prop_ro("overflow", [](const LabelRef& self) {
+            return self.get().overflow();
+        })
+        .def("set_max_lines",
+             [](const LabelRef& self, size_t max_lines) {
+                 self.get().set_max_lines(max_lines);
+             },
+             nb::arg("max_lines"))
+        .def_prop_ro("max_lines", [](const LabelRef& self) {
+            return self.get().max_lines();
+        });
 
     nb::class_<SliderRef, WidgetRef>(m, "Slider")
         .def_prop_ro("widget", [](const SliderRef& self) { return self.widget; })

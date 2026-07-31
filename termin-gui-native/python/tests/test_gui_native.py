@@ -50,6 +50,8 @@ from termin.gui_native import (
     StyleRole,
     StyleState,
     TextureSampling,
+    TextOverflow,
+    TextWrapMode,
     Widget,
     WidgetFlag,
     WidgetLanguage,
@@ -243,8 +245,10 @@ def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy(
     document = tc_ui_document_create()
     root = document.create_box_layout(horizontal=False, debug_name="typed-root")
     grid = document.create_grid_layout("typed-grid")
+    flow = document.create_wrap_layout(Orientation.Horizontal, "typed-flow")
     panel = document.create_panel("typed-panel")
     label = document.create_label("before", "typed-label")
+    flow_label = document.create_label("wrapped text", "flow-label")
     slider = document.create_slider(0.25)
     separator = document.create_separator(horizontal=True)
     spacer = document.create_spacer(Size(8.0, 6.0))
@@ -252,13 +256,24 @@ def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy(
 
     label.text = "after"
     label.set_font_size(15.0)
+    flow_label.set_wrap_mode(TextWrapMode.Word)
+    flow_label.set_overflow(TextOverflow.Ellipsis)
+    flow_label.set_max_lines(2)
+    assert flow_label.wrap_mode == TextWrapMode.Word
+    assert flow_label.overflow == TextOverflow.Ellipsis
+    assert flow_label.max_lines == 2
     panel.set_fill(Color(0.1, 0.1, 0.1, 1.0))
     separator.set_thickness(2.0)
     grid.add_column(LayoutPolicy.Stretch)
     grid.add_row(LayoutPolicy.Fixed, 24.0)
     grid.add_child(label, 0, 0)
+    flow.set_spacing(3.0)
+    flow.set_line_spacing(4.0)
+    flow.set_line_alignment(CrossAxisAlignment.Center)
+    flow.add_child(flow_label)
     root.add_fixed_child(panel, 12.0)
     root.add_stretch_child(grid)
+    root.add_fixed_child(flow, 24.0)
     root.add_fixed_child(slider, 20.0)
     root.add_fixed_child(separator, 2.0)
     root.add_fixed_child(spacer, 6.0)
@@ -279,7 +294,10 @@ def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy(
     assert label.widget.parent.handle == grid.handle
 
     assert document.destroy_widget_recursive(root.handle)
-    for typed in (root, grid, panel, label, slider, separator, spacer, swatch):
+    for typed in (
+        root, grid, flow, panel, label, flow_label, slider, separator, spacer,
+        swatch,
+    ):
         assert not typed.widget.alive
 
 
