@@ -517,21 +517,9 @@ bool tc_material_phase_declare_texture(
         return false;
     }
 
+    if (!tc_material_phase_declare_texture_slot(phase, name)) return false;
     tc_material_texture* slot = tc_material_phase_find_texture(phase, name);
-    if (!slot) {
-        if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
-            tc_log(
-                TC_LOG_ERROR,
-                "tc_material_phase_declare_texture: texture slot capacity exceeded for '%s'",
-                name);
-            return false;
-        }
-        slot = &phase->textures[phase->texture_count++];
-        memset(slot, 0, sizeof(*slot));
-        slot->texture = tc_texture_handle_invalid();
-        strncpy(slot->name, name, TC_UNIFORM_NAME_MAX - 1);
-        slot->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
-    } else if (
+    if (
         slot->has_expected_encoding
         && slot->expected_encoding != (uint8_t)expected_encoding) {
         tc_log(
@@ -564,6 +552,35 @@ bool tc_material_phase_declare_texture(
 
     slot->has_expected_encoding = 1;
     slot->expected_encoding = (uint8_t)expected_encoding;
+    return true;
+}
+
+bool tc_material_phase_declare_texture_slot(
+    tc_material_phase* phase,
+    const char* name
+) {
+    if (!phase || !name || name[0] == '\0') {
+        tc_log(
+            TC_LOG_ERROR,
+            "tc_material_phase_declare_texture_slot: phase and name are required");
+        return false;
+    }
+    tc_material_texture* slot = tc_material_phase_find_texture(phase, name);
+    if (!slot) {
+        if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
+            tc_log(
+                TC_LOG_ERROR,
+                "tc_material_phase_declare_texture_slot: texture slot capacity exceeded for '%s'",
+                name);
+            return false;
+        }
+        slot = &phase->textures[phase->texture_count++];
+        memset(slot, 0, sizeof(*slot));
+        slot->texture = tc_texture_handle_invalid();
+        strncpy(slot->name, name, TC_UNIFORM_NAME_MAX - 1);
+        slot->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
+    }
+    slot->is_declared = 1;
     return true;
 }
 
@@ -687,7 +704,7 @@ size_t tc_material_set_texture(
         const tc_material_phase* phase = &mat->phases[phase_index];
         for (size_t slot_index = 0; slot_index < phase->texture_count; ++slot_index) {
             const tc_material_texture* slot = &phase->textures[slot_index];
-            if (!slot->has_expected_encoding) continue;
+            if (!slot->is_declared) continue;
             has_declared_schema = true;
             if (strcmp(slot->name, name) == 0) {
                 target_is_declared = true;

@@ -638,14 +638,17 @@ TcMaterial create_material_from_parsed(
         // Declare encoding-checked slots and set symbolic defaults.
         for (const auto& prop : shader_uniforms) {
             if (prop.property_type == "Texture") {
-                if (!prop.expected_texture_encoding.has_value()) {
-                    throw std::runtime_error(
-                        "Texture property '" + prop.name + "' has no encoding contract");
-                }
-                const tc_texture_encoding expected = tgfx::to_tc_texture_encoding(
-                    *prop.expected_texture_encoding);
-                if (!tc_material_phase_declare_texture(
-                        phase, prop.name.c_str(), expected)) {
+                const bool has_expected_encoding =
+                    prop.expected_texture_encoding.has_value();
+                const tc_texture_encoding expected = has_expected_encoding
+                    ? tgfx::to_tc_texture_encoding(*prop.expected_texture_encoding)
+                    : TC_TEXTURE_ENCODING_LINEAR;
+                const bool declared = has_expected_encoding
+                    ? tc_material_phase_declare_texture(
+                        phase, prop.name.c_str(), expected)
+                    : tc_material_phase_declare_texture_slot(
+                        phase, prop.name.c_str());
+                if (!declared) {
                     throw std::runtime_error(
                         "Failed to declare texture property '" + prop.name + "'");
                 }
@@ -660,6 +663,7 @@ TcMaterial create_material_from_parsed(
                         + "' has unsupported default '" + default_tex_name + "'");
                 }
                 if (default_tex_name == "normal"
+                    && has_expected_encoding
                     && expected != TC_TEXTURE_ENCODING_LINEAR) {
                     throw std::runtime_error(
                         "Texture property '" + prop.name
@@ -928,11 +932,19 @@ void bind_tc_material(nb::module_& m) {
         .def("set_texture", [](tc_material_phase& p, const char* name, TcTexture& tex) {
             return tc_material_phase_set_texture(&p, name, tex.handle);
         })
-        .def("declare_texture", [](tc_material_phase& p, const char* name, const std::string& encoding) {
+        .def("declare_texture", [](tc_material_phase& p, const char* name, nb::object encoding) {
+            if (encoding.is_none()) {
+                if (!tc_material_phase_declare_texture_slot(&p, name)) {
+                    throw std::runtime_error(
+                        "failed to declare texture slot '" + std::string(name) + "'");
+                }
+                return;
+            }
+            const std::string encoding_text = nb::cast<std::string>(encoding);
             tc_texture_encoding expected;
-            if (encoding == "srgb") {
+            if (encoding_text == "srgb") {
                 expected = TC_TEXTURE_ENCODING_SRGB;
-            } else if (encoding == "linear") {
+            } else if (encoding_text == "linear") {
                 expected = TC_TEXTURE_ENCODING_LINEAR;
             } else {
                 throw nb::value_error("texture slot encoding must be 'srgb' or 'linear'");
@@ -941,7 +953,7 @@ void bind_tc_material(nb::module_& m) {
                 throw std::runtime_error(
                     "failed to declare texture slot '" + std::string(name) + "'");
             }
-        }, nb::arg("name"), nb::arg("expected_encoding"))
+        }, nb::arg("name"), nb::arg("expected_encoding") = nb::none())
         .def("set_color", [](tc_material_phase& p, float r, float g, float b, float a) {
             tc_material_phase_set_color(&p, r, g, b, a);
         })

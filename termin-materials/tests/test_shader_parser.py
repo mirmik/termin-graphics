@@ -247,11 +247,51 @@ def test_parse_property_directive_texture2d():
     assert linear.default == "normal"
     assert linear.expected_encoding == "linear"
 
+    unconstrained = parse_property_directive(
+        '@property Texture2D u_input = "white"'
+    )
+    assert unconstrained.property_type == "Texture"
+    assert unconstrained.default == "white"
+    assert unconstrained.expected_encoding is None
+
+    unconstrained_normal = parse_property_directive(
+        '@property Texture2D u_normal = "normal"'
+    )
+    assert unconstrained_normal.default == "normal"
+    assert unconstrained_normal.expected_encoding is None
+
+
+def test_create_material_from_unconstrained_texture_property_uses_linear_default():
+    from tgfx import TextureEncoding
+
+    program = parse_shader_text("\n".join([
+        "@program unconstrained-texture",
+        "@language slang",
+        '@property Texture2D u_input = "white"',
+        "@phase opaque",
+        "@stage vertex vs_main",
+        "float4 vs_main(float3 position : POSITION) : SV_Position {",
+        "    return float4(position, 1.0);",
+        "}",
+        "@endstage",
+        "@stage fragment fs_main",
+        "float4 fs_main(float2 uv : TEXCOORD0) : SV_Target0 {",
+        "    return u_input.Sample(uv);",
+        "}",
+        "@endstage",
+        "@endphase",
+    ]))
+
+    material = create_material_from_parsed(program)
+    texture = material.textures["u_input"]
+
+    assert texture.is_valid
+    assert texture.encoding == TextureEncoding.LINEAR
+
 
 @pytest.mark.parametrize(
     ("directive", "message"),
     [
-        ('@property Texture2D u_albedo = "white"', "requires encoding"),
         (
             '@property Texture2D u_albedo = "white" encoding(display-p3)',
             "Unknown texture encoding",

@@ -1017,10 +1017,6 @@ static MaterialProperty parse_typed_uniform_directive(
         throw std::runtime_error("Unknown property type: " + property_type);
     }
     const bool is_texture = property_type == "Texture";
-    if (is_texture && !expected_texture_encoding.has_value()) {
-        throw std::runtime_error(
-            directive + " Texture2D property requires encoding(srgb|linear): " + line);
-    }
     if (!is_texture && expected_texture_encoding.has_value()) {
         throw std::runtime_error(
             "encoding() modifier is only valid for Texture2D properties: " + line);
@@ -1040,6 +1036,7 @@ static MaterialProperty parse_typed_uniform_directive(
                 "Texture2D property default must be \"white\" or \"normal\": " + line);
         }
         if (default_name == "normal"
+            && expected_texture_encoding.has_value()
             && expected_texture_encoding != tgfx::TextureEncoding::Linear) {
             throw std::runtime_error(
                 "Texture2D property default \"normal\" requires encoding(linear): " + line);

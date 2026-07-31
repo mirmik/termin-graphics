@@ -121,7 +121,7 @@ TEST_CASE("shader program declare is canonical by UUID") {
     tc_shader_program_shutdown();
 }
 
-TEST_CASE("shader program texture properties require expected encoding") {
+TEST_CASE("shader program texture properties accept optional expected encoding") {
     tc_shader_init();
     tc_shader_program_init();
     {
@@ -134,9 +134,11 @@ TEST_CASE("shader program texture properties require expected encoding") {
         tc_shader_program_property_desc texture{};
         texture.name = "u_albedo";
         texture.property_type = "Texture";
-        const tc_shader_program_payload_desc missing_encoding = {
+        const tc_shader_program_payload_desc unconstrained = {
             "Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
-        CHECK(!tc_shader_program_set_payload(program.get(), &missing_encoding));
+        REQUIRE(tc_shader_program_set_payload(program.get(), &unconstrained));
+        REQUIRE_EQ(program.get()->property_count, 1u);
+        CHECK(program.get()->properties[0].has_expected_encoding == 0);
 
         texture.has_expected_encoding = 1;
         texture.expected_encoding = TC_TEXTURE_ENCODING_SRGB;

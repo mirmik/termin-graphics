@@ -320,13 +320,6 @@ static bool build_properties(
         const bool is_texture =
             strcmp(output->property_type, "Texture") == 0
             || strcmp(output->property_type, "Texture2D") == 0;
-        if (is_texture && !input->has_expected_encoding) {
-            tc_log_error(
-                "tc_shader_program_set_payload: texture property '%s' requires expected encoding",
-                output->name);
-            free(properties);
-            return false;
-        }
         if (!is_texture && input->has_expected_encoding) {
             tc_log_error(
                 "tc_shader_program_set_payload: non-texture property '%s' has expected encoding",
@@ -357,6 +350,7 @@ static bool build_properties(
                 return false;
             }
             if (strcmp(output->default_text, "normal") == 0
+                && output->has_expected_encoding
                 && output->expected_encoding != TC_TEXTURE_ENCODING_LINEAR) {
                 tc_log_error(
                     "tc_shader_program_set_payload: texture property '%s' "

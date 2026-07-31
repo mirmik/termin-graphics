@@ -134,6 +134,7 @@ typedef struct tc_uniform_value {
 typedef struct tc_material_texture {
     char name[TC_UNIFORM_NAME_MAX];  // uniform name (e.g., "u_albedo")
     tc_texture_handle texture;
+    uint8_t is_declared;             // present in canonical property schema
     uint8_t has_expected_encoding;
     uint8_t expected_encoding;       // tc_texture_encoding
 } tc_material_texture;
@@ -246,7 +247,13 @@ TGFX_API bool tc_material_phase_set_texture(
     tc_texture_handle texture
 );
 
-// Declare an encoding-described canonical texture slot without assigning a
+// Declare a canonical texture slot without imposing an encoding constraint.
+TGFX_API bool tc_material_phase_declare_texture_slot(
+    tc_material_phase* phase,
+    const char* name
+);
+
+// Add an encoding constraint to a canonical texture slot without assigning a
 // texture. Repeating the same declaration is idempotent and conflicting schema
 // is rejected. An already-bound encoding mismatch is retained with a warning.
 TGFX_API bool tc_material_phase_declare_texture(

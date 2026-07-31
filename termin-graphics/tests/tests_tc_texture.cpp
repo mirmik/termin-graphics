@@ -181,6 +181,7 @@ TEST_CASE("material texture slots warn and bind encoding mismatches") {
     REQUIRE(tc_material_phase_declare_texture(
         &phase, "albedo", TC_TEXTURE_ENCODING_SRGB));
     CHECK_EQ(phase.texture_count, 1u);
+    CHECK(phase.textures[0].is_declared != 0);
     CHECK(phase.textures[0].has_expected_encoding != 0);
     CHECK_EQ(phase.textures[0].expected_encoding, TC_TEXTURE_ENCODING_SRGB);
 
@@ -195,6 +196,13 @@ TEST_CASE("material texture slots warn and bind encoding mismatches") {
     CHECK(tc_texture_handle_eq(phase.textures[0].texture, linear));
     CHECK_EQ(g_encoding_log_level, TC_LOG_WARN);
     CHECK(g_encoding_log_message.find("binding it unchanged") != std::string::npos);
+
+    tc_material_phase unconstrained{};
+    REQUIRE(tc_material_phase_declare_texture_slot(&unconstrained, "input"));
+    CHECK(unconstrained.textures[0].is_declared != 0);
+    CHECK(unconstrained.textures[0].has_expected_encoding == 0);
+    CHECK(tc_material_phase_set_texture(&unconstrained, "input", linear));
+    CHECK(tc_material_phase_set_texture(&unconstrained, "input", srgb));
 
     tc_material_phase unchecked{};
     CHECK(tc_material_phase_set_texture(&unchecked, "manual", linear));

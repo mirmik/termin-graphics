@@ -278,7 +278,7 @@ public:
  *   @glBlend <bool>
  *   @glCull <bool>
  *   @property <Type> <name> [= DefaultValue] [range(min, max)]
- *   @property Texture2D <name> [= DefaultValue] encoding(srgb|linear)
+ *   @property Texture2D <name> [= DefaultValue] [encoding(srgb|linear)]
  *      Material-level property. Inside @phase is accepted for legacy syntax,
  *      but per-phase properties are not supported.
  *   @stage <stage_name> [entry_name|entry=<entry_name>]
