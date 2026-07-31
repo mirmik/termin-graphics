@@ -85,6 +85,18 @@ root:
       max_lines: 3
 )";
 
+constexpr const char* RESPONSIVE_SOURCE = R"(
+uiscript: 2
+root:
+  type: termin.gui.BoxLayout
+  name: responsive
+  orientation: vertical
+  variants:
+    - when: {min_width: 600, orientation: landscape}
+      priority: 5
+      set: {orientation: horizontal, spacing: 12, safe_area: respect}
+)";
+
 void test_compiled_round_trip_and_independent_instances() {
     TcUiDocumentAsset::clear_registry_for_tests();
     TcUiDocumentAsset asset = TcUiDocumentAsset::declare_source(
@@ -252,6 +264,31 @@ void test_wrapped_label_package_round_trip() {
     assert(label->max_lines() == 3);
 }
 
+void test_responsive_variant_package_round_trip() {
+    TcUiDocumentAsset::clear_registry_for_tests();
+    TcUiDocumentAsset asset = TcUiDocumentAsset::declare_source(
+        "ui-responsive", "Responsive UI",
+        "ui/responsive.uiscript", RESPONSIVE_SOURCE);
+    assert(asset.valid());
+    const std::string compiled = asset.resolve()->compiled_json();
+    assert(compiled.find("\"variants\"") != std::string::npos);
+    TcUiDocumentAsset::clear_registry_for_tests();
+    asset = TcUiDocumentAsset::declare_compiled_json(
+        compiled, "ui-responsive");
+    assert(asset.valid());
+    assert(asset.resolve()->compiled_json() == compiled);
+    LoadedUiScript restored = asset.instantiate();
+    restored.document().layout_roots({0.0f, 0.0f, 800.0f, 600.0f});
+    tc_widget* root = tc_ui_document_resolve_widget(
+        restored.document().handle(), restored.root().handle);
+    assert(root);
+    const auto* box = static_cast<const BoxLayout*>(root->body);
+    assert(box->orientation() == Orientation::Horizontal);
+    assert(box->spacing() == 12.0f);
+    assert(restored.document().root_layout_policy() ==
+           TC_UI_ROOT_LAYOUT_SAFE_AREA);
+}
+
 } // namespace
 
 int main() {
@@ -260,6 +297,7 @@ int main() {
     test_generation_handle_and_compiled_validation();
     test_grid_scroll_round_trip_and_transactional_reload();
     test_wrapped_label_package_round_trip();
+    test_responsive_variant_package_round_trip();
     TcUiDocumentAsset::clear_registry_for_tests();
     return 0;
 }

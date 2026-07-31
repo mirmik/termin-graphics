@@ -433,6 +433,147 @@ void test_wrapped_label_and_wrap_layout_facets() {
     }
 }
 
+void test_responsive_variants_preserve_tree_and_interaction_state() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(R"(
+uiscript: 2
+root:
+  type: termin.gui.BoxLayout
+  name: responsive
+  orientation: vertical
+  padding: 1
+  spacing: 2
+  safe_area: ignore
+  variants:
+    - when: {width_class: compact}
+      set: {padding: 5, spacing: 7}
+    - when: {width_class: medium}
+      set: {spacing: 11, safe_area: respect}
+    - when: {orientation: landscape}
+      priority: 10
+      set: {orientation: horizontal}
+  children:
+    - type: termin.gui.IconButton
+      name: action
+      icon: A
+      size: 30
+      variants:
+        - when: {orientation: landscape}
+          set: {visible: false}
+)");
+    termin_gui_native_test::install_test_text_measurer(loaded.document());
+    tc_widget* root = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    tc_widget* action = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("action").handle);
+    assert(root && action);
+    const tc_widget_handle root_handle = loaded.root().handle;
+    const tc_widget_handle action_handle = loaded.named("action").handle;
+
+    tc_ui_presentation_metrics metrics =
+        tc_ui_presentation_metrics_identity({1198.0f, 1600.0f});
+    metrics.density_scale = 2.0f;
+    metrics.physical_safe_insets = {20.0f, 40.0f, 20.0f, 40.0f};
+    assert(loaded.document().set_presentation_metrics(metrics));
+    loaded.document().layout_roots({0.0f, 0.0f, 599.0f, 800.0f});
+    auto* box = static_cast<BoxLayout*>(root->body);
+    assert(box->orientation() == Orientation::Vertical);
+    assert(box->padding().left == 5.0f);
+    assert(box->spacing() == 7.0f);
+    assert(tc_widget_is_visible(action));
+    assert(loaded.document().root_layout_policy() ==
+           TC_UI_ROOT_LAYOUT_FULL_VIEWPORT);
+
+    tc_widget_set_focusable(action, true);
+    assert(tc_ui_document_set_focus(
+        loaded.document().handle(), action_handle));
+    assert(tc_widget_handle_eq(
+        tc_ui_document_focused_widget(loaded.document().handle()),
+        action_handle));
+
+    metrics.physical_extent = {1600.0f, 1200.0f};
+    assert(loaded.document().set_presentation_metrics(metrics));
+    loaded.document().layout_roots({0.0f, 0.0f, 800.0f, 600.0f});
+    assert(tc_widget_handle_eq(loaded.root().handle, root_handle));
+    assert(tc_widget_handle_eq(loaded.named("action").handle, action_handle));
+    assert(box->orientation() == Orientation::Horizontal);
+    assert(box->padding().left == 1.0f);
+    assert(box->spacing() == 11.0f);
+    assert(!tc_widget_is_visible(action));
+    assert(tc_widget_handle_is_invalid(
+        tc_ui_document_focused_widget(loaded.document().handle())));
+    assert(loaded.document().root_layout_policy() ==
+           TC_UI_ROOT_LAYOUT_SAFE_AREA);
+    const tc_ui_rect safe_bounds = tc_widget_bounds(root);
+    assert(safe_bounds.x == 10.0f && safe_bounds.y == 20.0f);
+    assert(safe_bounds.width == 780.0f && safe_bounds.height == 560.0f);
+
+    metrics.physical_extent = {1198.0f, 1600.0f};
+    assert(loaded.document().set_presentation_metrics(metrics));
+    loaded.document().layout_roots({0.0f, 0.0f, 599.0f, 800.0f});
+    assert(tc_widget_is_visible(action));
+    assert(box->orientation() == Orientation::Vertical);
+    assert(box->spacing() == 7.0f);
+}
+
+void test_responsive_grid_placement_and_diagnostics() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(R"(
+uiscript: 2
+root:
+  type: termin.gui.GridLayout
+  columns:
+    - policy: stretch
+    - policy: stretch
+  rows:
+    - policy: stretch
+    - policy: stretch
+  children:
+    - type: termin.gui.Panel
+      name: item
+      row: 0
+      column: 0
+      variants:
+        - when: {min_width: 600}
+          set: {row: 1, column: 1}
+)");
+    tc_widget* root = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    assert(root);
+    auto* grid = static_cast<GridLayout*>(root->body);
+    loaded.document().layout_roots({0.0f, 0.0f, 599.0f, 400.0f});
+    assert(grid->items()[0].row == 0 && grid->items()[0].column == 0);
+    loaded.document().layout_roots({0.0f, 0.0f, 600.0f, 400.0f});
+    assert(grid->items()[0].row == 1 && grid->items()[0].column == 1);
+    loaded.document().layout_roots({0.0f, 0.0f, 599.0f, 400.0f});
+    assert(grid->items()[0].row == 0 && grid->items()[0].column == 0);
+
+    const std::vector<std::string> invalid{
+        "    - when: {min_width: 10, max_width: 10}\n"
+        "      set: {visible: false}\n",
+        "    - when: {platform: android}\n"
+        "      set: {visible: false}\n",
+        "    - when: {min_width: 0}\n"
+        "      set: {text: nope}\n",
+        "    - when: {min_width: 0}\n"
+        "      set: {spacing: 1}\n"
+        "    - when: {max_width: 1000}\n"
+        "      set: {spacing: 2}\n",
+    };
+    for (const std::string& variants : invalid) {
+        try {
+            loader.parser.parse(
+                "uiscript: 2\nroot:\n"
+                "  type: termin.gui.BoxLayout\n"
+                "  variants:\n" + variants);
+            assert(false);
+        } catch (const UiScriptError& error) {
+            assert(std::string(error.what()).find("root.variants") !=
+                   std::string::npos);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -443,5 +584,7 @@ int main() {
     test_box_properties_placement_and_strict_validation();
     test_grid_and_scroll_facets();
     test_wrapped_label_and_wrap_layout_facets();
+    test_responsive_variants_preserve_tree_and_interaction_state();
+    test_responsive_grid_placement_and_diagnostics();
     return 0;
 }

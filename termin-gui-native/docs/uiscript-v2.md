@@ -31,6 +31,7 @@ The initial cross-platform baseline contains:
 - `termin.gui.GridLayout`;
 - `termin.gui.ScrollArea`;
 - `termin.gui.Label`;
+- `termin.gui.WrapLayout`;
 - `termin.gui.IconButton`.
 
 Common properties are `visible`, `enabled`, and the normalized `layout`
@@ -124,6 +125,51 @@ An immutable `UiScriptDescription` records the validated tree and its native
 type dependencies. Materialization creates a fresh document tree for every
 consumer. A failure destroys every widget created by that attempt. Reload
 builds a complete replacement first and leaves the old tree alive on error.
+
+## Responsive variants
+
+Every node may contain validated `variants`. Selectors use the document's
+logical viewport, never physical pixels or a platform name:
+
+```yaml
+root:
+  type: termin.gui.BoxLayout
+  orientation: vertical
+  safe_area: ignore
+  variants:
+    - when: {width_class: compact}
+      set: {padding: 8, spacing: 6}
+    - when: {min_width: 600, orientation: landscape}
+      priority: 10
+      set: {orientation: horizontal, safe_area: respect}
+```
+
+Supported selector fields are `min_width`, `max_width`, `min_height`,
+`max_height`, `orientation` (`portrait` or `landscape`), and `width_class`.
+Minimum bounds are inclusive and maximum bounds are exclusive. Width classes
+are `compact` below 600 logical units, `medium` from 600 through 839.999, and
+`expanded` from 840. A square viewport is classified as landscape.
+
+Matching variants are composed in ascending integer `priority`; source order
+is retained for non-conflicting rules at the same priority. Two selectors
+which can overlap at the same priority may not override the same property.
+Such input is rejected as ambiguous and must assign distinct priorities.
+
+The responsive override surface is intentionally closed:
+
+- every widget may override `visible` and `layout`;
+- Box/HStack/VStack may override `orientation`, `spacing`, and `padding`;
+- a child of GridLayout may override `row`, `column`, `row_span`, and
+  `column_span`;
+- the root may override `safe_area` (`respect` or `ignore`).
+
+The base root may also declare `safe_area`. Rules are evaluated immediately
+before each document layout pass and cached until the matching set changes.
+They update existing widget handles and parent placement metadata; they never
+rematerialize the tree. Making a subtree invisible uses the normal widget
+participation path, which removes it from paint, hit testing, focus, and
+pointer capture. Compiled UI document assets preserve selectors, priorities,
+and overrides exactly.
 
 ## UI document assets
 

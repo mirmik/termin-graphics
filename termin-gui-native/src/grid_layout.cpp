@@ -107,6 +107,36 @@ void GridLayout::add_child(
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
 }
 
+bool GridLayout::set_child_placement(
+    tc_widget_handle handle,
+    size_t row,
+    size_t column,
+    size_t row_span,
+    size_t column_span
+) {
+    if (row_span == 0 || column_span == 0 ||
+        row + row_span > rows_.size() ||
+        column + column_span > columns_.size()) {
+        tc_log_error(
+            "[termin-gui-native] GridLayout child placement exceeds declared tracks");
+        return false;
+    }
+    for (GridItem& item : items_) {
+        if (!tc_widget_handle_eq(item.handle, handle)) {
+            continue;
+        }
+        item.row = row;
+        item.column = column;
+        item.row_span = row_span;
+        item.column_span = column_span;
+        mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
+        return true;
+    }
+    tc_log_error(
+        "[termin-gui-native] cannot update placement for a non-child GridLayout widget");
+    return false;
+}
+
 bool GridLayout::set_column_extent_limits(size_t column, float min_extent, float max_extent) {
     if (column >= columns_.size()) {
         return false;

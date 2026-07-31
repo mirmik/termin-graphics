@@ -193,6 +193,41 @@ root:
             )
 
 
+def test_uiscript_responsive_variants_are_native_and_retained():
+    source = """
+uiscript: 2
+root:
+  type: termin.gui.BoxLayout
+  name: responsive
+  spacing: 2
+  variants:
+    - when: {max_width: 600}
+      set: {spacing: 7}
+  children:
+    - type: termin.gui.Panel
+      name: content
+      variants:
+        - when: {orientation: landscape}
+          set: {visible: false}
+"""
+    loader = UiScriptLoader()
+    description = loader.parser.parse(source)
+    assert description.root.variants[0].selector == {"max_width": 600}
+    assert description.root.variants[0].overrides == {"spacing": 7}
+
+    loaded = loader.materialize(description)
+    content = loaded.named("content").widget
+    root_handle = loaded.root.widget.handle
+    content_handle = content.handle
+    loaded.document.layout_roots(Rect(0, 0, 599, 800))
+    assert content.visible
+    loaded.document.layout_roots(Rect(0, 0, 800, 600))
+    assert not content.visible
+    assert loaded.root.widget.handle == root_handle
+    assert content.handle == content_handle
+    loaded.close()
+
+
 @pytest.mark.parametrize(
     ("source", "message"),
     [

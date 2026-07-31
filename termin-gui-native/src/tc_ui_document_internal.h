@@ -24,6 +24,18 @@ typedef struct tc_ui_overlay_entry {
     bool has_layout;
 } tc_ui_overlay_entry;
 
+typedef void (*tc_ui_layout_prepare_fn)(
+    tc_ui_document_handle document,
+    tc_ui_rect* rect,
+    void* user_data
+);
+
+typedef struct tc_ui_layout_prepare_entry {
+    uint64_t token;
+    tc_ui_layout_prepare_fn callback;
+    void* user_data;
+} tc_ui_layout_prepare_entry;
+
 struct tc_ui_document {
     tc_ui_document_handle handle;
     char debug_name[TC_UI_DOCUMENT_DEBUG_NAME_CAPACITY];
@@ -43,6 +55,10 @@ struct tc_ui_document {
     tc_ui_overlay_entry* overlays;
     size_t overlay_count;
     size_t overlay_capacity;
+    tc_ui_layout_prepare_entry* layout_prepare_entries;
+    size_t layout_prepare_count;
+    size_t layout_prepare_capacity;
+    uint64_t next_layout_prepare_token;
     tc_ui_rect layout_rect;
     bool has_layout_rect;
 
@@ -75,12 +91,29 @@ struct tc_ui_document {
     void* clipboard_user_data;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document(
     tc_ui_document_handle handle
 );
 TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document_checked(
     tc_ui_document_handle handle,
     const char* operation
+);
+TC_UI_INTERNAL uint64_t tc_ui_internal_add_layout_prepare(
+    tc_ui_document_handle document,
+    tc_ui_layout_prepare_fn callback,
+    void* user_data
+);
+TC_UI_INTERNAL void tc_ui_internal_remove_layout_prepare(
+    tc_ui_document_handle document,
+    uint64_t token
+);
+TC_UI_INTERNAL void tc_ui_internal_notify_layout_prepare(
+    tc_ui_document* document,
+    tc_ui_rect* rect
 );
 
 TC_UI_INTERNAL bool tc_ui_internal_same_handle(tc_widget_handle lhs, tc_widget_handle rhs);
@@ -157,5 +190,9 @@ TC_UI_INTERNAL void tc_ui_internal_update_hover(
     const tc_ui_pointer_event* source
 );
 TC_UI_INTERNAL void tc_ui_internal_refresh_cursor(tc_ui_document* document);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

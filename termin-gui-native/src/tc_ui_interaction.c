@@ -747,6 +747,7 @@ void tc_ui_document_layout_roots(tc_ui_document_handle document_handle, tc_ui_re
     if (!document) {
         return;
     }
+    tc_ui_internal_notify_layout_prepare(document, &rect);
     document->layout_rect = rect;
     document->has_layout_rect = true;
     for (index = 0; index < document->root_count; ++index) {

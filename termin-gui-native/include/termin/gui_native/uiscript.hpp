@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -14,15 +15,25 @@ namespace termin::gui_native {
 
 inline constexpr std::uint32_t UISCRIPT_VERSION = 2;
 
+class ResponsiveRuntime;
+
 class TERMIN_GUI_NATIVE_API UiScriptError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
+};
+
+struct UiScriptVariant {
+    tc::trent selector = tc::trent::dict();
+    tc::trent overrides = tc::trent::dict();
+    std::int64_t priority = 0;
+    std::string source_path;
 };
 
 struct UiScriptNode {
     std::string type_name;
     std::string name;
     tc::trent properties = tc::trent::dict();
+    std::vector<UiScriptVariant> variants;
     std::vector<UiScriptNode> children;
     std::string source_path;
 };
@@ -71,6 +82,7 @@ private:
     UiScriptDescription description_;
     MaterializedWidget root_;
     std::unordered_map<std::string, MaterializedWidget> widgets_;
+    std::unique_ptr<ResponsiveRuntime> responsive_runtime_;
     bool owns_document_ = false;
     bool closed_ = true;
 };

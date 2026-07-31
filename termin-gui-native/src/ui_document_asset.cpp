@@ -57,6 +57,21 @@ tc::trent encode_node(const UiScriptNode& node) {
             property.key ? property.key : "",
             tc::trent_view(property.value));
     }
+    if (!node.variants.empty()) {
+        tc::trent variants = tc::trent::list();
+        for (const UiScriptVariant& variant : node.variants) {
+            tc::trent encoded_variant = tc::trent::dict();
+            encoded_variant.set(
+                "when", tc::trent::copy_of(variant.selector.raw()));
+            encoded_variant.set(
+                "set", tc::trent::copy_of(variant.overrides.raw()));
+            if (variant.priority != 0) {
+                encoded_variant.set("priority", variant.priority);
+            }
+            variants.push_back(std::move(encoded_variant));
+        }
+        encoded.set("variants", std::move(variants));
+    }
     if (!node.children.empty()) {
         tc::trent children = tc::trent::list();
         for (const UiScriptNode& child : node.children) {

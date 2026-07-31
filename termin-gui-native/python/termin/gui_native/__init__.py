@@ -362,6 +362,7 @@ from termin.gui_native.uiscript import (  # noqa: E402
     UiScriptLoader,
     UiScriptNode,
     UiScriptParser,
+    UiScriptVariant,
 )
 from termin.gui_native.ui_document_asset import (  # noqa: E402
     UI_DOCUMENT_ASSET_SCHEMA_VERSION,
@@ -530,6 +531,7 @@ __all__ = [
     "UiScriptLoader",
     "UiScriptNode",
     "UiScriptParser",
+    "UiScriptVariant",
     "WidgetLayoutSpec",
     "Viewport3D",
     "ViewportExternalDragEvent",

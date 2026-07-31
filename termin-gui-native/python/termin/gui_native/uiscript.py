@@ -8,6 +8,7 @@ from termin.gui_native._gui_native import (
     UiScriptLoader,
     UiScriptNode,
     UiScriptParser,
+    UiScriptVariant,
 )
 
 UISCRIPT_VERSION = 2
@@ -21,4 +22,5 @@ __all__ = [
     "UiScriptLoader",
     "UiScriptNode",
     "UiScriptParser",
+    "UiScriptVariant",
 ]

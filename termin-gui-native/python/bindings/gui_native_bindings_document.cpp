@@ -1059,6 +1059,18 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
   nb::exception<termin::gui_native::UiScriptError>(
       m, "UiScriptError", PyExc_ValueError);
 
+  nb::class_<termin::gui_native::UiScriptVariant>(m, "UiScriptVariant")
+      .def_prop_ro("selector",
+                   [](const termin::gui_native::UiScriptVariant &self) {
+                     return tc_value_to_python(self.selector.raw());
+                   })
+      .def_prop_ro("overrides",
+                   [](const termin::gui_native::UiScriptVariant &self) {
+                     return tc_value_to_python(self.overrides.raw());
+                   })
+      .def_ro("priority", &termin::gui_native::UiScriptVariant::priority)
+      .def_ro("source_path", &termin::gui_native::UiScriptVariant::source_path);
+
   nb::class_<termin::gui_native::UiScriptNode>(m, "UiScriptNode")
       .def_prop_ro("type_name",
                    [](const termin::gui_native::UiScriptNode &self) {
@@ -1077,6 +1089,10 @@ void bind_gui_native_rendering_and_document(nb::module_ &m) {
       .def_prop_ro("children",
                    [](const termin::gui_native::UiScriptNode &self) {
                      return self.children;
+                   })
+      .def_prop_ro("variants",
+                   [](const termin::gui_native::UiScriptNode &self) {
+                     return self.variants;
                    })
       .def_prop_ro("source_path",
                    [](const termin::gui_native::UiScriptNode &self) {

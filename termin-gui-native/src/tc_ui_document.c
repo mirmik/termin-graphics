@@ -32,6 +32,76 @@ static tc_handle document_base_handle(tc_ui_document_handle handle) {
     return (tc_handle){handle.index, handle.generation};
 }
 
+uint64_t tc_ui_internal_add_layout_prepare(
+    tc_ui_document_handle document_handle,
+    tc_ui_layout_prepare_fn callback,
+    void* user_data
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_internal_add_layout_prepare");
+    tc_ui_layout_prepare_entry* entry;
+    if (!document || !callback) {
+        tc_log_error(
+            "[termin-gui-native] cannot add an invalid layout prepare callback");
+        return 0;
+    }
+    if (!tc_ui_internal_reserve_array(
+            (void**)&document->layout_prepare_entries,
+            sizeof(*document->layout_prepare_entries),
+            &document->layout_prepare_capacity,
+            document->layout_prepare_count + 1)) {
+        tc_log_error(
+            "[termin-gui-native] failed to reserve layout prepare callbacks");
+        return 0;
+    }
+    ++document->next_layout_prepare_token;
+    if (document->next_layout_prepare_token == 0) {
+        ++document->next_layout_prepare_token;
+    }
+    entry = &document->layout_prepare_entries[document->layout_prepare_count++];
+    entry->token = document->next_layout_prepare_token;
+    entry->callback = callback;
+    entry->user_data = user_data;
+    return entry->token;
+}
+
+void tc_ui_internal_remove_layout_prepare(
+    tc_ui_document_handle document_handle,
+    uint64_t token
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document(document_handle);
+    size_t index;
+    if (!document || token == 0) {
+        return;
+    }
+    for (index = 0; index < document->layout_prepare_count; ++index) {
+        if (document->layout_prepare_entries[index].token == token) {
+            memmove(
+                &document->layout_prepare_entries[index],
+                &document->layout_prepare_entries[index + 1],
+                (document->layout_prepare_count - index - 1) *
+                    sizeof(*document->layout_prepare_entries));
+            --document->layout_prepare_count;
+            return;
+        }
+    }
+}
+
+void tc_ui_internal_notify_layout_prepare(
+    tc_ui_document* document,
+    tc_ui_rect* rect
+) {
+    size_t index;
+    if (!document || !rect) {
+        return;
+    }
+    for (index = 0; index < document->layout_prepare_count; ++index) {
+        const tc_ui_layout_prepare_entry entry =
+            document->layout_prepare_entries[index];
+        entry.callback(document->handle, rect, entry.user_data);
+    }
+}
+
 tc_ui_presentation_metrics
 tc_ui_presentation_metrics_identity(tc_ui_size physical_extent) {
     tc_ui_presentation_metrics metrics;
@@ -1276,6 +1346,7 @@ void tc_ui_document_destroy(tc_ui_document_handle document_handle) {
     }
     free(document->roots);
     free(document->overlays);
+    free(document->layout_prepare_entries);
     free(document->free_slots);
     free(document->slots);
     pool_slot = (tc_ui_document_pool_slot*)tc_pool_get(

@@ -30,6 +30,13 @@ public:
     size_t add_row(GridTrack track);
     void add_child(tc_widget_handle handle, size_t row, size_t column, size_t row_span = 1, size_t column_span = 1);
     void add_child(const Widget& widget, size_t row, size_t column, size_t row_span = 1, size_t column_span = 1) { add_child(widget.handle(), row, column, row_span, column_span); }
+    bool set_child_placement(
+        tc_widget_handle handle,
+        size_t row,
+        size_t column,
+        size_t row_span = 1,
+        size_t column_span = 1
+    );
     bool set_column_extent_limits(size_t column, float min_extent, float max_extent);
     bool set_row_extent_limits(size_t row, float min_extent, float max_extent);
     const std::vector<GridTrack>& columns() const { return columns_; }

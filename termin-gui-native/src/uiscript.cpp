@@ -9,8 +9,12 @@
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_trent_yaml.hpp>
 #include <termin/gui_native/builtin_widget_registration.hpp>
+#include <termin/gui_native/box_layout.hpp>
+#include <termin/gui_native/grid_layout.hpp>
 #include <termin/gui_native/tc_uiscript.h>
 #include <termin/gui_native/tc_widget_registry.h>
+
+#include "tc_ui_document_internal.h"
 
 namespace termin::gui_native {
 namespace {
@@ -324,6 +328,14 @@ void validate_property(
         }
         return;
     }
+    if (name == "safe_area") {
+        if (!value.is_string() ||
+            (value.as_string() != "respect" &&
+             value.as_string() != "ignore")) {
+            fail(path, "expected 'respect' or 'ignore'");
+        }
+        return;
+    }
     if (name == "align_items" || name == "align_self" ||
         name == "line_alignment") {
         if (!value.is_string()) fail(path, "expected an alignment string");
@@ -419,6 +431,201 @@ bool contains_child_property(
         }
     }
     return false;
+}
+
+struct SelectorDomain {
+    double min_width = 0.0;
+    double max_width = INFINITY;
+    double min_height = 0.0;
+    double max_height = INFINITY;
+    std::string orientation;
+};
+
+SelectorDomain selector_domain(tc::trent_view selector) {
+    SelectorDomain domain;
+    if (tc::trent_view value = selector["min_width"]; value) {
+        domain.min_width = value.as_numer();
+    }
+    if (tc::trent_view value = selector["max_width"]; value) {
+        domain.max_width = value.as_numer();
+    }
+    if (tc::trent_view value = selector["min_height"]; value) {
+        domain.min_height = value.as_numer();
+    }
+    if (tc::trent_view value = selector["max_height"]; value) {
+        domain.max_height = value.as_numer();
+    }
+    if (tc::trent_view value = selector["orientation"]; value) {
+        domain.orientation = value.as_string();
+    }
+    if (tc::trent_view value = selector["width_class"]; value) {
+        const std::string width_class = value.as_string();
+        if (width_class == "compact") {
+            domain.max_width = std::min(domain.max_width, 600.0);
+        } else if (width_class == "medium") {
+            domain.min_width = std::max(domain.min_width, 600.0);
+            domain.max_width = std::min(domain.max_width, 840.0);
+        } else {
+            domain.min_width = std::max(domain.min_width, 840.0);
+        }
+    }
+    return domain;
+}
+
+bool selectors_overlap(tc::trent_view lhs, tc::trent_view rhs) {
+    const SelectorDomain a = selector_domain(lhs);
+    const SelectorDomain b = selector_domain(rhs);
+    return std::max(a.min_width, b.min_width) <
+            std::min(a.max_width, b.max_width) &&
+        std::max(a.min_height, b.min_height) <
+            std::min(a.max_height, b.max_height) &&
+        (a.orientation.empty() || b.orientation.empty() ||
+         a.orientation == b.orientation);
+}
+
+bool overrides_overlap(tc::trent_view lhs, tc::trent_view rhs) {
+    for (const auto entry : lhs.as_dict()) {
+        if (rhs[entry.key ? entry.key : ""]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<UiScriptVariant> parse_variants(
+    tc::trent_view source,
+    const std::string& path,
+    const std::string& type_name,
+    const tc_uiscript_type_descriptor* parent_descriptor
+) {
+    const tc::trent_view variants = source["variants"];
+    std::vector<UiScriptVariant> result;
+    if (!variants) {
+        return result;
+    }
+    if (!variants.is_list()) {
+        fail(path + ".variants", "expected a list");
+    }
+    result.reserve(variants.size());
+    for (size_t index = 0; index < variants.size(); ++index) {
+        const std::string variant_path =
+            path + ".variants[" + std::to_string(index) + "]";
+        const tc::trent_view encoded = variants[index];
+        if (!encoded.is_dict()) {
+            fail(variant_path, "expected a mapping");
+        }
+        for (const auto entry : encoded.as_dict()) {
+            const std::string key = entry.key ? entry.key : "";
+            if (key != "when" && key != "set" && key != "priority") {
+                fail(variant_path, "unsupported variant property '" + key + "'");
+            }
+        }
+        const tc::trent_view selector = encoded["when"];
+        const tc::trent_view overrides = encoded["set"];
+        if (!selector.is_dict() || selector.size() == 0) {
+            fail(variant_path + ".when", "expected a non-empty selector mapping");
+        }
+        if (!overrides.is_dict() || overrides.size() == 0) {
+            fail(variant_path + ".set", "expected a non-empty override mapping");
+        }
+        static const std::unordered_set<std::string> selector_keys{
+            "min_width", "max_width", "min_height", "max_height",
+            "orientation", "width_class"};
+        for (const auto entry : selector.as_dict()) {
+            const std::string key = entry.key ? entry.key : "";
+            const tc::trent_view value = entry.view();
+            if (!selector_keys.contains(key)) {
+                fail(variant_path + ".when",
+                     "unsupported selector '" + key + "'");
+            }
+            if (key == "orientation") {
+                if (!value.is_string() ||
+                    (value.as_string() != "portrait" &&
+                     value.as_string() != "landscape")) {
+                    fail(variant_path + ".when.orientation",
+                         "expected 'portrait' or 'landscape'");
+                }
+            } else if (key == "width_class") {
+                if (!value.is_string() ||
+                    (value.as_string() != "compact" &&
+                     value.as_string() != "medium" &&
+                     value.as_string() != "expanded")) {
+                    fail(variant_path + ".when.width_class",
+                         "expected 'compact', 'medium', or 'expanded'");
+                }
+            } else {
+                validate_number(
+                    value, variant_path + ".when." + key, true);
+            }
+        }
+        const SelectorDomain domain = selector_domain(selector);
+        if (domain.min_width >= domain.max_width) {
+            fail(variant_path + ".when",
+                 "width selector has an empty [min, max) range");
+        }
+        if (domain.min_height >= domain.max_height) {
+            fail(variant_path + ".when",
+                 "height selector has an empty [min, max) range");
+        }
+
+        static const std::unordered_set<std::string> box_types{
+            "termin.gui.BoxLayout", "termin.gui.HStack", "termin.gui.VStack"};
+        for (const auto entry : overrides.as_dict()) {
+            const std::string key = entry.key ? entry.key : "";
+            const bool generic = key == "visible" || key == "layout";
+            const bool box =
+                box_types.contains(type_name) &&
+                (key == "orientation" || key == "spacing" || key == "padding");
+            const bool grid_placement =
+                parent_descriptor &&
+                contains_child_property(*parent_descriptor, key) &&
+                (key == "row" || key == "column" ||
+                 key == "row_span" || key == "column_span");
+            const bool safe_area = key == "safe_area" && path == "root";
+            if (!generic && !box && !grid_placement && !safe_area) {
+                fail(variant_path + ".set",
+                     "unsupported responsive override '" + key + "'");
+            }
+            if (safe_area) {
+                const tc::trent_view value = entry.view();
+                if (!value.is_string() ||
+                    (value.as_string() != "respect" &&
+                     value.as_string() != "ignore")) {
+                    fail(variant_path + ".set.safe_area",
+                         "expected 'respect' or 'ignore'");
+                }
+            } else {
+                validate_property(
+                    key, entry.view(), variant_path + ".set." + key);
+            }
+        }
+        const tc::trent_view priority = encoded["priority"];
+        if (priority && !priority.is_integer()) {
+            fail(variant_path + ".priority", "expected an integer");
+        }
+        UiScriptVariant variant;
+        variant.selector = tc::trent::copy_of(selector.raw());
+        variant.overrides = tc::trent::copy_of(overrides.raw());
+        variant.priority = priority ? priority.as_integer() : 0;
+        variant.source_path = variant_path;
+        for (const UiScriptVariant& previous : result) {
+            if (previous.priority == variant.priority &&
+                selectors_overlap(previous.selector.view(), selector) &&
+                overrides_overlap(previous.overrides.view(), overrides)) {
+                fail(variant_path,
+                     "ambiguous overlap at priority " +
+                     std::to_string(variant.priority) +
+                     "; assign distinct priorities");
+            }
+        }
+        result.push_back(std::move(variant));
+    }
+    std::stable_sort(
+        result.begin(), result.end(),
+        [](const UiScriptVariant& lhs, const UiScriptVariant& rhs) {
+            return lhs.priority < rhs.priority;
+        });
+    return result;
 }
 
 void validate_box_placement(
@@ -523,6 +730,53 @@ void validate_grid_structure(
     }
 }
 
+void validate_grid_variant_placements(const UiScriptNode& node) {
+    if (node.type_name != "termin.gui.GridLayout") {
+        return;
+    }
+    const size_t row_count = node.properties["rows"].size();
+    const size_t column_count = node.properties["columns"].size();
+    for (const UiScriptNode& child : node.children) {
+        const size_t base_row =
+            static_cast<size_t>(child.properties["row"].as_integer());
+        const size_t base_column =
+            static_cast<size_t>(child.properties["column"].as_integer());
+        const tc::trent_view base_row_span_value =
+            child.properties["row_span"];
+        const tc::trent_view base_column_span_value =
+            child.properties["column_span"];
+        const size_t base_row_span = base_row_span_value
+            ? static_cast<size_t>(base_row_span_value.as_integer()) : 1;
+        const size_t base_column_span = base_column_span_value
+            ? static_cast<size_t>(base_column_span_value.as_integer()) : 1;
+        for (const UiScriptVariant& variant : child.variants) {
+            const tc::trent_view overrides = variant.overrides;
+            const size_t row = overrides["row"]
+                ? static_cast<size_t>(overrides["row"].as_integer())
+                : base_row;
+            const size_t column = overrides["column"]
+                ? static_cast<size_t>(overrides["column"].as_integer())
+                : base_column;
+            const size_t row_span = overrides["row_span"]
+                ? static_cast<size_t>(overrides["row_span"].as_integer())
+                : base_row_span;
+            const size_t column_span = overrides["column_span"]
+                ? static_cast<size_t>(overrides["column_span"].as_integer())
+                : base_column_span;
+            if (row + row_span > row_count) {
+                fail(
+                    variant.source_path + ".set.row",
+                    "responsive row placement exceeds declared tracks");
+            }
+            if (column + column_span > column_count) {
+                fail(
+                    variant.source_path + ".set.column",
+                    "responsive column placement exceeds declared tracks");
+            }
+        }
+    }
+}
+
 UiScriptNode parse_node(
     tc::trent_view source,
     const std::string& path,
@@ -567,7 +821,7 @@ UiScriptNode parse_node(
     }
 
     static const std::unordered_set<std::string> structural{
-        "type", "name", "children"};
+        "type", "name", "children", "variants"};
     static const std::unordered_set<std::string> common{
         "visible", "enabled", "layout"};
     for (const auto entry : source.as_dict()) {
@@ -578,8 +832,9 @@ UiScriptNode parse_node(
         const bool parent_property =
             parent_descriptor &&
             contains_child_property(*parent_descriptor, key);
+        const bool root_property = path == "root" && key == "safe_area";
         if (!common.contains(key) && !contains_property(*descriptor, key) &&
-            !parent_property) {
+            !parent_property && !root_property) {
             fail(path, "unsupported " + type_name + " property '" + key + "'");
         }
         validate_property(key, entry.view(), path + "." + key);
@@ -587,6 +842,8 @@ UiScriptNode parse_node(
     }
     validate_box_placement(node, parent_descriptor);
     validate_grid_structure(type_name, source, path);
+    node.variants = parse_variants(
+        source, path, type_name, parent_descriptor);
 
     const tc::trent_view children = source["children"];
     if (children) {
@@ -612,6 +869,7 @@ UiScriptNode parse_node(
             ));
         }
     }
+    validate_grid_variant_placements(node);
     return node;
 }
 
@@ -619,7 +877,8 @@ MaterializedWidget materialize_node(
     tc_ui_document_handle document,
     const UiScriptNode& node,
     std::vector<tc_widget_handle>& created,
-    std::unordered_map<std::string, MaterializedWidget>& named
+    std::unordered_map<std::string, MaterializedWidget>& named,
+    std::unordered_map<std::string, tc_widget_handle>& all_handles
 ) {
     const tc_widget_handle handle =
         tc_ui_document_create_registered_widget(document, node.type_name.c_str());
@@ -627,6 +886,7 @@ MaterializedWidget materialize_node(
         fail(node.source_path, "registered widget factory failed");
     }
     created.push_back(handle);
+    all_handles.emplace(node.source_path, handle);
     tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
     if (!widget) {
         fail(node.source_path, "created widget could not be resolved");
@@ -655,6 +915,17 @@ MaterializedWidget materialize_node(
             fail(node.source_path + ".layout", "widget rejected normalized layout spec");
         }
     }
+    if (tc::trent_view safe_area = node.properties["safe_area"]; safe_area) {
+        const tc_ui_root_layout_policy policy =
+            safe_area.as_string() == "respect"
+            ? TC_UI_ROOT_LAYOUT_SAFE_AREA
+            : TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
+        if (node.source_path != "root" ||
+            !tc_ui_document_set_root_layout_policy(document, policy)) {
+            fail(node.source_path + ".safe_area",
+                 "document rejected root safe-area policy");
+        }
+    }
     const tc_uiscript_type_descriptor* descriptor =
         tc_uiscript_type_descriptor_get(node.type_name.c_str());
     if (!descriptor) {
@@ -671,7 +942,7 @@ MaterializedWidget materialize_node(
     }
     for (const UiScriptNode& child_node : node.children) {
         MaterializedWidget child = materialize_node(
-            document, child_node, created, named);
+            document, child_node, created, named, all_handles);
         tc_widget* child_widget =
             tc_ui_document_resolve_widget(document, child.handle);
         if (!child_widget || !descriptor->attach_child ||
@@ -708,6 +979,327 @@ std::string read_file(const std::string& path) {
 }
 
 } // namespace
+
+class ResponsiveRuntime {
+private:
+    struct Binding {
+        tc_widget_handle handle = tc_widget_handle_invalid();
+        tc_widget_handle parent = tc_widget_handle_invalid();
+        std::string type_name;
+        std::vector<UiScriptVariant> variants;
+        bool base_visible = true;
+        tc_ui_widget_layout_spec base_layout =
+            tc_ui_widget_layout_spec_default();
+        bool is_box = false;
+        Orientation base_orientation = Orientation::Horizontal;
+        EdgeInsets base_padding{};
+        float base_spacing = 0.0f;
+        bool has_grid_placement = false;
+        GridItem base_grid_placement{};
+        bool is_root = false;
+        tc_ui_root_layout_policy base_safe_area =
+            TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
+        std::vector<bool> active;
+    };
+
+    tc_ui_document_handle document_ = tc_ui_document_handle_invalid();
+    uint64_t callback_token_ = 0;
+    std::vector<Binding> bindings_;
+
+    static bool matches(
+        tc::trent_view selector,
+        float width,
+        float height
+    ) {
+        if (tc::trent_view value = selector["min_width"];
+            value && width < value.as_numer()) {
+            return false;
+        }
+        if (tc::trent_view value = selector["max_width"];
+            value && width >= value.as_numer()) {
+            return false;
+        }
+        if (tc::trent_view value = selector["min_height"];
+            value && height < value.as_numer()) {
+            return false;
+        }
+        if (tc::trent_view value = selector["max_height"];
+            value && height >= value.as_numer()) {
+            return false;
+        }
+        if (tc::trent_view value = selector["orientation"]; value) {
+            const bool portrait = height > width;
+            if ((value.as_string() == "portrait") != portrait) {
+                return false;
+            }
+        }
+        if (tc::trent_view value = selector["width_class"]; value) {
+            const std::string width_class = width < 600.0f
+                ? "compact"
+                : (width < 840.0f ? "medium" : "expanded");
+            if (value.as_string() != width_class) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static float number(tc::trent_view value) {
+        return static_cast<float>(value.as_numer());
+    }
+
+    static EdgeInsets padding(tc::trent_view value) {
+        if (is_number(value)) {
+            const float all = number(value);
+            return {all, all, all, all};
+        }
+        return {
+            number(value[0]), number(value[1]),
+            number(value[2]), number(value[3])};
+    }
+
+    static void prepare_callback(
+        tc_ui_document_handle,
+        tc_ui_rect* rect,
+        void* user_data
+    ) noexcept {
+        auto* runtime = static_cast<ResponsiveRuntime*>(user_data);
+        try {
+            runtime->refresh(*rect);
+        } catch (const std::exception& error) {
+            tc_log_error(
+                "[termin-gui-native] responsive UiScript refresh failed: %s",
+                error.what());
+        } catch (...) {
+            tc_log_error(
+                "[termin-gui-native] responsive UiScript refresh failed "
+                "with an unknown exception");
+        }
+    }
+
+    void collect(
+        const UiScriptNode& node,
+        tc_widget_handle parent,
+        const std::string& parent_type,
+        const std::unordered_map<std::string, tc_widget_handle>& handles
+    ) {
+        const auto found = handles.find(node.source_path);
+        if (found == handles.end()) {
+            throw UiScriptError(
+                node.source_path +
+                ": responsive runtime lost materialized widget");
+        }
+        const tc_widget_handle handle = found->second;
+        if (!node.variants.empty()) {
+            tc_widget* widget =
+                tc_ui_document_resolve_widget(document_, handle);
+            if (!widget) {
+                throw UiScriptError(
+                    node.source_path +
+                    ": responsive runtime could not resolve widget");
+            }
+            Binding binding;
+            binding.handle = handle;
+            binding.parent = parent;
+            binding.type_name = node.type_name;
+            binding.variants = node.variants;
+            binding.base_visible = tc_widget_is_visible(widget);
+            binding.base_layout = tc_widget_layout_spec(widget);
+            binding.is_root = tc_widget_handle_is_invalid(parent);
+            if (binding.is_root) {
+                binding.base_safe_area =
+                    tc_ui_document_root_layout_policy(document_);
+            }
+            static const std::unordered_set<std::string> box_types{
+                "termin.gui.BoxLayout",
+                "termin.gui.HStack",
+                "termin.gui.VStack"};
+            binding.is_box = box_types.contains(node.type_name);
+            if (binding.is_box) {
+                const auto* box = static_cast<const BoxLayout*>(widget->body);
+                binding.base_orientation = box->orientation();
+                binding.base_padding = box->padding();
+                binding.base_spacing = box->spacing();
+            }
+            if (!tc_widget_handle_is_invalid(parent)) {
+                tc_widget* parent_widget =
+                    tc_ui_document_resolve_widget(document_, parent);
+                if (parent_widget && parent_widget->body &&
+                    parent_type == "termin.gui.GridLayout") {
+                    const auto* grid =
+                        static_cast<const GridLayout*>(parent_widget->body);
+                    for (const GridItem& item : grid->items()) {
+                        if (tc_widget_handle_eq(item.handle, handle)) {
+                            binding.has_grid_placement = true;
+                            binding.base_grid_placement = item;
+                            break;
+                        }
+                    }
+                }
+            }
+            binding.active.assign(binding.variants.size(), false);
+            bindings_.push_back(std::move(binding));
+        }
+        for (const UiScriptNode& child : node.children) {
+            collect(child, handle, node.type_name, handles);
+        }
+    }
+
+    void apply(Binding& binding, const std::vector<bool>& active) {
+        tc_widget* widget =
+            tc_ui_document_resolve_widget(document_, binding.handle);
+        if (!widget) {
+            tc_log_error(
+                "[termin-gui-native] responsive UiScript target became stale");
+            return;
+        }
+        bool visible = binding.base_visible;
+        tc_ui_widget_layout_spec layout = binding.base_layout;
+        bool has_layout_override = false;
+        Orientation orientation = binding.base_orientation;
+        EdgeInsets box_padding = binding.base_padding;
+        float spacing = binding.base_spacing;
+        GridItem placement = binding.base_grid_placement;
+        tc_ui_root_layout_policy safe_area = binding.base_safe_area;
+
+        for (size_t index = 0; index < binding.variants.size(); ++index) {
+            if (!active[index]) {
+                continue;
+            }
+            const tc::trent_view overrides =
+                binding.variants[index].overrides;
+            if (tc::trent_view value = overrides["visible"]; value) {
+                visible = value.as_bool();
+            }
+            if (tc::trent_view value = overrides["layout"]; value) {
+                layout = parse_layout_spec(
+                    value,
+                    binding.variants[index].source_path + ".set.layout");
+                has_layout_override = true;
+            }
+            if (tc::trent_view value = overrides["orientation"]; value) {
+                orientation = value.as_string() == "vertical"
+                    ? Orientation::Vertical
+                    : Orientation::Horizontal;
+            }
+            if (tc::trent_view value = overrides["padding"]; value) {
+                box_padding = padding(value);
+            }
+            if (tc::trent_view value = overrides["spacing"]; value) {
+                spacing = number(value);
+            }
+            if (tc::trent_view value = overrides["row"]; value) {
+                placement.row = static_cast<size_t>(value.as_integer());
+            }
+            if (tc::trent_view value = overrides["column"]; value) {
+                placement.column = static_cast<size_t>(value.as_integer());
+            }
+            if (tc::trent_view value = overrides["row_span"]; value) {
+                placement.row_span = static_cast<size_t>(value.as_integer());
+            }
+            if (tc::trent_view value = overrides["column_span"]; value) {
+                placement.column_span =
+                    static_cast<size_t>(value.as_integer());
+            }
+            if (tc::trent_view value = overrides["safe_area"]; value) {
+                safe_area = value.as_string() == "respect"
+                    ? TC_UI_ROOT_LAYOUT_SAFE_AREA
+                    : TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
+            }
+        }
+        tc_widget_set_visible(widget, visible);
+        if (has_layout_override || binding.active != active) {
+            if (!tc_widget_set_layout_spec(widget, &layout)) {
+                throw UiScriptError(
+                    "responsive target rejected a validated layout override");
+            }
+        }
+        if (binding.is_box) {
+            auto* box = static_cast<BoxLayout*>(widget->body);
+            box->set_orientation(orientation)
+                .set_padding(box_padding)
+                .set_spacing(spacing);
+        }
+        if (binding.has_grid_placement) {
+            tc_widget* parent_widget =
+                tc_ui_document_resolve_widget(document_, binding.parent);
+            if (!parent_widget ||
+                !static_cast<GridLayout*>(parent_widget->body)
+                     ->set_child_placement(
+                         binding.handle,
+                         placement.row,
+                         placement.column,
+                         placement.row_span,
+                         placement.column_span)) {
+                throw UiScriptError(
+                    "responsive grid placement rejected by parent");
+            }
+        }
+        if (binding.is_root &&
+            !tc_ui_document_set_root_layout_policy(document_, safe_area)) {
+            throw UiScriptError(
+                "responsive root rejected safe-area policy");
+        }
+        binding.active = active;
+    }
+
+    void refresh(tc_ui_rect& rect) {
+        float width = rect.width;
+        float height = rect.height;
+        tc_ui_presentation_metrics metrics;
+        if (tc_ui_document_has_presentation_metrics(document_) &&
+            tc_ui_document_presentation_metrics(document_, &metrics)) {
+            tc_ui_rect viewport;
+            if (tc_ui_presentation_metrics_logical_viewport(
+                    &metrics, &viewport)) {
+                width = viewport.width;
+                height = viewport.height;
+            }
+        }
+        for (Binding& binding : bindings_) {
+            std::vector<bool> active;
+            active.reserve(binding.variants.size());
+            for (const UiScriptVariant& variant : binding.variants) {
+                active.push_back(
+                    matches(variant.selector, width, height));
+            }
+            if (active != binding.active) {
+                apply(binding, active);
+            }
+        }
+        if (tc_ui_document_has_presentation_metrics(document_)) {
+            tc_ui_rect policy_rect;
+            if (tc_ui_document_presentation_layout_rect(
+                    document_, &policy_rect)) {
+                rect = policy_rect;
+            }
+        }
+    }
+
+public:
+    ResponsiveRuntime(
+        tc_ui_document_handle document,
+        const UiScriptNode& root,
+        const std::unordered_map<std::string, tc_widget_handle>& handles
+    ) : document_(document) {
+        collect(root, tc_widget_handle_invalid(), "", handles);
+        if (!bindings_.empty()) {
+            callback_token_ = tc_ui_internal_add_layout_prepare(
+                document_, &ResponsiveRuntime::prepare_callback, this);
+            if (callback_token_ == 0) {
+                throw UiScriptError(
+                    "failed to register responsive layout runtime");
+            }
+        }
+    }
+
+    ~ResponsiveRuntime() {
+        if (callback_token_ != 0) {
+            tc_ui_internal_remove_layout_prepare(
+                document_, callback_token_);
+        }
+    }
+};
 
 UiScriptDescription UiScriptParser::parse(const std::string& source) const {
     tc::trent document;
@@ -765,11 +1357,13 @@ LoadedUiScript& LoadedUiScript::operator=(LoadedUiScript&& other) noexcept {
     description_ = std::move(other.description_);
     root_ = std::move(other.root_);
     widgets_ = std::move(other.widgets_);
+    responsive_runtime_ = std::move(other.responsive_runtime_);
     owns_document_ = other.owns_document_;
     closed_ = other.closed_;
     other.document_ = tc_ui_document_handle_invalid();
     other.root_ = {};
     other.widgets_.clear();
+    other.responsive_runtime_.reset();
     other.owns_document_ = false;
     other.closed_ = true;
     return *this;
@@ -792,6 +1386,7 @@ void LoadedUiScript::close() {
         return;
     }
     closed_ = true;
+    responsive_runtime_.reset();
     if (owns_document_) {
         if (tc_ui_document_is_valid(document_)) {
             tc_ui_document_destroy(document_);
@@ -839,6 +1434,7 @@ LoadedUiScript UiScriptLoader::materialize(
         throw UiScriptError("failed to create target UI document");
     }
     std::vector<tc_widget_handle> created;
+    std::unordered_map<std::string, tc_widget_handle> all_handles;
     LoadedUiScript loaded;
     loaded.document_ = document;
     loaded.description_ = description;
@@ -846,10 +1442,12 @@ LoadedUiScript UiScriptLoader::materialize(
     loaded.closed_ = false;
     try {
         loaded.root_ = materialize_node(
-            document, description.root, created, loaded.widgets_);
+            document, description.root, created, loaded.widgets_, all_handles);
         if (!tc_ui_document_add_root(document, loaded.root_.handle)) {
             fail(description.root.source_path, "native document rejected root");
         }
+        loaded.responsive_runtime_ = std::make_unique<ResponsiveRuntime>(
+            document, description.root, all_handles);
         return loaded;
     } catch (...) {
         if (owns_document) {
