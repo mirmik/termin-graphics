@@ -254,10 +254,10 @@ void detach_if_child(tc_widget* parent, tc_widget_handle child_handle) {
 tc_ui_size measure_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_constraints constraints) {
     const bool width_definite =
         constraints.max_size.width > 0.0f &&
-        constraints.max_size.width < kHuge;
+        constraints.min_size.width == constraints.max_size.width;
     const bool height_definite =
         constraints.max_size.height > 0.0f &&
-        constraints.max_size.height < kHuge;
+        constraints.min_size.height == constraints.max_size.height;
     return measure_widget(
         widget,
         document,

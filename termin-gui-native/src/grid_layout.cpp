@@ -164,10 +164,10 @@ tc_ui_size GridLayout::measure(tc_ui_document_handle document, tc_ui_constraints
         std::max(0.0f, constraints.max_size.height - padding_extent.height)};
     const bool width_definite =
         constraints.max_size.width > 0.0f &&
-        constraints.max_size.width < kHuge;
+        constraints.min_size.width == constraints.max_size.width;
     const bool height_definite =
         constraints.max_size.height > 0.0f &&
-        constraints.max_size.height < kHuge;
+        constraints.min_size.height == constraints.max_size.height;
     GridAxisLayout columns = build_grid_axis(
         document, c_widget(), columns_, items_, true, column_spacing_,
         parent_extent, width_definite, height_definite);

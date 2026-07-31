@@ -248,10 +248,10 @@ tc_ui_size BoxLayout::measure(tc_ui_document_handle document,
       std::max(0.0f, constraints.max_size.height - padding_extent.height)};
   const bool width_definite =
       constraints.max_size.width > 0.0f &&
-      constraints.max_size.width < kHuge;
+      constraints.min_size.width == constraints.max_size.width;
   const bool height_definite =
       constraints.max_size.height > 0.0f &&
-      constraints.max_size.height < kHuge;
+      constraints.min_size.height == constraints.max_size.height;
   size_t live_children = 0;
   for (size_t index = 0; index < child_count(); ++index) {
     tc_widget *child = child_at(index);

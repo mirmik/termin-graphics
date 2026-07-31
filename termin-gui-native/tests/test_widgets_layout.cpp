@@ -199,7 +199,10 @@ void test_hstack_vstack_wrappers_use_expected_orientation() {
   document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
 
   assert(near(row.bounds().y, 0.0f));
+  assert(near(row.bounds().height, 10.0f));
   assert(near(bottom.bounds().y, row.bounds().height));
+  assert(near(bottom.bounds().y, 10.0f));
+  assert(near(bottom.bounds().height, 8.0f));
   assert(near(left.bounds().x, 0.0f));
   assert(near(right.bounds().x, left.bounds().width));
 

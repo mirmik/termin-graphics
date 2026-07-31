@@ -130,10 +130,10 @@ tc_ui_size ScrollArea::measure(
             const tc_ui_insets margin = tc_widget_layout_spec(content).margin;
             const bool width_definite =
                 constraints.max_size.width > 0.0f &&
-                constraints.max_size.width < kHuge;
+                constraints.min_size.width == constraints.max_size.width;
             const bool height_definite =
                 constraints.max_size.height > 0.0f &&
-                constraints.max_size.height < kHuge;
+                constraints.min_size.height == constraints.max_size.height;
             tc_ui_constraints content_constraints = unconstrained();
             if (!horizontal_scroll_enabled_ && width_definite) {
                 const float width = std::max(
