@@ -26,6 +26,8 @@ public:
     GridLayout& set_border(Color color, float thickness = 1.0f);
     size_t add_column(LayoutPolicy policy = LayoutPolicy::Stretch, float value = 0.0f);
     size_t add_row(LayoutPolicy policy = LayoutPolicy::Stretch, float value = 0.0f);
+    size_t add_column(GridTrack track);
+    size_t add_row(GridTrack track);
     void add_child(tc_widget_handle handle, size_t row, size_t column, size_t row_span = 1, size_t column_span = 1);
     void add_child(const Widget& widget, size_t row, size_t column, size_t row_span = 1, size_t column_span = 1) { add_child(widget.handle(), row, column, row_span, column_span); }
     bool set_column_extent_limits(size_t column, float min_extent, float max_extent);

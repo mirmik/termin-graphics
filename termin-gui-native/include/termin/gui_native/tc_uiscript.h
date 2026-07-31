@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-#define TC_UISCRIPT_TYPE_ABI_VERSION 2u
+#define TC_UISCRIPT_TYPE_ABI_VERSION 3u
 #define TC_RUNTIME_TYPE_FACET_UISCRIPT "termin.gui.uiscript"
 
 typedef bool (*tc_uiscript_apply_properties_fn)(
@@ -35,6 +35,7 @@ typedef struct tc_uiscript_type_descriptor {
     tc_uiscript_attach_child_fn attach_child;
     const char* const* child_properties;
     size_t child_property_count;
+    size_t max_child_count;
 } tc_uiscript_type_descriptor;
 
 TERMIN_GUI_NATIVE_API const tc_uiscript_type_descriptor*

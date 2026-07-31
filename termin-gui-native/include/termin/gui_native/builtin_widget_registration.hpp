@@ -9,6 +9,8 @@ class TextInput;
 class OverlayLayout;
 class Panel;
 class BoxLayout;
+class GridLayout;
+class ScrollArea;
 class HStack;
 class VStack;
 class IconButton;
@@ -44,6 +46,16 @@ struct NativeWidgetRuntimeType<Panel> {
 template <>
 struct NativeWidgetRuntimeType<BoxLayout> {
     static constexpr const char* name = "termin.gui.BoxLayout";
+};
+
+template <>
+struct NativeWidgetRuntimeType<GridLayout> {
+    static constexpr const char* name = "termin.gui.GridLayout";
+};
+
+template <>
+struct NativeWidgetRuntimeType<ScrollArea> {
+    static constexpr const char* name = "termin.gui.ScrollArea";
 };
 
 template <>

@@ -32,13 +32,21 @@ GridLayout& GridLayout::set_border(Color color, float thickness) {
 }
 
 size_t GridLayout::add_column(LayoutPolicy policy, float value) {
-    columns_.push_back(make_grid_track(policy, value));
+    return add_column(make_grid_track(policy, value));
+}
+
+size_t GridLayout::add_column(GridTrack track) {
+    columns_.push_back(track);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     return columns_.size() - 1;
 }
 
 size_t GridLayout::add_row(LayoutPolicy policy, float value) {
-    rows_.push_back(make_grid_track(policy, value));
+    return add_row(make_grid_track(policy, value));
+}
+
+size_t GridLayout::add_row(GridTrack track) {
+    rows_.push_back(track);
     mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     return rows_.size() - 1;
 }

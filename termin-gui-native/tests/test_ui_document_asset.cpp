@@ -1,5 +1,7 @@
 #include <termin/gui_native/ui_document_asset.hpp>
 #include <termin/gui_native/box_layout.hpp>
+#include <termin/gui_native/grid_layout.hpp>
+#include <termin/gui_native/scroll_area.hpp>
 
 #include <cassert>
 #include <string>
@@ -28,6 +30,39 @@ root:
       min_extent: 24
       max_extent: 80
       align_self: center
+)";
+
+constexpr const char* GRID_SCROLL_SOURCE = R"(
+uiscript: 2
+root:
+  type: termin.gui.ScrollArea
+  name: scroll
+  horizontal_scroll: false
+  vertical_scrollbar: always
+  children:
+    - type: termin.gui.GridLayout
+      name: grid
+      column_spacing: 4
+      row_spacing: 6
+      columns:
+        - policy: fixed
+          value: 40
+        - policy: flex
+          value: 2
+          min_extent: 30
+          max_extent: 100
+      rows:
+        - policy: preferred
+          min_extent: 50
+        - policy: stretch
+          grow: 3
+          min_extent: 80
+      children:
+        - type: termin.gui.Panel
+          name: spanning
+          row: 0
+          column: 0
+          column_span: 2
 )";
 
 void test_compiled_round_trip_and_independent_instances() {
@@ -125,12 +160,59 @@ void test_generation_handle_and_compiled_validation() {
         compiled, "ui-generation").valid());
 }
 
+void test_grid_scroll_round_trip_and_transactional_reload() {
+    TcUiDocumentAsset::clear_registry_for_tests();
+    TcUiDocumentAsset asset = TcUiDocumentAsset::declare_source(
+        "ui-grid-scroll", "Grid Scroll", "ui/grid-scroll.uiscript",
+        GRID_SCROLL_SOURCE);
+    assert(asset.valid());
+    assert(asset.resolve()->type_dependencies().size() == 3);
+    const std::string compiled = asset.resolve()->compiled_json();
+    const std::uint64_t revision = asset.revision();
+    LoadedUiScript instance = asset.instantiate();
+    const tc_widget_handle old_root = instance.root().handle;
+
+    TcUiDocumentAsset::clear_registry_for_tests();
+    asset = TcUiDocumentAsset::declare_compiled_json(
+        compiled, "ui-grid-scroll");
+    assert(asset.valid());
+    assert(asset.resolve()->compiled_json() == compiled);
+    LoadedUiScript restored = asset.instantiate();
+    tc_widget* scroll_widget = tc_ui_document_resolve_widget(
+        restored.document().handle(), restored.root().handle);
+    tc_widget* grid_widget = tc_ui_document_resolve_widget(
+        restored.document().handle(), restored.named("grid").handle);
+    assert(scroll_widget && grid_widget);
+    const auto* scroll = static_cast<const ScrollArea*>(scroll_widget->body);
+    const auto* grid = static_cast<const GridLayout*>(grid_widget->body);
+    assert(!scroll->horizontal_scroll_enabled());
+    assert(scroll->vertical_scrollbar_policy() == ScrollBarPolicy::Always);
+    assert(grid->columns()[1].policy == LayoutPolicy::Flex);
+    assert(grid->columns()[1].value == 2.0f);
+    assert(grid->columns()[1].min_extent == 30.0f);
+    assert(grid->rows()[1].grow == 3.0f);
+    assert(grid->items()[0].column_span == 2);
+
+    LoadedUiScript live = asset.instantiate();
+    const tc_widget_handle live_root = live.root().handle;
+    assert(!asset.reload_source(
+        "uiscript: 2\nroot:\n  type: termin.gui.ScrollArea\n"
+        "  children:\n    - type: termin.gui.Panel\n"
+        "    - type: termin.gui.Panel\n"));
+    assert(asset.revision() == revision);
+    assert(tc_ui_document_resolve_widget(
+        live.document().handle(), live_root));
+    assert(tc_ui_document_resolve_widget(
+        instance.document().handle(), old_root));
+}
+
 } // namespace
 
 int main() {
     test_compiled_round_trip_and_independent_instances();
     test_reload_is_transactional_for_recipe_and_instance();
     test_generation_handle_and_compiled_validation();
+    test_grid_scroll_round_trip_and_transactional_reload();
     TcUiDocumentAsset::clear_registry_for_tests();
     return 0;
 }

@@ -6,11 +6,13 @@
 
 #include <tcbase/tc_log.h>
 #include <termin/gui_native/box_layout.hpp>
+#include <termin/gui_native/grid_layout.hpp>
 #include <termin/gui_native/h_stack.hpp>
 #include <termin/gui_native/icon_button.hpp>
 #include <termin/gui_native/label.hpp>
 #include <termin/gui_native/overlay_layout.hpp>
 #include <termin/gui_native/panel.hpp>
+#include <termin/gui_native/scroll_area.hpp>
 #include <termin/gui_native/tc_widget_registry.h>
 #include <termin/gui_native/text_area.hpp>
 #include <termin/gui_native/text_input.hpp>
@@ -179,6 +181,101 @@ bool apply_box_properties(tc_widget* widget, const tc_value* properties) {
     return true;
 }
 
+GridTrack grid_track_property(const tc_value* value) {
+    const tc_value* policy_value =
+        tc_value_dict_get(const_cast<tc_value*>(value), "policy");
+    const std::string policy_text =
+        policy_value && policy_value->data.s ? policy_value->data.s : "";
+    GridTrack track;
+    if (policy_text == "fixed") {
+        track.policy = LayoutPolicy::Fixed;
+        track.value = number_property(value, "value");
+        track.grow = 0.0f;
+        track.shrink = 0.0f;
+        track.min_extent = track.value;
+        track.max_extent = track.value;
+    } else if (policy_text == "preferred") {
+        track.policy = LayoutPolicy::Preferred;
+        track.grow = 0.0f;
+        track.shrink = 0.0f;
+    } else if (policy_text == "flex") {
+        track.policy = LayoutPolicy::Flex;
+        track.value = number_property(value, "value", 1.0f);
+        track.grow = track.value;
+        track.shrink = track.value;
+    } else {
+        track.policy = LayoutPolicy::Stretch;
+        track.grow = 1.0f;
+        track.shrink = 1.0f;
+    }
+    if (property(value, "grow")) {
+        track.grow = number_property(value, "grow");
+    }
+    if (property(value, "shrink")) {
+        track.shrink = number_property(value, "shrink");
+    }
+    if (track.policy != LayoutPolicy::Fixed) {
+        track.min_extent = number_property(value, "min_extent");
+        track.max_extent = number_property(value, "max_extent");
+    }
+    return track;
+}
+
+bool apply_grid_properties(tc_widget* widget, const tc_value* properties) {
+    auto* grid = static_cast<GridLayout*>(widget->body);
+    if (property(properties, "padding")) {
+        grid->set_padding(padding_property(properties));
+    }
+    grid->set_spacing(
+        number_property(properties, "column_spacing"),
+        number_property(properties, "row_spacing"));
+    auto add_tracks = [grid](const tc_value* tracks, bool columns) {
+        if (!tracks) {
+            return;
+        }
+        for (size_t index = 0; index < tracks->data.list.count; ++index) {
+            GridTrack track = grid_track_property(&tracks->data.list.items[index]);
+            if (columns) {
+                grid->add_column(track);
+            } else {
+                grid->add_row(track);
+            }
+        }
+    };
+    add_tracks(property(properties, "columns"), true);
+    add_tracks(property(properties, "rows"), false);
+    return true;
+}
+
+ScrollBarPolicy scrollbar_policy_property(
+    const tc_value* properties,
+    const char* name
+) {
+    const tc_value* value = property(properties, name);
+    const std::string text =
+        value && value->data.s ? value->data.s : "auto";
+    if (text == "always") {
+        return ScrollBarPolicy::Always;
+    }
+    return text == "hidden" ? ScrollBarPolicy::Hidden : ScrollBarPolicy::Auto;
+}
+
+bool apply_scroll_area_properties(
+    tc_widget* widget,
+    const tc_value* properties
+) {
+    auto* scroll = static_cast<ScrollArea*>(widget->body);
+    const tc_value* horizontal = property(properties, "horizontal_scroll");
+    const tc_value* vertical = property(properties, "vertical_scroll");
+    scroll->set_scroll_axes(
+        horizontal ? horizontal->data.b : true,
+        vertical ? vertical->data.b : true);
+    scroll->set_scrollbar_policy(
+        scrollbar_policy_property(properties, "horizontal_scrollbar"),
+        scrollbar_policy_property(properties, "vertical_scrollbar"));
+    return true;
+}
+
 bool apply_icon_button_properties(tc_widget* widget, const tc_value* properties) {
     auto* button = static_cast<IconButton*>(widget->body);
     if (const tc_value* icon = property(properties, "icon")) {
@@ -344,6 +441,33 @@ bool append_overlay_child(
         child->handle, anchor, offset);
 }
 
+bool append_grid_child(
+    tc_widget* parent,
+    tc_widget* child,
+    const tc_value* properties
+) {
+    auto integer_property = [properties](const char* name, size_t fallback) {
+        const tc_value* value = property(properties, name);
+        return value ? static_cast<size_t>(value->data.i) : fallback;
+    };
+    static_cast<GridLayout*>(parent->body)->add_child(
+        child->handle,
+        integer_property("row", 0),
+        integer_property("column", 0),
+        integer_property("row_span", 1),
+        integer_property("column_span", 1));
+    return child->parent == parent;
+}
+
+bool append_scroll_content(
+    tc_widget* parent,
+    tc_widget* child,
+    const tc_value*
+) {
+    static_cast<ScrollArea*>(parent->body)->set_content(child->handle);
+    return child->parent == parent;
+}
+
 bool reject_declarative_persistence(const tc_widget* widget, void*, tc_value*) {
     tc_log_error(
         "[termin-gui-native] widget type '%s' is declarative-only and has no durable state codec",
@@ -444,9 +568,16 @@ bool register_declarative_widget(
 constexpr const char* kPanelProperties[] = {"background_color"};
 constexpr const char* kBoxProperties[] = {
     "orientation", "padding", "spacing", "align_items"};
+constexpr const char* kGridProperties[] = {
+    "padding", "column_spacing", "row_spacing", "columns", "rows"};
+constexpr const char* kScrollAreaProperties[] = {
+    "horizontal_scroll", "vertical_scroll",
+    "horizontal_scrollbar", "vertical_scrollbar"};
 constexpr const char* kOverlayChildProperties[] = {"anchor", "offset"};
 constexpr const char* kBoxChildProperties[] = {
     "basis", "grow", "shrink", "min_extent", "max_extent", "align_self"};
+constexpr const char* kGridChildProperties[] = {
+    "row", "column", "row_span", "column_span"};
 constexpr const char* kIconButtonProperties[] = {
     "icon", "tooltip", "size", "font_size", "background_color",
     "hover_color", "pressed_color", "active_color", "icon_color",
@@ -462,6 +593,7 @@ const tc_uiscript_type_descriptor kOverlayUiScript{
     &append_overlay_child,
     kOverlayChildProperties,
     std::size(kOverlayChildProperties),
+    SIZE_MAX,
 };
 const tc_uiscript_type_descriptor kPanelUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -471,6 +603,7 @@ const tc_uiscript_type_descriptor kPanelUiScript{
     &append_child,
     nullptr,
     0,
+    SIZE_MAX,
 };
 const tc_uiscript_type_descriptor kBoxUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -480,6 +613,27 @@ const tc_uiscript_type_descriptor kBoxUiScript{
     &append_box_child,
     kBoxChildProperties,
     std::size(kBoxChildProperties),
+    SIZE_MAX,
+};
+const tc_uiscript_type_descriptor kGridUiScript{
+    TC_UISCRIPT_TYPE_ABI_VERSION,
+    kGridProperties,
+    std::size(kGridProperties),
+    &apply_grid_properties,
+    &append_grid_child,
+    kGridChildProperties,
+    std::size(kGridChildProperties),
+    SIZE_MAX,
+};
+const tc_uiscript_type_descriptor kScrollAreaUiScript{
+    TC_UISCRIPT_TYPE_ABI_VERSION,
+    kScrollAreaProperties,
+    std::size(kScrollAreaProperties),
+    &apply_scroll_area_properties,
+    &append_scroll_content,
+    nullptr,
+    0,
+    1,
 };
 const tc_uiscript_type_descriptor kIconButtonUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -489,6 +643,7 @@ const tc_uiscript_type_descriptor kIconButtonUiScript{
     nullptr,
     nullptr,
     0,
+    0,
 };
 const tc_uiscript_type_descriptor kLabelUiScript{
     TC_UISCRIPT_TYPE_ABI_VERSION,
@@ -497,6 +652,7 @@ const tc_uiscript_type_descriptor kLabelUiScript{
     &apply_label_properties,
     nullptr,
     nullptr,
+    0,
     0,
 };
 
@@ -551,6 +707,10 @@ bool register_builtin_widget_types() {
         register_declarative_widget<Panel>(
             NativeWidgetRuntimeType<Panel>::name, &kPanelUiScript) &&
         register_box_layout_widget() &&
+        register_declarative_widget<GridLayout>(
+            NativeWidgetRuntimeType<GridLayout>::name, &kGridUiScript) &&
+        register_declarative_widget<ScrollArea>(
+            NativeWidgetRuntimeType<ScrollArea>::name, &kScrollAreaUiScript) &&
         register_declarative_widget<HStack>(
             NativeWidgetRuntimeType<HStack>::name, &kBoxUiScript) &&
         register_declarative_widget<VStack>(

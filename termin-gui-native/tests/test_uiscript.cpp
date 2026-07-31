@@ -1,5 +1,7 @@
 #include <termin/gui_native/uiscript.hpp>
 #include <termin/gui_native/box_layout.hpp>
+#include <termin/gui_native/grid_layout.hpp>
+#include <termin/gui_native/scroll_area.hpp>
 
 #include <cassert>
 #include <string>
@@ -257,6 +259,121 @@ void test_box_properties_placement_and_strict_validation() {
     }
 }
 
+void test_grid_and_scroll_facets() {
+    UiScriptLoader loader;
+    LoadedUiScript loaded = loader.load_string(
+        "uiscript: 2\n"
+        "root:\n"
+        "  type: termin.gui.ScrollArea\n"
+        "  name: scroll\n"
+        "  horizontal_scroll: false\n"
+        "  vertical_scroll: true\n"
+        "  horizontal_scrollbar: hidden\n"
+        "  vertical_scrollbar: always\n"
+        "  children:\n"
+        "    - type: termin.gui.GridLayout\n"
+        "      name: grid\n"
+        "      padding: [2, 3, 4, 5]\n"
+        "      column_spacing: 6\n"
+        "      row_spacing: 4\n"
+        "      columns:\n"
+        "        - policy: fixed\n"
+        "          value: 30\n"
+        "        - policy: flex\n"
+        "          value: 2\n"
+        "          grow: 3\n"
+        "          shrink: 1\n"
+        "          min_extent: 20\n"
+        "          max_extent: 100\n"
+        "      rows:\n"
+        "        - policy: fixed\n"
+        "          value: 40\n"
+        "        - policy: preferred\n"
+        "          min_extent: 60\n"
+        "        - policy: stretch\n"
+        "          min_extent: 80\n"
+        "          max_extent: 120\n"
+        "      children:\n"
+        "        - type: termin.gui.Panel\n"
+        "          name: header\n"
+        "          row: 0\n"
+        "          column: 0\n"
+        "          column_span: 2\n"
+        "        - type: termin.gui.IconButton\n"
+        "          name: bottom\n"
+        "          icon: B\n"
+        "          row: 2\n"
+        "          column: 1\n");
+    termin_gui_native_test::install_test_text_measurer(loaded.document());
+    loaded.document().layout_roots({0.0f, 0.0f, 120.0f, 70.0f});
+
+    tc_widget* scroll_widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.root().handle);
+    tc_widget* grid_widget = tc_ui_document_resolve_widget(
+        loaded.document().handle(), loaded.named("grid").handle);
+    assert(scroll_widget && grid_widget);
+    auto* scroll = static_cast<ScrollArea*>(scroll_widget->body);
+    const auto* grid = static_cast<const GridLayout*>(grid_widget->body);
+    assert(!scroll->horizontal_scroll_enabled());
+    assert(scroll->vertical_scroll_enabled());
+    assert(scroll->horizontal_scrollbar_policy() == ScrollBarPolicy::Hidden);
+    assert(scroll->vertical_scrollbar_policy() == ScrollBarPolicy::Always);
+    assert(grid->columns().size() == 2 && grid->rows().size() == 3);
+    assert(grid->columns()[1].policy == LayoutPolicy::Flex);
+    assert(grid->columns()[1].value == 2.0f);
+    assert(grid->columns()[1].grow == 3.0f);
+    assert(grid->columns()[1].shrink == 1.0f);
+    assert(grid->columns()[1].min_extent == 20.0f);
+    assert(grid->columns()[1].max_extent == 100.0f);
+    assert(grid->items().size() == 2);
+    assert(grid->items()[0].column_span == 2);
+    assert(scroll->content_size().width == 120.0f);
+    assert(scroll->content_size().height == 196.0f);
+
+    const tc_widget_handle bottom = loaded.named("bottom").handle;
+    assert(scroll->ensure_visible(bottom));
+    assert(scroll->scroll_y() > 0.0f);
+    const tc_ui_rect narrow_bottom = tc_widget_bounds(
+        tc_ui_document_resolve_widget(loaded.document().handle(), bottom));
+    loaded.document().layout_roots({0.0f, 0.0f, 180.0f, 100.0f});
+    const tc_ui_rect wide_bottom = tc_widget_bounds(
+        tc_ui_document_resolve_widget(loaded.document().handle(), bottom));
+    assert(scroll->content_size().width == 180.0f);
+    assert(scroll->content_size().height == 196.0f);
+    assert(scroll->scroll_y() == 96.0f);
+    assert(wide_bottom.width > narrow_bottom.width);
+
+    const std::vector<std::string> invalid{
+        "  type: termin.gui.GridLayout\n"
+        "  columns:\n"
+        "    - policy: fixed\n"
+        "  rows:\n"
+        "    - policy: stretch\n",
+        "  type: termin.gui.GridLayout\n"
+        "  columns:\n"
+        "    - policy: stretch\n"
+        "  rows:\n"
+        "    - policy: stretch\n"
+        "  children:\n"
+        "    - type: termin.gui.Panel\n"
+        "      row: 0\n"
+        "      column: 0\n"
+        "      column_span: 2\n",
+        "  type: termin.gui.ScrollArea\n"
+        "  children:\n"
+        "    - type: termin.gui.Panel\n"
+        "    - type: termin.gui.Panel\n",
+    };
+    for (const std::string& root : invalid) {
+        try {
+            loader.parser.parse("uiscript: 2\nroot:\n" + root);
+            assert(false);
+        } catch (const UiScriptError& error) {
+            assert(std::string(error.what()).find("root") != std::string::npos);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -265,5 +382,6 @@ int main() {
     test_materialization_rollback();
     test_generic_layout_spec_validation_and_materialization();
     test_box_properties_placement_and_strict_validation();
+    test_grid_and_scroll_facets();
     return 0;
 }

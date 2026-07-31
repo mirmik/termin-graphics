@@ -49,6 +49,83 @@ void validate_color(tc::trent_view value, const std::string& path) {
     }
 }
 
+void validate_grid_track(tc::trent_view track, const std::string& path) {
+    if (!track.is_dict()) {
+        fail(path, "expected a track mapping");
+    }
+    static const std::unordered_set<std::string> supported{
+        "policy", "value", "grow", "shrink", "min_extent", "max_extent"};
+    for (const auto entry : track.as_dict()) {
+        const std::string key = entry.key ? entry.key : "";
+        if (!supported.contains(key)) {
+            fail(path, "unsupported track property '" + key + "'");
+        }
+    }
+    const tc::trent_view policy_value = track["policy"];
+    if (!policy_value.is_string()) {
+        fail(path + ".policy",
+             "expected 'fixed', 'preferred', 'flex', or 'stretch'");
+    }
+    const std::string policy = policy_value.as_string();
+    if (policy != "fixed" && policy != "preferred" &&
+        policy != "flex" && policy != "stretch") {
+        fail(path + ".policy", "unsupported track policy '" + policy + "'");
+    }
+    const tc::trent_view value = track["value"];
+    if (policy == "fixed") {
+        if (!value) {
+            fail(path + ".value", "fixed track requires a value");
+        }
+        validate_number(value, path + ".value", true);
+    } else if (policy == "flex") {
+        if (value) {
+            validate_number(value, path + ".value", true);
+            if (value.as_numer() <= 0.0) {
+                fail(path + ".value", "flex weight must be > 0");
+            }
+        }
+    } else if (value) {
+        fail(path + ".value", policy + " track does not accept a value");
+    }
+    for (const char* key : {"grow", "shrink", "min_extent", "max_extent"}) {
+        if (tc::trent_view item = track[key]; item) {
+            validate_number(item, path + "." + key, true);
+        }
+    }
+    const tc::trent_view grow = track["grow"];
+    const tc::trent_view shrink = track["shrink"];
+    if (policy == "fixed" &&
+        ((grow && grow.as_numer() != 0.0) ||
+         (shrink && shrink.as_numer() != 0.0))) {
+        fail(path, "fixed track cannot grow or shrink");
+    }
+    const tc::trent_view minimum = track["min_extent"];
+    const tc::trent_view maximum = track["max_extent"];
+    if (minimum && maximum && maximum.as_numer() > 0.0 &&
+        minimum.as_numer() > maximum.as_numer()) {
+        fail(path + ".max_extent",
+             "must be zero (unbounded) or >= min_extent");
+    }
+    if (policy == "fixed") {
+        const double fixed = value.as_numer();
+        if ((minimum && minimum.as_numer() != fixed) ||
+            (maximum && maximum.as_numer() != 0.0 &&
+             maximum.as_numer() != fixed)) {
+            fail(path, "fixed track extent conflicts with min/max extent");
+        }
+    }
+}
+
+void validate_grid_tracks(tc::trent_view value, const std::string& path) {
+    if (!value.is_list() || value.size() == 0) {
+        fail(path, "expected a non-empty track list");
+    }
+    for (size_t index = 0; index < value.size(); ++index) {
+        validate_grid_track(
+            value[index], path + "[" + std::to_string(index) + "]");
+    }
+}
+
 tc_ui_length parse_layout_length(tc::trent_view value, const std::string& path) {
     if (is_number(value)) {
         validate_number(value, path, true);
@@ -186,10 +263,41 @@ void validate_property(
         if (!value.is_bool()) fail(path, "expected a boolean");
         return;
     }
-    if (name == "spacing" || name == "size" || name == "font_size" ||
+    if (name == "horizontal_scroll" || name == "vertical_scroll") {
+        if (!value.is_bool()) fail(path, "expected a boolean");
+        return;
+    }
+    if (name == "spacing" || name == "column_spacing" ||
+        name == "row_spacing" || name == "size" || name == "font_size" ||
         name == "border_radius" || name == "grow" || name == "shrink" ||
         name == "min_extent" || name == "max_extent") {
         validate_number(value, path, true);
+        return;
+    }
+    if (name == "columns" || name == "rows") {
+        validate_grid_tracks(value, path);
+        return;
+    }
+    if (name == "row" || name == "column" ||
+        name == "row_span" || name == "column_span") {
+        if (!value.is_integer() || value.as_integer() < 0 ||
+            ((name == "row_span" || name == "column_span") &&
+             value.as_integer() == 0)) {
+            fail(path, name == "row" || name == "column"
+                ? "expected a non-negative integer"
+                : "expected a positive integer");
+        }
+        return;
+    }
+    if (name == "horizontal_scrollbar" ||
+        name == "vertical_scrollbar") {
+        if (!value.is_string()) {
+            fail(path, "expected 'auto', 'always', or 'hidden'");
+        }
+        const std::string policy = value.as_string();
+        if (policy != "auto" && policy != "always" && policy != "hidden") {
+            fail(path, "unsupported scrollbar policy '" + policy + "'");
+        }
         return;
     }
     if (name == "padding") {
@@ -325,6 +433,73 @@ void validate_box_placement(
     }
 }
 
+void validate_grid_structure(
+    const std::string& type_name,
+    tc::trent_view source,
+    const std::string& path
+) {
+    if (type_name != "termin.gui.GridLayout") {
+        return;
+    }
+    const tc::trent_view columns = source["columns"];
+    const tc::trent_view rows = source["rows"];
+    if (!columns) {
+        fail(path + ".columns", "GridLayout requires column tracks");
+    }
+    if (!rows) {
+        fail(path + ".rows", "GridLayout requires row tracks");
+    }
+    const tc::trent_view children = source["children"];
+    if (!children || !children.is_list()) {
+        return;
+    }
+    for (size_t index = 0; index < children.size(); ++index) {
+        const tc::trent_view child = children[index];
+        const std::string child_path =
+            path + ".children[" + std::to_string(index) + "]";
+        if (!child.is_dict()) {
+            continue;
+        }
+        const tc::trent_view row = child["row"];
+        const tc::trent_view column = child["column"];
+        if (!row) {
+            fail(child_path + ".row", "GridLayout child requires a row");
+        }
+        if (!column) {
+            fail(child_path + ".column",
+                 "GridLayout child requires a column");
+        }
+        if (!row.is_integer() || !column.is_integer()) {
+            continue;
+        }
+        const tc::trent_view row_span_value = child["row_span"];
+        const tc::trent_view column_span_value = child["column_span"];
+        if ((row_span_value && !row_span_value.is_integer()) ||
+            (column_span_value && !column_span_value.is_integer())) {
+            continue;
+        }
+        const int64_t row_span =
+            row_span_value ? row_span_value.as_integer() : 1;
+        const int64_t column_span =
+            column_span_value ? column_span_value.as_integer() : 1;
+        if (row.as_integer() < 0 || column.as_integer() < 0 ||
+            row_span <= 0 || column_span <= 0) {
+            continue;
+        }
+        if (row.as_integer() >= static_cast<int64_t>(rows.size()) ||
+            row.as_integer() + row_span >
+                static_cast<int64_t>(rows.size())) {
+            fail(child_path + ".row", "row placement exceeds declared tracks");
+        }
+        if (column.as_integer() >= static_cast<int64_t>(columns.size()) ||
+            column.as_integer() + column_span >
+                static_cast<int64_t>(columns.size())) {
+            fail(child_path + ".column",
+                 "column placement exceeds declared tracks");
+        }
+    }
+}
+
 UiScriptNode parse_node(
     tc::trent_view source,
     const std::string& path,
@@ -388,6 +563,7 @@ UiScriptNode parse_node(
         node.properties.set(key, tc::trent::copy_of(*entry.value));
     }
     validate_box_placement(node, parent_descriptor);
+    validate_grid_structure(type_name, source, path);
 
     const tc::trent_view children = source["children"];
     if (children) {
@@ -396,6 +572,10 @@ UiScriptNode parse_node(
         }
         if (!descriptor->attach_child && !children.as_list().empty()) {
             fail(path + ".children", type_name + " does not accept children");
+        }
+        if (children.size() > descriptor->max_child_count) {
+            fail(path + ".children", type_name + " accepts at most " +
+                std::to_string(descriptor->max_child_count) + " child");
         }
         node.children.reserve(children.size());
         for (size_t index = 0; index < children.size(); ++index) {

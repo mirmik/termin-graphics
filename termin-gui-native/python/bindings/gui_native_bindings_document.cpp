@@ -24,10 +24,16 @@ nb::object typed_uiscript_widget(const PythonMaterializedWidget &materialized) {
     return nb::cast(IconButtonRef{ref});
   if (type == "termin.gui.OverlayLayout")
     return nb::cast(OverlayLayoutRef{ref});
+  if (type == "termin.gui.BoxLayout")
+    return nb::cast(BoxLayoutRef{ref});
   if (type == "termin.gui.HStack")
     return nb::cast(HStackRef{ref});
   if (type == "termin.gui.VStack")
     return nb::cast(VStackRef{ref});
+  if (type == "termin.gui.GridLayout")
+    return nb::cast(GridLayoutRef{ref});
+  if (type == "termin.gui.ScrollArea")
+    return nb::cast(ScrollAreaRef{ref});
   if (type == "termin.gui.Panel")
     return nb::cast(PanelRef{ref});
   return nb::cast(ref);

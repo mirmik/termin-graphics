@@ -98,6 +98,57 @@ def test_uiscript_v2_parses_to_native_description():
     assert button.properties["tooltip"] == "Inspect"
 
 
+def test_uiscript_grid_and_scroll_facets_materialize_in_python():
+    source = """
+uiscript: 2
+root:
+  type: termin.gui.ScrollArea
+  name: scroll
+  horizontal_scroll: false
+  vertical_scrollbar: always
+  children:
+    - type: termin.gui.GridLayout
+      name: grid
+      columns:
+        - policy: fixed
+          value: 40
+        - policy: flex
+          value: 2
+          min_extent: 30
+      rows:
+        - policy: stretch
+          min_extent: 120
+      children:
+        - type: termin.gui.Panel
+          row: 0
+          column: 0
+          column_span: 2
+"""
+    loaded = UiScriptLoader().load_string(source)
+    assert loaded.root.public.horizontal_scroll_enabled is False
+    assert loaded.root.public.vertical_scrollbar_policy.name == "Always"
+    assert loaded.widgets["grid"].properties["columns"][1] == {
+        "policy": "flex",
+        "value": 2,
+        "min_extent": 30,
+    }
+    loaded.document.layout_roots(Rect(0, 0, 100, 60))
+    assert loaded.root.public.content_size.height == pytest.approx(120)
+    loaded.close()
+
+    with pytest.raises(UiScriptError, match=r"root\.children"):
+        UiScriptLoader().parser.parse(
+            """
+uiscript: 2
+root:
+  type: termin.gui.ScrollArea
+  children:
+    - type: termin.gui.Panel
+    - type: termin.gui.Panel
+"""
+        )
+
+
 @pytest.mark.parametrize(
     ("source", "message"),
     [

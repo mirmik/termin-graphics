@@ -28,6 +28,8 @@ The initial cross-platform baseline contains:
 - `termin.gui.BoxLayout`;
 - `termin.gui.HStack`;
 - `termin.gui.VStack`;
+- `termin.gui.GridLayout`;
+- `termin.gui.ScrollArea`;
 - `termin.gui.Label`;
 - `termin.gui.IconButton`.
 
@@ -67,6 +69,56 @@ with zero grow/shrink; weights can be supplied for a preferred basis.
 the container's `align_items`. Placement metadata belongs exclusively to the
 parent Box facet; using these fields under another parent fails during
 structural validation.
+
+`GridLayout` declares non-empty `columns` and `rows` lists. Every track has a
+`policy` (`fixed`, `preferred`, `flex`, or `stretch`). Fixed tracks require
+`value`; flex tracks use a positive `value` as their default grow/shrink
+weight. Non-fixed tracks may override `grow`, `shrink`, `min_extent`, and
+`max_extent`; zero maximum remains unbounded. Grid children require
+zero-based `row` and `column`, and may specify positive `row_span` and
+`column_span`. Placements extending beyond the declared tracks are rejected
+instead of implicitly creating tracks:
+
+```yaml
+root:
+  type: termin.gui.GridLayout
+  padding: 8
+  column_spacing: 6
+  row_spacing: 4
+  columns:
+    - policy: fixed
+      value: 48
+    - policy: flex
+      value: 2
+      min_extent: 80
+      max_extent: 320
+  rows:
+    - policy: preferred
+    - policy: stretch
+  children:
+    - type: termin.gui.Panel
+      row: 0
+      column: 0
+      column_span: 2
+```
+
+`ScrollArea` accepts exactly zero or one declarative content child. The
+`horizontal_scroll` and `vertical_scroll` booleans enable each scroll axis;
+`horizontal_scrollbar` and `vertical_scrollbar` accept `auto`, `always`, or
+`hidden`. Content measurement, viewport fitting on disabled axes, focus
+reveal, and scroll clamping remain native `ScrollArea` behavior:
+
+```yaml
+root:
+  type: termin.gui.ScrollArea
+  horizontal_scroll: false
+  vertical_scroll: true
+  horizontal_scrollbar: hidden
+  vertical_scrollbar: auto
+  children:
+    - type: termin.gui.VStack
+      # ...
+```
 
 An immutable `UiScriptDescription` records the validated tree and its native
 type dependencies. Materialization creates a fresh document tree for every
