@@ -103,6 +103,15 @@ shown simultaneously in presentations with different metrics must be
 instantiated as separate documents. This avoids presentation-dependent widget
 bounds being shared across viewports.
 
+For scene documents rendered by `UIWidgetPass`, the pass is the presentation
+owner of `physical_extent`: it replaces that field with the active render
+target extent on every frame. A platform-published density scale, font scale,
+and safe insets remain unchanged. If those insets are incompatible with the
+new target extent, the submission is rejected with an error instead of being
+silently converted to identity metrics. This split lets resizable editor
+viewports reflow the same document while retaining Android density and
+safe-area policy.
+
 ## Language projections
 
 C uses the functions in `tc_ui_document.h`. C++ exposes the same value through
