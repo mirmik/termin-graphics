@@ -353,6 +353,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_uiscript_test
         tests/test_uiscript.cpp
     )
+    termin_gui_native_add_test(termin_gui_native_adaptive_layout_matrix_test
+        tests/test_adaptive_layout_matrix.cpp
+    )
     termin_gui_native_add_test(termin_gui_native_ui_document_asset_test
         tests/test_ui_document_asset.cpp
     )
