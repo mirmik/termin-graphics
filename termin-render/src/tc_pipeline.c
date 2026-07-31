@@ -15,6 +15,7 @@
 #define PIPELINE_INITIAL_PASS_CAPACITY 8
 
 static tc_pool g_pipeline_pool;
+static tc_pool_generation_epoch g_pipeline_generation_epoch;
 static bool g_pipeline_pool_initialized = false;
 
 #define PIPELINES ((tc_pipeline*)g_pipeline_pool.data)
@@ -107,6 +108,7 @@ void tc_pipeline_pool_init(void) {
         .initial_generation = 0u,
         .allocate_low_indices_first = true,
         .name = "tc_pipeline_pool",
+        .generation_epoch = &g_pipeline_generation_epoch,
     };
     if (!tc_pool_init_ex(
             &g_pipeline_pool,

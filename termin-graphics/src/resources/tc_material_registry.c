@@ -15,6 +15,7 @@
 // ============================================================================
 
 static tc_pool g_material_pool;
+static tc_pool_generation_epoch g_material_generation_epoch;
 static tc_resource_map* g_material_uuid_to_index = NULL;
 static uint64_t g_material_next_uuid = 1;
 static bool g_material_initialized = false;
@@ -26,7 +27,11 @@ static bool g_material_initialized = false;
 void tc_material_init(void) {
     TC_REGISTRY_INIT_GUARD(g_material_initialized, "tc_material");
 
-    if (!tc_pool_init(&g_material_pool, sizeof(tc_material), 64)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_material_pool,
+            sizeof(tc_material),
+            64,
+            &g_material_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_material_init: failed to init pool");
         return;
     }

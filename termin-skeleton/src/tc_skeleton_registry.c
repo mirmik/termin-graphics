@@ -10,6 +10,7 @@
 #include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_skeleton_pool;
+static tc_pool_generation_epoch g_skeleton_generation_epoch;
 static tc_resource_map* g_uuid_to_index = NULL;
 static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
@@ -31,7 +32,11 @@ static void skeleton_free_data(tc_skeleton* skeleton) {
 void tc_skeleton_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_skeleton");
 
-    if (!tc_pool_init(&g_skeleton_pool, sizeof(tc_skeleton), 32)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_skeleton_pool,
+            sizeof(tc_skeleton),
+            32,
+            &g_skeleton_generation_epoch)) {
         tc_log_error("tc_skeleton_init: failed to init pool");
         return;
     }

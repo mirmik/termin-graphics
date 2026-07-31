@@ -1,6 +1,7 @@
 #include "guard_c.h"
 
 #include "render/tc_render_target.h"
+#include "render/tc_render_target_pool.h"
 #include "core/tc_component.h"
 #include "core/tc_scene.h"
 #include "inspect/tc_runtime_type_registry.h"
@@ -65,6 +66,25 @@ GUARD_C_TEST(test_render_target_pool_grows_and_rejects_stale_handle) {
         tc_render_target_free(targets[i]);
     }
     GUARD_C_CHECK_EQ_UINT(0, tc_render_target_pool_count());
+    return 0;
+}
+
+GUARD_C_TEST(test_render_target_pool_rejects_stale_handle_after_rebootstrap) {
+    tc_render_target_pool_shutdown();
+    const tc_render_target_handle stale =
+        tc_render_target_new("before-rebootstrap");
+    GUARD_C_REQUIRE(tc_render_target_alive(stale));
+
+    tc_render_target_pool_shutdown();
+    GUARD_C_CHECK(!tc_render_target_alive(stale));
+
+    const tc_render_target_handle replacement =
+        tc_render_target_new("after-rebootstrap");
+    GUARD_C_REQUIRE(tc_render_target_alive(replacement));
+    GUARD_C_CHECK_EQ_UINT(stale.index, replacement.index);
+    GUARD_C_CHECK(stale.generation != replacement.generation);
+    GUARD_C_CHECK(!tc_render_target_alive(stale));
+    tc_render_target_free(replacement);
     return 0;
 }
 
@@ -240,6 +260,7 @@ int main(int argc, char** argv) {
     GUARD_C_BEGIN_ARGS(argc, argv);
     GUARD_C_RUN(test_render_target_rejects_invalid_dimensions_without_mutation);
     GUARD_C_RUN(test_render_target_pool_grows_and_rejects_stale_handle);
+    GUARD_C_RUN(test_render_target_pool_rejects_stale_handle_after_rebootstrap);
     GUARD_C_RUN(test_render_target_resolves_camera_replacement_from_entity_handle);
     GUARD_C_RUN(test_render_target_resolves_camera_from_scene_less_pool);
     GUARD_C_RUN(test_render_target_rejects_camera_from_another_scene);

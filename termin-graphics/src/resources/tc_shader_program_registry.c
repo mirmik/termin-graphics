@@ -12,6 +12,7 @@
 #include <tgfx/resources/tc_shader_registry.h>
 
 static tc_pool g_program_pool;
+static tc_pool_generation_epoch g_program_generation_epoch;
 static tc_resource_map* g_program_uuid_to_index = NULL;
 static bool g_program_initialized = false;
 
@@ -59,7 +60,11 @@ static void clear_payload(tc_shader_program* program) {
 
 void tc_shader_program_init(void) {
     TC_REGISTRY_INIT_GUARD(g_program_initialized, "tc_shader_program");
-    if (!tc_pool_init(&g_program_pool, sizeof(tc_shader_program), 32)) {
+    if (!tc_pool_init_rebootstrap(
+            &g_program_pool,
+            sizeof(tc_shader_program),
+            32,
+            &g_program_generation_epoch)) {
         tc_log_error("tc_shader_program_init: failed to initialize pool");
         return;
     }
