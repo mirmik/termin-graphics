@@ -50,6 +50,7 @@
     }
   ],
   "internal_roots": [
+    "test-projects/android-render-showcase/docs",
     "tcplot/docs",
     "termin-animation/docs",
     "termin-audio/docs",
