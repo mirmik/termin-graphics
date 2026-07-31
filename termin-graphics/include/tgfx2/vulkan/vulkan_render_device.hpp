@@ -143,6 +143,12 @@ struct VulkanDeviceCreateInfo {
     bool enable_validation = true;
     PresentationMode presentation_mode = PresentationMode::VSync;
 
+    // Vulkan API version requested through VkApplicationInfo. Zero selects
+    // the backend's platform default (1.0 on Android, 1.3 elsewhere).
+    // Keeping this explicit lets hosts honor runtime requirements and lets
+    // compatibility tests exercise the Vulkan 1.0 extension path.
+    uint32_t api_version = 0;
+
     // Host-visible dynamic UBO budget per in-flight frame. Keeping this in
     // device configuration makes the memory/performance tradeoff explicit
     // and lets stress tests exercise the overflow path deterministically.
@@ -292,6 +298,7 @@ private:
     VkQueue present_queue_ = VK_NULL_HANDLE;
     uint32_t graphics_family_ = 0;
     uint32_t present_family_ = 0;
+    uint32_t api_version_ = VK_API_VERSION_1_0;
     std::vector<const char*> device_extensions_;
 
     VmaAllocator allocator_ = VK_NULL_HANDLE;

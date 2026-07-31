@@ -46,6 +46,10 @@ int main() {
     tgfx::VulkanDeviceCreateInfo info;
     const char* validation_env = std::getenv("TGFX2_VULKAN_VALIDATION");
     info.enable_validation = validation_env && validation_env[0] == '1';
+    // Exercise the Vulkan 1.0 compatibility path used by Android. In
+    // particular, device creation must not call core 1.1 feature queries
+    // merely because the loader returns a non-null trampoline.
+    info.api_version = VK_API_VERSION_1_0;
 
     std::unique_ptr<tgfx::IRenderDevice> device;
     try {

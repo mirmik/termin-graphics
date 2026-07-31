@@ -37,9 +37,9 @@ extern "C" {
 }
 
 #ifdef __ANDROID__
-static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_0;
+static constexpr uint32_t TGFX2_VULKAN_DEFAULT_API_VERSION = VK_API_VERSION_1_0;
 #else
-static constexpr uint32_t TGFX2_VULKAN_RUNTIME_API_VERSION = VK_API_VERSION_1_3;
+static constexpr uint32_t TGFX2_VULKAN_DEFAULT_API_VERSION = VK_API_VERSION_1_3;
 #endif
 
 // Trampolines for destroy-hook C callbacks. Defined at file scope (not in
@@ -78,13 +78,21 @@ static bool physical_device_supports_extension(
     const char* extension_name)
 {
     uint32_t count = 0;
-    if (vkEnumerateDeviceExtensionProperties(
-            physical_device, nullptr, &count, nullptr) != VK_SUCCESS) {
+    VkResult result = vkEnumerateDeviceExtensionProperties(
+        physical_device, nullptr, &count, nullptr);
+    if (result != VK_SUCCESS) {
+        tc_log_error(
+            "VulkanRenderDevice: failed to enumerate device extension count, result=%d",
+            static_cast<int>(result));
         return false;
     }
     std::vector<VkExtensionProperties> extensions(count);
-    if (vkEnumerateDeviceExtensionProperties(
-            physical_device, nullptr, &count, extensions.data()) != VK_SUCCESS) {
+    result = vkEnumerateDeviceExtensionProperties(
+        physical_device, nullptr, &count, extensions.data());
+    if (result != VK_SUCCESS) {
+        tc_log_error(
+            "VulkanRenderDevice: failed to enumerate device extensions, result=%d",
+            static_cast<int>(result));
         return false;
     }
     for (const VkExtensionProperties& extension : extensions) {
@@ -111,6 +119,9 @@ static bool contains_extension(
 
 VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     validation_enabled_ = info.enable_validation;
+    api_version_ = info.api_version != 0
+        ? info.api_version
+        : TGFX2_VULKAN_DEFAULT_API_VERSION;
     device_extensions_ = info.device_extensions;
     requested_ring_ubo_slot_size_ = info.ring_ubo_slot_size;
     init_instance(info);
@@ -368,7 +379,7 @@ void VulkanRenderDevice::init_instance(const VulkanDeviceCreateInfo& info) {
     app_info.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
     app_info.pEngineName = "tgfx2";
     app_info.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-    app_info.apiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
+    app_info.apiVersion = api_version_;
 
     std::vector<const char*> extensions = info.instance_extensions;
     std::vector<const char*> layers;
@@ -510,38 +521,56 @@ void VulkanRenderDevice::create_logical_device() {
     // projection matrices (see termin-base/geom/mat44.hpp) build
     // matrices that target exactly that. No VK_EXT_depth_clip_control
     // needed.
-    VkPhysicalDeviceVulkan11Features vulkan11_features{};
-    vulkan11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-    VkPhysicalDeviceFeatures2 supported_features2{};
-    supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    supported_features2.pNext = &vulkan11_features;
-    auto get_physical_device_features2 =
-        reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-            vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
-    if (!get_physical_device_features2) {
-        get_physical_device_features2 =
+    VkPhysicalDeviceProperties physical_device_properties{};
+    vkGetPhysicalDeviceProperties(physical_device_, &physical_device_properties);
+    const uint32_t effective_api_version =
+        std::min(api_version_, physical_device_properties.apiVersion);
+
+    VkPhysicalDeviceShaderDrawParametersFeatures supported_draw_parameters{};
+    supported_draw_parameters.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+    VkPhysicalDeviceShaderDrawParametersFeatures enabled_draw_parameters{};
+    enabled_draw_parameters.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+
+    if (effective_api_version >= VK_API_VERSION_1_1) {
+        VkPhysicalDeviceFeatures2 supported_features2{};
+        supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        supported_features2.pNext = &supported_draw_parameters;
+        auto get_physical_device_features2 =
             reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-                vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2KHR"));
-    }
-    if (get_physical_device_features2) {
-        get_physical_device_features2(physical_device_, &supported_features2);
+                vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
+        if (get_physical_device_features2) {
+            get_physical_device_features2(physical_device_, &supported_features2);
+            enabled_draw_parameters.shaderDrawParameters =
+                supported_draw_parameters.shaderDrawParameters;
+        } else {
+            tc_log_error(
+                "VulkanRenderDevice: vkGetPhysicalDeviceFeatures2 unavailable "
+                "for effective Vulkan API version %u.%u",
+                VK_API_VERSION_MAJOR(effective_api_version),
+                VK_API_VERSION_MINOR(effective_api_version));
+        }
     } else {
         tc_log_info(
-            "VulkanRenderDevice: vkGetPhysicalDeviceFeatures2 unavailable; "
-            "Vulkan 1.1 feature query skipped");
+            "VulkanRenderDevice: effective Vulkan API version %u.%u; "
+            "skipping core 1.1 physical-device feature query",
+            VK_API_VERSION_MAJOR(effective_api_version),
+            VK_API_VERSION_MINOR(effective_api_version));
     }
 
-    VkPhysicalDeviceVulkan11Features enabled_vulkan11_features{};
-    enabled_vulkan11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-    if (vulkan11_features.shaderDrawParameters) {
-        enabled_vulkan11_features.shaderDrawParameters = VK_TRUE;
-    } else if (physical_device_supports_extension(
-                   physical_device_,
-                   VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
+    bool shader_draw_parameters_available =
+        enabled_draw_parameters.shaderDrawParameters == VK_TRUE;
+    if (!shader_draw_parameters_available &&
+        physical_device_supports_extension(
+            physical_device_,
+            VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
         if (!contains_extension(extensions, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
             extensions.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
         }
-    } else {
+        shader_draw_parameters_available = true;
+    }
+    if (!shader_draw_parameters_available) {
         tc_log_info(
             "VulkanRenderDevice: shaderDrawParameters unsupported; "
             "Slang shaders using SV_InstanceID with BaseInstance may fail validation");
@@ -552,8 +581,8 @@ void VulkanRenderDevice::create_logical_device() {
     ci.queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size());
     ci.pQueueCreateInfos = queue_cis.data();
     ci.pEnabledFeatures = &features;
-    ci.pNext = enabled_vulkan11_features.shaderDrawParameters
-        ? &enabled_vulkan11_features
+    ci.pNext = enabled_draw_parameters.shaderDrawParameters
+        ? &enabled_draw_parameters
         : nullptr;
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     ci.ppEnabledExtensionNames = extensions.data();
@@ -578,7 +607,7 @@ void VulkanRenderDevice::create_allocator() {
     ci.physicalDevice = physical_device_;
     ci.device = device_;
     ci.instance = instance_;
-    ci.vulkanApiVersion = TGFX2_VULKAN_RUNTIME_API_VERSION;
+    ci.vulkanApiVersion = api_version_;
 
     if (vmaCreateAllocator(&ci, &allocator_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VMA allocator");
