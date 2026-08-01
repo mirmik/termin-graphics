@@ -204,6 +204,7 @@ add_subdirectory(termin-components/termin-components-mesh)
 add_subdirectory(termin-components/termin-components-collision)
 add_subdirectory(termin-components/termin-components-kinematic)
 add_subdirectory(termin-components/termin-components-physics)
+add_subdirectory(termin-components/termin-components-physics-fem)
 add_subdirectory(termin-components/termin-components-skeleton)
 
 add_subdirectory(termin-graphics)
