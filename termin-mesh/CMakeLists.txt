@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
+option(TERMIN_MESH_BUILD_SHARED "Build termin-mesh as a shared library" ON)
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
@@ -27,10 +28,13 @@ set(TERMIN_MESH_CXX_SOURCES
     src/tgfx_mesh_handle.cpp
 )
 
-add_library(termin_mesh SHARED ${TERMIN_MESH_C_SOURCES} ${TERMIN_MESH_CXX_SOURCES})
+if(TERMIN_MESH_BUILD_SHARED)
+    add_library(termin_mesh SHARED ${TERMIN_MESH_C_SOURCES} ${TERMIN_MESH_CXX_SOURCES})
+    target_compile_definitions(termin_mesh PRIVATE TGFX_EXPORTS TC_EXPORTS)
+else()
+    add_library(termin_mesh STATIC ${TERMIN_MESH_C_SOURCES} ${TERMIN_MESH_CXX_SOURCES})
+endif()
 add_library(tmesh::termin_mesh ALIAS termin_mesh)
-
-target_compile_definitions(termin_mesh PRIVATE TGFX_EXPORTS TC_EXPORTS)
 
 if(MSVC)
     target_compile_options(termin_mesh PRIVATE /wd4251 /wd4275)
