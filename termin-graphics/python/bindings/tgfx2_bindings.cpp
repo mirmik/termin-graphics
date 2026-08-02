@@ -731,7 +731,7 @@ void bind_tgfx2(nb::module_& m) {
             })
 
         // Diagnostic backend identifier as a lowercase string:
-        // "opengl", "vulkan", "metal", "d3d11", "null". Rendering code
+        // "opengl", "vulkan", "metal", "d3d11", "webgpu", "null". Rendering code
         // should prefer capability properties above.
         .def_prop_ro("backend",
             [](Tgfx2ContextHolder& self) -> std::string {
@@ -740,6 +740,7 @@ void bind_tgfx2(nb::module_& m) {
                     case tgfx::BackendType::Vulkan: return "vulkan";
                     case tgfx::BackendType::Metal:  return "metal";
                     case tgfx::BackendType::D3D11:  return "d3d11";
+                    case tgfx::BackendType::WebGPU: return "webgpu";
                     case tgfx::BackendType::Null:   return "null";
                 }
                 return "unknown";

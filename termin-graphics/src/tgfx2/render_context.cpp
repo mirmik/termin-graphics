@@ -28,6 +28,7 @@ const char* render_context_backend_name(BackendType backend) {
         case BackendType::Vulkan: return "vulkan";
         case BackendType::Metal: return "metal";
         case BackendType::D3D11: return "d3d11";
+        case BackendType::WebGPU: return "webgpu";
         case BackendType::Null: return "null";
     }
     return "unknown";

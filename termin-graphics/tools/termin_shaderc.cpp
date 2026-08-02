@@ -187,6 +187,7 @@ static tgfx::BackendType backend_type_for_target(const std::string& target) {
     if (target == "opengl") return tgfx::BackendType::OpenGL;
     if (target == "d3d11") return tgfx::BackendType::D3D11;
     if (target == "metal") return tgfx::BackendType::Metal;
+    if (target == "webgpu") return tgfx::BackendType::WebGPU;
     if (target == "vulkan" || target == "webgpu" || target.empty()) {
         return tgfx::BackendType::Vulkan;
     }

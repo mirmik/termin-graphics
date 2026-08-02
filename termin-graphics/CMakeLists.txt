@@ -7,6 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TGFX2_ENABLE_OPENGL "Enable OpenGL backend for tgfx2" ON)
+option(TGFX2_ENABLE_WEBGPU "Enable WebGPU backend for tgfx2" ${EMSCRIPTEN})
+if(TGFX2_ENABLE_WEBGPU AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR "TGFX2_ENABLE_WEBGPU currently requires Emscripten")
+endif()
 if(WIN32)
     set(_TGFX2_D3D11_DEFAULT ON)
 else()
@@ -56,6 +60,10 @@ target_include_directories(glad PUBLIC
 target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 
 # --- termin_graphics ---
+set(_TGFX_LIBRARY_TYPE SHARED)
+if(EMSCRIPTEN)
+    set(_TGFX_LIBRARY_TYPE STATIC)
+endif()
 set(TGFX_C_SOURCES
     src/resources/tc_shader_abi.c
     src/resources/tc_shader_registry.c
@@ -71,7 +79,7 @@ if(TGFX2_ENABLE_OPENGL)
     list(APPEND TGFX_CXX_SOURCES src/tgfx_opengl_c_api.cpp)
 endif()
 
-add_library(termin_graphics SHARED ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
+add_library(termin_graphics ${_TGFX_LIBRARY_TYPE} ${TGFX_C_SOURCES} ${TGFX_CXX_SOURCES})
 if(COMMAND termin_add_alias_if_missing)
     termin_add_alias_if_missing(tgfx::termin_graphics termin_graphics)
 endif()
@@ -106,12 +114,14 @@ termin_set_rpath_lib(termin_graphics)
 # Shared by the runtime and the host-side shader compiler. Keeping it out of
 # termin_graphics2 prevents the compiler used for SDK shader artifacts from
 # depending on the library whose artifacts it generates.
-add_library(termin_graphics_process_runner STATIC
-    src/tgfx2/internal/process_runner.cpp
-)
-target_include_directories(termin_graphics_process_runner PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+if(NOT EMSCRIPTEN)
+    add_library(termin_graphics_process_runner STATIC
+        src/tgfx2/internal/process_runner.cpp
+    )
+    target_include_directories(termin_graphics_process_runner PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+endif()
 
 # --- termin_graphics2 (new backend-neutral API) ---
 set(TGFX2_SOURCES
@@ -143,11 +153,22 @@ set(TGFX2_SOURCES
     src/tgfx2/vertex_layout.cpp
 )
 
+if(EMSCRIPTEN)
+    # The browser slice owns the backend-neutral device boundary, not the
+    # desktop renderer stack (filesystem artifact resolution, font loading,
+    # native interop, and process execution). Keep this source closure explicit
+    # so new desktop-only dependencies cannot silently leak into the web build.
+    set(TGFX2_SOURCES
+        src/tgfx2/device_factory.cpp
+        src/tgfx2/vertex_layout.cpp
+    )
+endif()
+
 # Binding policy is consumed both by the runtime library and by termin_shaderc.
 # Keep it in a small shared library so the compiler can use the same exported
 # policy without depending on termin_graphics2 and creating an artifact-build
 # cycle.
-add_library(termin_graphics_binding_policy SHARED
+add_library(termin_graphics_binding_policy ${_TGFX_LIBRARY_TYPE}
     src/tgfx2/backend_binding_plan.cpp
 )
 target_compile_definitions(termin_graphics_binding_policy PRIVATE TGFX2_EXPORTS)
@@ -251,7 +272,14 @@ if(TGFX2_ENABLE_D3D11)
     )
 endif()
 
-add_library(termin_graphics2 SHARED ${TGFX2_SOURCES})
+if(TGFX2_ENABLE_WEBGPU)
+    list(APPEND TGFX2_SOURCES
+        src/tgfx2/webgpu/webgpu_render_device.cpp
+        src/tgfx2/webgpu/webgpu_command_list.cpp
+    )
+endif()
+
+add_library(termin_graphics2 ${_TGFX_LIBRARY_TYPE} ${TGFX2_SOURCES})
 if(COMMAND termin_add_alias_if_missing)
     termin_add_alias_if_missing(tgfx::termin_graphics2 termin_graphics2)
 endif()
@@ -313,6 +341,12 @@ if(TGFX2_ENABLE_D3D11)
     target_link_libraries(termin_graphics2 PRIVATE d3d11 dxgi d3d9 d3dcompiler)
 endif()
 
+if(TGFX2_ENABLE_WEBGPU)
+    target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_WEBGPU)
+    target_compile_options(termin_graphics2 PUBLIC "--use-port=emdawnwebgpu")
+    target_link_options(termin_graphics2 PUBLIC "--use-port=emdawnwebgpu")
+endif()
+
 if(MSVC)
     target_compile_options(termin_graphics2 PRIVATE /wd4251 /wd4275)
 endif()
@@ -334,7 +368,9 @@ target_link_libraries(termin_graphics2 PUBLIC
     tmesh::termin_mesh
     termin_graphics_binding_policy
 )
-target_link_libraries(termin_graphics2 PRIVATE termin_graphics_process_runner)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(termin_graphics2 PRIVATE termin_graphics_process_runner)
+endif()
 if(TGFX2_ENABLE_OPENGL)
     target_link_libraries(termin_graphics2 PUBLIC glad OpenGL::GL)
 else()

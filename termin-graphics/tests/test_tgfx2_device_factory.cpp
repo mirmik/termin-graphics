@@ -165,6 +165,9 @@ TEST_CASE("tgfx2 device factory parses TERMIN_BACKEND aliases") {
     set_backend_env("DX11");
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::D3D11);
 
+    set_backend_env("wgpu");
+    CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::WebGPU);
+
     set_backend_env("null");
     CHECK(tgfx::default_backend_from_env() == tgfx::BackendType::Null);
 
@@ -178,14 +181,19 @@ TEST_CASE("tgfx2 backend names and compiled availability are queryable") {
     CHECK(std::string(tgfx::backend_name(tgfx::BackendType::OpenGL)) == "opengl");
     CHECK(std::string(tgfx::backend_name(tgfx::BackendType::Vulkan)) == "vulkan");
     CHECK(std::string(tgfx::backend_name(tgfx::BackendType::D3D11)) == "d3d11");
+    CHECK(std::string(tgfx::backend_name(tgfx::BackendType::WebGPU)) == "webgpu");
 
     CHECK(tgfx::backend_from_name("GL") == tgfx::BackendType::OpenGL);
     CHECK(tgfx::backend_from_name("vk") == tgfx::BackendType::Vulkan);
     CHECK(tgfx::backend_from_name("DX11") == tgfx::BackendType::D3D11);
+    CHECK(tgfx::backend_from_name("WGPU") == tgfx::BackendType::WebGPU);
     CHECK(tgfx::backend_from_name("definitely-not-a-backend") == tgfx::BackendType::Null);
 
     CHECK(tgfx::backend_is_compiled(tgfx::compiled_default_backend()));
     CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::Null));
+#ifndef __EMSCRIPTEN__
+    CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::WebGPU));
+#endif
 }
 
 TEST_CASE("tgfx2 shader artifact paths are backend aware") {
@@ -197,6 +205,7 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
     fs::create_directories(root / "shaders" / "vulkan");
     fs::create_directories(root / "shaders" / "opengl");
     fs::create_directories(root / "shaders" / "d3d11");
+    fs::create_directories(root / "shaders" / "webgpu");
 
     const std::string root_str = root.generic_string();
     termin::tgfx2_set_shader_artifact_root(root_str.c_str());
@@ -222,6 +231,13 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
         tgfx::ShaderStage::Vertex,
         path));
     CHECK(path == root_str + "/shaders/d3d11/shader-uuid.vs.cso");
+
+    CHECK(termin::tgfx2_shader_artifact_path(
+        "shader-uuid",
+        tgfx::BackendType::WebGPU,
+        tgfx::ShaderStage::Fragment,
+        path));
+    CHECK(path == root_str + "/shaders/webgpu/shader-uuid.frag.wgsl");
 
     const fs::path spirv_path = root / "shaders" / "vulkan" / "shader-uuid.frag.spv";
     {
@@ -362,6 +378,22 @@ TEST_CASE("backend binding plan separates semantic resources from backend placem
     CHECK(opengl_plan.entries[0].placement.opengl.binding_class ==
           tgfx::OpenGLBindingClass::UniformBuffer);
     CHECK(opengl_plan.entries[0].placement.opengl.binding_point == 1u);
+
+    binding.has_webgpu_placement = 1;
+    binding.webgpu.group = 0;
+    binding.webgpu.binding = 5;
+    tgfx::BackendBindingPlan webgpu_plan;
+    REQUIRE(tgfx::build_backend_binding_plan(
+        tgfx::BackendType::WebGPU,
+        &binding,
+        1,
+        webgpu_plan,
+        &error));
+    REQUIRE(webgpu_plan.entries.size() == 1);
+    CHECK(webgpu_plan.entries[0].placement.kind == tgfx::BackendPlacementKind::WebGPU);
+    CHECK(webgpu_plan.entries[0].placement.webgpu.group == 0u);
+    CHECK(webgpu_plan.entries[0].placement.webgpu.binding == 5u);
+    CHECK(!webgpu_plan.entries[0].placement.webgpu.has_sampler_binding);
 }
 
 TEST_CASE("bound resource group views preserve dirty scopes and owned storage") {

@@ -193,6 +193,7 @@ static const char* backend_directory(tgfx::BackendType backend) {
         case tgfx::BackendType::OpenGL: return "opengl";
         case tgfx::BackendType::Vulkan: return "vulkan";
         case tgfx::BackendType::D3D11: return "d3d11";
+        case tgfx::BackendType::WebGPU: return "webgpu";
         case tgfx::BackendType::Metal:
         case tgfx::BackendType::Null:
             return "";
@@ -207,6 +208,7 @@ static const char* backend_stage_suffix(
     switch (backend) {
         case tgfx::BackendType::OpenGL:
         case tgfx::BackendType::Vulkan:
+        case tgfx::BackendType::WebGPU:
             return stage_extension(stage);
         case tgfx::BackendType::D3D11:
             switch (stage) {
@@ -228,6 +230,7 @@ static const char* backend_artifact_extension(tgfx::BackendType backend) {
         case tgfx::BackendType::OpenGL: return "glsl";
         case tgfx::BackendType::Vulkan: return "spv";
         case tgfx::BackendType::D3D11: return "cso";
+        case tgfx::BackendType::WebGPU: return "wgsl";
         case tgfx::BackendType::Metal:
         case tgfx::BackendType::Null:
             return "";
@@ -250,6 +253,7 @@ static const char* backend_name(tgfx::BackendType backend) {
         case tgfx::BackendType::OpenGL: return "opengl";
         case tgfx::BackendType::Vulkan: return "vulkan";
         case tgfx::BackendType::D3D11: return "d3d11";
+        case tgfx::BackendType::WebGPU: return "webgpu";
         case tgfx::BackendType::Metal: return "metal";
         case tgfx::BackendType::Null: return "null";
     }
@@ -314,7 +318,8 @@ static bool shader_language_target_supported(
     if (language == TC_SHADER_LANGUAGE_SLANG) {
         return backend == tgfx::BackendType::Vulkan ||
                backend == tgfx::BackendType::OpenGL ||
-               backend == tgfx::BackendType::D3D11;
+               backend == tgfx::BackendType::D3D11 ||
+               backend == tgfx::BackendType::WebGPU;
     }
     if (language == TC_SHADER_LANGUAGE_HLSL) {
         return backend == tgfx::BackendType::D3D11;
@@ -812,6 +817,13 @@ static bool parse_shader_resource_layout_sidecar(
     std::string target;
     const bool has_target = trent_string_field(root, "target", target);
     const bool require_d3d11_placement = has_target && target == "d3d11";
+    const bool require_webgpu_placement = has_target && target == "webgpu";
+    if (require_webgpu_placement) {
+        uint32_t version = 0;
+        if (!trent_uint_field(root, "version", version) || version != 3) {
+            return false;
+        }
+    }
 
     for (const nos::trent& object : resources->as_list()) {
         if (!object.is_dict()) {
@@ -880,6 +892,32 @@ static bool parse_shader_resource_layout_sidecar(
                     scalar_sampler_for_texture_array ? 1 : 0;
             }
         } else if (require_d3d11_placement) {
+            return false;
+        }
+
+        const nos::trent* webgpu = trent_dict_get(object, "webgpu");
+        if (webgpu) {
+            uint32_t group = 0;
+            uint32_t webgpu_binding = 0;
+            if (!webgpu->is_dict() ||
+                !trent_uint_field(*webgpu, "group", group) ||
+                !trent_uint_field(*webgpu, "binding", webgpu_binding) ||
+                group != 0) {
+                return false;
+            }
+            resource.has_webgpu_placement = 1;
+            resource.webgpu.group = group;
+            resource.webgpu.binding = webgpu_binding;
+            uint32_t sampler_binding = 0;
+            if (trent_uint_field(*webgpu, "sampler_binding", sampler_binding)) {
+                if (kind != TC_SHADER_RESOURCE_TEXTURE ||
+                    sampler_binding == webgpu_binding) {
+                    return false;
+                }
+                resource.webgpu.has_sampler_binding = 1;
+                resource.webgpu.sampler_binding = sampler_binding;
+            }
+        } else if (require_webgpu_placement) {
             return false;
         }
 
@@ -967,6 +1005,9 @@ static void merge_shader_resource_binding(
             const uint8_t previous_d3d11_scalar_sampler_for_texture_array =
                 existing.d3d11_scalar_sampler_for_texture_array;
             const tc_shader_d3d11_placement previous_d3d11 = existing.d3d11;
+            const uint8_t previous_has_webgpu_placement =
+                existing.has_webgpu_placement;
+            const tc_shader_webgpu_placement previous_webgpu = existing.webgpu;
             if (previous_has_d3d11_placement && incoming.has_d3d11_placement &&
                 (previous_d3d11.register_class != incoming.d3d11.register_class ||
                  previous_d3d11.register_index != incoming.d3d11.register_index)) {
@@ -993,6 +1034,24 @@ static void merge_shader_resource_binding(
             }
             if (previous_d3d11_scalar_sampler_for_texture_array) {
                 existing.d3d11_scalar_sampler_for_texture_array = 1;
+            }
+            if (previous_has_webgpu_placement && incoming.has_webgpu_placement &&
+                (previous_webgpu.group != incoming.webgpu.group ||
+                 previous_webgpu.binding != incoming.webgpu.binding ||
+                 previous_webgpu.has_sampler_binding !=
+                     incoming.webgpu.has_sampler_binding ||
+                 (previous_webgpu.has_sampler_binding &&
+                  previous_webgpu.sampler_binding !=
+                      incoming.webgpu.sampler_binding))) {
+                tc_log(TC_LOG_ERROR,
+                       "merge_shader_resource_binding: '%s' has conflicting "
+                       "WebGPU placements across stages",
+                       incoming.name);
+            }
+            if (!incoming.has_webgpu_placement &&
+                previous_has_webgpu_placement) {
+                existing.has_webgpu_placement = 1;
+                existing.webgpu = previous_webgpu;
             }
             if ((incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNKNOWN ||
                  incoming.scope == TC_SHADER_RESOURCE_SCOPE_UNSCOPED) &&
