@@ -31,8 +31,13 @@ The initial cross-platform baseline contains:
 - `termin.gui.GridLayout`;
 - `termin.gui.ScrollArea`;
 - `termin.gui.Label`;
+- `termin.gui.Checkbox`;
 - `termin.gui.WrapLayout`;
 - `termin.gui.IconButton`.
+
+`Checkbox` accepts a boolean `checked` property. The value initializes the
+native checked state and can subsequently be changed through ordinary pointer
+or keyboard input.
 
 Common properties are `visible`, `enabled`, and the normalized `layout`
 mapping documented in [widget-layout-spec.md](widget-layout-spec.md). `anchor`
