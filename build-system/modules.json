@@ -35,6 +35,16 @@
       "kinds": ["cmake"]
     },
     {
+      "id": "termin-components-physics-fem",
+      "path": "termin-components/termin-components-physics-fem",
+      "kinds": ["cmake"]
+    },
+    {
+      "id": "termin-components-physics-fem-ui",
+      "path": "termin-components/termin-components-physics-fem-ui",
+      "kinds": ["cmake"]
+    },
+    {
       "id": "termin-components-skeleton",
       "path": "termin-components/termin-components-skeleton",
       "kinds": ["cmake"]
