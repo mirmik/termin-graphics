@@ -97,6 +97,44 @@ jobs:
         shell: pwsh
         run: .\build-sdk.ps1 --no-wheels --no-parallel --dry-run
 
+  # ── 0e. Chromium Web Runtime gate ──────────────────────────────
+  web-runtime-chromium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Cache pinned Emscripten toolchain
+        uses: actions/cache@v5
+        with:
+          path: build/toolchains/emsdk
+          key: emsdk-${{ runner.os }}-${{ hashFiles('build-system/emscripten-version.txt') }}
+
+      - name: Setup pinned Emscripten toolchain
+        run: ./setup-web-toolchain.sh
+
+      - name: Resolve Chromium executable
+        run: |
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "$browser" ]]; then
+            echo "ERROR: GitHub runner does not provide a Chromium-family browser" >&2
+            exit 1
+          fi
+          echo "TERMIN_WEB_BROWSER=$browser" >> "$GITHUB_ENV"
+
+      - name: Build and run Chromium Web Runtime gate
+        run: ./build-web-core.sh --browser-smoke
+
+      - name: Upload Web Runtime gate report
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: web-runtime-chromium-gate
+          path: build/web-core/bin/browser-gate-report.json
+          if-no-files-found: error
+          retention-days: 14
+
   # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
   tgfx2-d3d11-bound-windows:
     runs-on: windows-latest
