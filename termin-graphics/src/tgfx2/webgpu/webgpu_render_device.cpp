@@ -740,7 +740,13 @@ void WebGpuRenderDevice::submit(ICommandList& command_list) {
 
 void WebGpuRenderDevice::present() {
     if (!acquired_surface_texture_) fail("present called without an acquired surface texture");
+#if !defined(__EMSCRIPTEN__)
     surface_.Present();
+#endif
+    // Browser WebGPU presents the current canvas texture at the end of the
+    // requestAnimationFrame callback. Emdawnwebgpu deliberately aborts when
+    // wgpuSurfacePresent is called, but the acquired texture still has to be
+    // released here before the next frame.
     textures_.remove(acquired_surface_texture_.id);
     acquired_surface_texture_ = {};
 }
