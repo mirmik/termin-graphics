@@ -5,6 +5,11 @@
   "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
     {
+      "id": "tcplot-gui-native",
+      "path": "tcplot-gui-native",
+      "kinds": ["cmake"]
+    },
+    {
       "id": "termin-android",
       "path": "termin-android",
       "kinds": ["cmake", "platform"]

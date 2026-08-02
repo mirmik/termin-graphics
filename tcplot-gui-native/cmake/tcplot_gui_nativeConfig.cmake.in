@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(termin_gui_native REQUIRED)
+find_dependency(tcplot REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/tcplot_gui_nativeTargets.cmake")

@@ -407,6 +407,21 @@ void validate_property(
     fail(path, "property has no native UiScript validator");
 }
 
+void validate_widget_property(
+    const tc_uiscript_type_descriptor& descriptor,
+    const std::string& name,
+    tc::trent_view value,
+    const std::string& path
+) {
+    if (descriptor.validate_property) {
+        if (!descriptor.validate_property(name.c_str(), value.raw())) {
+            fail(path, "widget type rejected property value");
+        }
+        return;
+    }
+    validate_property(name, value, path);
+}
+
 bool contains_property(
     const tc_uiscript_type_descriptor& descriptor,
     const std::string& name
@@ -837,7 +852,12 @@ UiScriptNode parse_node(
             !parent_property && !root_property) {
             fail(path, "unsupported " + type_name + " property '" + key + "'");
         }
-        validate_property(key, entry.view(), path + "." + key);
+        if (contains_property(*descriptor, key)) {
+            validate_widget_property(
+                *descriptor, key, entry.view(), path + "." + key);
+        } else {
+            validate_property(key, entry.view(), path + "." + key);
+        }
         node.properties.set(key, tc::trent::copy_of(*entry.value));
     }
     validate_box_placement(node, parent_descriptor);

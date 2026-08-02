@@ -34,6 +34,14 @@ find_package(tcplot CONFIG REQUIRED)
 target_link_libraries(my_plot PRIVATE tcplot::tcplot)
 ```
 
+Готовый native UI chart поставляется отдельным необязательным мостом
+[`tcplot-gui-native`](../../tcplot-gui-native/README.md). Runtime-тип
+`termin.gui.Plot2D` можно положить прямо в `.uiscript`, а данные линий передать
+из C++ через имя виджета. Сам `tcplot` при этом не зависит от UI: bridge
+композирует projection, grid и retained series в `TcVisualScene` и добавляет
+её draw list непосредственно в paint-команду виджета, без `SceneView` и
+промежуточной текстуры.
+
 `PlotEngine2D::plot_frame()` возвращает immutable `PlotFrame2D`: detached
 snapshot viewport, plot area, data range, clip и прямого/обратного
 data-to-pixel преобразования. Снимок не меняется после последующих pan, zoom,

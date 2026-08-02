@@ -13,12 +13,17 @@
 extern "C" {
 #endif
 
-#define TC_UISCRIPT_TYPE_ABI_VERSION 3u
+#define TC_UISCRIPT_TYPE_ABI_VERSION 4u
 #define TC_RUNTIME_TYPE_FACET_UISCRIPT "termin.gui.uiscript"
 
 typedef bool (*tc_uiscript_apply_properties_fn)(
     tc_widget* widget,
     const tc_value* properties
+);
+
+typedef bool (*tc_uiscript_validate_property_fn)(
+    const char* property_name,
+    const tc_value* value
 );
 
 typedef bool (*tc_uiscript_attach_child_fn)(
@@ -31,6 +36,7 @@ typedef struct tc_uiscript_type_descriptor {
     uint32_t abi_version;
     const char* const* properties;
     size_t property_count;
+    tc_uiscript_validate_property_fn validate_property;
     tc_uiscript_apply_properties_fn apply_properties;
     tc_uiscript_attach_child_fn attach_child;
     const char* const* child_properties;

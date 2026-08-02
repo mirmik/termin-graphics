@@ -39,6 +39,12 @@ mapping documented in [widget-layout-spec.md](widget-layout-spec.md). `anchor`
 and `offset` describe placement in an `OverlayLayout`. Widget-specific
 properties are declared by the registered type's UiScript facet.
 
+An external widget facet may provide its own property validator alongside the
+property-name list and materialization callback. Structural parsing invokes
+that validator before storing the value, so extension modules do not need to
+teach the central UiScript parser their property names or value types. Common
+layout and visibility properties continue to use the core validators.
+
 `BoxLayout`, `HStack`, and `VStack` accept `orientation` (`horizontal` or
 `vertical`), non-negative `spacing`, `padding` as one number or
 `[left, top, right, bottom]`, and `align_items` (`stretch`, `start`, `center`,
