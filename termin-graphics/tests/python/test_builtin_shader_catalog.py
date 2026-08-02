@@ -60,3 +60,20 @@ def test_builtin_shader_manifest_rejects_duplicate_uuid_and_missing_source(tmp_p
     assert "duplicate shader uuid: duplicate" in errors
     assert any("source does not exist" in error for error in errors)
     assert any("has no entry" in error for error in errors)
+
+
+def test_builtin_shader_webgpu_artifact_name_uses_wgsl_extension() -> None:
+    module = _catalog_module()
+
+    assert (
+        module.artifact_name("termin-engine-example", "webgpu", "vertex")
+        == "termin-engine-example.vert.wgsl"
+    )
+    assert (
+        module.artifact_name("termin-engine-example", "webgpu", "fragment")
+        == "termin-engine-example.frag.wgsl"
+    )
+    assert (
+        module.artifact_name("termin-engine-example", "webgpu", "compute")
+        == "termin-engine-example.comp.wgsl"
+    )

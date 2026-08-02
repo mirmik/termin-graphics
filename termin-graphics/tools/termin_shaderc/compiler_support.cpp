@@ -202,6 +202,46 @@ std::optional<std::string> resolve_fxc(const CompileOptions& options, const char
     return std::nullopt;
 }
 
+std::optional<std::string> resolve_wgsl_validator(
+    const CompileOptions& options,
+    const char* argv0
+) {
+    if (!options.wgsl_validator.empty()) {
+        if (!is_existing_file(options.wgsl_validator)) {
+            std::cerr
+                << "termin_shaderc: WGSL validator does not exist: "
+                << options.wgsl_validator << "\n";
+            return std::nullopt;
+        }
+        return options.wgsl_validator;
+    }
+
+    if (const char* env = std::getenv("TERMIN_WGSL_VALIDATOR")) {
+        if (env[0] != '\0') {
+            if (!is_existing_file(env)) {
+                std::cerr
+                    << "termin_shaderc: TERMIN_WGSL_VALIDATOR points to missing validator: "
+                    << env << "\n";
+                return std::nullopt;
+            }
+            return std::string(env);
+        }
+    }
+
+    if (auto found = find_on_path("naga")) {
+        return found;
+    }
+    if (auto found = find_sdk_tool("naga", argv0)) {
+        return found;
+    }
+
+    std::cerr
+        << "termin_shaderc: WGSL validator not found. Pass --wgsl-validator, "
+        << "set TERMIN_WGSL_VALIDATOR, add naga to PATH, or install it under "
+        << "TERMIN_SDK/bin.\n";
+    return std::nullopt;
+}
+
 static void append_unique_existing_dir(
     std::vector<std::string>& dirs,
     const std::filesystem::path& path

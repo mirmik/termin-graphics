@@ -390,6 +390,15 @@ endif()
 option(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS
     "Compile built-in shader artifacts into the SDK share/termin tree"
     ${_TERMIN_BUILTIN_SHADER_ARTIFACTS_DEFAULT})
+if(WIN32 AND TGFX2_ENABLE_D3D11)
+    set(_TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS_DEFAULT "d3d11")
+else()
+    set(_TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS_DEFAULT "")
+endif()
+set(TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS
+    "${_TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS_DEFAULT}"
+    CACHE STRING
+    "Semicolon-separated built-in shader artifact targets: vulkan, opengl, d3d11, webgpu")
 
 if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
     if(NOT TARGET termin_shaderc)
@@ -401,14 +410,20 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
         termin_require_canonical_python(Interpreter)
     endif()
 
-    set(_termin_builtin_shader_artifact_targets "")
-    if(WIN32 AND TGFX2_ENABLE_D3D11)
-        list(APPEND _termin_builtin_shader_artifact_targets d3d11)
-    endif()
+    set(_termin_builtin_shader_artifact_targets
+        ${TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS})
+    set(_termin_supported_builtin_shader_artifact_targets
+        vulkan opengl d3d11 webgpu)
     if(NOT _termin_builtin_shader_artifact_targets)
         message(FATAL_ERROR
             "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON but no built-in shader artifact targets are enabled")
     endif()
+    foreach(_target IN LISTS _termin_builtin_shader_artifact_targets)
+        if(NOT _target IN_LIST _termin_supported_builtin_shader_artifact_targets)
+            message(FATAL_ERROR
+                "Unsupported built-in shader artifact target: ${_target}")
+        endif()
+    endforeach()
 
     set(_termin_builtin_shader_slangc "")
     if(DEFINED ENV{TERMIN_SLANGC} AND EXISTS "$ENV{TERMIN_SLANGC}")
@@ -424,12 +439,29 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
             "Set TERMIN_SLANGC or add slangc to PATH.")
     endif()
 
+    if("webgpu" IN_LIST _termin_builtin_shader_artifact_targets)
+        if(DEFINED ENV{TERMIN_WGSL_VALIDATOR} AND EXISTS "$ENV{TERMIN_WGSL_VALIDATOR}")
+            set(_termin_builtin_shader_wgsl_validator "$ENV{TERMIN_WGSL_VALIDATOR}")
+        else()
+            find_program(_termin_builtin_shader_wgsl_validator NAMES naga)
+        endif()
+        if(NOT _termin_builtin_shader_wgsl_validator)
+            message(FATAL_ERROR
+                "WebGPU built-in shader artifacts require Naga. "
+                "Set TERMIN_WGSL_VALIDATOR or add naga to PATH.")
+        endif()
+    endif()
+
     set(_termin_builtin_shader_artifact_args
         "--shaderc" "$<TARGET_FILE:termin_shaderc>"
         "--slangc" "${_termin_builtin_shader_slangc}"
         "--source-dir" "${CMAKE_CURRENT_SOURCE_DIR}/resources/builtin_shaders"
         "--output-root" "${CMAKE_BINARY_DIR}/share/termin"
     )
+    if(_termin_builtin_shader_wgsl_validator)
+        list(APPEND _termin_builtin_shader_artifact_args
+            "--wgsl-validator" "${_termin_builtin_shader_wgsl_validator}")
+    endif()
     foreach(_target IN LISTS _termin_builtin_shader_artifact_targets)
         list(APPEND _termin_builtin_shader_artifact_args "--target" "${_target}")
     endforeach()

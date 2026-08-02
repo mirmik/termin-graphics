@@ -25,6 +25,8 @@ struct ShaderResourceBinding {
     bool slang_split_texture = false;
     bool slang_separate_sampler = false;
     bool slang_storage_texture = false;
+    bool webgpu_has_sampler_binding = false;
+    uint32_t webgpu_sampler_binding = 0;
     bool d3d11_scalar_sampler_for_texture_array = false;
 
     struct Field {
@@ -65,6 +67,9 @@ bool patch_slang_opengl_glsl_resource_bindings(
     const CompileOptions& options,
     const std::vector<ShaderResourceBinding>& resources);
 bool legalize_slang_opengl_glsl_builtins(const CompileOptions& options);
+bool assign_and_patch_slang_webgpu_resource_bindings(
+    const CompileOptions& options,
+    std::vector<ShaderResourceBinding>& resources);
 bool augment_d3d11_resource_bindings_from_hlsl(
     const CompileOptions& options,
     const std::filesystem::path& hlsl_path,

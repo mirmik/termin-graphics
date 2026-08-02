@@ -23,6 +23,7 @@ TARGET_EXTENSIONS = {
     "vulkan": "spv",
     "opengl": "glsl",
     "d3d11": "cso",
+    "webgpu": "wgsl",
 }
 
 
@@ -103,6 +104,7 @@ def main() -> int:
     parser.add_argument("--shaderc", required=True)
     parser.add_argument("--slangc")
     parser.add_argument("--fxc")
+    parser.add_argument("--wgsl-validator")
     parser.add_argument("--source-dir", required=True)
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--target", action="append", required=True)
@@ -194,6 +196,8 @@ def main() -> int:
                     cmd.extend(["--slangc", args.slangc])
                 if args.fxc:
                     cmd.extend(["--fxc", args.fxc])
+                if target == "webgpu" and args.wgsl_validator:
+                    cmd.extend(["--wgsl-validator", args.wgsl_validator])
                 result = subprocess.run(cmd)
                 compiled += 1
                 if result.returncode != 0:

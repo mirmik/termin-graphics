@@ -22,8 +22,8 @@ void print_help(std::ostream& out) {
         << "\n"
         << "Compile options:\n"
         << "  --language <name>    Source language: glsl or slang. Required.\n"
-        << "  --target <name>      Backend target: vulkan, opengl, or d3d11.\n"
-        << "  --stage <name>       Shader stage: vertex, fragment, or geometry.\n"
+        << "  --target <name>      Backend target: vulkan, opengl, d3d11, or webgpu.\n"
+        << "  --stage <name>       Shader stage: vertex, fragment, geometry, or compute.\n"
         << "  --input <path>       Source file to compile.\n"
         << "  --output <path>      Artifact output path (.spv for Vulkan Slang/GLSL).\n"
         << "  --entry <name>       Entry point. Default: main.\n"
@@ -37,6 +37,7 @@ void print_help(std::ostream& out) {
         << "Slang options:\n"
         << "  --slangc <path>          Explicit slangc executable path.\n"
         << "  --fxc <path>             Explicit Windows FXC executable path for d3d11.\n"
+        << "  --wgsl-validator <path>  Explicit Naga WGSL validator path for webgpu.\n"
         << "  --matrix-layout <mode>   Matrix layout: column, col, column-major,\n"
         << "                           col-major, row, or row-major. Default: column.\n"
         << "  --default-scope <scope>  Scope for resources without TerminScope metadata:\n"
@@ -57,13 +58,16 @@ void print_help(std::ostream& out) {
         << "  termin_shaderc compile --language slang --target vulkan --stage vertex \\\n"
         << "    --entry vs_main --input shader.slang --output shader.vert.spv -I builtin_shaders\n"
         << "  termin_shaderc compile --language glsl --target vulkan --stage fragment \\\n"
-        << "    --input shader.frag.glsl --output shader.frag.spv\n";
+        << "    --input shader.frag.glsl --output shader.frag.spv\n"
+        << "  termin_shaderc compile --language slang --target webgpu --stage fragment \\\n"
+        << "    --entry fs_main --input shader.slang --output shader.frag.wgsl \\\n"
+        << "    --wgsl-validator naga\n";
 }
 
 void usage() {
     std::cerr
         << "Usage: termin_shaderc compile --language glsl|slang "
-        << "--target opengl|vulkan|d3d11 --stage vertex|fragment|geometry "
+        << "--target opengl|vulkan|d3d11|webgpu --stage vertex|fragment|geometry|compute "
         << "--input <source> --output <artifact> [--entry main]\n"
         << "Run 'termin_shaderc --help' for full help.\n";
 }
@@ -161,6 +165,11 @@ ParsedCommandLine parse_command_line(int argc, char** argv) {
             }
         } else if (arg == "--fxc") {
             if (!take_value(options.fxc)) {
+                parsed.exit_code = 2;
+                return parsed;
+            }
+        } else if (arg == "--wgsl-validator") {
+            if (!take_value(options.wgsl_validator)) {
                 parsed.exit_code = 2;
                 return parsed;
             }
