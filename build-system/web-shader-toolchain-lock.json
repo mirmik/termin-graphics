@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "slang": {
+    "version": "2026.5.2",
+    "platform": "linux-x86_64-glibc-2.27",
+    "url": "https://github.com/shader-slang/slang/releases/download/v2026.5.2/slang-2026.5.2-linux-x86_64-glibc-2.27.tar.gz",
+    "sha256": "15583850c9d12e9ef8664449dfaedd55b3d4abff210bc89c4e666e89e436eaa9"
+  },
+  "naga_cli": {
+    "version": "30.0.0",
+    "crate": "naga-cli",
+    "crate_sha256": "70c089479ee0825b0786deb835b200cc2242bb8d210078837937e8ff885946c4"
+  }
+}
