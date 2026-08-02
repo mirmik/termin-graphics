@@ -72,8 +72,14 @@ void WebGpuCommandList::begin_render_pass(const RenderPassDesc& pass) {
         depth.depthLoadOp = load_op(pass.depth.load);
         depth.depthStoreOp = store_op(pass.depth.store);
         depth.depthClearValue = pass.depth.clear_depth;
-        depth.stencilLoadOp = wgpu::LoadOp::Undefined;
-        depth.stencilStoreOp = wgpu::StoreOp::Undefined;
+        if (texture->desc.format == PixelFormat::D24_UNorm_S8_UInt) {
+            depth.stencilLoadOp = wgpu::LoadOp::Clear;
+            depth.stencilStoreOp = wgpu::StoreOp::Store;
+            depth.stencilClearValue = pass.depth.clear_stencil;
+        } else {
+            depth.stencilLoadOp = wgpu::LoadOp::Undefined;
+            depth.stencilStoreOp = wgpu::StoreOp::Undefined;
+        }
     }
     wgpu::RenderPassDescriptor native;
     native.colorAttachmentCount = colors.size();

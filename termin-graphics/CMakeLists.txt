@@ -154,12 +154,21 @@ set(TGFX2_SOURCES
 )
 
 if(EMSCRIPTEN)
-    # The browser slice owns the backend-neutral device boundary, not the
-    # desktop renderer stack (filesystem artifact resolution, font loading,
-    # native interop, and process execution). Keep this source closure explicit
-    # so new desktop-only dependencies cannot silently leak into the web build.
+    # The browser render profile needs the same backend-neutral scene/render
+    # bridge as native hosts. Native font/canvas helpers and subprocess-based
+    # shader compilation stay outside this closure.
     set(TGFX2_SOURCES
+        src/tgfx2/builtin_shader_sources.cpp
         src/tgfx2/device_factory.cpp
+        src/tgfx2/pixel_format_utils.cpp
+        src/tgfx2/pipeline_cache.cpp
+        src/tgfx2/render_context.cpp
+        src/tgfx2/graphics_host.cpp
+        src/tgfx2_interop.cpp
+        src/tgfx2/tc_mesh_bridge.cpp
+        src/tgfx2/tc_shader_bridge.cpp
+        src/tgfx2/tc_texture_upload.cpp
+        src/tgfx2/texture_pool.cpp
         src/tgfx2/vertex_layout.cpp
     )
 endif()
@@ -275,6 +284,7 @@ endif()
 if(TGFX2_ENABLE_WEBGPU)
     list(APPEND TGFX2_SOURCES
         src/tgfx2/webgpu/webgpu_render_device.cpp
+        src/tgfx2/webgpu/webgpu_tc_bridge.cpp
         src/tgfx2/webgpu/webgpu_command_list.cpp
     )
 endif()

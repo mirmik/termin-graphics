@@ -11,6 +11,28 @@
 #include <tcbase/tc_log.h>
 #include <tcbase/trent/json.h>
 
+extern "C" {
+#include "tgfx/resources/tc_mesh_registry.h"
+#include "tgfx/resources/tc_shader_registry.h"
+#include "tgfx/resources/tc_texture_registry.h"
+}
+
+namespace {
+
+void webgpu_invalidate_tc_shader(uint32_t pool_index, void* user) {
+    static_cast<tgfx::WebGpuRenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
+}
+
+void webgpu_invalidate_tc_texture(uint32_t pool_index, void* user) {
+    static_cast<tgfx::WebGpuRenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
+}
+
+void webgpu_invalidate_tc_mesh(uint32_t pool_index, void* user) {
+    static_cast<tgfx::WebGpuRenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
+}
+
+} // namespace
+
 namespace tgfx {
 namespace {
 
@@ -115,6 +137,10 @@ wgpu::BufferUsage buffer_usage(const BufferDesc& desc) {
     if (has_flag(desc.usage, BufferUsage::Storage)) usage |= wgpu::BufferUsage::Storage;
     if (has_flag(desc.usage, BufferUsage::CopySrc)) usage |= wgpu::BufferUsage::CopySrc;
     if (has_flag(desc.usage, BufferUsage::CopyDst)) usage |= wgpu::BufferUsage::CopyDst;
+    // WebGPU has no synchronous host-visible buffer mode. The portable
+    // cpu_visible flag means that the runtime will update this buffer from
+    // CPU memory, which maps naturally to Queue::WriteBuffer + CopyDst.
+    if (desc.cpu_visible) usage |= wgpu::BufferUsage::CopyDst;
     return usage;
 }
 
@@ -143,12 +169,12 @@ wgpu::TextureFormat texture_format(PixelFormat format) {
         case PixelFormat::R32F: return wgpu::TextureFormat::R32Float;
         case PixelFormat::RG32F: return wgpu::TextureFormat::RG32Float;
         case PixelFormat::RGBA32F: return wgpu::TextureFormat::RGBA32Float;
+        case PixelFormat::D24_UNorm: return wgpu::TextureFormat::Depth24Plus;
         case PixelFormat::D24_UNorm_S8_UInt: return wgpu::TextureFormat::Depth24PlusStencil8;
         case PixelFormat::D32F: return wgpu::TextureFormat::Depth32Float;
         case PixelFormat::RGBA8_sRGB: return wgpu::TextureFormat::RGBA8UnormSrgb;
         case PixelFormat::BGRA8_sRGB: return wgpu::TextureFormat::BGRA8UnormSrgb;
         case PixelFormat::RGB8_UNorm:
-        case PixelFormat::D24_UNorm:
         case PixelFormat::Undefined:
             fail("unsupported pixel format");
     }
@@ -336,6 +362,14 @@ WebGpuRenderDevice::WebGpuRenderDevice(
         fail("canvas surface has no supported formats");
     }
     surface_format_ = surface_caps.formats[0];
+    for (size_t index = 0; index < surface_caps.formatCount; ++index) {
+        if (surface_caps.formats[index] == wgpu::TextureFormat::RGBA8Unorm) {
+            // Termin's canonical scene/display render targets are RGBA8. Keep
+            // the browser surface copy-compatible when the adapter exposes it.
+            surface_format_ = wgpu::TextureFormat::RGBA8Unorm;
+            break;
+        }
+    }
     caps_.backend = BackendType::WebGPU;
     caps_.supports_compute = false;
     caps_.supports_geometry_shaders = false;
@@ -347,9 +381,28 @@ WebGpuRenderDevice::WebGpuRenderDevice(
     caps_.max_texture_dimension_2d = 8192;
     caps_.max_texture_units = 16;
     configure_surface(width, height);
+    default_sampler_ = create_sampler({});
+    tc_shader_registry_add_destroy_hook(&webgpu_invalidate_tc_shader, this);
+    tc_texture_registry_add_destroy_hook(&webgpu_invalidate_tc_texture, this);
+    tc_mesh_registry_add_destroy_hook(&webgpu_invalidate_tc_mesh, this);
 }
 
 WebGpuRenderDevice::~WebGpuRenderDevice() {
+    tc_mesh_registry_remove_destroy_hook(&webgpu_invalidate_tc_mesh, this);
+    tc_texture_registry_remove_destroy_hook(&webgpu_invalidate_tc_texture, this);
+    tc_shader_registry_remove_destroy_hook(&webgpu_invalidate_tc_shader, this);
+    for (auto& [_, entry] : tc_mesh_cache_) {
+        if (entry.vbo) destroy(entry.vbo);
+        if (entry.ebo) destroy(entry.ebo);
+    }
+    for (auto& [_, entry] : tc_texture_cache_) {
+        if (entry.handle) destroy(entry.handle);
+    }
+    for (auto& [_, entry] : tc_shader_cache_) {
+        if (entry.vs) destroy(entry.vs);
+        if (entry.fs) destroy(entry.fs);
+    }
+    if (default_sampler_) destroy(default_sampler_);
     if (surface_) surface_.Unconfigure();
 }
 
@@ -357,11 +410,63 @@ void WebGpuRenderDevice::wait_idle() {
     tc_log_warn("WebGPU: wait_idle is asynchronous and intentionally a no-op");
 }
 
+void WebGpuRenderDevice::clear_texture(
+    TextureHandle dst_handle,
+    termin::Color4 color,
+    termin::Bounds2i viewport) {
+    const WebGpuTexture* dst = textures_.get(dst_handle.id);
+    if (!dst) fail("clear_texture requires a valid destination texture");
+    const int width = static_cast<int>(dst->desc.width);
+    const int height = static_cast<int>(dst->desc.height);
+    if (viewport.x0 != 0 || viewport.y0 != 0 ||
+            viewport.x1 != width || viewport.y1 != height) {
+        fail("WebGPU clear_texture currently requires a full-texture viewport");
+    }
+    RenderPassDesc pass;
+    ColorAttachmentDesc attachment;
+    attachment.texture = dst_handle;
+    attachment.clear_color[0] = color.r;
+    attachment.clear_color[1] = color.g;
+    attachment.clear_color[2] = color.b;
+    attachment.clear_color[3] = color.a;
+    pass.colors.push_back(attachment);
+    std::unique_ptr<ICommandList> commands = create_command_list();
+    commands->begin();
+    commands->begin_render_pass(pass);
+    commands->end_render_pass();
+    commands->end();
+    submit(*commands);
+}
+
+void WebGpuRenderDevice::blit_to_texture(
+    TextureHandle dst_handle,
+    TextureHandle src_handle,
+    termin::Bounds2i src_rect,
+    termin::Bounds2i dst_rect) {
+    const WebGpuTexture* src = textures_.get(src_handle.id);
+    const WebGpuTexture* dst = textures_.get(dst_handle.id);
+    if (!src || !dst) fail("blit_to_texture requires valid textures");
+    const bool full_source = src_rect.x0 == 0 && src_rect.y0 == 0 &&
+        src_rect.x1 == static_cast<int>(src->desc.width) &&
+        src_rect.y1 == static_cast<int>(src->desc.height);
+    const bool full_destination = dst_rect.x0 == 0 && dst_rect.y0 == 0 &&
+        dst_rect.x1 == static_cast<int>(dst->desc.width) &&
+        dst_rect.y1 == static_cast<int>(dst->desc.height);
+    if (!full_source || !full_destination ||
+            src->desc.width != dst->desc.width ||
+            src->desc.height != dst->desc.height ||
+            src->desc.sample_count != 1 || dst->desc.sample_count != 1) {
+        fail("WebGPU blit_to_texture requires equal single-sample full textures");
+    }
+    std::unique_ptr<ICommandList> commands = create_command_list();
+    commands->begin();
+    commands->copy_texture(src_handle, dst_handle);
+    commands->end();
+    submit(*commands);
+}
+
 BufferHandle WebGpuRenderDevice::create_buffer(const BufferDesc& desc) {
     if (desc.size == 0) fail("create_buffer requires non-zero size");
-    if (desc.cpu_visible) {
-        fail("cpu_visible buffers require an async mapping contract not exposed by tgfx2 yet");
-    }
     wgpu::BufferDescriptor native;
     native.size = desc.size;
     native.usage = buffer_usage(desc);
@@ -614,7 +719,9 @@ ResourceSetHandle WebGpuRenderDevice::create_bound_resource_set(
                 }
                 case BoundResourceKind::SampledTexture: {
                     const WebGpuTexture* texture = textures_.get(binding.value.texture.id);
-                    const WebGpuSampler* sampler = samplers_.get(binding.value.sampler.id);
+                    const SamplerHandle sampler_handle = binding.value.sampler
+                        ? binding.value.sampler : default_sampler_;
+                    const WebGpuSampler* sampler = samplers_.get(sampler_handle.id);
                     if (!texture || !sampler) fail("sampled texture requires valid texture and sampler");
                     native.textureView = texture->view;
                     entries.push_back(native);
@@ -628,7 +735,9 @@ ResourceSetHandle WebGpuRenderDevice::create_bound_resource_set(
                     break;
                 }
                 case BoundResourceKind::Sampler: {
-                    const WebGpuSampler* sampler = samplers_.get(binding.value.sampler.id);
+                    const SamplerHandle sampler_handle = binding.value.sampler
+                        ? binding.value.sampler : default_sampler_;
+                    const WebGpuSampler* sampler = samplers_.get(sampler_handle.id);
                     if (!sampler) fail("resource set references an invalid sampler");
                     native.sampler = sampler->object;
                     entries.push_back(native);
@@ -742,35 +851,40 @@ void WebGpuRenderDevice::present() {
     if (!acquired_surface_texture_) fail("present called without an acquired surface texture");
 #if !defined(__EMSCRIPTEN__)
     surface_.Present();
-#endif
-    // Browser WebGPU presents the current canvas texture at the end of the
-    // requestAnimationFrame callback. Emdawnwebgpu deliberately aborts when
-    // wgpuSurfacePresent is called, but the acquired texture still has to be
-    // released here before the next frame.
     textures_.remove(acquired_surface_texture_.id);
     acquired_surface_texture_ = {};
+#endif
+    // Browser WebGPU presents at the end of requestAnimationFrame and
+    // wgpuSurfacePresent deliberately aborts. Retain the current texture
+    // through that boundary; acquire_surface_texture releases it at the
+    // beginning of the next frame.
 }
 
 void WebGpuRenderDevice::configure_surface(uint32_t width, uint32_t height) {
     if (width == 0 || height == 0) fail("surface extent must be non-zero");
     if (acquired_surface_texture_) {
-        fail("cannot resize while a surface texture is acquired");
+        textures_.remove(acquired_surface_texture_.id);
+        acquired_surface_texture_ = {};
     }
     wgpu::SurfaceConfiguration config;
     config.device = device_;
     config.format = surface_format_;
-    config.usage = wgpu::TextureUsage::RenderAttachment;
+    config.usage = wgpu::TextureUsage::RenderAttachment |
+                   wgpu::TextureUsage::CopyDst;
     config.width = width;
     config.height = height;
     config.presentMode = wgpu::PresentMode::Fifo;
-    config.alphaMode = wgpu::CompositeAlphaMode::Auto;
+    config.alphaMode = wgpu::CompositeAlphaMode::Opaque;
     surface_.Configure(&config);
     surface_width_ = width;
     surface_height_ = height;
 }
 
 TextureHandle WebGpuRenderDevice::acquire_surface_texture() {
-    if (acquired_surface_texture_) fail("surface texture is already acquired");
+    if (acquired_surface_texture_) {
+        textures_.remove(acquired_surface_texture_.id);
+        acquired_surface_texture_ = {};
+    }
     wgpu::SurfaceTexture surface_texture;
     surface_.GetCurrentTexture(&surface_texture);
     if (surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal &&
@@ -782,7 +896,7 @@ TextureHandle WebGpuRenderDevice::acquire_surface_texture() {
     desc.width = surface_width_;
     desc.height = surface_height_;
     desc.format = surface_pixel_format();
-    desc.usage = TextureUsage::ColorAttachment;
+    desc.usage = TextureUsage::ColorAttachment | TextureUsage::CopyDst;
     wgpu::TextureView view = surface_texture.texture.CreateView();
     acquired_surface_texture_ = {textures_.add(
         {std::move(surface_texture.texture), std::move(view), desc, true})};

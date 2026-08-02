@@ -1267,6 +1267,14 @@ static std::optional<std::filesystem::path> resolve_shader_compiler(
 }
 
 static int run_shader_tool(const std::vector<std::string>& args, const char* log_prefix) {
+#ifdef __EMSCRIPTEN__
+    tc_log(
+        TC_LOG_ERROR,
+        "%s: runtime shader compilation is unavailable in WebAssembly; package a prebuilt artifact",
+        log_prefix);
+    (void)args;
+    return 127;
+#else
     tgfx::internal::ProcessResult result = tgfx::internal::run_process(args);
     if (!result.start_error.empty()) {
         tc_log(TC_LOG_ERROR,
@@ -1276,6 +1284,7 @@ static int run_shader_tool(const std::vector<std::string>& args, const char* log
                result.start_error.c_str());
     }
     return result.exit_code;
+#endif
 }
 
 static bool compile_shader_artifact(

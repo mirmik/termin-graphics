@@ -63,6 +63,7 @@ endif()
 
 include(GNUInstallDirs)
 
+if(NOT EMSCRIPTEN)
 install(TARGETS termin_image
     EXPORT termin_imageTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -99,3 +100,4 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_imageConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_image
 )
+endif()

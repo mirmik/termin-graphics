@@ -132,6 +132,15 @@ public:
                                uint32_t mip = 0) override;
     void read_buffer(BufferHandle src, std::span<uint8_t> data,
                      uint64_t offset = 0) override;
+    void blit_to_texture(
+        TextureHandle dst,
+        TextureHandle src,
+        termin::Bounds2i src_rect,
+        termin::Bounds2i dst_rect) override;
+    void clear_texture(
+        TextureHandle dst,
+        termin::Color4 color,
+        termin::Bounds2i viewport) override;
 
     uintptr_t pipeline_resource_layout_token(
         PipelineHandle pipeline) const override;
@@ -140,6 +149,16 @@ public:
         QueueType queue = QueueType::Graphics) override;
     void submit(ICommandList& cmd) override;
     void present() override;
+
+    bool ensure_tc_shader(
+        tc_shader* shader,
+        ShaderHandle* out_vs,
+        ShaderHandle* out_fs) override;
+    void invalidate_tc_shader_cache(uint32_t pool_index) override;
+    TextureHandle ensure_tc_texture(tc_texture* texture) override;
+    void invalidate_tc_texture_cache(uint32_t pool_index) override;
+    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+    void invalidate_tc_mesh_cache(uint32_t pool_index) override;
 
     void configure_surface(uint32_t width, uint32_t height);
     TextureHandle acquire_surface_texture();
@@ -175,6 +194,29 @@ private:
     WebGpuHandlePool<WebGpuShader> shaders_;
     WebGpuHandlePool<WebGpuPipeline> pipelines_;
     WebGpuHandlePool<WebGpuResourceSet> resource_sets_;
+    SamplerHandle default_sampler_;
+
+    struct CachedTcShaderEntry {
+        ShaderHandle vs;
+        ShaderHandle fs;
+        uint32_t version = 0;
+        uint64_t resolver_revision = 0;
+        bool has_vs = false;
+    };
+    std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
+
+    struct CachedTcTextureEntry {
+        TextureHandle handle;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+
+    struct CachedTcMeshEntry {
+        BufferHandle vbo;
+        BufferHandle ebo;
+        uint32_t version = 0;
+    };
+    std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
 };
 
 } // namespace tgfx
