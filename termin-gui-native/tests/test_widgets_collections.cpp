@@ -1293,6 +1293,41 @@ void test_dialog_modal_stack_focus_actions_and_exactly_once_results() {
                              dialog.button_handles()[0]));
   assert(dialog.bounds().x > 0.0f && dialog.bounds().y > 0.0f);
 
+  const tc_ui_rect centered_bounds = dialog.bounds();
+  tc_ui_pointer_event drag{};
+  drag.type = TC_UI_POINTER_DOWN;
+  drag.button = 0;
+  drag.x = centered_bounds.x + 24.0f;
+  drag.y = centered_bounds.y + 12.0f;
+  assert(document.dispatch_pointer_event(drag) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_eq(document.pointer_capture(), dialog.handle()));
+  drag.type = TC_UI_POINTER_MOVE;
+  drag.x += 100.0f;
+  drag.y += 70.0f;
+  assert(document.dispatch_pointer_event(drag) == TC_UI_EVENT_HANDLED);
+  assert(near(dialog.bounds().x, centered_bounds.x + 100.0f));
+  assert(near(dialog.bounds().y, centered_bounds.y + 70.0f));
+  drag.type = TC_UI_POINTER_UP;
+  assert(document.dispatch_pointer_event(drag) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+  assert(tc_widget_handle_eq(document.focused_widget(),
+                             dialog.button_handles()[0]));
+  const tc_ui_rect dragged_bounds = dialog.bounds();
+  document.layout_roots(tc_ui_rect{0.0f, 0.0f, 800.0f, 600.0f});
+  assert(near(dialog.bounds().x, dragged_bounds.x));
+  assert(near(dialog.bounds().y, dragged_bounds.y));
+
+  dialog.set_draggable(false);
+  drag.type = TC_UI_POINTER_DOWN;
+  drag.x = dialog.bounds().x + 24.0f;
+  drag.y = dialog.bounds().y + 12.0f;
+  assert(document.dispatch_pointer_event(drag) == TC_UI_EVENT_HANDLED);
+  assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+  assert(near(dialog.bounds().x, dragged_bounds.x));
+  assert(near(dialog.bounds().y, dragged_bounds.y));
+  dialog.set_draggable(true);
+  assert(tc_ui_document_set_focus(document.get(), dialog.button_handles()[0]));
+
   tc_ui_key_event tab{};
   tab.type = TC_UI_KEY_DOWN;
   tab.key = TC_UI_KEY_TAB;

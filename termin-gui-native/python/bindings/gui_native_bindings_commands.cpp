@@ -448,6 +448,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                      [](const DialogRef& self, bool enabled) {
                          self.get().set_dismiss_on_escape(enabled);
                      })
+        .def_prop_rw("draggable",
+                     [](const DialogRef& self) { return self.get().draggable(); },
+                     [](const DialogRef& self, bool enabled) {
+                         self.get().set_draggable(enabled);
+                     })
         .def_prop_ro("open", [](const DialogRef& self) { return self.get().open(); })
         .def("set_content", [](const DialogRef& self, const WidgetRef& content) {
             self.get().set_content(
@@ -496,6 +501,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         })
         .def_prop_ro("message", [](const MessageBoxRef& self) { return self.get().message(); })
         .def_prop_ro("kind", [](const MessageBoxRef& self) { return self.get().kind(); })
+        .def_prop_rw("draggable",
+                     [](const MessageBoxRef& self) { return self.get().draggable(); },
+                     [](const MessageBoxRef& self, bool enabled) {
+                         self.get().set_draggable(enabled);
+                     })
         .def_prop_ro("open", [](const MessageBoxRef& self) { return self.get().open(); })
         .def("show", [](const MessageBoxRef& self, tc_ui_rect viewport) {
             return self.get().show(self.widget.state->document, viewport);
@@ -530,6 +540,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_prop_rw("value", [](const InputDialogRef& self) { return self.get().value(); },
                      [](const InputDialogRef& self, std::string value) {
                          self.get().set_value(std::move(value));
+                     })
+        .def_prop_rw("draggable",
+                     [](const InputDialogRef& self) { return self.get().draggable(); },
+                     [](const InputDialogRef& self, bool enabled) {
+                         self.get().set_draggable(enabled);
                      })
         .def_prop_ro("open", [](const InputDialogRef& self) { return self.get().open(); })
         .def("show", [](const InputDialogRef& self, tc_ui_rect viewport) {
@@ -571,6 +586,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_prop_ro("model", [](const FileDialogOverlayRef& self) ->
                      termin::gui_native::FileDialogModel& { return self.get().model(); },
                      nb::rv_policy::reference_internal)
+        .def_prop_rw("draggable",
+                     [](const FileDialogOverlayRef& self) { return self.get().draggable(); },
+                     [](const FileDialogOverlayRef& self, bool enabled) {
+                         self.get().set_draggable(enabled);
+                     })
         .def_prop_ro("open", [](const FileDialogOverlayRef& self) { return self.get().open(); })
         .def("set_filters", [](const FileDialogOverlayRef& self,
                                std::vector<termin::gui_native::FileDialogFilter> filters) {
@@ -731,6 +751,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             [](const ColorDialogRef& self, tc_ui_color color) {
                 self.get().set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
+        .def_prop_rw("draggable",
+                     [](const ColorDialogRef& self) { return self.get().draggable(); },
+                     [](const ColorDialogRef& self, bool enabled) {
+                         self.get().set_draggable(enabled);
+                     })
         .def_prop_ro("open", [](const ColorDialogRef& self) { return self.get().open(); })
         .def(
             "show",

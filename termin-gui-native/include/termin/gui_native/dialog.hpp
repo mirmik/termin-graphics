@@ -38,6 +38,12 @@ class Dialog : public NativeWidget {
     float button_spacing_ = 8.0f;
     float min_width_ = 300.0f;
     bool dismiss_on_escape_ = true;
+    bool draggable_ = true;
+    bool dragging_ = false;
+    tc_ui_point drag_pointer_start_{};
+    tc_ui_rect drag_bounds_start_{};
+    tc_ui_rect shown_viewport_{};
+    tc_widget_handle last_focused_descendant_ = tc_widget_handle_invalid();
     bool has_pending_result_ = false;
     bool has_result_ = false;
     bool open_ = false;
@@ -53,6 +59,8 @@ class Dialog : public NativeWidget {
     void set_actions(std::vector<DialogAction> actions);
     bool dismiss_on_escape() const { return dismiss_on_escape_; }
     void set_dismiss_on_escape(bool enabled) { dismiss_on_escape_ = enabled; }
+    bool draggable() const { return draggable_; }
+    void set_draggable(bool enabled);
     void set_content(NativeWidget& content);
     tc_widget_handle content_handle() const { return content_handle_; }
     bool show(tc_ui_document_handle document, tc_ui_rect viewport);
@@ -68,7 +76,11 @@ class Dialog : public NativeWidget {
     void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
     void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
     tc_widget_handle hit_test(tc_ui_document_handle document, float x, float y) override;
+    tc_ui_event_result pointer_event(tc_ui_document_handle document,
+                                     const tc_ui_pointer_event* event) override;
     tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+    void descendant_focused(tc_ui_document_handle document,
+                            tc_widget_handle descendant) override;
     void overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) override;
     void on_destroy(tc_ui_document_handle document) override;
 

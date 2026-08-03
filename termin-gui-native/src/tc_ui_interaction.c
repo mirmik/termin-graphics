@@ -510,8 +510,10 @@ static bool layout_overlay_entry(
     bounds.height = wanted.height;
     switch (entry->layout.placement) {
         case TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER:
-            bounds.x = viewport.x + (viewport.width - bounds.width) * 0.5f;
-            bounds.y = viewport.y + (viewport.height - bounds.height) * 0.5f;
+            bounds.x = viewport.x + (viewport.width - bounds.width) * 0.5f +
+                entry->layout.offset.x;
+            bounds.y = viewport.y + (viewport.height - bounds.height) * 0.5f +
+                entry->layout.offset.y;
             break;
         case TC_UI_OVERLAY_PLACEMENT_POINT:
             bounds.x = entry->layout.point.x + entry->layout.offset.x;
@@ -654,6 +656,47 @@ bool tc_ui_document_show_overlay_with_layout(
         return false;
     }
     return show_overlay_impl(document_handle, handle, flags, layout, viewport);
+}
+
+bool tc_ui_document_update_overlay_layout(
+    tc_ui_document_handle document_handle,
+    tc_widget_handle handle,
+    const tc_ui_overlay_layout* layout,
+    tc_ui_rect viewport
+) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
+        document_handle, "tc_ui_document_update_overlay_layout");
+    size_t index;
+    tc_ui_overlay_entry previous;
+    tc_ui_overlay_entry updated;
+    if (!document || !layout) {
+        tc_log_error("[termin-gui-native] overlay layout update requires a layout policy");
+        return false;
+    }
+    if (layout->placement < TC_UI_OVERLAY_PLACEMENT_MANUAL ||
+        layout->placement > TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT) {
+        tc_log_error("[termin-gui-native] overlay layout update has unknown placement");
+        return false;
+    }
+    index = tc_ui_internal_find_overlay_index(document, handle);
+    if (index == SIZE_MAX) {
+        tc_log_error("[termin-gui-native] overlay layout update requires an active overlay");
+        return false;
+    }
+    previous = document->overlays[index];
+    document->overlays[index].layout = *layout;
+    document->overlays[index].has_layout = true;
+    updated = document->overlays[index];
+    if (layout_overlay_entry(document, &updated, viewport)) {
+        return true;
+    }
+    index = tc_ui_internal_find_overlay_index(document, handle);
+    if (index != SIZE_MAX) {
+        document->overlays[index].layout = previous.layout;
+        document->overlays[index].has_layout = previous.has_layout;
+    }
+    tc_log_error("[termin-gui-native] failed to apply updated overlay layout");
+    return false;
 }
 
 bool tc_ui_document_dismiss_overlay(

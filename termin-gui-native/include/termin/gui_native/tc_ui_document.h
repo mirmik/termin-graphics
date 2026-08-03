@@ -858,6 +858,13 @@ TERMIN_GUI_NATIVE_API bool tc_ui_document_show_overlay_with_layout(
     tc_ui_rect viewport
 );
 
+TERMIN_GUI_NATIVE_API bool tc_ui_document_update_overlay_layout(
+    tc_ui_document_handle document,
+    tc_widget_handle handle,
+    const tc_ui_overlay_layout* layout,
+    tc_ui_rect viewport
+);
+
 TERMIN_GUI_NATIVE_API bool tc_ui_document_dismiss_overlay(
     tc_ui_document_handle document,
     tc_widget_handle handle,
