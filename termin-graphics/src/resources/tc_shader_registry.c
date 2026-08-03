@@ -1186,6 +1186,10 @@ static bool tc_shader_upsert_resource_binding(
             shader->resource_bindings[existing].has_d3d11_placement = 1;
             shader->resource_bindings[existing].d3d11 = previous.d3d11;
         }
+        if (!binding->has_webgpu_placement && previous.has_webgpu_placement) {
+            shader->resource_bindings[existing].has_webgpu_placement = 1;
+            shader->resource_bindings[existing].webgpu = previous.webgpu;
+        }
         if (binding->fields == NULL && previous.fields != NULL) {
             shader->resource_bindings[existing].fields = previous.fields;
             shader->resource_bindings[existing].field_count = previous.field_count;
@@ -1300,6 +1304,34 @@ static bool tc_shader_validate_resource_layout(
         for (uint32_t j = i + 1u; j < count; ++j) {
             const tc_shader_resource_binding* a = &bindings[i];
             const tc_shader_resource_binding* b = &bindings[j];
+            if (a->has_webgpu_placement && b->has_webgpu_placement) {
+                const bool same_primary =
+                    a->webgpu.group == b->webgpu.group &&
+                    a->webgpu.binding == b->webgpu.binding;
+                const bool a_sampler_hits_b =
+                    a->webgpu.has_sampler_binding &&
+                    a->webgpu.group == b->webgpu.group &&
+                    a->webgpu.sampler_binding == b->webgpu.binding;
+                const bool b_sampler_hits_a =
+                    b->webgpu.has_sampler_binding &&
+                    a->webgpu.group == b->webgpu.group &&
+                    b->webgpu.sampler_binding == a->webgpu.binding;
+                const bool sampler_collision =
+                    a->webgpu.has_sampler_binding &&
+                    b->webgpu.has_sampler_binding &&
+                    a->webgpu.group == b->webgpu.group &&
+                    a->webgpu.sampler_binding == b->webgpu.sampler_binding;
+                if (same_primary || a_sampler_hits_b || b_sampler_hits_a ||
+                    sampler_collision) {
+                    tc_log(
+                        TC_LOG_ERROR,
+                        "tc_shader_set_resource_layout: conflicting WebGPU resources in group=%u: '%s' vs '%s'",
+                        a->webgpu.group,
+                        a->name,
+                        b->name);
+                    return false;
+                }
+            }
             if (!a->has_d3d11_placement || !b->has_d3d11_placement) {
                 continue;
             }

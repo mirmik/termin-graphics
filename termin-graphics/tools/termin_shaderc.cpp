@@ -187,7 +187,10 @@ static tgfx::BackendType backend_type_for_target(const std::string& target) {
     if (target == "opengl") return tgfx::BackendType::OpenGL;
     if (target == "d3d11") return tgfx::BackendType::D3D11;
     if (target == "metal") return tgfx::BackendType::Metal;
-    if (target == "vulkan" || target.empty()) return tgfx::BackendType::Vulkan;
+    if (target == "webgpu") return tgfx::BackendType::WebGPU;
+    if (target == "vulkan" || target == "webgpu" || target.empty()) {
+        return tgfx::BackendType::Vulkan;
+    }
     return tgfx::BackendType::Null;
 }
 
@@ -1437,7 +1440,8 @@ static bool write_resource_layout_sidecar(
         return false;
     }
 
-    const uint32_t sidecar_version = options.target == "d3d11" ? 2u : 1u;
+    const uint32_t sidecar_version =
+        options.target == "webgpu" ? 3u : (options.target == "d3d11" ? 2u : 1u);
     out << "{\n";
     out << "  \"version\": " << sidecar_version << ",\n";
     out << "  \"language\": \"" << json_escape(options.language) << "\",\n";
@@ -1460,6 +1464,16 @@ static bool write_resource_layout_sidecar(
                 << "\"register_index\": " << binding.d3d11_register_index;
             if (binding.d3d11_scalar_sampler_for_texture_array) {
                 out << ", \"scalar_sampler_for_texture_array\": true";
+            }
+            out << "}";
+        }
+        if (options.target == "webgpu") {
+            out << ", \"webgpu\": {"
+                << "\"group\": " << binding.set << ", "
+                << "\"binding\": " << binding.binding;
+            if (binding.webgpu_has_sampler_binding) {
+                out << ", \"sampler_binding\": "
+                    << binding.webgpu_sampler_binding;
             }
             out << "}";
         }
@@ -1588,6 +1602,14 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             return false;
         }
         extra_args = {"-profile", "sm_5_0"};
+    } else if (options.target == "webgpu") {
+        if (options.stage == "geometry") {
+            std::cerr
+                << "termin_shaderc: WebGPU does not support geometry shaders\n";
+            return false;
+        }
+        slang_target = "wgsl";
+        native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
     } else {
         std::cerr << "termin_shaderc: unsupported target: " << options.target << "\n";
         return false;
@@ -1601,6 +1623,13 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     if (options.target == "d3d11") {
         fxc = resolve_fxc(options, argv0);
         if (!fxc) {
+            return false;
+        }
+    }
+    std::optional<std::string> wgsl_validator;
+    if (options.target == "webgpu") {
+        wgsl_validator = resolve_wgsl_validator(options, argv0);
+        if (!wgsl_validator) {
             return false;
         }
     }
@@ -1758,6 +1787,16 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
             write_resource_layout_sidecar(options, resources);
     } else if (options.target == "d3d11") {
         wrote_layout = write_resource_layout_sidecar(options, resources);
+    } else if (options.target == "webgpu") {
+        wrote_layout =
+            assign_and_patch_slang_webgpu_resource_bindings(options, resources) &&
+            run_command({
+                *wgsl_validator,
+                "--input-kind",
+                "wgsl",
+                options.output,
+            }) == 0 &&
+            write_resource_layout_sidecar(options, resources);
     } else {
         wrote_layout = write_resource_layout_sidecar(options, resources);
     }
@@ -1765,6 +1804,10 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     std::filesystem::remove(reflection_path, ec);
     if (is_d3d11 && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
         std::filesystem::remove(slang_output_path, ec);
+    }
+    if (!wrote_layout && options.target == "webgpu") {
+        std::filesystem::remove(options.output, ec);
+        std::filesystem::remove(options.output + ".layout.json", ec);
     }
     return wrote_layout;
 }

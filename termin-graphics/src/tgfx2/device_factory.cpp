@@ -11,6 +11,10 @@
 #include "tgfx2/d3d11/d3d11_render_device.hpp"
 #endif
 
+#ifdef TGFX2_HAS_WEBGPU
+#include "tgfx2/webgpu/webgpu_render_device.hpp"
+#endif
+
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -26,6 +30,7 @@ const char* backend_name(BackendType type) {
         case BackendType::Vulkan: return "vulkan";
         case BackendType::Metal: return "metal";
         case BackendType::D3D11: return "d3d11";
+        case BackendType::WebGPU: return "webgpu";
         case BackendType::Null: return "null";
     }
     return "unknown";
@@ -39,6 +44,7 @@ BackendType backend_from_name(const std::string& name) {
     if (s == "vulkan" || s == "vk") return BackendType::Vulkan;
     if (s == "metal") return BackendType::Metal;
     if (s == "d3d11" || s == "dx11") return BackendType::D3D11;
+    if (s == "webgpu" || s == "wgpu") return BackendType::WebGPU;
     if (s == "null") return BackendType::Null;
     return BackendType::Null;
 }
@@ -63,6 +69,12 @@ bool backend_is_compiled(BackendType type) {
 #else
             return false;
 #endif
+        case BackendType::WebGPU:
+#ifdef TGFX2_HAS_WEBGPU
+            return true;
+#else
+            return false;
+#endif
         case BackendType::Metal:
         case BackendType::Null:
             return false;
@@ -79,6 +91,8 @@ BackendType compiled_default_backend() {
     return BackendType::OpenGL;
 #elif defined(TGFX2_HAS_D3D11)
     return BackendType::D3D11;
+#elif defined(TGFX2_HAS_WEBGPU)
+    return BackendType::WebGPU;
 #else
     return BackendType::Null;
 #endif
@@ -133,6 +147,15 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
             return std::make_unique<D3D11RenderDevice>();
 #else
             throw std::runtime_error("D3D11 backend not compiled (set TGFX2_ENABLE_D3D11=ON)");
+#endif
+
+        case BackendType::WebGPU:
+#ifdef TGFX2_HAS_WEBGPU
+            throw std::runtime_error(
+                "WebGPU device creation is asynchronous; use "
+                "WebGpuRenderDevice::request_async()");
+#else
+            throw std::runtime_error("WebGPU backend not compiled (set TGFX2_ENABLE_WEBGPU=ON)");
 #endif
 
         case BackendType::Metal:

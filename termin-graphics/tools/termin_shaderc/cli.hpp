@@ -15,6 +15,7 @@ struct CompileOptions {
     std::string debug_name = "shader";
     std::string slangc;
     std::string fxc;
+    std::string wgsl_validator;
     std::string matrix_layout = "column";
     std::string default_scope;
     std::vector<std::string> include_dirs;

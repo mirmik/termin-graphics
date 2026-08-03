@@ -139,6 +139,17 @@ typedef struct tc_shader_d3d11_placement {
     uint32_t register_index;
 } tc_shader_d3d11_placement;
 
+typedef struct tc_shader_webgpu_placement {
+    uint32_t group;
+    uint32_t binding;
+    // Valid only when has_sampler_binding is non-zero. Combined Slang
+    // textures remain one semantic Termin resource but occupy two WebGPU
+    // binding slots.
+    uint32_t sampler_binding;
+    uint8_t has_sampler_binding;
+    uint8_t _reserved[3];
+} tc_shader_webgpu_placement;
+
 typedef struct tc_shader_resource_binding {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
     uint32_t kind;        // tc_shader_resource_kind
@@ -149,8 +160,10 @@ typedef struct tc_shader_resource_binding {
     uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
     uint8_t has_d3d11_placement;
     uint8_t d3d11_scalar_sampler_for_texture_array;
-    uint8_t _resource_binding_reserved[2];
+    uint8_t has_webgpu_placement;
+    uint8_t _resource_binding_reserved;
     tc_shader_d3d11_placement d3d11;
+    tc_shader_webgpu_placement webgpu;
     tc_shader_resource_field* fields;
     uint32_t field_count;
 } tc_shader_resource_binding;

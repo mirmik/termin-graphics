@@ -21,6 +21,7 @@ def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     assert "termin_shaderc compile [options]" in result.stdout
     assert "--slangc <path>" in result.stdout
     assert "--fxc <path>" in result.stdout
+    assert "--wgsl-validator <path>" in result.stdout
     assert "--include-dir <dir>" in result.stdout
     assert "--default-scope <scope>" in result.stdout
     assert "<output>.layout.json" in result.stdout

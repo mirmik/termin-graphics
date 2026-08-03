@@ -326,6 +326,54 @@ bool build_opengl_entry(
     return true;
 }
 
+bool build_webgpu_entry(
+    const tc_shader_resource_binding& binding,
+    BackendBindingPlanEntry& entry,
+    std::string* error
+) {
+    if (!binding.has_webgpu_placement) {
+        set_error(
+            error,
+            "shader resource " + resource_label(binding) +
+            " is missing WebGPU placement from layout sidecar v3");
+        return false;
+    }
+    if (binding.webgpu.group != 0) {
+        set_error(
+            error,
+            "shader resource " + resource_label(binding) +
+            " uses WebGPU bind group " +
+            std::to_string(binding.webgpu.group) +
+            ", but tgfx2 currently supports group 0 only");
+        return false;
+    }
+    if (binding.webgpu.has_sampler_binding &&
+        entry.resource.kind != ShaderResourceKind::Texture) {
+        set_error(
+            error,
+            "shader resource " + resource_label(binding) +
+            " declares sampler_binding but is not a sampled texture");
+        return false;
+    }
+    if (binding.webgpu.has_sampler_binding &&
+        binding.webgpu.sampler_binding == binding.webgpu.binding) {
+        set_error(
+            error,
+            "shader resource " + resource_label(binding) +
+            " reuses its WebGPU texture binding for the sampler");
+        return false;
+    }
+
+    entry.placement.kind = BackendPlacementKind::WebGPU;
+    entry.placement.webgpu.group = binding.webgpu.group;
+    entry.placement.webgpu.binding = binding.webgpu.binding;
+    entry.placement.webgpu.has_sampler_binding =
+        binding.webgpu.has_sampler_binding != 0;
+    entry.placement.webgpu.sampler_binding =
+        binding.webgpu.sampler_binding;
+    return true;
+}
+
 bool d3d11_conflicts(
     const BackendBindingPlanEntry& a,
     const BackendBindingPlanEntry& b
@@ -409,6 +457,26 @@ bool opengl_conflicts(
     return !same_semantic_resource(a, b);
 }
 
+bool webgpu_conflicts(
+    const BackendBindingPlanEntry& a,
+    const BackendBindingPlanEntry& b
+) {
+    if (a.placement.kind != BackendPlacementKind::WebGPU ||
+        b.placement.kind != BackendPlacementKind::WebGPU ||
+        a.placement.webgpu.group != b.placement.webgpu.group) {
+        return false;
+    }
+    const auto occupies = [](const BackendBindingPlanEntry& entry,
+                             uint32_t binding) {
+        return entry.placement.webgpu.binding == binding ||
+            (entry.placement.webgpu.has_sampler_binding &&
+             entry.placement.webgpu.sampler_binding == binding);
+    };
+    return occupies(a, b.placement.webgpu.binding) ||
+        (b.placement.webgpu.has_sampler_binding &&
+         occupies(a, b.placement.webgpu.sampler_binding));
+}
+
 bool validate_plan_conflicts(
     const BackendBindingPlan& plan,
     std::string* error
@@ -450,6 +518,15 @@ bool validate_plan_conflicts(
                         set_error(
                             error,
                             "OpenGL binding plan conflict between resource '" +
+                            a.resource.name + "' and '" + b.resource.name + "'");
+                        return false;
+                    }
+                    break;
+                case BackendType::WebGPU:
+                    if (webgpu_conflicts(a, b)) {
+                        set_error(
+                            error,
+                            "WebGPU binding plan conflict between resource '" +
                             a.resource.name + "' and '" + b.resource.name + "'");
                         return false;
                     }
@@ -509,6 +586,9 @@ bool build_backend_binding_plan(
                 break;
             case BackendType::OpenGL:
                 ok = build_opengl_entry(binding, entry, error);
+                break;
+            case BackendType::WebGPU:
+                ok = build_webgpu_entry(binding, entry, error);
                 break;
             case BackendType::Metal:
             case BackendType::Null:

@@ -6,7 +6,7 @@
 
 namespace tgfx {
 
-enum class BackendType { OpenGL, Vulkan, Metal, D3D11, Null };
+enum class BackendType { OpenGL, Vulkan, Metal, D3D11, WebGPU, Null };
 enum class QueueType { Graphics, Compute, Transfer };
 
 // Presentation scheduling requested by a window host. This is intentionally

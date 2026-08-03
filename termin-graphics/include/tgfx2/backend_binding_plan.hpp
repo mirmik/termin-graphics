@@ -49,6 +49,7 @@ enum class BackendPlacementKind : uint32_t {
     VulkanDescriptor,
     D3D11Register,
     OpenGLBinding,
+    WebGPU,
 };
 
 enum class BackendDescriptorKind : uint32_t {
@@ -95,11 +96,19 @@ struct OpenGLBindingPlacement {
     uint32_t texture_unit = 0;
 };
 
+struct WebGpuBindingPlacement {
+    uint32_t group = 0;
+    uint32_t binding = 0;
+    bool has_sampler_binding = false;
+    uint32_t sampler_binding = 0;
+};
+
 struct BackendPlacement {
     BackendPlacementKind kind = BackendPlacementKind::None;
     VulkanDescriptorPlacement vulkan;
     D3D11RegisterPlacement d3d11;
     OpenGLBindingPlacement opengl;
+    WebGpuBindingPlacement webgpu;
 };
 
 struct BackendBindingPlanEntry {

@@ -1,5 +1,7 @@
 #include "backend_patchers.hpp"
 
+#include <tgfx2/backend_binding_plan.hpp>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstdint>
@@ -172,6 +174,234 @@ bool patch_slang_opengl_glsl_resource_bindings(
         return true;
     }
     return write_text_file(options.output, glsl);
+}
+
+static bool patch_slang_wgsl_symbol_binding(
+    std::string& wgsl,
+    const std::string& symbol_pattern,
+    uint32_t group,
+    uint32_t binding,
+    bool& changed,
+    bool& found
+) {
+    const std::regex declaration_re(
+        "(@binding\\()([0-9]+)(\\)\\s*@group\\()([0-9]+)"
+        "(\\)\\s*var(?:<[^>]+>)?\\s+)(" + symbol_pattern + ")(\\s*:)");
+    std::smatch match;
+    if (!std::regex_search(wgsl, match, declaration_re)) {
+        return true;
+    }
+
+    found = true;
+    const std::string group_text = std::to_string(group);
+    const std::string binding_text = std::to_string(binding);
+    const size_t binding_pos = static_cast<size_t>(match.position(2));
+    const size_t binding_size = static_cast<size_t>(match.length(2));
+    const size_t group_pos = static_cast<size_t>(match.position(4));
+    const size_t group_size = static_cast<size_t>(match.length(4));
+
+    if (wgsl.compare(group_pos, group_size, group_text) != 0) {
+        wgsl.replace(group_pos, group_size, group_text);
+        changed = true;
+    }
+    if (wgsl.compare(binding_pos, binding_size, binding_text) != 0) {
+        wgsl.replace(binding_pos, binding_size, binding_text);
+        changed = true;
+    }
+    return true;
+}
+
+static bool slang_wgsl_has_symbol_declaration(
+    const std::string& wgsl,
+    const std::string& symbol_pattern
+) {
+    const std::regex declaration_re(
+        "@binding\\([0-9]+\\)\\s*@group\\([0-9]+\\)\\s*"
+        "var(?:<[^>]+>)?\\s+(?:" + symbol_pattern + ")\\s*:");
+    return std::regex_search(wgsl, declaration_re);
+}
+
+static bool slang_wgsl_resource_present(
+    const std::string& wgsl,
+    const ShaderResourceBinding& resource
+) {
+    const std::string escaped_name = regex_escape(resource.name);
+    if (resource.kind == "texture") {
+        return slang_wgsl_has_symbol_declaration(
+                   wgsl,
+                   escaped_name + "_texture_[0-9]+") ||
+               slang_wgsl_has_symbol_declaration(
+                   wgsl,
+                   escaped_name + "_[0-9]+");
+    }
+    if (resource.kind == "sampler") {
+        return slang_wgsl_has_symbol_declaration(
+                   wgsl,
+                   escaped_name + "_sampler_[0-9]+") ||
+               slang_wgsl_has_symbol_declaration(
+                   wgsl,
+                   escaped_name + "_[0-9]+");
+    }
+    return slang_wgsl_has_symbol_declaration(
+        wgsl,
+        escaped_name + "_[0-9]+");
+}
+
+static bool patch_slang_wgsl_resource_binding(
+    std::string& wgsl,
+    const ShaderResourceBinding& resource,
+    bool& changed
+) {
+    const std::string escaped_name = regex_escape(resource.name);
+    auto patch_candidates = [&] (
+        const std::vector<std::string>& patterns,
+        uint32_t binding,
+        const char* role
+    ) -> bool {
+        for (const std::string& pattern : patterns) {
+            bool found = false;
+            if (!patch_slang_wgsl_symbol_binding(
+                    wgsl,
+                    pattern,
+                    resource.set,
+                    binding,
+                    changed,
+                    found)) {
+                return false;
+            }
+            if (found) {
+                return true;
+            }
+        }
+        std::cerr
+            << "termin_shaderc: WGSL is missing " << role
+            << " declaration for reflected resource '" << resource.name
+            << "'; cannot patch WebGPU binding placement\n";
+        return false;
+    };
+
+    if (resource.kind == "texture") {
+        if (!patch_candidates(
+                {
+                    escaped_name + "_texture_[0-9]+",
+                    escaped_name + "_[0-9]+",
+                },
+                resource.binding,
+                "texture")) {
+            return false;
+        }
+        if (resource.webgpu_has_sampler_binding) {
+            return patch_candidates(
+                {escaped_name + "_sampler_[0-9]+"},
+                resource.webgpu_sampler_binding,
+                "sampler");
+        }
+        return true;
+    }
+
+    if (resource.kind == "sampler") {
+        return patch_candidates(
+            {
+                escaped_name + "_[0-9]+",
+                escaped_name + "_sampler_[0-9]+",
+            },
+            resource.binding,
+            "sampler");
+    }
+
+    return patch_candidates(
+        {escaped_name + "_[0-9]+"},
+        resource.binding,
+        "resource");
+}
+
+bool assign_and_patch_slang_webgpu_resource_bindings(
+    const CompileOptions& options,
+    std::vector<ShaderResourceBinding>& resources
+) {
+    std::string wgsl;
+    if (!read_file(options.output, wgsl)) {
+        return false;
+    }
+
+    struct OccupiedBinding {
+        uint32_t group;
+        uint32_t binding;
+    };
+    std::vector<OccupiedBinding> occupied;
+    occupied.reserve(resources.size() * 2);
+    for (const ShaderResourceBinding& resource : resources) {
+        occupied.push_back({resource.set, resource.binding});
+    }
+
+    for (ShaderResourceBinding& resource : resources) {
+        if (resource.kind != "texture" || !resource.slang_combined_texture) {
+            continue;
+        }
+        const tgfx::ShaderResourceScope scope =
+            resource.scope == "frame" ? tgfx::ShaderResourceScope::Frame :
+            resource.scope == "pass" ? tgfx::ShaderResourceScope::Pass :
+            resource.scope == "material" ? tgfx::ShaderResourceScope::Material :
+            resource.scope == "draw" ? tgfx::ShaderResourceScope::Draw :
+            resource.scope == "transient" ? tgfx::ShaderResourceScope::Transient :
+            tgfx::ShaderResourceScope::Unscoped;
+        const tgfx::BackendBindingRange range =
+            tgfx::transitional_backend_binding_range(
+                tgfx::BackendType::Vulkan,
+                tgfx::ShaderResourceKind::Sampler,
+                scope);
+        if (range.size == 0) {
+            std::cerr
+                << "termin_shaderc: combined texture resource '" << resource.name
+                << "' has no WebGPU sampler binding range for scope '"
+                << resource.scope << "'\n";
+            return false;
+        }
+
+        const uint32_t hash = tgfx::stable_shader_resource_name_hash(
+            resource.name + ":sampler");
+        uint32_t candidate = range.base + (hash % range.size);
+        bool assigned = false;
+        for (uint32_t attempt = 0; attempt < range.size; ++attempt) {
+            const bool conflict = std::any_of(
+                occupied.begin(),
+                occupied.end(),
+                [&](const OccupiedBinding& slot) {
+                    return slot.group == resource.set && slot.binding == candidate;
+                });
+            if (!conflict) {
+                resource.webgpu_has_sampler_binding = true;
+                resource.webgpu_sampler_binding = candidate;
+                occupied.push_back({resource.set, candidate});
+                assigned = true;
+                break;
+            }
+            candidate = range.base + ((candidate - range.base + 1) % range.size);
+        }
+        if (!assigned) {
+            std::cerr
+                << "termin_shaderc: no free WebGPU sampler binding for combined "
+                << "texture resource '" << resource.name << "'\n";
+            return false;
+        }
+    }
+
+    std::vector<ShaderResourceBinding> active_resources;
+    active_resources.reserve(resources.size());
+    for (ShaderResourceBinding& resource : resources) {
+        if (slang_wgsl_resource_present(wgsl, resource)) {
+            active_resources.push_back(std::move(resource));
+        }
+    }
+    resources = std::move(active_resources);
+
+    bool changed = false;
+    for (const ShaderResourceBinding& resource : resources) {
+        if (!patch_slang_wgsl_resource_binding(wgsl, resource, changed)) {
+            return false;
+        }
+    }
+    return !changed || write_text_file(options.output, wgsl);
 }
 
 static bool replace_all_literal(

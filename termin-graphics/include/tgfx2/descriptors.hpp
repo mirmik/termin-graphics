@@ -53,6 +53,10 @@ struct ShaderDesc {
     std::string source;
     std::string entry_point = "main";
     std::string debug_name;
+    // Prebuilt shader resource-layout sidecar. WebGPU consumes the version 3
+    // JSON contract emitted beside WGSL; runtime shader compilation and
+    // reflection are deliberately outside the browser backend.
+    std::string resource_layout_json;
     // SPIR-V bytecode (for Vulkan path; empty for GL-only)
     std::vector<uint8_t> bytecode;
 };
