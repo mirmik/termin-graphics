@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <tcbase/tc_log.h>
+#include <tcbase/settings.h>
 
 namespace tgfx {
 
@@ -90,6 +91,36 @@ std::optional<fs::path> configured_tool(
     return normalized_path(candidate);
 }
 
+std::optional<fs::path> settings_tool(
+    const char* settings_key,
+    const char* tool_name)
+{
+    const tc::Settings settings("termin");
+    const nos::trent& value = settings.get(settings_key);
+    if (value.is_nil()) {
+        return std::nullopt;
+    }
+    if (!value.is_string()) {
+        tc_log_error(
+            "[StandaloneShaderRuntime] %s must be a string",
+            settings_key);
+        return fs::path{};
+    }
+    if (value.as_string().empty()) {
+        return std::nullopt;
+    }
+    const fs::path candidate = executable_path(value.as_string());
+    if (!is_file(candidate)) {
+        tc_log_error(
+            "[StandaloneShaderRuntime] %s points to missing %s: '%s'",
+            settings_key,
+            tool_name,
+            candidate.string().c_str());
+        return fs::path{};
+    }
+    return normalized_path(candidate);
+}
+
 void append_sdk_tool_candidates(
     std::vector<fs::path>& candidates,
     const char* tool_name)
@@ -115,7 +146,8 @@ void append_sdk_tool_candidates(
 
 std::optional<fs::path> resolve_tool(
     const char* environment_name,
-    const char* tool_name)
+    const char* tool_name,
+    const char* settings_key)
 {
     const std::optional<fs::path> configured =
         configured_tool(environment_name, tool_name);
@@ -124,6 +156,15 @@ std::optional<fs::path> resolve_tool(
             return std::nullopt;
         }
         return configured;
+    }
+
+    const std::optional<fs::path> from_settings =
+        settings_tool(settings_key, tool_name);
+    if (from_settings.has_value()) {
+        if (from_settings->empty()) {
+            return std::nullopt;
+        }
+        return from_settings;
     }
 
     std::vector<fs::path> candidates;
@@ -244,12 +285,14 @@ bool configure_default_standalone_shader_runtime(
     }
 
     const std::optional<fs::path> shader_compiler =
-        resolve_tool("TERMIN_SHADERC", "termin_shaderc");
+        resolve_tool(
+            "TERMIN_SHADERC", "termin_shaderc", "Build/shaderCompiler");
     if (!shader_compiler) {
         return false;
     }
     const std::optional<fs::path> slang_compiler =
-        resolve_tool("TERMIN_SLANGC", "slangc");
+        resolve_tool(
+            "TERMIN_SLANGC", "slangc", "Shader/slangCompiler");
     if (!slang_compiler) {
         return false;
     }

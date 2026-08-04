@@ -5,29 +5,52 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from tcbase import log
+from tcbase import Settings, log
 
 from termin.shader_tools import existing_executable, resolve_path_tool, resolve_sdk_tool
 
 
-def _configured_tool(env_name: str, label: str) -> Path | None:
+def _configured_tool(env_name: str, label: str) -> tuple[bool, Path | None]:
     configured = os.environ.get(env_name)
     if not configured:
-        return None
+        return False, None
 
     path = Path(configured)
     resolved = existing_executable(path)
     if resolved is not None:
-        return resolved
+        return True, resolved
 
     log.error(f"[ShaderRuntime] {env_name} points to missing {label}: {configured}")
-    return None
+    return True, None
+
+
+def _settings_tool(key: str, label: str) -> tuple[bool, Path | None]:
+    configured = Settings("termin").get(key, "")
+    if not isinstance(configured, str) or not configured.strip():
+        return False, None
+
+    resolved = existing_executable(Path(configured.strip()))
+    if resolved is not None:
+        return True, resolved
+
+    log.error(
+        f"[ShaderRuntime] {key} points to missing {label}: {configured}"
+    )
+    return True, None
 
 
 def resolve_termin_shaderc(anchor_file: Path | None = None) -> Path | None:
-    configured = _configured_tool("TERMIN_SHADERC", "file")
-    if configured is not None:
-        return configured
+    configured_in_environment, environment_tool = _configured_tool(
+        "TERMIN_SHADERC", "file"
+    )
+    if configured_in_environment:
+        return environment_tool
+
+    configured_in_settings, settings_tool = _settings_tool(
+        "Build/shaderCompiler", "file"
+    )
+    if configured_in_settings:
+        return settings_tool
 
     anchor = anchor_file if anchor_file is not None else Path(__file__)
     sdk_tool = resolve_sdk_tool("termin_shaderc", anchor)
@@ -38,9 +61,17 @@ def resolve_termin_shaderc(anchor_file: Path | None = None) -> Path | None:
 
 
 def resolve_slangc(anchor_file: Path | None = None) -> Path | None:
-    configured = _configured_tool("TERMIN_SLANGC", "slangc")
-    if configured is not None:
-        return configured
+    configured_in_environment, environment_tool = _configured_tool(
+        "TERMIN_SLANGC", "slangc"
+    )
+    if configured_in_environment:
+        return environment_tool
+
+    configured_in_settings, settings_tool = _settings_tool(
+        "Shader/slangCompiler", "slangc"
+    )
+    if configured_in_settings:
+        return settings_tool
 
     anchor = anchor_file if anchor_file is not None else Path(__file__)
     sdk_tool = resolve_sdk_tool("slangc", anchor)

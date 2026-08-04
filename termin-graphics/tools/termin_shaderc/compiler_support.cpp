@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <tgfx2/internal/process_runner.hpp>
+#include <tcbase/settings.h>
 
 namespace termin_shaderc::internal {
 
@@ -152,6 +153,26 @@ std::optional<std::string> resolve_slangc(const CompileOptions& options, const c
         }
     }
 
+    const tc::Settings settings("termin");
+    const nos::trent& configured = settings.get("Shader/slangCompiler");
+    if (!configured.is_nil()) {
+        if (!configured.is_string()) {
+            std::cerr
+                << "termin_shaderc: Shader/slangCompiler must be a string\n";
+            return std::nullopt;
+        }
+        if (!configured.as_string().empty() &&
+            !is_existing_file(configured.as_string())) {
+            std::cerr
+                << "termin_shaderc: Shader/slangCompiler points to missing slangc: "
+                << configured.as_string() << "\n";
+            return std::nullopt;
+        }
+        if (!configured.as_string().empty()) {
+            return configured.as_string();
+        }
+    }
+
     if (auto found = find_on_path("slangc")) {
         return found;
     }
@@ -160,8 +181,9 @@ std::optional<std::string> resolve_slangc(const CompileOptions& options, const c
     }
 
     std::cerr
-        << "termin_shaderc: slangc not found. Set TERMIN_SLANGC, add slangc to PATH, "
-        << "or install it under TERMIN_SDK/bin.\n";
+        << "termin_shaderc: slangc not found. Configure Shader/slangCompiler, "
+        << "set TERMIN_SLANGC, add slangc to PATH, or install it under "
+        << "TERMIN_SDK/bin.\n";
     return std::nullopt;
 }
 

@@ -11,8 +11,16 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _load_shader_runtime_module(monkeypatch):
+def _load_shader_runtime_module(monkeypatch, settings_values=None):
+    class FakeSettings:
+        def __init__(self, app_name):
+            assert app_name == "termin"
+
+        def get(self, key, default=None):
+            return (settings_values or {}).get(key, default)
+
     monkeypatch.setitem(sys.modules, "tcbase", types.SimpleNamespace(
+        Settings=FakeSettings,
         log=types.SimpleNamespace(error=lambda message: None, info=lambda message: None)
     ))
     path = _repo_root() / "termin-graphics" / "python" / "tgfx" / "shader_runtime.py"
@@ -44,7 +52,28 @@ def test_tgfx_shader_runtime_resolves_sdk_windows_exe_suffix(
 
     shader_runtime = _load_shader_runtime_module(monkeypatch)
 
-    assert shader_runtime._resolve_tool("termin_shaderc", "TERMIN_SHADERC") == tool
+    assert shader_runtime._resolve_tool(
+        "termin_shaderc", "TERMIN_SHADERC", "Build/shaderCompiler"
+    ) == tool
+
+
+def test_tgfx_shader_runtime_reads_common_slang_setting(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    slangc = tmp_path / _executable_name("slangc")
+    slangc.write_text("#!/bin/sh\n", encoding="utf-8")
+    slangc.chmod(0o755)
+    monkeypatch.delenv("TERMIN_SLANGC", raising=False)
+
+    shader_runtime = _load_shader_runtime_module(
+        monkeypatch,
+        {"Shader/slangCompiler": str(slangc)},
+    )
+
+    assert shader_runtime._resolve_tool(
+        "slangc", "TERMIN_SLANGC", "Shader/slangCompiler"
+    ) == slangc
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows cache root uses LOCALAPPDATA")

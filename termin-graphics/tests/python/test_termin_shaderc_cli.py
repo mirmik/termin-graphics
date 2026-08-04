@@ -1916,11 +1916,51 @@ def test_termin_shaderc_reports_missing_slangc(tmp_path: Path) -> None:
             "--output",
             str(tmp_path / "out.spv"),
         ],
-        env={"TERMIN_SLANGC": str(tmp_path / "missing_slangc")},
+        env={
+            "TERMIN_SLANGC": str(tmp_path / "missing_slangc"),
+            "XDG_CONFIG_HOME": str(tmp_path / "empty-config"),
+            "APPDATA": str(tmp_path / "empty-config"),
+        },
     )
 
     assert result.returncode == 1
     assert "TERMIN_SLANGC points to missing slangc" in result.stderr
+
+
+def test_termin_shaderc_reads_slangc_from_common_settings(tmp_path: Path) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text("void main() {}\n", encoding="utf-8")
+    fake_slangc = _write_fake_slangc(tmp_path / "fake_slangc.py")
+    config_home = tmp_path / "config"
+    settings_path = config_home / "termin" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps({"Shader": {"slangCompiler": str(fake_slangc)}}),
+        encoding="utf-8",
+    )
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "vertex",
+            "--input",
+            str(shader),
+            "--output",
+            str(tmp_path / "out.spv"),
+        ],
+        env={
+            "XDG_CONFIG_HOME": str(config_home),
+            "APPDATA": str(config_home),
+            "TERMIN_SLANGC": "",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_termin_shaderc_propagates_slangc_failure(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import shutil
 
-from tcbase import log
+from tcbase import Settings, log
 
 
 _configured = False
@@ -39,7 +39,7 @@ def _sdk_tool_dirs() -> tuple[Path, ...]:
     return tuple(dirs)
 
 
-def _resolve_tool(name: str, env_name: str) -> Path | None:
+def _resolve_tool(name: str, env_name: str, settings_key: str) -> Path | None:
     configured = os.environ.get(env_name)
     if configured:
         path = Path(configured)
@@ -47,6 +47,16 @@ def _resolve_tool(name: str, env_name: str) -> Path | None:
         if resolved is not None:
             return resolved
         log.error(f"[ShaderRuntime] {env_name} points to missing file: {configured}")
+        return None
+
+    settings_value = Settings("termin").get(settings_key, "")
+    if isinstance(settings_value, str) and settings_value.strip():
+        resolved = _existing_tool(Path(settings_value.strip()))
+        if resolved is not None:
+            return resolved
+        log.error(
+            f"[ShaderRuntime] {settings_key} points to missing file: {settings_value}"
+        )
         return None
 
     for directory in _sdk_tool_dirs():
@@ -88,14 +98,16 @@ def configure_default_shader_runtime(label: str = "python") -> bool:
         _configured = True
         return True
 
-    compiler = _resolve_tool("termin_shaderc", "TERMIN_SHADERC")
+    compiler = _resolve_tool(
+        "termin_shaderc", "TERMIN_SHADERC", "Build/shaderCompiler"
+    )
     if compiler is None:
         log.error(
             f"[ShaderRuntime] termin_shaderc not found; {label} Slang shaders cannot compile"
         )
         return False
 
-    slangc = _resolve_tool("slangc", "TERMIN_SLANGC")
+    slangc = _resolve_tool("slangc", "TERMIN_SLANGC", "Shader/slangCompiler")
     if slangc is None:
         log.error(f"[ShaderRuntime] slangc not found; {label} Slang shaders cannot compile")
         return False

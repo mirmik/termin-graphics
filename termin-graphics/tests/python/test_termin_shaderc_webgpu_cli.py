@@ -165,13 +165,15 @@ def test_webgpu_target_removes_artifacts_when_validation_fails(tmp_path: Path) -
 
 def _pinned_webgpu_tools() -> tuple[Path, Path]:
     root = Path(__file__).resolve().parents[3]
-    lock = json.loads(
+    web_lock = json.loads(
         (root / "build-system/web-shader-toolchain-lock.json").read_text(
             encoding="utf-8"
         )
     )
-    slangc = root / "build/toolchains" / f"slang-{lock['slang']['version']}" / "bin/slangc"
-    naga = root / "build/toolchains" / f"naga-{lock['naga_cli']['version']}" / "bin/naga"
+    from tcbase import Settings
+
+    slangc = Path(Settings("termin").get("Shader/slangCompiler", ""))
+    naga = root / "build/toolchains" / f"naga-{web_lock['naga_cli']['version']}" / "bin/naga"
     if not slangc.is_file() or not naga.is_file():
         pytest.skip("pinned WebGPU shader tools are not installed")
     return slangc, naga
