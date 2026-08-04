@@ -1,5 +1,9 @@
 import json
+import os
 from pathlib import Path
+import shutil
+
+import pytest
 
 from shaderc_test_helpers import (
     _expected_scoped_binding,
@@ -1671,6 +1675,57 @@ def test_termin_shaderc_normalizes_slang_pass_shadow_texture_reflection_placemen
             "size": 0,
         },
     ]
+
+
+def test_builtin_shadow_helper_compiles_with_filtering_and_cascades(tmp_path: Path) -> None:
+    slangc_value = os.environ.get("TERMIN_SLANGC") or shutil.which("slangc")
+    if not slangc_value or not Path(slangc_value).is_file():
+        pytest.skip("slangc is not available")
+
+    source_root = (
+        Path(__file__).resolve().parents[3]
+        / "termin-graphics"
+        / "resources"
+        / "builtin_shaders"
+    )
+    shader = tmp_path / "shadow-smoke.slang"
+    shader.write_text(
+        "import termin_shadows;\n"
+        "struct FragmentInput { float3 world_pos : TEXCOORD0; };\n"
+        "[shader(\"fragment\")]\n"
+        "float4 fs_main(FragmentInput input) : SV_Target0 {\n"
+        "    float visibility = compute_shadow_auto(0, input.world_pos);\n"
+        "    return float4(visibility, visibility, visibility, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "shadow-smoke.spv"
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "fs_main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(slangc_value),
+            "--include-dir",
+            str(source_root),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert output.is_file()
+    assert Path(f"{output}.layout.json").is_file()
 
 
 def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:
