@@ -256,7 +256,8 @@ The current foundation includes:
   a clamped, bounded-scroll overlay with nested submenu ownership, keyboard
   navigation and outside/Escape dismissal. `MenuBar` switches adjacent menus
   through a single popup owner and dispatches cycle-safe shortcut descriptors;
-- `Dialog` provides centered modal composition with canonical content/action
+- `Dialog` provides centered modal composition with a viewport-clamped title-bar
+  drag gesture (disable with `set_draggable(false)`), canonical content/action
   ownership, nested-modal focus containment/restoration, default/cancel
   keyboard semantics and exactly-once typed results. `MessageBox` and
   `InputDialog` reuse that contract in both C++ and Python; buttons are

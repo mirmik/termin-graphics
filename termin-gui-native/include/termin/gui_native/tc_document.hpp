@@ -52,6 +52,14 @@ class TcDocument {
         return tc_ui_document_show_overlay_with_layout(
             handle_, widget.handle(), flags, &layout, viewport);
     }
+    bool update_overlay_layout(
+        const Widget& widget,
+        const tc_ui_overlay_layout& layout,
+        tc_ui_rect viewport
+    ) const {
+        return tc_ui_document_update_overlay_layout(
+            handle_, widget.handle(), &layout, viewport);
+    }
     tc_ui_rect layout_rect() const { return tc_ui_document_layout_rect(handle_); }
     bool dismiss_overlay(
         const Widget& widget,

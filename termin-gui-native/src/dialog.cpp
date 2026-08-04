@@ -11,6 +11,18 @@ Dialog::Dialog(std::string title) : NativeWidget("Dialog"), title_(std::move(tit
     set_preferred_size(tc_ui_size{420.0f, 220.0f});
 }
 
+void Dialog::set_draggable(bool enabled) {
+    if (draggable_ == enabled)
+        return;
+    draggable_ = enabled;
+    if (!enabled && dragging_) {
+        dragging_ = false;
+        if (!tc_ui_document_handle_is_invalid(document()))
+            tc_ui_document_release_pointer_capture(document(), handle());
+    }
+    mark_dirty(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT);
+}
+
 void Dialog::set_title(std::string title) {
     if (!valid_utf8(title)) {
         tc_log_error("[termin-gui-native] Dialog rejected invalid UTF-8 title");
@@ -245,6 +257,57 @@ tc_widget_handle Dialog::hit_test(tc_ui_document_handle document, float x, float
     return mouse_transparent() ? tc_widget_handle_invalid() : handle();
 }
 
+tc_ui_event_result Dialog::pointer_event(tc_ui_document_handle document,
+                                         const tc_ui_pointer_event* event) {
+    if (!event)
+        return TC_UI_EVENT_IGNORED;
+    const bool captured = tc_widget_handle_eq(
+        tc_ui_document_pointer_capture(document), handle());
+    if (event->type == TC_UI_POINTER_CANCEL) {
+        const bool was_dragging = dragging_ || captured;
+        dragging_ = false;
+        return was_dragging ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
+    }
+    if (event->type == TC_UI_POINTER_DOWN && draggable_ &&
+        event->button == tcbase::mouse_button_value(tcbase::MouseButton::LEFT) &&
+        rect_contains(tc_ui_rect{bounds().x, bounds().y, bounds().width, title_height_},
+                      event->x, event->y)) {
+        if (!tc_ui_document_set_pointer_capture(document, handle()))
+            return TC_UI_EVENT_IGNORED;
+        dragging_ = true;
+        drag_pointer_start_ = tc_ui_point{event->x, event->y};
+        drag_bounds_start_ = bounds();
+        if (tc_ui_document_is_alive(document, last_focused_descendant_))
+            tc_ui_document_set_focus(document, last_focused_descendant_);
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_MOVE && dragging_ && captured) {
+        tc_ui_rect viewport = tc_ui_document_layout_rect(document);
+        if (viewport.width <= 0.0f || viewport.height <= 0.0f)
+            viewport = shown_viewport_;
+        const float wanted_x = drag_bounds_start_.x + event->x - drag_pointer_start_.x;
+        const float wanted_y = drag_bounds_start_.y + event->y - drag_pointer_start_.y;
+        tc_ui_overlay_layout overlay_layout{};
+        overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER;
+        overlay_layout.offset.x = wanted_x -
+            (viewport.x + (viewport.width - bounds().width) * 0.5f);
+        overlay_layout.offset.y = wanted_y -
+            (viewport.y + (viewport.height - bounds().height) * 0.5f);
+        if (!tc_ui_document_update_overlay_layout(
+                document, handle(), &overlay_layout, viewport)) {
+            tc_log_error("[termin-gui-native] Dialog failed to update drag position");
+        }
+        return TC_UI_EVENT_HANDLED;
+    }
+    if (event->type == TC_UI_POINTER_UP && (dragging_ || captured)) {
+        dragging_ = false;
+        if (captured)
+            tc_ui_document_release_pointer_capture(document, handle());
+        return TC_UI_EVENT_HANDLED;
+    }
+    return TC_UI_EVENT_IGNORED;
+}
+
 bool Dialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
     if (tc_ui_document_handle_is_invalid(document) || !tc_ui_document_is_alive(document, handle()) || open_) {
         tc_log_error("[termin-gui-native] Dialog show requires a live closed adopted widget");
@@ -258,6 +321,8 @@ bool Dialog::show(tc_ui_document_handle document, tc_ui_rect viewport) {
         overlay_flags |= TC_UI_OVERLAY_BLOCK_ESCAPE;
     tc_ui_overlay_layout overlay_layout{};
     overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER;
+    shown_viewport_ = viewport;
+    dragging_ = false;
     open_ = tc_ui_document_show_overlay_with_layout(
         document, handle(), overlay_flags, &overlay_layout, viewport);
     if (!open_)
@@ -308,6 +373,11 @@ tc_ui_event_result Dialog::key_event(tc_ui_document_handle document, const tc_ui
                                                            : TC_UI_EVENT_IGNORED;
 }
 
+void Dialog::descendant_focused(tc_ui_document_handle,
+                                tc_widget_handle descendant) {
+    last_focused_descendant_ = descendant;
+}
+
 void Dialog::deliver_result(tc_ui_document_handle document, DialogResult result) {
     if (has_result_)
         return;
@@ -321,6 +391,7 @@ void Dialog::deliver_result(tc_ui_document_handle document, DialogResult result)
 
 void Dialog::overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dismiss_reason reason) {
     open_ = false;
+    dragging_ = false;
     DialogResult result;
     if (has_pending_result_) {
         result = std::move(pending_result_);
@@ -337,6 +408,8 @@ void Dialog::overlay_dismissed(tc_ui_document_handle document, tc_ui_overlay_dis
 
 void Dialog::on_destroy(tc_ui_document_handle document) {
     open_ = false;
+    dragging_ = false;
+    last_focused_descendant_ = tc_widget_handle_invalid();
     destroy_buttons(document);
     if (!tc_widget_handle_is_invalid(content_handle_) &&
         tc_ui_document_is_alive(document, content_handle_)) {
