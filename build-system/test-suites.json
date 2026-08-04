@@ -320,6 +320,7 @@
     {"id": "termin-physics-tests-native", "module": "termin-physics", "executor": "ctest", "roots": ["termin-physics/tests"]},
     {"id": "termin-qopt-tests-native", "module": "termin-qopt", "executor": "ctest", "roots": ["termin-qopt/tests"]},
     {"id": "termin-robotics-tests-native", "module": "termin-robotics", "executor": "ctest", "roots": ["termin-robotics/tests"]},
+    {"id": "termin-robotics-tests-python", "module": "termin-robotics", "executor": "pytest", "roots": ["termin-robotics/python/tests"]},
     {"id": "termin-physics-qopt-tests-native", "module": "termin-physics-qopt", "executor": "ctest", "roots": ["termin-physics-qopt/tests"]},
     {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
     {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
