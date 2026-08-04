@@ -4,6 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptDir "scripts\Normalize-WindowsSdkPermissions.ps1")
 
 $pythonCommand = $null
 if ($env:PYTHON_BIN) {
@@ -33,4 +34,21 @@ if ($oldPythonPath) {
 & $pythonCommand.Source -m termin_build.sdk --repo-root $ScriptDir build @orchestratorArgs
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
+}
+
+$sdkPrefix = if ($env:SDK_PREFIX) {
+    $env:SDK_PREFIX
+} else {
+    Join-Path $ScriptDir "sdk"
+}
+Enable-TerminSdkInheritedPermissions -SdkPrefix $sdkPrefix
+
+$launcherPath = Join-Path $sdkPrefix "bin\termin_launcher.exe"
+if (-not (Test-Path $launcherPath -PathType Leaf)) {
+    throw "SDK launcher is missing after build: $launcherPath"
+}
+Write-Host "+ verify launcher bundled Python layout"
+& $launcherPath --termin-python-layout-smoke
+if ($LASTEXITCODE -ne 0) {
+    throw "SDK launcher bundled Python layout smoke failed with exit code $LASTEXITCODE"
 }
