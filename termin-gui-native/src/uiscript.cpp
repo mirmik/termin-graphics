@@ -1364,6 +1364,8 @@ UiScriptDescription UiScriptParser::parse_document(
     return description;
 }
 
+LoadedUiScript::LoadedUiScript() = default;
+
 LoadedUiScript::LoadedUiScript(LoadedUiScript&& other) noexcept {
     *this = std::move(other);
 }

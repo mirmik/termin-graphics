@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -524,7 +525,9 @@ int main() {
         bool depth_ready = false;
         float async_depth = 0.0f;
         std::array<std::array<float, 4>, 4> async_colors{};
-        for (int attempt = 0; attempt < 1000; ++attempt) {
+        const auto readback_deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < readback_deadline) {
             for (size_t i = 0; i < color_requests.size(); ++i) {
                 if (!color_ready[i]) {
                     color_ready[i] = device->poll_pixel_rgba8(
@@ -541,7 +544,7 @@ int main() {
                 depth_ready) {
                 break;
             }
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         if (!std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
                 return ready;

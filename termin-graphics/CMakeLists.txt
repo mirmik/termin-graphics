@@ -696,11 +696,18 @@ if(BUILD_TGFX2_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
     )
     target_link_libraries(tgfx2_device_factory_test PRIVATE termin_graphics2)
+    if(TGFX2_ENABLE_OPENGL)
+        target_sources(tgfx2_device_factory_test PRIVATE
+            src/tgfx2/opengl/opengl_type_conversions.cpp)
+    endif()
     if(TGFX2_ENABLE_VULKAN)
         target_compile_definitions(tgfx2_device_factory_test PRIVATE TGFX2_HAS_VULKAN)
+        target_link_libraries(tgfx2_device_factory_test PRIVATE Vulkan::Vulkan)
     endif()
     if(TGFX2_ENABLE_D3D11)
         target_compile_definitions(tgfx2_device_factory_test PRIVATE TGFX2_HAS_D3D11)
+        target_sources(tgfx2_device_factory_test PRIVATE
+            src/tgfx2/d3d11/d3d11_type_conversions.cpp)
     endif()
     termin_set_rpath_test(tgfx2_device_factory_test)
     add_test(NAME tgfx2_device_factory_test COMMAND tgfx2_device_factory_test)

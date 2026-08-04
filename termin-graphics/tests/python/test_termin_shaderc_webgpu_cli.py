@@ -79,9 +79,9 @@ def test_webgpu_target_patches_and_validates_wgsl_with_versioned_layout(tmp_path
             "--output",
             str(output),
             "--slangc",
-            str(_write_fake_webgpu_slangc(tmp_path / "slangc")),
+            str(_write_fake_webgpu_slangc(tmp_path / "slangc.py")),
             "--wgsl-validator",
-            str(_write_fake_naga(tmp_path / "naga")),
+            str(_write_fake_naga(tmp_path / "naga.py")),
         ]
     )
 
@@ -152,9 +152,9 @@ def test_webgpu_target_removes_artifacts_when_validation_fails(tmp_path: Path) -
             "--output",
             str(output),
             "--slangc",
-            str(_write_fake_webgpu_slangc(tmp_path / "slangc")),
+            str(_write_fake_webgpu_slangc(tmp_path / "slangc.py")),
             "--wgsl-validator",
-            str(_write_fake_naga(tmp_path / "naga", exit_code=9)),
+            str(_write_fake_naga(tmp_path / "naga.py", exit_code=9)),
         ]
     )
 

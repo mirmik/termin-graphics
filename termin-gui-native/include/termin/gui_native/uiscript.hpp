@@ -58,7 +58,7 @@ struct MaterializedWidget {
 
 class TERMIN_GUI_NATIVE_API LoadedUiScript {
 public:
-    LoadedUiScript() = default;
+    LoadedUiScript();
     LoadedUiScript(const LoadedUiScript&) = delete;
     LoadedUiScript& operator=(const LoadedUiScript&) = delete;
     LoadedUiScript(LoadedUiScript&& other) noexcept;

@@ -321,6 +321,17 @@ Invoke-TerminCMakeBuild `
     -BuildJobs $BuildJobs
 
 $CtestJunitPath = Join-Path $BuildDir "ctest-results.xml"
+# Keep test-owned temporary files and shader artifacts inside the build tree.
+# This makes CTest independent of user-profile ACLs and prevents automatic
+# tests from writing to the developer's persistent shader cache.
+$CtestRuntimeRoot = Join-Path $BuildDir "ctest-runtime"
+$CtestTempRoot = Join-Path $CtestRuntimeRoot "temp"
+$CtestShaderCacheRoot = Join-Path $CtestRuntimeRoot "shader-cache"
+New-Item -ItemType Directory -Force -Path $CtestTempRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $CtestShaderCacheRoot | Out-Null
+$env:TEMP = $CtestTempRoot
+$env:TMP = $CtestTempRoot
+$env:TERMIN_SDK_SHADER_CACHE_ROOT = $CtestShaderCacheRoot
 # CTest may leave an existing JUnit document untouched, so remove only the
 # report owned by this build directory before starting a new run.
 Remove-Item -LiteralPath $CtestJunitPath -Force -ErrorAction SilentlyContinue

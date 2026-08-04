@@ -26,7 +26,7 @@ struct SurfaceContractDescriptor {
     bool operator==(const SurfaceContractDescriptor&) const = default;
 };
 
-class SurfaceContractRegistry {
+class TERMIN_MATERIALS_API SurfaceContractRegistry {
 public:
     static bool register_contract(
         const SurfaceContractDescriptor& descriptor,
