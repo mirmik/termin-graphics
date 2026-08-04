@@ -256,7 +256,10 @@
     },
     {
       "path": "termin-physics-fem",
-      "distribution": "termin-physics-fem"
+      "distribution": "termin-physics-fem",
+      "native_extensions": [
+        {"extension": "termin.physics_fem._components_physics_fem_native", "target": "_components_physics_fem_native"}
+      ]
     },
     {
       "path": "termin-pga",
