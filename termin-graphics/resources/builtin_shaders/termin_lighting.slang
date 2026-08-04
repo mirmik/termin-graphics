@@ -36,7 +36,12 @@ public float get_light_outer_angle(int i) { return lighting.u_lights[i].outer_ca
 public float3 get_ambient_color() { return lighting.u_ambient_data.rgb; }
 public float get_ambient_intensity() { return lighting.u_ambient_data.w; }
 public float3 get_camera_position() { return lighting.u_camera_light_count.xyz; }
+public int get_shadow_method() { return int(lighting.u_shadow_settings.x); }
+public float get_shadow_softness() { return lighting.u_shadow_settings.y; }
 public float get_shadow_bias() { return lighting.u_shadow_settings.z; }
+public int get_light_cascade_count(int i) { return int(lighting.u_lights[i].outer_cascade.y); }
+public bool get_light_cascade_blend(int i) { return lighting.u_lights[i].outer_cascade.z > 0.5; }
+public float get_light_blend_distance(int i) { return lighting.u_lights[i].outer_cascade.w; }
 
 public float compute_distance_attenuation(float3 attenuation, float range, float dist) {
     float denom = attenuation.x + attenuation.y * dist + attenuation.z * dist * dist;
