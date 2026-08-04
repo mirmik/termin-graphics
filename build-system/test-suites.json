@@ -318,6 +318,8 @@
     {"id": "termin-prefab-tests-native", "module": "termin-prefab", "executor": "ctest", "roots": ["termin-prefab/tests"]},
     {"id": "termin-physics-tests-native", "module": "termin-physics", "executor": "ctest", "roots": ["termin-physics/tests"]},
     {"id": "termin-qopt-tests-native", "module": "termin-qopt", "executor": "ctest", "roots": ["termin-qopt/tests"]},
+    {"id": "termin-robotics-tests-native", "module": "termin-robotics", "executor": "ctest", "roots": ["termin-robotics/tests"]},
+    {"id": "termin-physics-qopt-tests-native", "module": "termin-physics-qopt", "executor": "ctest", "roots": ["termin-physics-qopt/tests"]},
     {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
     {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
     {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},
@@ -587,6 +589,12 @@
       "module": "termin-qopt",
       "executor": "pytest",
       "roots": ["termin-qopt/tests"]
+    },
+    {
+      "id": "termin-physics-qopt-tests-python",
+      "module": "termin-physics-qopt",
+      "executor": "pytest",
+      "roots": ["termin-physics-qopt/tests/multibody_oracle_test.py"]
     },
     {
       "id": "termin-render-passes-tests",
