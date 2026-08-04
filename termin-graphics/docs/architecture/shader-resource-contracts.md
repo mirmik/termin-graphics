@@ -88,7 +88,7 @@ Current fixed ABI resources:
 | `bone_block` | `draw` | constant buffer | skinned vertex-transform path | skinning matrices / bone data |
 | `lighting` | `pass` | constant buffer | lighting/color pass | scene lights and ambient lighting data |
 | `shadow_block` | `pass` | constant buffer | lighting/color pass | shadow matrix and cascade metadata |
-| `shadow_maps` | `pass` | texture array | lighting/color pass | shadow map textures sampled by material shaders |
+| `shadow_maps` | `pass` | texture binding array (current ABI) | lighting/color pass | independently bound shadow map textures sampled by material shaders |
 
 These names are stable shader ABI, not backend placement policy. Material
 texture property names are different: `albedo_texture`, `normal_texture`, and
@@ -99,6 +99,12 @@ A shader that uses Termin's standard lighting include should declare
 `lighting`, `shadow_block`, and `shadow_maps` with `pass` scope. A shader that
 does not use lighting need not declare those resources, and the pass should
 skip those binds without guessing replacement names.
+
+The current `shadow_maps` kind means an array of independent texture bindings;
+it is not one physical 2D array texture. The cross-backend target replaces it
+with a renderer-owned layered resource and one sampled depth-array view, as
+specified by the
+[backend-neutral layered shadow pool](../../../docs/architecture/2026-08-04-layered-shadow-pool.md).
 
 Adding a new well-known ABI resource requires updating this table, documenting
 the payload layout, adding validation/tests, and deciding whether it belongs to
