@@ -85,11 +85,6 @@
       "kinds": ["cmake", "runtime"]
     },
     {
-      "id": "termin-robotics",
-      "path": "termin-robotics",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
       "id": "termin-window",
       "path": "termin-window",
       "kinds": ["cmake", "platform"]
