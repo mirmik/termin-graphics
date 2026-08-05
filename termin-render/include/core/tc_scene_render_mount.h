@@ -4,6 +4,7 @@
 
 #include "core/tc_scene_pool.h"
 #include "core/tc_scene_extension.h"
+#include "core/tc_debug_geometry.h"
 #include "render/tc_pipeline_template.h"
 #include "tc_viewport_config.h"
 #include "tc_render_target_config.h"
@@ -14,6 +15,11 @@ extern "C" {
 
 typedef struct tc_render_attachment_context tc_render_attachment_context;
 typedef struct tc_render_prepare_context tc_render_prepare_context;
+
+typedef struct tc_debug_geometry_setting {
+    tc_debug_geometry_type_id type_id;
+    bool enabled;
+} tc_debug_geometry_setting;
 
 typedef struct tc_scene_render_mount {
     tc_scene_handle scene;
@@ -31,6 +37,13 @@ typedef struct tc_scene_render_mount {
 
     // Transient runtime state. Never serialized.
     const tc_render_attachment_context* attachment_context;
+    tc_debug_geometry_setting* debug_geometry_settings;
+    size_t debug_geometry_setting_count;
+    size_t debug_geometry_setting_capacity;
+    tc_debug_geometry_primitive* debug_geometry_primitives;
+    size_t debug_geometry_primitive_count;
+    size_t debug_geometry_primitive_capacity;
+    bool debug_geometry_collecting;
 } tc_scene_render_mount;
 
 // Register builtin render-mount extension type in scene-extension registry.

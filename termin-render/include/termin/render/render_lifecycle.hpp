@@ -1,6 +1,7 @@
 #pragma once
 
 #include "termin/render/render_export.hpp"
+#include "termin/render/debug_geometry.hpp"
 
 extern "C" {
 #include "core/tc_render_lifecycle.h"
@@ -18,6 +19,8 @@ public:
     explicit RenderPrepareContext(tc_scene_handle scene) : scene_(scene) {}
 
     tc_scene_handle scene() const { return scene_; }
+    DebugGeometryDrawer debug_geometry(tc_debug_geometry_type_id type_id) const;
+    DebugGeometryDrawer debug_geometry(const char* stable_id) const;
 };
 
 class RENDER_API RenderLifecycle {

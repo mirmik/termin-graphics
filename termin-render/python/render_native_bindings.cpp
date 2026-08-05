@@ -2,6 +2,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <tcbase/tc_log.hpp>
+#include <termin/render/debug_geometry.hpp>
 #include <termin/render/render_lifecycle.hpp>
 
 extern "C" {
@@ -20,6 +21,29 @@ namespace nb = nanobind;
 namespace {
 
 PyObject* g_attachment_context_wrapper = nullptr;
+
+termin::Vec3 sequence_vec3(const nb::sequence& value, const char* label) {
+    if (nb::len(value) != 3) {
+        throw nb::value_error((std::string(label) + " must contain 3 values").c_str());
+    }
+    return {
+        nb::cast<double>(value[0]),
+        nb::cast<double>(value[1]),
+        nb::cast<double>(value[2]),
+    };
+}
+
+termin::Color4 sequence_color4(const nb::sequence& value) {
+    if (nb::len(value) != 4) {
+        throw nb::value_error("color must contain 4 values");
+    }
+    return {
+        nb::cast<float>(value[0]),
+        nb::cast<float>(value[1]),
+        nb::cast<float>(value[2]),
+        nb::cast<float>(value[3]),
+    };
+}
 
 nb::object wrap_attachment_context(const tc_render_attachment_context* context) {
     nb::object capsule = nb::steal<nb::object>(PyCapsule_New(
@@ -83,8 +107,54 @@ void bind_scene_render_extensions(nb::module_& m);
 }
 
 NB_MODULE(_render_native, m) {
+    nb::class_<termin::DebugGeometryTypeRegistration>(m, "DebugGeometryTypeRegistration")
+        .def(nb::init<const char*, const char*, const char*, bool>(),
+            nb::arg("stable_id"),
+            nb::arg("display_name"),
+            nb::arg("category") = "",
+            nb::arg("default_enabled") = true)
+        .def_prop_ro("type_id", &termin::DebugGeometryTypeRegistration::type_id)
+        .def_prop_ro("valid", &termin::DebugGeometryTypeRegistration::valid)
+        .def("__bool__", &termin::DebugGeometryTypeRegistration::valid);
+
+    nb::class_<termin::DebugGeometryDrawer>(m, "DebugGeometryDrawer")
+        .def_prop_ro("valid", &termin::DebugGeometryDrawer::valid)
+        .def("__bool__", &termin::DebugGeometryDrawer::valid)
+        .def("line", [](const termin::DebugGeometryDrawer& self,
+                         const nb::sequence& start,
+                         const nb::sequence& end,
+                         const nb::sequence& color,
+                         bool depth_test) {
+            return self.line(
+                sequence_vec3(start, "start"),
+                sequence_vec3(end, "end"),
+                sequence_color4(color),
+                depth_test);
+        }, nb::arg("start"), nb::arg("end"), nb::arg("color"),
+           nb::arg("depth_test") = false)
+        .def("wire_sphere", [](const termin::DebugGeometryDrawer& self,
+                                const nb::sequence& center,
+                                double radius,
+                                const nb::sequence& color,
+                                int segments,
+                                bool depth_test) {
+            return self.wire_sphere(
+                sequence_vec3(center, "center"), radius,
+                sequence_color4(color), segments, depth_test);
+        }, nb::arg("center"), nb::arg("radius"), nb::arg("color"),
+           nb::arg("segments") = 16, nb::arg("depth_test") = false);
+
     nb::class_<termin::RenderPrepareContext>(m, "RenderPrepareContext")
-        .def_prop_ro("scene_handle", &termin::RenderPrepareContext::scene);
+        .def_prop_ro("scene_handle", &termin::RenderPrepareContext::scene)
+        .def("debug_geometry", [](const termin::RenderPrepareContext& self,
+                                   nb::object type) {
+            if (nb::isinstance<nb::str>(type)) {
+                std::string stable_id = nb::cast<std::string>(type);
+                return self.debug_geometry(stable_id.c_str());
+            }
+            return self.debug_geometry(
+                nb::cast<tc_debug_geometry_type_id>(type));
+        }, nb::arg("type"));
 
     m.def("_set_render_attachment_context_wrapper", [](nb::object wrapper) {
         PyObject* replacement = wrapper.is_none() ? nullptr : wrapper.ptr();
@@ -114,6 +184,8 @@ NB_MODULE(_render_native, m) {
         nb::int_(TC_PHASE_EDITOR_DEBUG_TRANSPARENT);
     m.attr("RENDER_CATEGORY_COLLIDERS") = nb::int_(TC_RENDER_CATEGORY_COLLIDERS);
     m.attr("RENDER_CATEGORY_NAVMESH") = nb::int_(TC_RENDER_CATEGORY_NAVMESH);
+    m.attr("RENDER_CATEGORY_DEBUG_GEOMETRY") =
+        nb::int_(TC_RENDER_CATEGORY_DEBUG_GEOMETRY);
     m.attr("RENDER_CATEGORY_ALL") = nb::int_(TC_RENDER_CATEGORY_ALL);
 
     nb::enum_<tc_render_sync_mode>(m, "RenderSyncMode")
@@ -154,6 +226,22 @@ NB_MODULE(_render_native, m) {
     m.def("render_lifecycle_capability_id", []() {
         return tc_render_lifecycle_capability_id();
     }, "Get the render lifecycle capability ID");
+
+    m.def("debug_geometry_types", []() {
+        nb::list result;
+        for (size_t index = 0; index < tc_debug_geometry_type_count(); ++index) {
+            tc_debug_geometry_type_desc desc = {};
+            if (!tc_debug_geometry_type_at(index, &desc)) continue;
+            nb::dict item;
+            item["type_id"] = desc.type_id;
+            item["stable_id"] = desc.stable_id;
+            item["display_name"] = desc.display_name;
+            item["category"] = desc.category;
+            item["default_enabled"] = desc.default_enabled;
+            result.append(std::move(item));
+        }
+        return result;
+    }, "Enumerate registered debug geometry classes");
 
     m.def("install_render_lifecycle", [](uintptr_t c_ptr) {
         auto* component = reinterpret_cast<tc_component*>(c_ptr);

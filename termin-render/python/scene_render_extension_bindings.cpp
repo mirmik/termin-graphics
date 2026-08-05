@@ -3,6 +3,8 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <stdexcept>
+
 #include <termin/render/tc_pipeline_template.hpp>
 #include <termin/render/tc_scene_render_ext.hpp>
 #include <termin/tc_scene.hpp>
@@ -16,6 +18,7 @@ extern "C" {
 #include "core/tc_scene_extension_ids.h"
 #include "core/tc_scene_lighting.h"
 #include "core/tc_scene_render_mount.h"
+#include "core/tc_debug_geometry.h"
 #include "core/tc_scene_render_state.h"
 }
 
@@ -260,6 +263,27 @@ void bind_scene_render_extensions(nb::module_& m) {
             });
 
     nb::class_<SceneRenderMount>(m, "SceneRenderMount")
+        .def("debug_geometry_enabled", [](const SceneRenderMount& self,
+                                           const std::string& stable_id) {
+            if (!tc_scene_render_mount_ensure(self.handle())) {
+                throw std::runtime_error("failed to attach scene render mount");
+            }
+            return tc_scene_debug_geometry_enabled(
+                self.handle(), tc_debug_geometry_type_find(stable_id.c_str()));
+        }, nb::arg("stable_id"))
+        .def("set_debug_geometry_enabled", [](SceneRenderMount& self,
+                                               const std::string& stable_id,
+                                               bool enabled) {
+            if (!tc_scene_render_mount_ensure(self.handle())) {
+                throw std::runtime_error("failed to attach scene render mount");
+            }
+            tc_debug_geometry_type_id type_id =
+                tc_debug_geometry_type_find(stable_id.c_str());
+            if (!tc_scene_debug_geometry_set_enabled(
+                    self.handle(), type_id, enabled)) {
+                throw nb::value_error("unknown debug geometry type");
+            }
+        }, nb::arg("stable_id"), nb::arg("enabled"))
         .def("add_viewport_config", [](SceneRenderMount& self, const ViewportConfig& config) {
             scene_add_viewport_config(TcSceneRef(self.handle()), config);
         }, nb::arg("config"))

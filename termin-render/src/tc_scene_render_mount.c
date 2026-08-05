@@ -105,6 +105,8 @@ static void render_mount_destroy(void* ext, void* type_userdata) {
     free(mount->pipeline_templates);
     free(mount->viewport_configs);
     free(mount->render_target_configs);
+    free(mount->debug_geometry_settings);
+    free(mount->debug_geometry_primitives);
     free(mount);
 }
 
@@ -486,7 +488,9 @@ void tc_scene_render_mount_prepare(
 ) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
     if (!mount || !mount->attachment_context || !context) return;
+    tc_scene_debug_geometry_begin_collection(scene);
     tc_render_lifecycle_prepare_scene(scene, context);
+    tc_scene_debug_geometry_end_collection(scene);
 }
 
 void tc_scene_render_mount_notify_detach(
@@ -500,6 +504,7 @@ void tc_scene_render_mount_notify_detach(
         return;
     }
     tc_render_lifecycle_notify_scene_detach(scene, context);
+    tc_scene_debug_geometry_clear(scene);
     mount->attachment_context = NULL;
 }
 

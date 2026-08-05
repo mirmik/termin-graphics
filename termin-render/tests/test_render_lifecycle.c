@@ -13,6 +13,7 @@ typedef struct probe {
     int prepare_count;
     int detach_count;
     int prepare_order;
+    tc_debug_geometry_type_id debug_type;
 } probe;
 
 static int g_prepare_order = 0;
@@ -40,6 +41,14 @@ static void on_prepare(
     if (!self || !context) return;
     self->prepare_count++;
     self->prepare_order = ++g_prepare_order;
+    tc_debug_geometry_drawer drawer = {
+        component->lifecycle_scene,
+        self->debug_type,
+    };
+    const float start[3] = {0.0f, 0.0f, 0.0f};
+    const float end[3] = {1.0f, 0.0f, 0.0f};
+    const float color[4] = {1.0f, 1.0f, 0.0f, 1.0f};
+    tc_debug_geometry_drawer_line(&drawer, start, end, color, false);
 }
 
 static void on_detach(
@@ -68,6 +77,11 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
     tc_scene_ext_registry_init();
     tc_scene_render_mount_extension_init();
 
+    tc_debug_geometry_type_id debug_type = tc_debug_geometry_type_register(
+        "test.render.lifecycle", "Render lifecycle test", "Tests", true);
+    GUARD_C_REQUIRE(debug_type != TC_DEBUG_GEOMETRY_TYPE_INVALID);
+    GUARD_C_CHECK_EQ_INT(1, (int)tc_debug_geometry_type_count());
+
     tc_scene_handle scene = tc_scene_new_named("render-lifecycle-test");
     GUARD_C_REQUIRE(tc_scene_alive(scene));
     GUARD_C_REQUIRE(tc_scene_render_mount_ensure(scene));
@@ -78,6 +92,7 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
 
     probe early;
     GUARD_C_REQUIRE(probe_init(&early));
+    early.debug_type = debug_type;
     tc_entity_pool_add_component(pool, entity, &early.component);
 
     int attachment_storage = 0;
@@ -91,9 +106,11 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
         (const tc_render_prepare_context*)&prepare_storage;
     tc_scene_render_mount_prepare(scene, prepare);
     GUARD_C_CHECK_EQ_INT(1, early.prepare_count);
+    GUARD_C_CHECK_EQ_INT(1, (int)tc_scene_debug_geometry_primitive_count(scene));
 
     probe late;
     GUARD_C_REQUIRE(probe_init(&late));
+    late.debug_type = debug_type;
     tc_entity_pool_add_component(pool, entity, &late.component);
     GUARD_C_CHECK_EQ_INT(1, late.attach_count);
 
@@ -109,9 +126,11 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
     GUARD_C_CHECK_EQ_INT(2, early.prepare_order);
 
     tc_component_set_enabled(&late.component, false);
+    GUARD_C_REQUIRE(tc_scene_debug_geometry_set_enabled(scene, debug_type, false));
     tc_scene_render_mount_prepare(scene, prepare);
     GUARD_C_CHECK_EQ_INT(4, early.prepare_count);
     GUARD_C_CHECK_EQ_INT(2, late.prepare_count);
+    GUARD_C_CHECK_EQ_INT(0, (int)tc_scene_debug_geometry_primitive_count(scene));
 
     tc_entity_pool_remove_component(pool, entity, &late.component);
     GUARD_C_CHECK_EQ_INT(1, late.detach_count);
@@ -124,6 +143,8 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
     tc_component_clear_capabilities(&early.component);
     tc_component_clear_capabilities(&late.component);
     tc_scene_free(scene);
+    GUARD_C_REQUIRE(tc_debug_geometry_type_unregister(debug_type));
+    GUARD_C_CHECK_EQ_INT(0, (int)tc_debug_geometry_type_count());
     tc_scene_ext_registry_shutdown();
     return 0;
 }

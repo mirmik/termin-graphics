@@ -4,6 +4,8 @@ from termin_nanobind.runtime import preload_sdk_libs
 preload_sdk_libs("termin_render")
 
 from termin.render._render_native import (
+    DebugGeometryDrawer,
+    DebugGeometryTypeRegistration,
     PhaseDrawCall,
     PROJECT_RENDER_PHASE_CAPACITY,
     RENDER_PHASE_DEPTH,
@@ -19,6 +21,7 @@ from termin.render._render_native import (
     RENDER_PHASE_UI,
     RENDER_CATEGORY_ALL,
     RENDER_CATEGORY_COLLIDERS,
+    RENDER_CATEGORY_DEBUG_GEOMETRY,
     RENDER_CATEGORY_NAVMESH,
     RenderItem,
     RenderTargetConfig,
@@ -30,6 +33,7 @@ from termin.render._render_native import (
     TcSceneLighting,
     ViewportConfig,
     drawable_capability_id,
+    debug_geometry_types,
     configure_project_render_phases,
     find_render_phase,
     get_render_sync_mode,
@@ -54,6 +58,8 @@ from termin.render.viewport_config import (
 
 __all__ = [
     "DEFAULT_GEOMETRY_ID",
+    "DebugGeometryDrawer",
+    "DebugGeometryTypeRegistration",
     "Drawable",
     "PhaseDrawCall",
     "PROJECT_RENDER_PHASE_CAPACITY",
@@ -70,6 +76,7 @@ __all__ = [
     "RENDER_PHASE_UI",
     "RENDER_CATEGORY_ALL",
     "RENDER_CATEGORY_COLLIDERS",
+    "RENDER_CATEGORY_DEBUG_GEOMETRY",
     "RENDER_CATEGORY_NAVMESH",
     "ImmediateRenderer",
     "RenderItem",
@@ -87,6 +94,7 @@ __all__ = [
     "serialize_viewport_config",
     "deserialize_viewport_config",
     "drawable_capability_id",
+    "debug_geometry_types",
     "configure_project_render_phases",
     "find_render_phase",
     "get_render_sync_mode",

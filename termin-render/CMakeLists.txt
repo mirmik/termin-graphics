@@ -48,6 +48,7 @@ set(TERMIN_RENDER_SOURCES
     src/termin_render_version.c
     src/tc_component_python_drawable.c
     src/tc_component_python_render_lifecycle.c
+    src/tc_debug_geometry.c
     src/tc_render_lifecycle.c
     src/tc_drawable_capability.c
     src/tc_light_capability.c
@@ -67,6 +68,7 @@ set(TERMIN_RENDER_SOURCES
     src/viewport_config.cpp
     src/render_target_config.cpp
     src/drawable.cpp
+    src/debug_geometry.cpp
     src/render_lifecycle.cpp
     src/fbo_pool.cpp
     src/frame_pass.cpp
@@ -114,6 +116,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_scene_skybox.h
     include/core/tc_drawable_capability.h
     include/core/tc_render_lifecycle.h
+    include/core/tc_debug_geometry.h
     include/core/tc_drawable_protocol.h
     include/core/tc_render_item.h
     include/core/tc_light_capability.h
@@ -136,6 +139,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_context.hpp
     include/termin/render/execute_context.hpp
     include/termin/render/drawable.hpp
+    include/termin/render/debug_geometry.hpp
     include/termin/render/render_lifecycle.hpp
     include/termin/render/tc_pass.hpp
     include/termin/render/unknown_pass.hpp
