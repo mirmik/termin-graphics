@@ -25,6 +25,8 @@ typedef struct tc_debug_geometry_type_desc {
 typedef enum tc_debug_geometry_primitive_kind {
     TC_DEBUG_GEOMETRY_LINE = 1,
     TC_DEBUG_GEOMETRY_WIRE_SPHERE = 2,
+    TC_DEBUG_GEOMETRY_WIRE_BOX = 3,
+    TC_DEBUG_GEOMETRY_WIRE_CAPSULE = 4,
 } tc_debug_geometry_primitive_kind;
 
 typedef struct tc_debug_geometry_primitive {
@@ -42,6 +44,17 @@ typedef struct tc_debug_geometry_primitive {
             float center[3];
             float radius;
         } sphere;
+        struct {
+            float center[3];
+            float half_axis_x[3];
+            float half_axis_y[3];
+            float half_axis_z[3];
+        } box;
+        struct {
+            float start[3];
+            float end[3];
+            float radius;
+        } capsule;
     } data;
 } tc_debug_geometry_primitive;
 
@@ -94,6 +107,24 @@ TC_API bool tc_debug_geometry_drawer_line(
 TC_API bool tc_debug_geometry_drawer_wire_sphere(
     const tc_debug_geometry_drawer* drawer,
     const float center[3],
+    float radius,
+    const float color[4],
+    uint16_t segments,
+    bool depth_test
+);
+TC_API bool tc_debug_geometry_drawer_wire_box(
+    const tc_debug_geometry_drawer* drawer,
+    const float center[3],
+    const float half_axis_x[3],
+    const float half_axis_y[3],
+    const float half_axis_z[3],
+    const float color[4],
+    bool depth_test
+);
+TC_API bool tc_debug_geometry_drawer_wire_capsule(
+    const tc_debug_geometry_drawer* drawer,
+    const float start[3],
+    const float end[3],
     float radius,
     const float color[4],
     uint16_t segments,

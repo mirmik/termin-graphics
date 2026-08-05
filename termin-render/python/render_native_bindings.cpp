@@ -142,7 +142,36 @@ NB_MODULE(_render_native, m) {
                 sequence_vec3(center, "center"), radius,
                 sequence_color4(color), segments, depth_test);
         }, nb::arg("center"), nb::arg("radius"), nb::arg("color"),
-           nb::arg("segments") = 16, nb::arg("depth_test") = false);
+           nb::arg("segments") = 16, nb::arg("depth_test") = false)
+        .def("wire_box", [](const termin::DebugGeometryDrawer& self,
+                             const nb::sequence& center,
+                             const nb::sequence& half_axis_x,
+                             const nb::sequence& half_axis_y,
+                             const nb::sequence& half_axis_z,
+                             const nb::sequence& color,
+                             bool depth_test) {
+            return self.wire_box(
+                sequence_vec3(center, "center"),
+                sequence_vec3(half_axis_x, "half_axis_x"),
+                sequence_vec3(half_axis_y, "half_axis_y"),
+                sequence_vec3(half_axis_z, "half_axis_z"),
+                sequence_color4(color), depth_test);
+        }, nb::arg("center"), nb::arg("half_axis_x"),
+           nb::arg("half_axis_y"), nb::arg("half_axis_z"), nb::arg("color"),
+           nb::arg("depth_test") = false)
+        .def("wire_capsule", [](const termin::DebugGeometryDrawer& self,
+                                 const nb::sequence& start,
+                                 const nb::sequence& end,
+                                 double radius,
+                                 const nb::sequence& color,
+                                 int segments,
+                                 bool depth_test) {
+            return self.wire_capsule(
+                sequence_vec3(start, "start"), sequence_vec3(end, "end"),
+                radius, sequence_color4(color), segments, depth_test);
+        }, nb::arg("start"), nb::arg("end"), nb::arg("radius"),
+           nb::arg("color"), nb::arg("segments") = 16,
+           nb::arg("depth_test") = false);
 
     nb::class_<termin::RenderPrepareContext>(m, "RenderPrepareContext")
         .def_prop_ro("scene_handle", &termin::RenderPrepareContext::scene)
@@ -182,7 +211,6 @@ NB_MODULE(_render_native, m) {
     m.attr("RENDER_PHASE_EDITOR_DEBUG") = nb::int_(TC_PHASE_EDITOR_DEBUG);
     m.attr("RENDER_PHASE_EDITOR_DEBUG_TRANSPARENT") =
         nb::int_(TC_PHASE_EDITOR_DEBUG_TRANSPARENT);
-    m.attr("RENDER_CATEGORY_COLLIDERS") = nb::int_(TC_RENDER_CATEGORY_COLLIDERS);
     m.attr("RENDER_CATEGORY_NAVMESH") = nb::int_(TC_RENDER_CATEGORY_NAVMESH);
     m.attr("RENDER_CATEGORY_DEBUG_GEOMETRY") =
         nb::int_(TC_RENDER_CATEGORY_DEBUG_GEOMETRY);

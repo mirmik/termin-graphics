@@ -288,6 +288,7 @@
     {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
     {"id": "termin-bootstrap-tests-native", "module": "termin-bootstrap", "executor": "ctest", "roots": ["termin-bootstrap/tests"]},
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
+    {"id": "termin-components-collision-tests-native", "module": "termin-components-collision", "executor": "ctest", "roots": ["termin-components/termin-components-collision/tests"]},
     {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
     {"id": "termin-components-kinematic-tests-native", "module": "termin-components-kinematic", "executor": "ctest", "roots": ["termin-components/termin-components-kinematic/tests"]},
     {"id": "termin-components-physics-fem-tests-native", "module": "termin-components-physics-fem", "executor": "ctest", "roots": ["termin-components/termin-components-physics-fem/tests"]},

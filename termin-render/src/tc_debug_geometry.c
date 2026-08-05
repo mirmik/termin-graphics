@@ -316,6 +316,60 @@ bool tc_debug_geometry_drawer_wire_sphere(
     return true;
 }
 
+bool tc_debug_geometry_drawer_wire_box(
+    const tc_debug_geometry_drawer* drawer,
+    const float center[3],
+    const float half_axis_x[3],
+    const float half_axis_y[3],
+    const float half_axis_z[3],
+    const float color[4],
+    bool depth_test
+) {
+    if (!finite_vector(center, 3) || !finite_vector(half_axis_x, 3) ||
+        !finite_vector(half_axis_y, 3) || !finite_vector(half_axis_z, 3) ||
+        !finite_vector(color, 4)) return false;
+    tc_debug_geometry_primitive* primitive = append_primitive(drawer);
+    if (!primitive) return false;
+    primitive->kind = TC_DEBUG_GEOMETRY_WIRE_BOX;
+    primitive->depth_test = depth_test;
+    memcpy(primitive->color, color, sizeof(primitive->color));
+    memcpy(primitive->data.box.center, center, sizeof(primitive->data.box.center));
+    memcpy(primitive->data.box.half_axis_x, half_axis_x,
+           sizeof(primitive->data.box.half_axis_x));
+    memcpy(primitive->data.box.half_axis_y, half_axis_y,
+           sizeof(primitive->data.box.half_axis_y));
+    memcpy(primitive->data.box.half_axis_z, half_axis_z,
+           sizeof(primitive->data.box.half_axis_z));
+    return true;
+}
+
+bool tc_debug_geometry_drawer_wire_capsule(
+    const tc_debug_geometry_drawer* drawer,
+    const float start[3],
+    const float end[3],
+    float radius,
+    const float color[4],
+    uint16_t segments,
+    bool depth_test
+) {
+    if (!finite_vector(start, 3) || !finite_vector(end, 3) ||
+        !finite_vector(color, 4) || !isfinite(radius) || radius <= 0.0f) {
+        return false;
+    }
+    tc_debug_geometry_primitive* primitive = append_primitive(drawer);
+    if (!primitive) return false;
+    primitive->kind = TC_DEBUG_GEOMETRY_WIRE_CAPSULE;
+    primitive->depth_test = depth_test;
+    primitive->segments = segments < 4 ? 4 : segments;
+    memcpy(primitive->color, color, sizeof(primitive->color));
+    memcpy(primitive->data.capsule.start, start,
+           sizeof(primitive->data.capsule.start));
+    memcpy(primitive->data.capsule.end, end,
+           sizeof(primitive->data.capsule.end));
+    primitive->data.capsule.radius = radius;
+    return true;
+}
+
 size_t tc_scene_debug_geometry_primitive_count(tc_scene_handle scene) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
     return mount ? mount->debug_geometry_primitive_count : 0;
