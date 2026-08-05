@@ -47,6 +47,8 @@ include(TerminRpath)
 set(TERMIN_RENDER_SOURCES
     src/termin_render_version.c
     src/tc_component_python_drawable.c
+    src/tc_component_python_render_lifecycle.c
+    src/tc_render_lifecycle.c
     src/tc_drawable_capability.c
     src/tc_light_capability.c
     src/tc_camera_capability.c
@@ -65,6 +67,7 @@ set(TERMIN_RENDER_SOURCES
     src/viewport_config.cpp
     src/render_target_config.cpp
     src/drawable.cpp
+    src/render_lifecycle.cpp
     src/fbo_pool.cpp
     src/frame_pass.cpp
     src/builtin_passes.cpp
@@ -110,6 +113,7 @@ set(TERMIN_RENDER_HEADERS
     include/core/tc_scene_render_state.h
     include/core/tc_scene_skybox.h
     include/core/tc_drawable_capability.h
+    include/core/tc_render_lifecycle.h
     include/core/tc_drawable_protocol.h
     include/core/tc_render_item.h
     include/core/tc_light_capability.h
@@ -132,6 +136,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_context.hpp
     include/termin/render/execute_context.hpp
     include/termin/render/drawable.hpp
+    include/termin/render/render_lifecycle.hpp
     include/termin/render/tc_pass.hpp
     include/termin/render/unknown_pass.hpp
     include/termin/render/unknown_pass_ops.hpp
@@ -170,6 +175,7 @@ set(TERMIN_RENDER_HEADERS
     include/tc_viewport_config.h
     include/tc_render_target_config.h
     include/tc_component_python_drawable.h
+    include/tc_component_python_render_lifecycle.h
 )
 
 if(TERMIN_RENDER_BUILD_SHARED)
@@ -234,6 +240,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     )
     target_link_libraries(termin_render_drawable_test PRIVATE termin_render)
     add_test(NAME termin_render_drawable_test COMMAND termin_render_drawable_test)
+
+    add_executable(termin_render_lifecycle_test tests/test_render_lifecycle.c)
+    target_include_directories(termin_render_lifecycle_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_lifecycle_test PRIVATE termin_render)
+    add_test(NAME termin_render_lifecycle_test COMMAND termin_render_lifecycle_test)
 
     add_executable(termin_render_target_dimensions_test tests/test_render_target_dimensions.c)
     target_include_directories(termin_render_target_dimensions_test PRIVATE

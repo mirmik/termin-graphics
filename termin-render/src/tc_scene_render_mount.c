@@ -2,6 +2,7 @@
 #include "core/tc_scene_render_mount.h"
 #include "core/tc_scene.h"
 #include "core/tc_scene_extension.h"
+#include "core/tc_render_lifecycle.h"
 #include "render/tc_pipeline_template_registry.h"
 #include <tcbase/tc_log.h>
 #include "tc_value.h"
@@ -73,15 +74,22 @@ static void render_mount_ensure_render_target_capacity(tc_scene_render_mount* mo
 }
 
 static void* render_mount_create(tc_scene_handle scene, void* type_userdata) {
-    (void)scene;
     (void)type_userdata;
-    return calloc(1, sizeof(tc_scene_render_mount));
+    tc_scene_render_mount* mount = (tc_scene_render_mount*)calloc(
+        1, sizeof(tc_scene_render_mount));
+    if (mount) mount->scene = scene;
+    return mount;
 }
 
 static void render_mount_destroy(void* ext, void* type_userdata) {
     (void)type_userdata;
     if (!ext) return;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    if (mount->attachment_context) {
+        tc_render_lifecycle_notify_scene_detach(
+            mount->scene, mount->attachment_context);
+        mount->attachment_context = NULL;
+    }
     for (size_t i = 0; i < mount->pipeline_template_count; ++i) {
         tc_pipeline_template* pipeline_template =
             tc_pipeline_template_get(mount->pipeline_templates[i]);
@@ -395,12 +403,38 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
     return true;
 }
 
+static void render_mount_component_registered(
+    void* ext,
+    tc_component* component,
+    void* type_userdata
+) {
+    (void)type_userdata;
+    tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    if (!mount || !mount->attachment_context) return;
+    tc_render_lifecycle_notify_component_registered(
+        component, mount->attachment_context);
+}
+
+static void render_mount_component_unregistering(
+    void* ext,
+    tc_component* component,
+    void* type_userdata
+) {
+    (void)type_userdata;
+    tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
+    if (!mount || !mount->attachment_context) return;
+    tc_render_lifecycle_notify_component_unregistering(
+        component, mount->attachment_context);
+}
+
 void tc_scene_render_mount_extension_init(void) {
     if (tc_scene_ext_is_registered(TC_SCENE_EXT_TYPE_RENDER_MOUNT)) return;
 
     tc_scene_ext_vtable vtable = {
         .create = render_mount_create,
         .destroy = render_mount_destroy,
+        .on_component_registered = render_mount_component_registered,
+        .on_component_unregistering = render_mount_component_unregistering,
         .serialize = render_mount_serialize,
         .deserialize = render_mount_deserialize,
     };
@@ -423,6 +457,50 @@ tc_scene_render_mount* tc_scene_render_mount_get(tc_scene_handle scene) {
 bool tc_scene_render_mount_ensure(tc_scene_handle scene) {
     if (tc_scene_ext_has(scene, TC_SCENE_EXT_TYPE_RENDER_MOUNT)) return true;
     return tc_scene_ext_attach(scene, TC_SCENE_EXT_TYPE_RENDER_MOUNT);
+}
+
+const tc_render_attachment_context* tc_scene_render_mount_attachment_context(
+    tc_scene_handle scene
+) {
+    tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
+    return mount ? mount->attachment_context : NULL;
+}
+
+void tc_scene_render_mount_notify_attach(
+    tc_scene_handle scene,
+    const tc_render_attachment_context* context
+) {
+    tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
+    if (!mount || !context) return;
+    if (mount->attachment_context) {
+        tc_log_error("[tc_scene_render_mount] duplicate render attach");
+        return;
+    }
+    mount->attachment_context = context;
+    tc_render_lifecycle_notify_scene_attach(scene, context);
+}
+
+void tc_scene_render_mount_prepare(
+    tc_scene_handle scene,
+    const tc_render_prepare_context* context
+) {
+    tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
+    if (!mount || !mount->attachment_context || !context) return;
+    tc_render_lifecycle_prepare_scene(scene, context);
+}
+
+void tc_scene_render_mount_notify_detach(
+    tc_scene_handle scene,
+    const tc_render_attachment_context* context
+) {
+    tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
+    if (!mount || !context) return;
+    if (mount->attachment_context != context) {
+        tc_log_error("[tc_scene_render_mount] render detach context mismatch");
+        return;
+    }
+    tc_render_lifecycle_notify_scene_detach(scene, context);
+    mount->attachment_context = NULL;
 }
 
 void tc_scene_add_viewport_config(tc_scene_handle h, const tc_viewport_config* config) {

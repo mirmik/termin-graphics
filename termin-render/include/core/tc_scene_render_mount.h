@@ -12,7 +12,11 @@
 extern "C" {
 #endif
 
+typedef struct tc_render_attachment_context tc_render_attachment_context;
+typedef struct tc_render_prepare_context tc_render_prepare_context;
+
 typedef struct tc_scene_render_mount {
+    tc_scene_handle scene;
     tc_pipeline_template_handle* pipeline_templates;
     size_t pipeline_template_count;
     size_t pipeline_template_capacity;
@@ -24,6 +28,9 @@ typedef struct tc_scene_render_mount {
     tc_render_target_config* render_target_configs;
     size_t render_target_config_count;
     size_t render_target_config_capacity;
+
+    // Transient runtime state. Never serialized.
+    const tc_render_attachment_context* attachment_context;
 } tc_scene_render_mount;
 
 // Register builtin render-mount extension type in scene-extension registry.
@@ -35,6 +42,21 @@ TC_API tc_scene_render_mount* tc_scene_render_mount_get(tc_scene_handle scene);
 
 // Ensure render-mount extension is attached to scene.
 TC_API bool tc_scene_render_mount_ensure(tc_scene_handle scene);
+TC_API const tc_render_attachment_context* tc_scene_render_mount_attachment_context(
+    tc_scene_handle scene
+);
+TC_API void tc_scene_render_mount_notify_attach(
+    tc_scene_handle scene,
+    const tc_render_attachment_context* context
+);
+TC_API void tc_scene_render_mount_prepare(
+    tc_scene_handle scene,
+    const tc_render_prepare_context* context
+);
+TC_API void tc_scene_render_mount_notify_detach(
+    tc_scene_handle scene,
+    const tc_render_attachment_context* context
+);
 
 // Render-mount scene API (moved from tc_scene.h)
 TC_API void tc_scene_add_viewport_config(tc_scene_handle h, const tc_viewport_config* config);

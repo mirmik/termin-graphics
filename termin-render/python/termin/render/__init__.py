@@ -41,6 +41,7 @@ from termin.render._render_native import (
 )
 from termin.render.drawable import DEFAULT_GEOMETRY_ID, Drawable, RenderItemCollectContext
 from termin.render.drawable_component import DrawableComponent
+from termin.render.render_lifecycle import RenderLifecycleComponent
 from termin.render.immediate import ImmediateRenderer
 from termin.render.render_target_config import (
     deserialize_render_target_config,
@@ -95,4 +96,5 @@ __all__ = [
     "scene_render_state",
     "set_render_sync_mode",
     "DrawableComponent",
+    "RenderLifecycleComponent",
 ]

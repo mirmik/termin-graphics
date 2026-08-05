@@ -1,18 +1,80 @@
 // render_native_bindings.cpp - Drawable capability Python bindings
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <tcbase/tc_log.hpp>
+#include <termin/render/render_lifecycle.hpp>
 
 extern "C" {
 #include "core/tc_drawable_capability.h"
 #include "core/tc_drawable_protocol.h"
 #include "render/tc_render_category_flags.h"
 #include "tc_component_python_drawable.h"
+#include "tc_component_python_render_lifecycle.h"
 #include "core/tc_component.h"
 #include "tc_project_settings.h"
 #include "tgfx/resources/tc_phase.h"
 }
 
 namespace nb = nanobind;
+
+namespace {
+
+PyObject* g_attachment_context_wrapper = nullptr;
+
+nb::object wrap_attachment_context(const tc_render_attachment_context* context) {
+    nb::object capsule = nb::steal<nb::object>(PyCapsule_New(
+        const_cast<tc_render_attachment_context*>(context),
+        "termin.RenderAttachmentContext",
+        nullptr));
+    if (!g_attachment_context_wrapper) return capsule;
+    return nb::borrow<nb::object>(g_attachment_context_wrapper)(capsule);
+}
+
+void python_render_attach(
+    void* py_self,
+    const tc_render_attachment_context* context
+) {
+    PyGILState_STATE gil = PyGILState_Ensure();
+    try {
+        nb::handle self((PyObject*)py_self);
+        self.attr("on_render_attach")(wrap_attachment_context(context));
+    } catch (const std::exception& error) {
+        tc::Log::error(error, "RenderLifecycleComponent::on_render_attach");
+        PyErr_Print();
+    }
+    PyGILState_Release(gil);
+}
+
+void python_render_prepare(void* py_self, const tc_render_prepare_context* context) {
+    PyGILState_STATE gil = PyGILState_Ensure();
+    try {
+        nb::handle self((PyObject*)py_self);
+        const auto* cpp_context =
+            reinterpret_cast<const termin::RenderPrepareContext*>(context);
+        self.attr("prepare_render")(*cpp_context);
+    } catch (const std::exception& error) {
+        tc::Log::error(error, "RenderLifecycleComponent::prepare_render");
+        PyErr_Print();
+    }
+    PyGILState_Release(gil);
+}
+
+void python_render_detach(
+    void* py_self,
+    const tc_render_attachment_context* context
+) {
+    PyGILState_STATE gil = PyGILState_Ensure();
+    try {
+        nb::handle self((PyObject*)py_self);
+        self.attr("on_render_detach")(wrap_attachment_context(context));
+    } catch (const std::exception& error) {
+        tc::Log::error(error, "RenderLifecycleComponent::on_render_detach");
+        PyErr_Print();
+    }
+    PyGILState_Release(gil);
+}
+
+} // namespace
 
 namespace termin {
 void bind_drawable(nb::module_& m);
@@ -21,6 +83,22 @@ void bind_scene_render_extensions(nb::module_& m);
 }
 
 NB_MODULE(_render_native, m) {
+    nb::class_<termin::RenderPrepareContext>(m, "RenderPrepareContext")
+        .def_prop_ro("scene_handle", &termin::RenderPrepareContext::scene);
+
+    m.def("_set_render_attachment_context_wrapper", [](nb::object wrapper) {
+        PyObject* replacement = wrapper.is_none() ? nullptr : wrapper.ptr();
+        Py_XINCREF(replacement);
+        Py_XDECREF(g_attachment_context_wrapper);
+        g_attachment_context_wrapper = replacement;
+    });
+
+    tc_python_render_lifecycle_callbacks lifecycle_callbacks = {
+        .on_render_attach = python_render_attach,
+        .prepare_render = python_render_prepare,
+        .on_render_detach = python_render_detach,
+    };
+    tc_component_set_python_render_lifecycle_callbacks(&lifecycle_callbacks);
     m.attr("PROJECT_RENDER_PHASE_CAPACITY") = nb::int_(TC_PHASE_PROJECT_CAPACITY);
     m.attr("RENDER_PHASE_NONE") = nb::int_(TC_PHASE_NONE);
     m.attr("RENDER_PHASE_OPAQUE") = nb::int_(TC_PHASE_OPAQUE);
@@ -72,6 +150,26 @@ NB_MODULE(_render_native, m) {
     m.def("drawable_capability_id", []() {
         return tc_drawable_capability_id();
     }, "Get the drawable capability ID");
+
+    m.def("render_lifecycle_capability_id", []() {
+        return tc_render_lifecycle_capability_id();
+    }, "Get the render lifecycle capability ID");
+
+    m.def("install_render_lifecycle", [](uintptr_t c_ptr) {
+        auto* component = reinterpret_cast<tc_component*>(c_ptr);
+        tc_component_install_python_render_lifecycle(component);
+    }, nb::arg("c_ptr"), "Install render lifecycle capability on a component");
+
+    m.def("render_lifecycle_priority", [](uintptr_t c_ptr) {
+        return tc_render_lifecycle_priority(reinterpret_cast<tc_component*>(c_ptr));
+    }, nb::arg("c_ptr"));
+
+    m.def("set_render_lifecycle_priority", [](uintptr_t c_ptr, int priority) {
+        if (!tc_render_lifecycle_set_priority(
+                reinterpret_cast<tc_component*>(c_ptr), priority)) {
+            throw nb::value_error("component has no render lifecycle capability");
+        }
+    }, nb::arg("c_ptr"), nb::arg("priority"));
 
     m.def("install_drawable_vtable", [](uintptr_t c_ptr) {
         auto* c = reinterpret_cast<tc_component*>(c_ptr);
