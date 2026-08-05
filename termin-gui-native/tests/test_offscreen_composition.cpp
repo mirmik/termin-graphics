@@ -1,7 +1,10 @@
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <vector>
+
+#include <tc_profiler.h>
 
 #include <termin/gui_native/dynamic_texture_lease.hpp>
 #include <termin/gui_native/command_model.hpp>
@@ -13,6 +16,18 @@
 #include <tgfx2/graphics_host.hpp>
 
 namespace {
+
+int find_section(
+    const tc_frame_profile& frame, const char* name, int parent_index) {
+    for (int index = 0; index < frame.section_count; ++index) {
+        const tc_section_timing& section = frame.sections[index];
+        if (section.parent_index == parent_index &&
+            std::strcmp(section.name, name) == 0) {
+            return index;
+        }
+    }
+    return -1;
+}
 
 tgfx::BackendType offscreen_backend() {
     if (tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
@@ -53,10 +68,67 @@ int main() {
             std::fprintf(stderr, "offscreen composition claimed application graphics\n");
             return 1;
         }
-        if (!composition.render_frame() || composition.frame_generation() != 1) {
+        tc_profiler_clear_history();
+        tc_profiler_set_enabled(true);
+        tc_profiler_begin_frame();
+        tc_profiler_begin_section("UI Compose");
+        const bool rendered = composition.render_frame();
+        tc_profiler_end_section();
+        tc_profiler_begin_section("After Render");
+        tc_profiler_end_section();
+        tc_profiler_end_frame();
+        tc_profiler_set_enabled(false);
+        if (!rendered || composition.frame_generation() != 1) {
             std::fprintf(stderr, "offscreen composition did not publish a frame\n");
             return 1;
         }
+        const tc_frame_profile* profile = tc_profiler_history_at(0);
+        const int compose = profile
+            ? find_section(*profile, "UI Compose", -1)
+            : -1;
+        const char* stages[] = {
+            "UI Presentation Sync",
+            "UI Begin Frame",
+            "UI Before Frame",
+            "UI Texture Sync",
+            "UI Document Paint",
+            "UI Submit",
+            "UI Present",
+        };
+        if (!profile || compose < 0 ||
+            find_section(*profile, "After Render", -1) < 0) {
+            std::fprintf(stderr, "document renderer profiler stack was unbalanced\n");
+            return 1;
+        }
+        for (const char* stage : stages) {
+            if (find_section(*profile, stage, compose) < 0) {
+                std::fprintf(
+                    stderr, "document renderer profiler stage is missing: %s\n",
+                    stage);
+                return 1;
+            }
+        }
+        tc_profiler_capture* cadence_capture = tc_profiler_capture_create(1);
+        if (!cadence_capture) {
+            std::fprintf(stderr, "failed to create cadence-only profiler capture\n");
+            return 1;
+        }
+        tc_profiler_capture_set_active(cadence_capture, true);
+        tc_profiler_begin_frame();
+        const bool cadence_rendered = composition.render_frame();
+        tc_profiler_end_frame();
+        const tc_frame_profile* cadence_frame =
+            tc_profiler_capture_at(cadence_capture, 0);
+        if (!cadence_rendered || !cadence_frame ||
+            cadence_frame->sections_profiled ||
+            cadence_frame->section_count != 0) {
+            std::fprintf(
+                stderr,
+                "document renderer emitted sections during cadence-only capture\n");
+            tc_profiler_capture_destroy(cadence_capture);
+            return 1;
+        }
+        tc_profiler_capture_destroy(cadence_capture);
         const std::vector<float> first = composition.read_frame_rgba_float();
         if (first.size() != 64u * 48u * 4u || first[3] < 0.9f ||
             std::fabs(first[0] - 0.03f) > 0.03f) {

@@ -8,10 +8,12 @@
 #include <cmath>
 #include <mutex>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include <tcbase/tc_log.h>
+#include <tc_profiler.h>
 
 #include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/native_document_painter.hpp>
@@ -24,6 +26,24 @@
 namespace termin::gui_native {
 
 namespace {
+
+class ProfilerSection final {
+  public:
+    explicit ProfilerSection(const char* name)
+        : active_(tc_profiler_enabled()) {
+        if (active_) tc_profiler_begin_section(name);
+    }
+
+    ~ProfilerSection() {
+        if (active_) tc_profiler_end_section();
+    }
+
+    ProfilerSection(const ProfilerSection&) = delete;
+    ProfilerSection& operator=(const ProfilerSection&) = delete;
+
+  private:
+    bool active_;
+};
 
 [[noreturn]] void renderer_error(const std::string& message) {
     tc_log_error("[gui-native-document-renderer] %s", message.c_str());
@@ -347,65 +367,88 @@ bool DocumentRenderer::sync_presentation_metrics() {
 
 bool DocumentRenderer::render_frame() {
     impl_->require_open("render_frame");
-    const auto [width, height] = framebuffer_size();
-    if (width <= 0 || height <= 0) return false;
-    if (!sync_presentation_metrics()) return false;
-    impl_->repaint_requested.store(false, std::memory_order_release);
-    impl_->ensure_target(width, height);
+    int width = 0;
+    int height = 0;
+    {
+        ProfilerSection profile("UI Presentation Sync");
+        std::tie(width, height) = framebuffer_size();
+        if (width <= 0 || height <= 0) return false;
+        if (!sync_presentation_metrics()) return false;
+        impl_->repaint_requested.store(false, std::memory_order_release);
+        impl_->ensure_target(width, height);
+    }
 
-    impl_->context->begin_frame();
-    if (impl_->before_frame) {
-        try {
-            impl_->before_frame(*impl_->context);
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] before-frame callback failed: %s",
-                error.what());
-            throw;
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] before-frame callback failed with "
-                "an unknown exception");
-            throw;
+    {
+        ProfilerSection profile("UI Begin Frame");
+        impl_->context->begin_frame();
+    }
+    {
+        ProfilerSection profile("UI Before Frame");
+        if (impl_->before_frame) {
+            try {
+                impl_->before_frame(*impl_->context);
+            } catch (const std::exception& error) {
+                tc_log_error(
+                    "[gui-native-document-renderer] before-frame callback failed: %s",
+                    error.what());
+                throw;
+            } catch (...) {
+                tc_log_error(
+                    "[gui-native-document-renderer] before-frame callback failed with "
+                    "an unknown exception");
+                throw;
+            }
         }
     }
-    for (auto iterator = impl_->color_pickers.begin();
-         iterator != impl_->color_pickers.end();) {
-        tc_widget* widget =
-            tc_ui_document_resolve_widget(impl_->document.handle(), *iterator);
-        auto* picker = widget
-            ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
-            : nullptr;
-        if (!picker) {
-            tc_log_error(
-                "[gui-native-document-renderer] registered ColorPicker was "
-                "destroyed without renderer unregistration");
-            iterator = impl_->color_pickers.erase(iterator);
-            continue;
+    {
+        ProfilerSection profile("UI Texture Sync");
+        for (auto iterator = impl_->color_pickers.begin();
+             iterator != impl_->color_pickers.end();) {
+            tc_widget* widget = tc_ui_document_resolve_widget(
+                impl_->document.handle(), *iterator);
+            auto* picker = widget
+                ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
+                : nullptr;
+            if (!picker) {
+                tc_log_error(
+                    "[gui-native-document-renderer] registered ColorPicker was "
+                    "destroyed without renderer unregistration");
+                iterator = impl_->color_pickers.erase(iterator);
+                continue;
+            }
+            impl_->painter.sync_color_picker_surfaces(*impl_->context, *picker);
+            ++iterator;
         }
-        impl_->painter.sync_color_picker_surfaces(*impl_->context, *picker);
-        ++iterator;
     }
-    impl_->context->begin_pass(
-        impl_->color_target, tgfx::TextureHandle{},
-        impl_->config.clear_color.data(), 1.0f, false);
-    tc_ui_presentation_metrics presentation_metrics{};
-    if (!impl_->document.presentation_metrics(presentation_metrics)) {
-        renderer_error(
-            "DocumentRenderer failed to read synchronized presentation metrics");
+    {
+        ProfilerSection profile("UI Document Paint");
+        impl_->context->begin_pass(
+            impl_->color_target, tgfx::TextureHandle{},
+            impl_->config.clear_color.data(), 1.0f, false);
+        tc_ui_presentation_metrics presentation_metrics{};
+        if (!impl_->document.presentation_metrics(presentation_metrics)) {
+            renderer_error(
+                "DocumentRenderer failed to read synchronized presentation metrics");
+        }
+        const UiDocumentSubmission submission{
+            impl_->document,
+            0,
+            0,
+            presentation_metrics,
+        };
+        impl_->painter.paint_documents(
+            *impl_->context, width, height,
+            std::span<const UiDocumentSubmission>(&submission, 1));
+        impl_->context->end_pass();
     }
-    const UiDocumentSubmission submission{
-        impl_->document,
-        0,
-        0,
-        presentation_metrics,
-    };
-    impl_->painter.paint_documents(
-        *impl_->context, width, height,
-        std::span<const UiDocumentSubmission>(&submission, 1));
-    impl_->context->end_pass();
-    impl_->context->end_frame();
-    impl_->frame_sink->publish_frame(impl_->color_target);
+    {
+        ProfilerSection profile("UI Submit");
+        impl_->context->end_frame();
+    }
+    {
+        ProfilerSection profile("UI Present");
+        impl_->frame_sink->publish_frame(impl_->color_target);
+    }
     ++impl_->rendered_frames;
     return true;
 }
