@@ -274,7 +274,10 @@
     },
     {
       "path": "termin-components/termin-components-physics",
-      "distribution": "termin-components-physics"
+      "distribution": "termin-components-physics",
+      "native_extensions": [
+        {"extension": "termin.physics_components._components_physics_native", "target": "_components_physics_native"}
+      ]
     },
     {
       "path": "termin-default-assets",
