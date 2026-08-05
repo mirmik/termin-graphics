@@ -67,6 +67,7 @@ endif()
 set(TGFX_C_SOURCES
     src/resources/tc_shader_abi.c
     src/resources/tc_shader_registry.c
+    src/resources/tc_shader_resource_layout.c
     src/resources/tc_shader_program_registry.c
     src/resources/tc_texture_registry.c
     src/resources/tc_material_registry.c
@@ -191,6 +192,7 @@ termin_set_rpath_lib(termin_graphics_binding_policy)
 if(TGFX2_ENABLE_OPENGL)
     list(APPEND TGFX2_SOURCES
         src/tgfx2/opengl/opengl_render_device.cpp
+        src/tgfx2/opengl/opengl_texture_readback.cpp
         src/tgfx2/opengl/opengl_command_list.cpp
         src/tgfx2/opengl/opengl_type_conversions.cpp
     )
@@ -273,6 +275,7 @@ if(TGFX2_ENABLE_D3D11)
     endif()
     list(APPEND TGFX2_SOURCES
         src/tgfx2/d3d11/d3d11_render_device.cpp
+        src/tgfx2/d3d11/d3d11_texture_readback.cpp
         src/tgfx2/d3d11/d3d11_tc_bridge.cpp
         src/tgfx2/d3d11/d3d11_shader_reflection.cpp
         src/tgfx2/d3d11/d3d11_command_list.cpp
