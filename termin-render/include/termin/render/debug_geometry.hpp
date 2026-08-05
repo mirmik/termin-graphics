@@ -2,9 +2,7 @@
 
 #include "termin/render/render_export.hpp"
 
-extern "C" {
 #include "core/tc_debug_geometry.h"
-}
 
 #include <termin/geom/vec3.hpp>
 #include <tgfx/types.hpp>
