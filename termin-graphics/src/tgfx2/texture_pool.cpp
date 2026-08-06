@@ -12,6 +12,7 @@ bool texture_desc_equal(const TextureDesc& a, const TextureDesc& b) {
     return a.width == b.width &&
            a.height == b.height &&
            a.mip_levels == b.mip_levels &&
+           a.array_layers == b.array_layers &&
            a.sample_count == b.sample_count &&
            a.format == b.format &&
            a.usage == b.usage;
@@ -21,6 +22,7 @@ bool render_target_desc_equal(const RenderTargetPoolDesc& a, const RenderTargetP
     return a.width == b.width &&
            a.height == b.height &&
            a.samples == b.samples &&
+           a.array_layers == b.array_layers &&
            a.color_format == b.color_format &&
            a.has_depth == b.has_depth &&
            (!a.has_depth || a.depth_format == b.depth_format);
@@ -127,6 +129,7 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
         color_desc.height = static_cast<uint32_t>(desc.height);
         color_desc.format = desc.color_format;
         color_desc.sample_count = static_cast<uint32_t>(desc.samples);
+        color_desc.array_layers = static_cast<uint32_t>(desc.array_layers);
         color_desc.usage = TextureUsage::Sampled |
                            TextureUsage::ColorAttachment |
                            TextureUsage::CopySrc |
@@ -139,6 +142,7 @@ bool RenderTargetPool::ensure(IRenderDevice& device,
             depth_desc.height = static_cast<uint32_t>(desc.height);
             depth_desc.format = desc.depth_format;
             depth_desc.sample_count = static_cast<uint32_t>(desc.samples);
+            depth_desc.array_layers = static_cast<uint32_t>(desc.array_layers);
             depth_desc.usage = TextureUsage::Sampled |
                                TextureUsage::DepthStencilAttachment |
                                TextureUsage::CopySrc |

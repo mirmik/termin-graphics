@@ -658,6 +658,11 @@ BufferHandle OpenGLRenderDevice::create_buffer(const BufferDesc& desc) {
 // --- Texture ---
 
 TextureHandle OpenGLRenderDevice::create_texture(const TextureDesc& desc) {
+    if (desc.array_layers != 1) {
+        tc_log(TC_LOG_ERROR,
+               "OpenGLRenderDevice::create_texture: layered textures are not supported");
+        return {};
+    }
     if (has_flag(desc.usage, TextureUsage::Storage)) {
         tc::Log::error(
             "OpenGLRenderDevice::create_texture: TextureUsage::Storage is not "

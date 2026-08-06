@@ -16,6 +16,7 @@ struct ResourceSpec {
     std::optional<float> clear_depth;
     std::optional<std::string> format;
     int samples = 1;
+    int array_layers = 1;
     std::string viewport_name;
     float scale = 1.0f;
     TextureFilter filter = TextureFilter::LINEAR;

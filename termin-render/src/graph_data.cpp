@@ -75,6 +75,15 @@ static std::string graph_data_resource_type_for_node(const NodeData& node) {
     if (node.pass_class == "Shadow Maps") {
         return "shadow_map_array";
     }
+    if (node.pass_class == "Multiview Color Texture") {
+        return "multiview_color_texture";
+    }
+    if (node.pass_class == "Multiview Depth Texture") {
+        return "multiview_depth_texture";
+    }
+    if (node.pass_class == "Multiview FBO") {
+        return "multiview_fbo";
+    }
     return "fbo";
 }
 
@@ -91,6 +100,12 @@ static void configure_resource_node_sockets(NodeData& node) {
         node.outputs.push_back({"color", "color_texture", false});
     } else if (resource_type == "depth_texture") {
         node.outputs.push_back({"depth", "depth_texture", false});
+    } else if (resource_type == "multiview_color_texture") {
+        node.outputs.push_back({"color", "multiview_color_texture", false});
+    } else if (resource_type == "multiview_depth_texture") {
+        node.outputs.push_back({"depth", "multiview_depth_texture", false});
+    } else if (resource_type == "multiview_fbo") {
+        node.outputs.push_back({"fbo", "multiview_fbo", false});
     } else {
         node.outputs.push_back({"fbo", "fbo", false});
     }
@@ -172,6 +187,17 @@ const NodeData* GraphData::get_node(const std::string& id) const {
 
 GraphData GraphData::from_trent(const nos::trent& t) {
     GraphData graph;
+
+    if (t.contains("execution_model") && t["execution_model"].is_string()) {
+        graph.execution_model = t["execution_model"].as_string();
+    }
+    if (graph.execution_model != "single_view" &&
+        graph.execution_model != "xr_multiview") {
+        tc::Log::error(
+            "GraphData: invalid execution_model '%s'",
+            graph.execution_model.c_str());
+        graph.execution_model.clear();
+    }
 
     if (t.contains("nodes") && t["nodes"].is_list()) {
         const auto& nodes_list = t["nodes"].as_list();

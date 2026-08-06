@@ -70,15 +70,33 @@ EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
         far_clip);
 }
 
-void bind_engine_per_frame_uniforms(
+StereoPerFrameStd140 make_stereo_per_frame_uniforms(
+    const StereoRenderViews& views,
+    float width,
+    float height)
+{
+    StereoPerFrameStd140 result{};
+    const RenderCamera* cameras[2] = {&views.left, &views.right};
+    for (size_t i = 0; i < 2; ++i) {
+        const RenderCamera& camera = *cameras[i];
+        result.views[i] = make_engine_per_frame_uniforms(
+            camera.view.to_float(), camera.projection.to_float(), camera.position,
+            width, height, static_cast<float>(camera.near_clip),
+            static_cast<float>(camera.far_clip));
+    }
+    return result;
+}
+
+void bind_engine_frame_uniform_data(
     tgfx::RenderContext2& ctx2,
-    const EnginePerFrameStd140& uniforms,
+    const void* data,
+    uint32_t size,
     const tc_shader* shader)
 {
     const tc_shader_resource_binding* rb =
         find_shader_abi_resource_binding(shader, ShaderAbiResourceId::PerFrame);
     if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-        ctx2.bind_uniform_data(rb, &uniforms, sizeof(uniforms));
+        ctx2.bind_uniform_data(rb, data, size);
         return;
     }
     if (shader && tc_shader_has_resource_layout(shader)) {
@@ -87,6 +105,15 @@ void bind_engine_per_frame_uniforms(
     tc::Log::error(
         "[FrameUniforms] shader '%s' has no per_frame constant-buffer resource layout entry",
         shader && shader->name ? shader->name : "<unnamed>");
+}
+
+void bind_engine_per_frame_uniforms(
+    tgfx::RenderContext2& ctx2,
+    const EnginePerFrameStd140& uniforms,
+    const tc_shader* shader)
+{
+    bind_engine_frame_uniform_data(
+        ctx2, &uniforms, static_cast<uint32_t>(sizeof(uniforms)), shader);
 }
 
 } // namespace termin

@@ -143,6 +143,10 @@ void append_vertex_output_adapter_to_hash(
     hash = fnv1a_append(adapter->output_type_name.c_str(), hash);
     hash = fnv1a_append(":output_function:", hash);
     hash = fnv1a_append(adapter->output_function.c_str(), hash);
+    hash = fnv1a_append(":entry_extra:", hash);
+    hash = fnv1a_append(adapter->entry_extra_parameters.c_str(), hash);
+    hash = fnv1a_append(":output_extra:", hash);
+    hash = fnv1a_append(adapter->output_extra_arguments.c_str(), hash);
     hash = fnv1a_append(":consumes:", hash);
     append_semantics_to_hash(adapter->consumed_world_semantics.semantics, hash);
     hash = fnv1a_append(":produces:", hash);
@@ -742,7 +746,8 @@ bool prepare_material_pipeline_resources(
     bool bound_any = false;
 
     if (resources.per_frame) {
-        bind_engine_per_frame_uniforms(ctx, *resources.per_frame, shader);
+        bind_engine_frame_uniform_data(
+            ctx, resources.per_frame, resources.per_frame_size, shader);
         bound_any = true;
     }
 
@@ -820,6 +825,7 @@ bool prepare_material_pipeline_resources(
 
     MaterialPipelineResourceView view{};
     view.per_frame = resources.per_frame;
+    view.per_frame_size = resources.per_frame_size;
     view.shadow_block = resources.shadow_block;
     view.shadow_block_size = resources.shadow_block_size;
     view.lighting_ubo = resources.lighting_ubo;

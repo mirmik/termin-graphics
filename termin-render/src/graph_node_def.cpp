@@ -55,6 +55,29 @@ const std::vector<GraphNodeDef>& builtin_defs() {
             {{"color", "color_texture"}, {"depth", "depth_texture"}},
             {{"fbo", "fbo"}},
         },
+        GraphNodeDef{
+            "external_xr_multiview_fbo",
+            "External XR Multiview FBO",
+            false,
+            {},
+            {{"fbo", "external_xr_multiview_fbo"}},
+        },
+        GraphNodeDef{
+            "multiview_fbo_split",
+            "Multiview FBO Split",
+            false,
+            {{"fbo", "multiview_fbo"}},
+            {{"color", "multiview_color_texture"},
+             {"depth", "multiview_depth_texture"}},
+        },
+        GraphNodeDef{
+            "multiview_fbo_join",
+            "Multiview FBO Join",
+            false,
+            {{"color", "multiview_color_texture"},
+             {"depth", "multiview_depth_texture"}},
+            {{"fbo", "multiview_fbo"}},
+        },
     };
     return defs;
 }
@@ -75,4 +98,3 @@ const std::vector<GraphNodeDef>& graph_node_defs() {
 }
 
 } // namespace termin
-

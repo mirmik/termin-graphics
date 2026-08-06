@@ -52,6 +52,8 @@ struct VkTextureResource {
     TextureDesc desc;
     VkImageLayout current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     bool external = false;
+    ExternalTextureState required_before_release =
+        ExternalTextureState::ColorAttachment;
 };
 
 struct VkSamplerResource {
@@ -109,6 +111,7 @@ struct VkFramebufferCacheKey {
     VkRenderPass render_pass = VK_NULL_HANDLE;
     uint32_t width = 0;
     uint32_t height = 0;
+    uint32_t layers = 1;
     std::vector<VkImageView> attachments;
 
     bool operator<(const VkFramebufferCacheKey& other) const {
@@ -116,6 +119,7 @@ struct VkFramebufferCacheKey {
         if (std::less<VkRenderPass>{}(other.render_pass, render_pass)) return false;
         if (width != other.width) return width < other.width;
         if (height != other.height) return height < other.height;
+        if (layers != other.layers) return layers < other.layers;
         return attachments < other.attachments;
     }
 };
@@ -303,6 +307,8 @@ private:
     uint32_t graphics_family_ = 0;
     uint32_t present_family_ = 0;
     uint32_t api_version_ = VK_API_VERSION_1_0;
+    bool multiview_enabled_ = false;
+    uint32_t max_multiview_views_ = 0;
     std::vector<const char*> device_extensions_;
 
     VmaAllocator allocator_ = VK_NULL_HANDLE;
@@ -466,6 +472,10 @@ public:
     TextureHandle create_texture(const TextureDesc& desc) override;
     TextureHandle register_external_texture(
         uintptr_t native_handle, const TextureDesc& desc) override;
+    bool begin_external_texture_access(
+        TextureHandle handle,
+        const ExternalTextureAccessDesc& access) override;
+    bool end_external_texture_access(TextureHandle handle) override;
     TextureDesc texture_desc(TextureHandle handle) const override;
     uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
     uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
@@ -554,13 +564,14 @@ public:
         bool has_depth,
         uint32_t sample_count,
         LoadOp depth_load,
-        StoreOp depth_store);
+        StoreOp depth_store,
+        uint32_t view_mask = 0);
 
     // Get or create a VkFramebuffer
     VkFramebuffer get_or_create_framebuffer(
         VkRenderPass render_pass,
         const std::vector<VkImageView>& attachments,
-        uint32_t width, uint32_t height);
+        uint32_t width, uint32_t height, uint32_t layers = 1);
 
     // Execute a one-shot command buffer (for uploads, layout transitions)
     void execute_immediate(std::function<void(VkCommandBuffer)> fn);
@@ -568,7 +579,8 @@ public:
     // Transition image layout
     void transition_image_layout(VkCommandBuffer cmd, VkImage image,
                                   VkImageLayout old_layout, VkImageLayout new_layout,
-                                  VkImageAspectFlags aspect);
+                                  VkImageAspectFlags aspect,
+                                  uint32_t array_layers = 1);
 
     // Lazy-create a default linear/clamp sampler used when a caller
     // binds a SampledTexture without an explicit sampler. One per

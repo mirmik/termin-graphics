@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <stdexcept>
 #include "tgfx2/handles.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
@@ -41,6 +42,10 @@ public:
 
     // Render pass
     virtual void begin_render_pass(const RenderPassDesc& pass) = 0;
+    virtual void begin_multiview_render_pass(const MultiviewRenderPassDesc&) {
+        throw std::runtime_error(
+            "ICommandList::begin_multiview_render_pass: backend does not support multiview");
+    }
     virtual void end_render_pass() = 0;
 
     // Pipeline & resources

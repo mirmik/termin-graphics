@@ -382,6 +382,28 @@ VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter()
     return adapter;
 }
 
+VertexOutputAdapter material_pipeline_multiview_material_vertex_output_adapter()
+{
+    VertexOutputAdapter adapter;
+    adapter.debug_name = "multiview_material_output";
+    adapter.source_module = {
+        "termin_multiview_material_vertex_output_adapter",
+        "builtin_shaders/termin_multiview_material_vertex_output_adapter.slang"};
+    adapter.output_type_name = "VertexOutput";
+    adapter.output_function = "termin_multiview_material_vertex_output";
+    adapter.entry_extra_parameters = ", uint view_id : SV_ViewID";
+    adapter.output_extra_arguments = ", view_id";
+    adapter.consumed_world_semantics =
+        material_pipeline_standard_material_fragment_interface();
+    adapter.produced_output_semantics =
+        material_pipeline_standard_material_fragment_interface();
+    adapter.resources.push_back(material_pipeline_abi_resource_decl(
+        ShaderAbiResourceId::PerFrame,
+        TC_SHADER_STAGE_VERTEX,
+        MaterialPipelineResourceOwner::Pass));
+    return adapter;
+}
+
 VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
     std::string debug_name)
 {

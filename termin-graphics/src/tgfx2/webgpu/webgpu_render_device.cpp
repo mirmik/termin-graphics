@@ -477,6 +477,11 @@ BufferHandle WebGpuRenderDevice::create_buffer(const BufferDesc& desc) {
 }
 
 TextureHandle WebGpuRenderDevice::create_texture(const TextureDesc& desc) {
+    if (desc.array_layers != 1) {
+        tc_log(TC_LOG_ERROR,
+               "WebGpuRenderDevice::create_texture: layered textures are not supported");
+        return {};
+    }
     if (desc.width == 0 || desc.height == 0 || desc.mip_levels == 0) {
         fail("create_texture requires a non-zero extent and mip count");
     }

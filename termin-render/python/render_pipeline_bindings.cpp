@@ -131,6 +131,7 @@ tc_pass* make_unknown_pass_from_serialized(const std::string& original_type, nb:
                 if (item.contains("clear_depth")) spec.clear_depth = nb::cast<float>(item["clear_depth"]);
                 if (item.contains("format")) spec.format = nb::cast<std::string>(item["format"]);
                 if (item.contains("samples")) spec.samples = nb::cast<int>(item["samples"]);
+                if (item.contains("array_layers")) spec.array_layers = nb::cast<int>(item["array_layers"]);
                 if (item.contains("viewport_name")) spec.viewport_name = nb::cast<std::string>(item["viewport_name"]);
                 if (item.contains("scale")) spec.scale = nb::cast<float>(item["scale"]);
                 if (item.contains("filter")) spec.filter = static_cast<TextureFilter>(nb::cast<int>(item["filter"]));
@@ -188,6 +189,19 @@ void bind_render_pipeline(nb::module_& m) {
             return std::string(value.name());
         })
         .def_prop_ro("version", &TcPipelineTemplate::version)
+        .def_prop_ro("execution_model", [](const TcPipelineTemplate& value) {
+            const tc_pipeline_template* pipeline_template = value.get();
+            if (!pipeline_template) {
+                throw std::runtime_error("cannot inspect an invalid pipeline template");
+            }
+            switch (pipeline_template->execution_model) {
+                case TC_PIPELINE_EXECUTION_SINGLE_VIEW:
+                    return std::string("single_view");
+                case TC_PIPELINE_EXECUTION_XR_MULTIVIEW:
+                    return std::string("xr_multiview");
+            }
+            throw std::runtime_error("pipeline template has an invalid execution model");
+        })
         .def("serialize", [](const TcPipelineTemplate& value) {
             const tc_pipeline_template* pipeline_template = value.get();
             if (!pipeline_template) {
@@ -238,6 +252,7 @@ void bind_render_pipeline(nb::module_& m) {
                 item["height"] = resource.height;
                 item["scale"] = resource.scale;
                 item["samples"] = resource.samples;
+                item["array_layers"] = resource.array_layers;
                 result.append(std::move(item));
             }
             return result;
@@ -533,6 +548,7 @@ void bind_render_pipeline(nb::module_& m) {
                 if (spec.clear_depth) spec_dict["clear_depth"] = *spec.clear_depth;
                 if (spec.format) spec_dict["format"] = *spec.format;
                 if (spec.samples != 1) spec_dict["samples"] = spec.samples;
+                if (spec.array_layers != 1) spec_dict["array_layers"] = spec.array_layers;
                 specs_list.append(spec_dict);
             }
             result["pipeline_specs"] = specs_list;
@@ -647,6 +663,7 @@ void bind_render_pipeline(nb::module_& m) {
                     if (spec_data.contains("clear_depth")) spec.clear_depth = nb::cast<float>(spec_data["clear_depth"]);
                     if (spec_data.contains("format")) spec.format = nb::cast<std::string>(spec_data["format"]);
                     if (spec_data.contains("samples")) spec.samples = nb::cast<int>(spec_data["samples"]);
+                    if (spec_data.contains("array_layers")) spec.array_layers = nb::cast<int>(spec_data["array_layers"]);
                     pipeline->add_spec(spec);
                 }
             }
@@ -724,7 +741,8 @@ void bind_render_pipeline(nb::module_& m) {
         RenderPipeline& pipeline,
         const TcPipelineTemplate& pipeline_template,
         const std::vector<std::string>& pass_parameters,
-        nb::list target_values
+        nb::list target_values,
+        const std::string& execution_model_name
     ) {
         std::vector<tc::PipelineTemplateTarget> targets;
         targets.reserve(nb::len(target_values));
@@ -741,13 +759,23 @@ void bind_render_pipeline(nb::module_& m) {
             if (item.contains("height")) target.height = nb::cast<int32_t>(item["height"]);
             targets.push_back(std::move(target));
         }
+        tc_pipeline_execution_model execution_model;
+        if (execution_model_name == "single_view") {
+            execution_model = TC_PIPELINE_EXECUTION_SINGLE_VIEW;
+        } else if (execution_model_name == "xr_multiview") {
+            execution_model = TC_PIPELINE_EXECUTION_XR_MULTIVIEW;
+        } else {
+            throw std::invalid_argument(
+                "unsupported pipeline execution model '" + execution_model_name + "'");
+        }
         if (!tc::publish_pipeline_template(
-                pipeline, pipeline_template, pass_parameters, targets)) {
+                pipeline, pipeline_template, pass_parameters, targets, execution_model)) {
             throw std::runtime_error("failed to publish canonical pipeline template");
         }
     }, nb::arg("pipeline"), nb::arg("pipeline_template"),
        nb::arg("pass_parameters") = std::vector<std::string>{},
-       nb::arg("targets") = nb::list());
+       nb::arg("targets") = nb::list(),
+       nb::arg("execution_model") = "single_view");
 
 }
 

@@ -64,3 +64,4 @@ class Graph:
     nodes: dict[str, Node] = field(default_factory=dict)
     edges: dict[str, Edge] = field(default_factory=dict)
     groups: dict[str, Group] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)

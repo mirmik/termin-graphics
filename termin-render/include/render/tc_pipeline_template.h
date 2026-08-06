@@ -14,8 +14,13 @@ extern "C" {
 
 TC_DEFINE_HANDLE(tc_pipeline_template_handle)
 
-#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 2u
-#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 2u
+#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 3u
+#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 3u
+
+typedef enum tc_pipeline_execution_model {
+    TC_PIPELINE_EXECUTION_SINGLE_VIEW = 1,
+    TC_PIPELINE_EXECUTION_XR_MULTIVIEW = 2
+} tc_pipeline_execution_model;
 
 typedef enum tc_pipeline_resource_access {
     TC_PIPELINE_RESOURCE_READ = 1,
@@ -39,6 +44,7 @@ typedef struct tc_pipeline_template_resource_desc {
     int32_t height;
     float scale;
     uint32_t samples;
+    uint32_t array_layers;
     uint32_t flags;
 } tc_pipeline_template_resource_desc;
 
@@ -74,6 +80,7 @@ typedef struct tc_pipeline_template_fbo_composition_desc {
 
 typedef struct tc_pipeline_template_payload_desc {
     uint32_t descriptor_version;
+    tc_pipeline_execution_model execution_model;
     const char* name;
     const tc_pipeline_template_pass_desc* passes;
     uint32_t pass_count;
@@ -93,6 +100,7 @@ typedef struct tc_pipeline_template {
     tc_resource_header header;
     tc_pipeline_template_handle self_handle;
     uint32_t descriptor_version;
+    tc_pipeline_execution_model execution_model;
     tc_pipeline_template_pass_desc* passes;
     uint32_t pass_count;
     tc_pipeline_template_resource_desc* resources;

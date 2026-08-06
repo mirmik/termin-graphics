@@ -102,6 +102,7 @@ RenderPipeline::RenderPipeline(const TcPipelineTemplate& pipeline_template)
             if (desc.width > 0 && desc.height > 0) spec.size = {desc.width, desc.height};
             spec.scale = desc.scale;
             spec.samples = static_cast<int>(desc.samples);
+            spec.array_layers = static_cast<int>(desc.array_layers);
             add_spec(spec);
         }
 

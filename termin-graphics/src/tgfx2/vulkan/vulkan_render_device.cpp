@@ -1,6 +1,8 @@
 #ifdef TGFX2_HAS_VULKAN
 
 #include <vulkan/vulkan.h>
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
@@ -228,6 +230,9 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     caps_.supports_multisample_resolve = true;
     caps_.supports_dynamic_uniform_offsets = true;
     caps_.supports_storage_textures = true;
+    caps_.supports_texture_arrays = props.limits.maxImageArrayLayers > 1;
+    caps_.supports_multiview = multiview_enabled_;
+    caps_.max_multiview_views = max_multiview_views_;
 
     // Subscribe to registry destroy-hooks so per-device tc_texture /
     // tc_mesh / tc_shader caches get invalidated before a slot is recycled. The
@@ -532,11 +537,16 @@ void VulkanRenderDevice::create_logical_device() {
     VkPhysicalDeviceShaderDrawParametersFeatures enabled_draw_parameters{};
     enabled_draw_parameters.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+    VkPhysicalDeviceMultiviewFeatures supported_multiview{};
+    supported_multiview.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES;
+    VkPhysicalDeviceMultiviewFeatures enabled_multiview{};
+    enabled_multiview.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES;
 
     if (effective_api_version >= VK_API_VERSION_1_1) {
         VkPhysicalDeviceFeatures2 supported_features2{};
         supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        supported_features2.pNext = &supported_draw_parameters;
+        supported_features2.pNext = &supported_multiview;
+        supported_multiview.pNext = &supported_draw_parameters;
         auto get_physical_device_features2 =
             reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
                 vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
@@ -544,6 +554,21 @@ void VulkanRenderDevice::create_logical_device() {
             get_physical_device_features2(physical_device_, &supported_features2);
             enabled_draw_parameters.shaderDrawParameters =
                 supported_draw_parameters.shaderDrawParameters;
+            enabled_multiview.multiview = supported_multiview.multiview;
+
+            VkPhysicalDeviceMultiviewProperties multiview_properties{};
+            multiview_properties.sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES;
+            VkPhysicalDeviceProperties2 properties2{};
+            properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            properties2.pNext = &multiview_properties;
+            auto get_physical_device_properties2 =
+                reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+                    vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceProperties2"));
+            if (get_physical_device_properties2) {
+                get_physical_device_properties2(physical_device_, &properties2);
+                max_multiview_views_ = multiview_properties.maxMultiviewViewCount;
+            }
         } else {
             tc_log_error(
                 "VulkanRenderDevice: vkGetPhysicalDeviceFeatures2 unavailable "
@@ -581,9 +606,16 @@ void VulkanRenderDevice::create_logical_device() {
     ci.queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size());
     ci.pQueueCreateInfos = queue_cis.data();
     ci.pEnabledFeatures = &features;
-    ci.pNext = enabled_draw_parameters.shaderDrawParameters
-        ? &enabled_draw_parameters
-        : nullptr;
+    void* feature_chain = nullptr;
+    if (enabled_draw_parameters.shaderDrawParameters) {
+        enabled_draw_parameters.pNext = feature_chain;
+        feature_chain = &enabled_draw_parameters;
+    }
+    if (enabled_multiview.multiview) {
+        enabled_multiview.pNext = feature_chain;
+        feature_chain = &enabled_multiview;
+    }
+    ci.pNext = feature_chain;
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     ci.ppEnabledExtensionNames = extensions.data();
 
@@ -593,6 +625,8 @@ void VulkanRenderDevice::create_logical_device() {
             "Failed to create Vulkan logical device: vkCreateDevice result=" +
             std::to_string(static_cast<int>(result)));
     }
+    multiview_enabled_ = enabled_multiview.multiview == VK_TRUE &&
+                         max_multiview_views_ >= 2;
 
     vkGetDeviceQueue(device_, graphics_family_, 0, &graphics_queue_);
     if (surface_) {
@@ -606,11 +640,24 @@ void VulkanRenderDevice::create_allocator() {
     vkGetPhysicalDeviceMemoryProperties(
         physical_device_, &memory_properties_);
 
+    VmaVulkanFunctions functions{};
+    functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
     VmaAllocatorCreateInfo ci{};
     ci.physicalDevice = physical_device_;
     ci.device = device_;
     ci.instance = instance_;
+#ifdef __ANDROID__
+    // Android loaders can expose Vulkan 1.1 entry-point symbols whose promoted
+    // dispatch target is unavailable for an OpenXR-created device. VMA only
+    // needs the Vulkan 1.0 memory path here; multiview still uses the device's
+    // actual 1.1 API and feature set outside the allocator.
+    ci.vulkanApiVersion = VK_API_VERSION_1_0;
+#else
     ci.vulkanApiVersion = api_version_;
+#endif
+    ci.pVulkanFunctions = &functions;
 
     if (vmaCreateAllocator(&ci, &allocator_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VMA allocator");
@@ -1074,6 +1121,10 @@ BufferHandle VulkanRenderDevice::create_buffer(const BufferDesc& desc) {
 // --- Texture ---
 
 TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
+    if (desc.array_layers == 0) {
+        throw std::runtime_error(
+            "VulkanRenderDevice::create_texture: invalid array layer count");
+    }
     VkTextureResource res;
     res.desc = desc;
 
@@ -1083,7 +1134,7 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
     ci.format = vk::to_vk_format(desc.format);
     ci.extent = {desc.width, desc.height, 1};
     ci.mipLevels = desc.mip_levels;
-    ci.arrayLayers = 1;
+    ci.arrayLayers = desc.array_layers;
     ci.samples = static_cast<VkSampleCountFlagBits>(desc.sample_count);
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.usage = vk::to_vk_image_usage(desc.usage);
@@ -1101,13 +1152,15 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
     VkImageViewCreateInfo view_ci{};
     view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     view_ci.image = res.image;
-    view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_ci.viewType = desc.array_layers > 1
+        ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+        : VK_IMAGE_VIEW_TYPE_2D;
     view_ci.format = ci.format;
     view_ci.subresourceRange.aspectMask = vk::format_aspect_flags(desc.format);
     view_ci.subresourceRange.baseMipLevel = 0;
     view_ci.subresourceRange.levelCount = desc.mip_levels;
     view_ci.subresourceRange.baseArrayLayer = 0;
-    view_ci.subresourceRange.layerCount = 1;
+    view_ci.subresourceRange.layerCount = desc.array_layers;
 
     if (vkCreateImageView(device_, &view_ci, nullptr, &res.view) != VK_SUCCESS) {
         vmaDestroyImage(allocator_, res.image, res.allocation);
@@ -1133,7 +1186,7 @@ TextureHandle VulkanRenderDevice::create_texture(const TextureDesc& desc) {
             transition_image_layout(cb, image,
                 VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                aspect);
+                aspect, desc.array_layers);
         });
         res.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
@@ -1149,6 +1202,10 @@ TextureHandle VulkanRenderDevice::register_external_texture(
     if (image == VK_NULL_HANDLE) {
         throw std::runtime_error("VulkanRenderDevice::register_external_texture: null VkImage");
     }
+    if (desc.array_layers == 0) {
+        throw std::runtime_error(
+            "VulkanRenderDevice::register_external_texture: array_layers must be positive");
+    }
 
     VkTextureResource res;
     res.image = image;
@@ -1159,19 +1216,71 @@ TextureHandle VulkanRenderDevice::register_external_texture(
     VkImageViewCreateInfo view_ci{};
     view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     view_ci.image = res.image;
-    view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_ci.viewType = desc.array_layers > 1
+        ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+        : VK_IMAGE_VIEW_TYPE_2D;
     view_ci.format = vk::to_vk_format(desc.format);
     view_ci.subresourceRange.aspectMask = vk::format_aspect_flags(desc.format);
     view_ci.subresourceRange.baseMipLevel = 0;
     view_ci.subresourceRange.levelCount = desc.mip_levels;
     view_ci.subresourceRange.baseArrayLayer = 0;
-    view_ci.subresourceRange.layerCount = 1;
+    view_ci.subresourceRange.layerCount = desc.array_layers;
 
     if (vkCreateImageView(device_, &view_ci, nullptr, &res.view) != VK_SUCCESS) {
         throw std::runtime_error("VulkanRenderDevice::register_external_texture: vkCreateImageView failed");
     }
 
     return {textures_.add(std::move(res))};
+}
+
+namespace {
+
+VkImageLayout external_texture_layout(ExternalTextureState state) {
+    switch (state) {
+    case ExternalTextureState::Undefined:
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    case ExternalTextureState::ColorAttachment:
+        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    case ExternalTextureState::ShaderRead:
+        return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    return VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
+} // namespace
+
+bool VulkanRenderDevice::begin_external_texture_access(
+    TextureHandle handle,
+    const ExternalTextureAccessDesc& access)
+{
+    VkTextureResource* texture = textures_.get(handle.id);
+    if (!texture || !texture->external) {
+        tc::Log::error(
+            "VulkanRenderDevice::begin_external_texture_access: handle is not external");
+        return false;
+    }
+    texture->current_layout = external_texture_layout(access.state_after_wait);
+    texture->required_before_release = access.required_before_release;
+    return true;
+}
+
+bool VulkanRenderDevice::end_external_texture_access(TextureHandle handle) {
+    VkTextureResource* texture = textures_.get(handle.id);
+    if (!texture || !texture->external) {
+        tc::Log::error(
+            "VulkanRenderDevice::end_external_texture_access: handle is not external");
+        return false;
+    }
+    const VkImageLayout required =
+        external_texture_layout(texture->required_before_release);
+    if (texture->current_layout != required) {
+        tc::Log::error(
+            "VulkanRenderDevice::end_external_texture_access: layout %d, required %d",
+            static_cast<int>(texture->current_layout),
+            static_cast<int>(required));
+        return false;
+    }
+    return true;
 }
 
 // --- Sampler ---
@@ -1548,7 +1657,8 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         has_depth,
         sample_count,
         depth_load,
-        StoreOp::Store);
+        StoreOp::Store,
+        0);
 }
 
 VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
@@ -1559,7 +1669,8 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     bool has_depth,
     uint32_t sample_count,
     LoadOp depth_load,
-    StoreOp depth_store)
+    StoreOp depth_store,
+    uint32_t view_mask)
 {
     if (color_loads.size() != color_formats.size() ||
         color_stores.size() != color_formats.size()) {
@@ -1587,6 +1698,7 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         key.push_back(static_cast<VkFormat>(
             static_cast<int>(depth_store) + 0x40000));
     }
+    key.push_back(static_cast<VkFormat>(view_mask + 0x50000u));
 
     auto it = render_pass_cache_.find(key);
     if (it != render_pass_cache_.end()) return it->second;
@@ -1692,6 +1804,17 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     rp_ci.dependencyCount = 1;
     rp_ci.pDependencies = &dep;
 
+    VkRenderPassMultiviewCreateInfo multiview_ci{};
+    uint32_t correlation_mask = view_mask;
+    if (view_mask != 0) {
+        multiview_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+        multiview_ci.subpassCount = 1;
+        multiview_ci.pViewMasks = &view_mask;
+        multiview_ci.correlationMaskCount = 1;
+        multiview_ci.pCorrelationMasks = &correlation_mask;
+        rp_ci.pNext = &multiview_ci;
+    }
+
     VkRenderPass rp;
     if (vkCreateRenderPass(device_, &rp_ci, nullptr, &rp) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create render pass");
@@ -1706,12 +1829,13 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
 VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
     VkRenderPass render_pass,
     const std::vector<VkImageView>& attachments,
-    uint32_t width, uint32_t height)
+    uint32_t width, uint32_t height, uint32_t layers)
 {
     VkFramebufferCacheKey key;
     key.render_pass = render_pass;
     key.width = width;
     key.height = height;
+    key.layers = layers;
     key.attachments = attachments;
 
     auto it = framebuffer_cache_.find(key);
@@ -1724,7 +1848,7 @@ VkFramebuffer VulkanRenderDevice::get_or_create_framebuffer(
     ci.pAttachments = attachments.data();
     ci.width = width;
     ci.height = height;
-    ci.layers = 1;
+    ci.layers = layers;
 
     VkFramebuffer fb;
     if (vkCreateFramebuffer(device_, &ci, nullptr, &fb) != VK_SUCCESS) {
@@ -1754,6 +1878,11 @@ void VulkanRenderDevice::blit_to_texture(
     // Self-blit is meaningless and would emit contradictory
     // TRANSFER_SRC/DST barriers on the same image.
     if (src == dst) return;
+    if (src->desc.array_layers != dst->desc.array_layers) {
+        tc::Log::error(
+            "VulkanRenderDevice::blit_to_texture: source and destination layer counts differ");
+        return;
+    }
 
     // Require the usage flags that the transitions below need. Without
     // them Vulkan rejects the layout transition outright. Callers are
@@ -1794,10 +1923,10 @@ void VulkanRenderDevice::blit_to_texture(
     execute_immediate([&](VkCommandBuffer cb) {
         transition_image_layout(cb, src->image,
             prev_src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, src->desc.array_layers);
         transition_image_layout(cb, dst->image,
             prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, dst->desc.array_layers);
 
         if (msaa_resolve) {
             // Resolve copies exactly the same rect in src/dst — no
@@ -1809,9 +1938,9 @@ void VulkanRenderDevice::blit_to_texture(
                         src_w, src_h, dst_w, dst_h);
             } else {
                 VkImageResolve resolve{};
-                resolve.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                resolve.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, src->desc.array_layers};
                 resolve.srcOffset = {src_rect.x0, src_rect.y0, 0};
-                resolve.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                resolve.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, dst->desc.array_layers};
                 resolve.dstOffset = {dst_rect.x0, dst_rect.y0, 0};
                 resolve.extent = {static_cast<uint32_t>(src_w),
                                   static_cast<uint32_t>(src_h), 1};
@@ -1835,9 +1964,9 @@ void VulkanRenderDevice::blit_to_texture(
                         (int)src->desc.format, (int)dst->desc.format);
             } else {
                 VkImageCopy region{};
-                region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, src->desc.array_layers};
                 region.srcOffset = {src_rect.x0, src_rect.y0, 0};
-                region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, dst->desc.array_layers};
                 region.dstOffset = {dst_rect.x0, dst_rect.y0, 0};
                 region.extent = {static_cast<uint32_t>(src_w),
                                  static_cast<uint32_t>(src_h), 1};
@@ -1848,10 +1977,10 @@ void VulkanRenderDevice::blit_to_texture(
             }
         } else {
             VkImageBlit blit{};
-            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, src->desc.array_layers};
             blit.srcOffsets[0] = {src_rect.x0, src_rect.y0, 0};
             blit.srcOffsets[1] = {src_rect.x1, src_rect.y1, 1};
-            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, dst->desc.array_layers};
             blit.dstOffsets[0] = {dst_rect.x0, dst_rect.y0, 0};
             blit.dstOffsets[1] = {dst_rect.x1, dst_rect.y1, 1};
             vkCmdBlitImage(cb,
@@ -1868,11 +1997,11 @@ void VulkanRenderDevice::blit_to_texture(
         transition_image_layout(cb, src->image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, src->desc.array_layers);
         transition_image_layout(cb, dst->image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, dst->desc.array_layers);
         src->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         dst->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     });
@@ -1891,7 +2020,7 @@ void VulkanRenderDevice::clear_texture(
     execute_immediate([&](VkCommandBuffer cb) {
         transition_image_layout(cb, dst->image,
             prev, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, dst->desc.array_layers);
 
         VkClearColorValue clear{};
         clear.float32[0] = color.r;
@@ -1912,7 +2041,7 @@ void VulkanRenderDevice::clear_texture(
         VkImageSubresourceRange range{};
         range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         range.levelCount = 1;
-        range.layerCount = 1;
+        range.layerCount = dst->desc.array_layers;
 
         vkCmdClearColorImage(cb, dst->image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1921,7 +2050,7 @@ void VulkanRenderDevice::clear_texture(
         if (prev != VK_IMAGE_LAYOUT_UNDEFINED) {
             transition_image_layout(cb, dst->image,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, prev,
-                VK_IMAGE_ASPECT_COLOR_BIT);
+                VK_IMAGE_ASPECT_COLOR_BIT, dst->desc.array_layers);
         } else {
             dst->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         }

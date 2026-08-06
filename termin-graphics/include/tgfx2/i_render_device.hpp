@@ -146,6 +146,15 @@ public:
         (void)native_handle; (void)desc;
         throw std::runtime_error("register_external_texture: not supported on this backend");
     }
+    virtual bool begin_external_texture_access(
+        TextureHandle, const ExternalTextureAccessDesc&) {
+        throw std::runtime_error(
+            "begin_external_texture_access: not supported on this backend");
+    }
+    virtual bool end_external_texture_access(TextureHandle) {
+        throw std::runtime_error(
+            "end_external_texture_access: not supported on this backend");
+    }
     virtual BufferHandle register_external_buffer(
         uintptr_t native_handle, const BufferDesc& desc) {
         (void)native_handle; (void)desc;
