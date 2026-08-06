@@ -21,6 +21,7 @@ $OpenGlMode = "on"
 $CcacheMode = "on"
 $UnityMode = "off"
 $PchMode = "on"
+$Profile = "full"
 $BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
 $CmakeGeneratorName = if ($env:CMAKE_GENERATOR_NAME) { $env:CMAKE_GENERATOR_NAME } elseif ($env:TERMIN_CMAKE_GENERATOR) { $env:TERMIN_CMAKE_GENERATOR } else { $null }
 
@@ -44,6 +45,7 @@ function Show-Help {
     Write-Host "  --sdl             Enable SDL2 support (default)"
     Write-Host "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
     Write-Host "  --opengl          Enable desktop OpenGL targets (default)"
+    Write-Host "  --profile=NAME    SDK graph profile: full (default) or graphics"
     Write-Host "  --help, -h        Show this help"
     Write-Host ""
     Write-Host "Environment:"
@@ -64,6 +66,10 @@ function Test-VulkanSdkAvailable {
 }
 
 foreach ($arg in $args) {
+    if ($arg -like "--profile=*") {
+        $Profile = $arg.Substring("--profile=".Length)
+        continue
+    }
     switch ($arg) {
         "--debug"       { $BuildType = "Debug" }
         "-d"            { $BuildType = "Debug" }
@@ -88,6 +94,11 @@ foreach ($arg in $args) {
         default          { Write-Error "Unknown option: $arg"; exit 1 }
     }
 }
+
+if ($Profile -notin @("full", "graphics")) {
+    throw "Unsupported SDK profile: $Profile. Expected 'full' or 'graphics'."
+}
+$env:TERMIN_SDK_PROFILE = $Profile
 
 if ($NoParallel) {
     $BuildJobs = 1
@@ -144,7 +155,8 @@ if ($oldPythonPath) {
     $env:PYTHONPATH = "$env:PYTHONPATH$([IO.Path]::PathSeparator)$oldPythonPath"
 }
 
-& $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile sdk-bindings --vulkan $TerminEnableVulkan --init-submodules
+$DoctorProfile = if ($Profile -eq "graphics") { "sdk-bindings-graphics" } else { "sdk-bindings" }
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile $DoctorProfile --vulkan $TerminEnableVulkan --init-submodules
 if ($LASTEXITCODE -ne 0) { throw "SDK bindings preflight failed" }
 
 Write-Host ""
@@ -163,6 +175,7 @@ Write-Host "OpenGL:      $TerminEnableOpenGl"
 Write-Host "ccache:      $TerminUseCcache"
 Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"
+Write-Host "SDK profile: $Profile"
 Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else { 'existing/default' })"
 Write-Host "Jobs:        $BuildJobs"
 Write-Host ""
@@ -172,11 +185,22 @@ if ($Clean -and (Test-Path $BuildDir)) {
     Remove-Item -Recurse -Force $BuildDir
 }
 
-$requiredSubmodules = @(
-    "termin-thirdparty/manifold",
-    "termin-thirdparty/clipper2",
-    "termin-thirdparty/recastnavigation"
-)
+$requiredSubmodules = if ($Profile -eq "graphics") {
+    @(
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp"
+    )
+} else {
+    @(
+        "termin-thirdparty/manifold",
+        "termin-thirdparty/clipper2",
+        "termin-thirdparty/recastnavigation"
+    )
+}
 if ($TerminEnableVulkan -eq "ON") {
     $requiredSubmodules += "termin-thirdparty/vulkan-memory-allocator"
 }
@@ -198,13 +222,14 @@ $cmakeArgs += @(
     "-DTERMIN_USE_CCACHE=$TerminUseCcache",
     "-DTERMIN_ENABLE_UNITY_BUILD=$TerminEnableUnityBuild",
     "-DTERMIN_ENABLE_PCH=$TerminEnablePch",
+    "-DTERMIN_SDK_PROFILE=$Profile",
     "-DTERMIN_BUILD_PYTHON=ON",
     "-DTERMIN_BUILD_TESTS=OFF",
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
     "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
-    "-DTERMIN_BUILD_EDITOR_MINIMAL=ON",
-    "-DTERMIN_BUILD_LAUNCHER=ON",
+    "-DTERMIN_BUILD_EDITOR_MINIMAL=$(if ($Profile -eq 'full') { 'ON' } else { 'OFF' })",
+    "-DTERMIN_BUILD_LAUNCHER=$(if ($Profile -eq 'full') { 'ON' } else { 'OFF' })",
     "-DPython_EXECUTABLE=$pythonExec"
 )
 

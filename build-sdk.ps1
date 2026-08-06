@@ -24,6 +24,16 @@ if (-not $pythonCommand) {
 }
 
 $orchestratorArgs = @($args)
+$sdkProfile = "full"
+for ($index = 0; $index -lt $orchestratorArgs.Count; $index++) {
+    $arg = $orchestratorArgs[$index]
+    if ($arg -like "--profile=*") {
+        $sdkProfile = $arg.Substring("--profile=".Length)
+    } elseif ($arg -eq "--profile" -and $index + 1 -lt $orchestratorArgs.Count) {
+        $sdkProfile = $orchestratorArgs[$index + 1]
+        $index++
+    }
+}
 
 $oldPythonPath = $env:PYTHONPATH
 $env:PYTHONPATH = (Join-Path $ScriptDir "termin-build-tools")
@@ -43,12 +53,14 @@ $sdkPrefix = if ($env:SDK_PREFIX) {
 }
 Enable-TerminSdkInheritedPermissions -SdkPrefix $sdkPrefix
 
-$launcherPath = Join-Path $sdkPrefix "bin\termin_launcher.exe"
-if (-not (Test-Path $launcherPath -PathType Leaf)) {
-    throw "SDK launcher is missing after build: $launcherPath"
-}
-Write-Host "+ verify launcher bundled Python layout"
-& $launcherPath --termin-python-layout-smoke
-if ($LASTEXITCODE -ne 0) {
-    throw "SDK launcher bundled Python layout smoke failed with exit code $LASTEXITCODE"
+if ($sdkProfile -eq "full") {
+    $launcherPath = Join-Path $sdkPrefix "bin\termin_launcher.exe"
+    if (-not (Test-Path $launcherPath -PathType Leaf)) {
+        throw "SDK launcher is missing after build: $launcherPath"
+    }
+    Write-Host "+ verify launcher bundled Python layout"
+    & $launcherPath --termin-python-layout-smoke
+    if ($LASTEXITCODE -ne 0) {
+        throw "SDK launcher bundled Python layout smoke failed with exit code $LASTEXITCODE"
+    }
 }

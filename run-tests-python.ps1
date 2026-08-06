@@ -13,6 +13,7 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptDir "scripts\Normalize-WindowsSdkPermissions.ps1")
 $PytestTargets = New-Object System.Collections.Generic.List[string]
 $Full = $false
 $PytestJobs = if ($env:TERMIN_PYTEST_JOBS) { $env:TERMIN_PYTEST_JOBS } else { "1" }
@@ -195,27 +196,34 @@ function Invoke-TestSuite {
     }
 }
 
-if ($PytestTargets.Count -gt 0) {
-    Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
-} else {
-    $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
-    & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
-        --repo-root $ScriptDir run $TestProfile `
-        --platform windows --executor pytest --python $PythonBin `
-        --pytest-jobs $parsedPytestJobs `
-        --python-arg=--termin-overlay --python-arg=$OverlayManifest
-    if ($LASTEXITCODE -ne 0) {
-        $Failures.Add("manifest Python suites")
-    }
+try {
+    if ($PytestTargets.Count -gt 0) {
+        Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
+    } else {
+        $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
+        & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
+            --repo-root $ScriptDir run $TestProfile `
+            --platform windows --executor pytest --python $PythonBin `
+            --pytest-jobs $parsedPytestJobs `
+            --python-arg=--termin-overlay --python-arg=$OverlayManifest
+        if ($LASTEXITCODE -ne 0) {
+            $Failures.Add("manifest Python suites")
+        }
 
-    Invoke-TestSuite "free-threaded SDK import graph" @(
-        "-m", "termin_build.sdk",
-        "--repo-root", $ScriptDir,
-        "verify-python-import-graph",
-        "--sdk-prefix", $env:TERMIN_SDK
-    )
-    Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
-    Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
+        Invoke-TestSuite "free-threaded SDK import graph" @(
+            "-m", "termin_build.sdk",
+            "--repo-root", $ScriptDir,
+            "verify-python-import-graph",
+            "--sdk-prefix", $env:TERMIN_SDK
+        )
+        Invoke-TestSuite "termin-modules import smoke" @("-c", "import termin_modules; env = termin_modules.ModuleEnvironment(); runtime = termin_modules.ModuleRuntime(); runtime.set_environment(env); runtime.register_cpp_backend(termin_modules.CppModuleBackend()); runtime.register_python_backend(termin_modules.PythonModuleBackend())")
+        Invoke-TestSuite "Python lint" @("-m", "ruff", "check", $ScriptDir)
+    }
+} finally {
+    Enable-TerminInheritedPermissions `
+        -LiteralPath $PytestRunTempDir `
+        -Recurse `
+        -Context "Pytest temporary tree"
 }
 
 if ($Failures.Count -gt 0) {
