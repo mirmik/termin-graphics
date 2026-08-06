@@ -3,6 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptDir "scripts\Normalize-WindowsSdkPermissions.ps1")
 $Force = $false
 
 foreach ($arg in $args) {
@@ -53,6 +54,9 @@ if ($Force) {
 }
 & $SdkPython -c $EnvironmentBootstrap $BuildToolsRoot @PrepareArgs
 if ($LASTEXITCODE -ne 0) { throw "Python test environment preparation failed" }
+Enable-TerminInheritedPermissions `
+    -LiteralPath $ToolsSite `
+    -Context "Test Python site-packages"
 
 Write-Host "Generating checkout overlay: $OverlayManifest"
 $OverlayBootstrap = "import sys; sys.path.insert(0, sys.argv.pop(1)); from termin_build.python_overlay import main; raise SystemExit(main())"
