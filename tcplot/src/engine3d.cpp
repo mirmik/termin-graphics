@@ -494,12 +494,17 @@ void PlotEngine3D::rebuild_meshes_(tgfx::IRenderDevice& device) {
                 continue;
             }
             const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
+            const float series_cs = cs *
+                static_cast<float>(std::max(s.size, 0.1) / 4.0);
             for (size_t i = 0; i < s.x.size(); i++) {
                 const float px = (float)s.x[i];
                 const float py = (float)s.y[i];
                 const float pz = (float)s.z[i];
                 struct Axis { float dx, dy, dz; };
-                const Axis axes[] = {{cs, 0, 0}, {0, cs, 0}, {0, 0, cs}};
+                const Axis axes[] = {
+                    {series_cs, 0, 0},
+                    {0, series_cs, 0},
+                    {0, 0, series_cs}};
                 for (const auto& a : axes) {
                     push_vertex(verts, px - a.dx, py - a.dy, pz - a.dz, c);
                     push_vertex(verts, px + a.dx, py + a.dy, pz + a.dz, c);
@@ -539,7 +544,7 @@ void PlotEngine3D::build_grid_mesh_(tgfx::IRenderDevice& device,
     // get very dim if sampled with low coverage; full alpha + mid-gray
     // keeps the grid legible without drowning the data series.
     // styles::grid_color() = (0.3, 0.3, 0.3, 0.5) stays the 2D choice.
-    const Color4 gc{0.55f, 0.55f, 0.55f, 1.0f};
+    const Color4 gc = grid_color;
 
     // For each axis, draw ticks as line segments running along the
     // bounding box's "floor" on one of the other two axes. Matches
@@ -574,9 +579,6 @@ void PlotEngine3D::build_grid_mesh_(tgfx::IRenderDevice& device,
     }
 
     // Axis lines through bounds_min: x=red, y=green, z=blue.
-    const Color4 axis_colors[3] = {
-        {1, 0, 0, 1}, {0, 1, 0, 1}, {0, 0, 1, 1},
-    };
     for (int axis = 0; axis < 3; ++axis) {
         double p0[3] = {bounds_min[0], bounds_min[1], bounds_min[2]};
         double p1[3] = {p0[0], p0[1], p0[2]};
@@ -748,21 +750,23 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     // Opaque surfaces. Color mapping is shader-driven to avoid baking
     // colormap transitions into mesh vertex colors.
     ctx->set_blend(false);
-    for (size_t i = 0; i < surface_meshes_.size(); ++i) {
-        const SurfaceSeries& style = surface_mesh_styles_[i];
-        const Color4 surface_color =
-            style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
-        Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
-        surface_params.colormap = style.colormap;
-        surface_params.colormap_reversed = style.colormap_reversed;
-        surface_params.surface_color = surface_color;
-        bind_plot3d_draw_data(*ctx, *this, surface_params);
-        draw_mesh_(*ctx, surface_meshes_[i]);
+    if (show_series) {
+        for (size_t i = 0; i < surface_meshes_.size(); ++i) {
+            const SurfaceSeries& style = surface_mesh_styles_[i];
+            const Color4 surface_color =
+                style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
+            Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
+            surface_params.colormap = style.colormap;
+            surface_params.colormap_reversed = style.colormap_reversed;
+            surface_params.surface_color = surface_color;
+            bind_plot3d_draw_data(*ctx, *this, surface_params);
+            draw_mesh_(*ctx, surface_meshes_[i]);
+        }
     }
 
     // Wireframes on top (no depth, no jet).
     bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
-    if (show_wireframe) {
+    if (show_series && show_wireframe) {
         ctx->set_depth_test(false);
         ctx->set_blend(true);
         for (auto& m : wireframe_meshes_) {
@@ -772,8 +776,8 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
     }
 
     // Lines and scatter.
-    if (lines_mesh_) draw_mesh_(*ctx, *lines_mesh_);
-    if (scatter_mesh_) draw_mesh_(*ctx, *scatter_mesh_);
+    if (show_series && lines_mesh_) draw_mesh_(*ctx, *lines_mesh_);
+    if (show_series && scatter_mesh_) draw_mesh_(*ctx, *scatter_mesh_);
 
     // Marker (immediate mode cross at marker pos).
     if (has_marker_ && marker_mode) {
@@ -821,7 +825,7 @@ void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
         }
     }
     // Tick labels + marker value label via Text3D.
-    if (font) {
+    if (font && show_labels) {
         float view[16];
         camera.view_matrix(view);
         // view is column-major 4x4. Row 0: world-space camera-right;
