@@ -57,6 +57,7 @@ set(TCPLOT_SOURCES
     src/plot_layout2d.cpp
     src/plot_annotations2d.cpp
     src/retained_scene_renderer2d.cpp
+    src/retained_chart3d.cpp
     src/engine3d.cpp
     src/engine2d.cpp
     src/plot_view3d.cpp

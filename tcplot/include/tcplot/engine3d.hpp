@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -67,6 +68,14 @@ public:
     // --- Style / mode flags (public; toggle_* methods also exist) ---
     bool show_grid = true;
     bool show_wireframe = true;
+    bool show_series = true;
+    bool show_labels = true;
+    Color4 grid_color{0.55f, 0.55f, 0.55f, 1.0f};
+    std::array<Color4, 3> axis_colors{
+        Color4{1, 0, 0, 1},
+        Color4{0, 1, 0, 1},
+        Color4{0, 0, 1, 1},
+    };
     float x_scale = 1.0f;
     float y_scale = 1.0f;
     float z_scale = 1.0f;
