@@ -73,6 +73,7 @@
     "termin-dispatch/docs",
     "termin-window/docs",
     "termin-engine/docs",
+    "termin-framegraph-remote/docs",
     "termin-glb/docs",
     "termin-graphics/docs",
     "termin-visual-scene/docs",
