@@ -385,6 +385,16 @@ public:
                 static_cast<float>(hi[2])});
     }
 
+    void reset_camera() {
+        // fit_bounds deliberately preserves the viewing direction so that
+        // adding or removing data does not surprise an interacting user.
+        // An explicit reset has different semantics: restore the canonical
+        // OrbitCamera orientation and projection, then frame current data.
+        camera_ = tcplot::OrbitCamera{};
+        dragging_ = false;
+        fit_camera();
+    }
+
     bool pointer_down(float x, float y, int button) {
         if (button != 0 && button != 2) return false;
         dragging_ = true;
@@ -958,7 +968,7 @@ int tc_retained_chart3d_set_camera(
 }
 
 void tc_retained_chart3d_reset_camera(tc_retained_chart3d* chart) {
-    if (chart) chart->value.fit_camera();
+    if (chart) chart->value.reset_camera();
 }
 
 int tc_retained_chart3d_pointer_down(
