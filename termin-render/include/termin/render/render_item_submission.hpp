@@ -28,6 +28,7 @@ struct RenderItemNamedTextureBinding {
     const char* name = nullptr;
     tgfx::TextureHandle texture;
     tgfx::SamplerHandle sampler;
+    bool only_if_shader_has_resource = false;
 };
 
 struct RenderItemNamedUniformBinding {
