@@ -9,6 +9,7 @@
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_swapchain.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+#include "tgfx2/vulkan/internal/image_transition_sync.hpp"
 
 #include <tcbase/tc_log.hpp>
 #include "tgfx2/vulkan/vulkan_shader_compiler.hpp"
@@ -18,6 +19,7 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 
 #include <stdexcept>
+#include <array>
 #include <cstring>
 #include <algorithm>
 #include <chrono>
@@ -1731,9 +1733,12 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         att.storeOp = to_vk_store(color_stores[i]);
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout = (color_loads[i] == LoadOp::Load)
-            ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-            : VK_IMAGE_LAYOUT_UNDEFINED;
+        // VulkanCommandList explicitly transitions every attachment before
+        // vkCmdBeginRenderPass. Keep the render-pass contract consistent with
+        // that tracked state even for Clear/DontCare; declaring UNDEFINED here
+        // would introduce a second implicit discard transition after the
+        // explicit attachment-optimal barrier.
+        att.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         att.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachments.push_back(att);
 
@@ -1749,9 +1754,7 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
         att.storeOp = to_vk_store(depth_store);
         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        att.initialLayout = (depth_load == LoadOp::Load)
-            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-            : VK_IMAGE_LAYOUT_UNDEFINED;
+        att.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attachments.push_back(att);
 
@@ -1765,9 +1768,10 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     subpass.pColorAttachments = color_refs.data();
     subpass.pDepthStencilAttachment = has_depth ? &depth_ref : nullptr;
 
-    // Single EXTERNAL→0 dependency covering color/depth writes and
-    // fragment reads. No self-dependency: inside the pass we never emit
-    // vkCmdPipelineBarrier. Every caller is required to deliver sampled
+    // EXTERNAL→0 covers work from earlier passes/transitions. The 0→0
+    // framebuffer-local dependency supports explicit in-pass attachment
+    // barriers without forcing tile materialization.
+    // Every caller is required to deliver sampled
     // textures already in SHADER_READ_ONLY_OPTIMAL (via upload_texture,
     // end_render_pass or copy_texture/blit_to_texture, all of which
     // leave that layout on exit).
@@ -1781,19 +1785,34 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     dep.srcSubpass = VK_SUBPASS_EXTERNAL;
     dep.dstSubpass = 0;
     dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                       vulkan_detail::depth_stencil_attachment_stages() |
                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                        VK_PIPELINE_STAGE_TRANSFER_BIT;
     dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                       vulkan_detail::depth_stencil_attachment_stages() |
                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dep.srcAccessMask = VK_ACCESS_SHADER_READ_BIT |
-                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                        vulkan_detail::color_attachment_accesses() |
+                        vulkan_detail::depth_stencil_attachment_accesses() |
                         VK_ACCESS_TRANSFER_WRITE_BIT;
     dep.dstAccessMask = VK_ACCESS_SHADER_READ_BIT |
-                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                        vulkan_detail::color_attachment_accesses() |
+                        vulkan_detail::depth_stencil_attachment_accesses();
+
+    VkSubpassDependency self_dep{};
+    self_dep.srcSubpass = 0;
+    self_dep.dstSubpass = 0;
+    self_dep.srcStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        vulkan_detail::depth_stencil_attachment_stages();
+    self_dep.dstStageMask = self_dep.srcStageMask;
+    self_dep.srcAccessMask =
+        vulkan_detail::color_attachment_accesses() |
+        vulkan_detail::depth_stencil_attachment_accesses();
+    self_dep.dstAccessMask = self_dep.srcAccessMask;
+    self_dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    const std::array<VkSubpassDependency, 2> dependencies{dep, self_dep};
 
     VkRenderPassCreateInfo rp_ci{};
     rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1801,8 +1820,8 @@ VkRenderPass VulkanRenderDevice::get_or_create_render_pass(
     rp_ci.pAttachments = attachments.data();
     rp_ci.subpassCount = 1;
     rp_ci.pSubpasses = &subpass;
-    rp_ci.dependencyCount = 1;
-    rp_ci.pDependencies = &dep;
+    rp_ci.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    rp_ci.pDependencies = dependencies.data();
 
     VkRenderPassMultiviewCreateInfo multiview_ci{};
     uint32_t correlation_mask = view_mask;

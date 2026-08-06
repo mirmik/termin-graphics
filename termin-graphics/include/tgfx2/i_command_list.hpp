@@ -47,6 +47,11 @@ public:
             "ICommandList::begin_multiview_render_pass: backend does not support multiview");
     }
     virtual void end_render_pass() = 0;
+    // Order framebuffer-local color/depth attachment accesses issued before
+    // and after this point without ending the active render pass. Backends
+    // whose render-pass model already provides the required ordering may use
+    // the default no-op. Vulkan maps this to a by-region subpass barrier.
+    virtual void framebuffer_local_barrier() {}
 
     // Pipeline & resources
     virtual void bind_pipeline(PipelineHandle pipeline) = 0;

@@ -2,6 +2,7 @@
 
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+#include "tgfx2/vulkan/internal/image_transition_sync.hpp"
 #include "vulkan_stats.hpp"
 
 #include <algorithm>
@@ -11,6 +12,34 @@
 #include <tcbase/tc_log.hpp>
 
 namespace tgfx {
+
+void VulkanCommandList::framebuffer_local_barrier() {
+    if (!in_render_pass_) {
+        tc::Log::error(
+            "VulkanCommandList::framebuffer_local_barrier requires an active render pass");
+        return;
+    }
+    const VkPipelineStageFlags stages =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        vulkan_detail::depth_stencil_attachment_stages();
+    VkMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask =
+        vulkan_detail::color_attachment_accesses() |
+        vulkan_detail::depth_stencil_attachment_accesses();
+    barrier.dstAccessMask = barrier.srcAccessMask;
+    vkCmdPipelineBarrier(
+        cmd_,
+        stages,
+        stages,
+        VK_DEPENDENCY_BY_REGION_BIT,
+        1,
+        &barrier,
+        0,
+        nullptr,
+        0,
+        nullptr);
+}
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
     : device_(device)

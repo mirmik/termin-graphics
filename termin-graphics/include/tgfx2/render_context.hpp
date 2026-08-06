@@ -233,6 +233,9 @@ public:
     bool begin_pass(const RenderPassDesc& pass);
     bool begin_multiview_pass(const MultiviewRenderPassDesc& pass);
     void end_pass();
+    // Insert an attachment read/write ordering point while preserving the
+    // active render pass and tile-local contents.
+    void framebuffer_local_barrier();
 
     // --- Mutable render state (applied at draw time) ---
     void set_depth_test(bool enabled);

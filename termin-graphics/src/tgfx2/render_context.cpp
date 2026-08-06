@@ -422,6 +422,15 @@ void RenderContext2::end_pass() {
     in_pass_ = false;
 }
 
+void RenderContext2::framebuffer_local_barrier() {
+    if (!in_pass_ || !cmd_) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2::framebuffer_local_barrier requires an active render pass");
+        return;
+    }
+    cmd_->framebuffer_local_barrier();
+}
+
 // ============================================================================
 // Mutable render state
 // ============================================================================

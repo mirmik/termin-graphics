@@ -128,10 +128,10 @@ void VulkanRenderDevice::transition_image_layout(
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else if (old_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.srcAccessMask = vulkan_detail::color_attachment_accesses();
         src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (old_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-        barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.srcAccessMask = vulkan_detail::depth_stencil_attachment_accesses();
         src_stage = vulkan_detail::depth_stencil_attachment_stages();
     } else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
         barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -145,10 +145,10 @@ void VulkanRenderDevice::transition_image_layout(
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     } else if (new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = vulkan_detail::color_attachment_accesses();
         dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = vulkan_detail::depth_stencil_attachment_accesses();
         dst_stage = vulkan_detail::depth_stencil_attachment_stages();
     }
 

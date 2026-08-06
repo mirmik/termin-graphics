@@ -38,6 +38,7 @@ public:
     void begin_render_pass(const RenderPassDesc& pass) override;
     void begin_multiview_render_pass(const MultiviewRenderPassDesc& pass) override;
     void end_render_pass() override;
+    void framebuffer_local_barrier() override;
 
     void bind_pipeline(PipelineHandle pipeline) override;
     void bind_resource_set(ResourceSetHandle set,
