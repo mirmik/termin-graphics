@@ -111,7 +111,12 @@ public:
                 "RetainedSceneRenderer2D: failed to paint visual scene");
             return 0;
         }
-        tgfx::DrawList2D draw_list = builder.freeze();
+        auto draw_list = builder.freeze();
+        if (!draw_list) {
+            tc::Log::error(
+                "RetainedSceneRenderer2D: failed to freeze visual scene draw list");
+            return 0;
+        }
         ensure_offscreen(width, height);
 
         tgfx::RenderContext2& ctx = host_->ctx();
@@ -123,7 +128,7 @@ public:
             1.0f,
             false);
         canvas_.begin(ctx, width, height);
-        const bool executed = canvas_.execute(draw_list, resources_);
+        const bool executed = canvas_.execute(*draw_list, resources_);
         canvas_.end();
         ctx.end_pass();
         ctx.end_frame();

@@ -18,6 +18,27 @@ option(TERMIN_BUILD_LAUNCHER "Build launcher executable" OFF)
 option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" ON)
 option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
 option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
+set(TERMIN_SDK_PROFILE "full" CACHE STRING
+    "SDK target graph profile: full or graphics")
+set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics)
+
+if(NOT TERMIN_SDK_PROFILE STREQUAL "full"
+   AND NOT TERMIN_SDK_PROFILE STREQUAL "graphics")
+    message(FATAL_ERROR
+        "Unsupported TERMIN_SDK_PROFILE='${TERMIN_SDK_PROFILE}'. "
+        "Expected one of: full, graphics")
+endif()
+
+if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+    if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
+        message(FATAL_ERROR
+            "TERMIN_SDK_PROFILE=graphics is a desktop SDK profile")
+    endif()
+    set(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(TERMIN_GUI_NATIVE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    message(STATUS
+        "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
+endif()
 
 if(TERMIN_PLATFORM_ANDROID AND TERMIN_PLATFORM_WEB)
     message(FATAL_ERROR "TERMIN_PLATFORM_ANDROID and TERMIN_PLATFORM_WEB are mutually exclusive")
@@ -228,7 +249,20 @@ endif()
 
 add_subdirectory(termin-base)
 
-if(TERMIN_PLATFORM_WEB)
+if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+    add_subdirectory(termin-dispatch)
+    add_subdirectory(termin-image)
+    add_subdirectory(termin-mesh)
+    add_subdirectory(termin-inspect)
+    add_subdirectory(termin-graphics)
+    if(TERMIN_ENABLE_SDL)
+        add_subdirectory(termin-window)
+    endif()
+    add_subdirectory(termin-visual-scene)
+    add_subdirectory(termin-gui-native)
+    add_subdirectory(tcplot)
+    add_subdirectory(tcplot-gui-native)
+elseif(TERMIN_PLATFORM_WEB)
     add_subdirectory(termin-inspect)
     add_subdirectory(termin-image)
     add_subdirectory(termin-modules)
