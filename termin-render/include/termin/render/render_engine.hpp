@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -49,6 +50,7 @@ struct RenderTargetContext {
 public:
     std::string name;
     RenderCamera camera;
+    std::optional<StereoRenderViews> stereo_views;
     // Render extent for this target. This is not the UI viewport's screen
     // rectangle; display placement is handled later during present/blit.
     Rect2i render_rect{0, 0, 0, 0};

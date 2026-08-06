@@ -242,6 +242,17 @@ ShaderHandle VulkanRenderDevice::create_shader(const ShaderDesc& desc) {
 // --- Pipeline ---
 
 PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
+    if (desc.view_count == 0 || desc.view_count >= 32 ||
+        (desc.view_count > 1 &&
+         (!multiview_enabled_ || desc.view_count > max_multiview_views_))) {
+        tc_log(
+            TC_LOG_ERROR,
+            "VulkanRenderDevice: invalid pipeline view_count=%u (multiview=%d max=%u)",
+            desc.view_count,
+            multiview_enabled_ ? 1 : 0,
+            max_multiview_views_);
+        return {};
+    }
     VkPipelineResource res;
     res.desc = desc;
 
@@ -293,9 +304,23 @@ PipelineHandle VulkanRenderDevice::create_pipeline(const PipelineDesc& desc) {
     bool needs_depth = desc.depth_format != PixelFormat::Undefined;
     {
         VulkanStatsTimer timer(g_pipeline_renderpass_us);
+        const std::vector<LoadOp> color_loads(
+            color_fmts.size(), LoadOp::Clear);
+        const std::vector<StoreOp> color_stores(
+            color_fmts.size(), StoreOp::Store);
+        const uint32_t view_mask = desc.view_count > 1
+            ? ((1u << desc.view_count) - 1u)
+            : 0u;
         res.render_pass = get_or_create_render_pass(
-            color_fmts, desc.depth_format, needs_depth, desc.sample_count,
-            LoadOp::Clear, LoadOp::Clear);
+            color_fmts,
+            color_loads,
+            color_stores,
+            desc.depth_format,
+            needs_depth,
+            desc.sample_count,
+            LoadOp::Clear,
+            StoreOp::Store,
+            view_mask);
     }
 
     // Shader stages

@@ -44,6 +44,7 @@ struct ViewportFrameData {
 };
 
 struct GraphData {
+    std::string execution_model = "single_view";
     std::vector<NodeData> nodes;
     std::vector<ConnectionData> connections;
     std::vector<ViewportFrameData> viewport_frames;

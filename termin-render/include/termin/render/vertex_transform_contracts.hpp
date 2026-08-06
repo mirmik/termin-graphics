@@ -89,6 +89,10 @@ struct VertexOutputAdapter {
     ShaderSourceModuleIdentity source_module;
     std::string output_type_name;
     std::string output_function;
+    // Optional pass-owned system-value plumbing for the generated vertex
+    // entry. Example: ", uint view_id : SV_ViewID" and ", view_id".
+    std::string entry_extra_parameters;
+    std::string output_extra_arguments;
     MaterialFragmentInterface consumed_world_semantics;
     MaterialFragmentInterface produced_output_semantics;
     std::vector<MaterialPipelineResourceDecl> resources;
@@ -136,6 +140,7 @@ RENDER_API VertexTransformProvider material_pipeline_make_skinned_mesh_vertex_tr
     std::string model_expression);
 
 RENDER_API VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter();
+RENDER_API VertexOutputAdapter material_pipeline_multiview_material_vertex_output_adapter();
 
 RENDER_API VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
     std::string debug_name);

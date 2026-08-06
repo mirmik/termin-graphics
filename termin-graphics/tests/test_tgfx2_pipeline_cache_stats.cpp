@@ -373,6 +373,30 @@ TEST_CASE("PipelineCache identity preserves ordered MRT color formats") {
     CHECK(device.create_pipeline_count == 3u);
 }
 
+TEST_CASE("PipelineCache keeps mono and multiview render-pass identities distinct") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+
+    const tgfx::PipelineHandle mono = cache.get(key);
+    REQUIRE(mono);
+    REQUIRE(device.created_pipeline_descs.size() == 1u);
+    CHECK(device.created_pipeline_descs[0].view_count == 1u);
+
+    key.view_count = 2;
+    const tgfx::PipelineHandle stereo = cache.get(key);
+    REQUIRE(stereo);
+    CHECK(stereo != mono);
+    REQUIRE(device.created_pipeline_descs.size() == 2u);
+    CHECK(device.created_pipeline_descs[1].view_count == 2u);
+
+    CHECK(cache.get(key) == stereo);
+    CHECK(device.create_pipeline_count == 2u);
+}
+
 TEST_CASE("PipelineCache rejects invalid MRT color format identity") {
     PipelineCacheStatsDevice device;
     tgfx::PipelineCache cache(device);

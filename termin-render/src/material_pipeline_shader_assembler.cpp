@@ -183,10 +183,13 @@ std::string compose_modular_vertex_source(
     source += adapter.output_type_name;
     source += " ";
     source += entry_point;
-    source += "(VertexInput input) {\n    return ";
+    source += "(VertexInput input";
+    source += adapter.entry_extra_parameters;
+    source += ") {\n    return ";
     source += adapter.output_function;
     source += "(";
     source += provider.adapter_input_expression;
+    source += adapter.output_extra_arguments;
     source += ");\n}\n";
     return source;
 }

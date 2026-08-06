@@ -70,6 +70,7 @@ public:
     Rect2i render_rect;
     TcSceneRef scene;
     RenderCamera* camera = nullptr;
+    const StereoRenderViews* stereo_views = nullptr;
     std::string render_target_name;
     tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     std::vector<Light> lights;

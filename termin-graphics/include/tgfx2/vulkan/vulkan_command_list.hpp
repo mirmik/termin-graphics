@@ -18,8 +18,15 @@ private:
     VkPipelineLayout current_layout_ = VK_NULL_HANDLE;
     bool in_render_pass_ = false;
     std::vector<TextureHandle> current_pass_color_attachments_;
+    MultiviewColorFinalState current_pass_color_final_state_ =
+        MultiviewColorFinalState::ShaderRead;
     TextureHandle current_pass_depth_attachment_{};
     std::chrono::steady_clock::time_point record_start_{};
+
+    void begin_render_pass_impl(
+        const RenderPassDesc& pass,
+        uint32_t view_count,
+        MultiviewColorFinalState color_final_state);
 
 public:
     explicit VulkanCommandList(VulkanRenderDevice& device);
@@ -29,6 +36,7 @@ public:
     void end() override;
 
     void begin_render_pass(const RenderPassDesc& pass) override;
+    void begin_multiview_render_pass(const MultiviewRenderPassDesc& pass) override;
     void end_render_pass() override;
 
     void bind_pipeline(PipelineHandle pipeline) override;

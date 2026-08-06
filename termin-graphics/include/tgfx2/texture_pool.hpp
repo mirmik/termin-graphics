@@ -48,6 +48,7 @@ struct TGFX2_TYPE_API RenderTargetPoolDesc {
     int width = 0;
     int height = 0;
     int samples = 1;
+    int array_layers = 1;
     PixelFormat color_format = PixelFormat::RGBA8_UNorm;
     bool has_depth = true;
     PixelFormat depth_format = PixelFormat::D24_UNorm;

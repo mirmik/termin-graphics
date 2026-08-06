@@ -67,7 +67,8 @@ static bool pipeline_cache_key_state_equal(const PipelineCacheKeyState& a,
         && a.color_mask.b == b.color_mask.b
         && a.color_mask.a == b.color_mask.a
         && a.depth_format == b.depth_format
-        && a.sample_count == b.sample_count;
+        && a.sample_count == b.sample_count
+        && a.view_count == b.view_count;
 }
 
 PipelineCacheKey::PipelineCacheKey(const PipelineCacheLookupKey& lookup)
@@ -130,6 +131,7 @@ static size_t pipeline_cache_key_hash(const PipelineCacheKeyState& k) {
     }
     hash_combine(h, std::hash<int>{}(static_cast<int>(k.depth_format)));
     hash_combine(h, std::hash<uint32_t>{}(k.sample_count));
+    hash_combine(h, std::hash<uint32_t>{}(k.view_count));
 
     return h;
 }
@@ -166,6 +168,13 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
             "backend call skipped",
             key.color_format_count,
             TGFX2_MAX_COLOR_ATTACHMENTS);
+        return {};
+    }
+    if (key.view_count == 0 || key.view_count >= 32) {
+        tc_log(
+            TC_LOG_ERROR,
+            "PipelineCache: invalid graphics pipeline view count %u; backend call skipped",
+            key.view_count);
         return {};
     }
     for (uint32_t i = 0; i < key.color_format_count; ++i) {
@@ -219,6 +228,7 @@ PipelineHandle PipelineCache::get(const PipelineCacheLookupKey& key) {
         key.color_formats.begin() + key.color_format_count);
     desc.depth_format = key.depth_format;
     desc.sample_count = key.sample_count;
+    desc.view_count = key.view_count;
 
     auto handle = device_.create_pipeline(desc);
     ++create_pipeline_count_;

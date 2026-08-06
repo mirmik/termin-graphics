@@ -18,6 +18,9 @@ struct BackendCapabilities {
     bool supports_multisample_resolve = true;
     bool supports_dynamic_uniform_offsets = false;
     bool supports_storage_textures = false;
+    bool supports_texture_arrays = false;
+    bool supports_multiview = false;
+    uint32_t max_multiview_views = 0;
     uint32_t max_color_attachments = 4;
     uint32_t max_texture_dimension_2d = 8192;
     uint32_t max_texture_units = 16;

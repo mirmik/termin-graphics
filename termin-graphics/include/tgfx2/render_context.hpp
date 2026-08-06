@@ -59,6 +59,12 @@ public:
 private:
     static constexpr uint32_t kTrackedVertexBufferMax = 2;
 
+    bool begin_pass_impl(
+        const RenderPassDesc& pass,
+        uint32_t view_count,
+        bool multiview,
+        MultiviewColorFinalState color_final_state);
+
     IRenderDevice& device_;
     PipelineCache& cache_;
     std::unique_ptr<ICommandList> cmd_;
@@ -85,6 +91,7 @@ private:
     uint32_t color_format_count_ = 0;
     PixelFormat depth_format_ = PixelFormat::Undefined;
     uint32_t sample_count_ = 1;
+    uint32_t view_count_ = 1;
 
     bool in_pass_ = false;
     bool pipeline_dirty_ = true;
@@ -224,6 +231,7 @@ public:
     // fragment output SV_TargetN. Returns false when validation rejects the
     // descriptor; no backend render pass is opened in that case.
     bool begin_pass(const RenderPassDesc& pass);
+    bool begin_multiview_pass(const MultiviewRenderPassDesc& pass);
     void end_pass();
 
     // --- Mutable render state (applied at draw time) ---

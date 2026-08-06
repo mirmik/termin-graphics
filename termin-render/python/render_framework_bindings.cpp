@@ -127,7 +127,8 @@ void bind_render_framework(nb::module_& m) {
             int samples,
             const std::string& viewport_name,
             float scale,
-            TextureFilter filter
+            TextureFilter filter,
+            int array_layers
         ) {
             new (self) ResourceSpec();
             self->resource = resource;
@@ -136,6 +137,7 @@ void bind_render_framework(nb::module_& m) {
             self->viewport_name = viewport_name;
             self->scale = scale;
             self->filter = filter;
+            self->array_layers = array_layers;
 
             if (!size.is_none()) {
                 nb::tuple t = nb::cast<nb::tuple>(size);
@@ -164,10 +166,12 @@ void bind_render_framework(nb::module_& m) {
             nb::arg("samples") = 1,
             nb::arg("viewport_name") = "",
             nb::arg("scale") = 1.0f,
-            nb::arg("filter") = TextureFilter::LINEAR)
+            nb::arg("filter") = TextureFilter::LINEAR,
+            nb::arg("array_layers") = 1)
         .def_rw("resource", &ResourceSpec::resource)
         .def_rw("resource_type", &ResourceSpec::resource_type)
         .def_rw("samples", &ResourceSpec::samples)
+        .def_rw("array_layers", &ResourceSpec::array_layers)
         .def_rw("viewport_name", &ResourceSpec::viewport_name)
         .def_rw("scale", &ResourceSpec::scale)
         .def_rw("filter", &ResourceSpec::filter)

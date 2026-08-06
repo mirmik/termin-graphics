@@ -48,6 +48,7 @@ struct PipelineCacheKeyState {
     uint32_t color_format_count = 1;
     PixelFormat depth_format = PixelFormat::D32F;
     uint32_t sample_count = 1;
+    uint32_t view_count = 1;
 };
 
 // Non-owning pipeline-cache request. Its vertex-layout view need only remain

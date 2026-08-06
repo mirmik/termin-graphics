@@ -754,6 +754,17 @@
           "entry": "fs_main"
         }
       }
+    },
+    {
+      "uuid": "termin-engine-multiview-tonemap",
+      "name": "MultiviewTonemapEngineFS",
+      "language": "slang",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-multiview-tonemap.frag.slang",
+          "entry": "fs_main"
+        }
+      }
     }
   ]
 }

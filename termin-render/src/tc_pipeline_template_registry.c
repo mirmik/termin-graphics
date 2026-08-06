@@ -99,6 +99,7 @@ tc_pipeline_template_handle tc_pipeline_template_create(const char* uuid, const 
     pipeline_template->header.pool_index = raw.index;
     pipeline_template->self_handle = raw;
     pipeline_template->descriptor_version = TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION;
+    pipeline_template->execution_model = TC_PIPELINE_EXECUTION_SINGLE_VIEW;
     if (!tc_resource_map_add(g_uuid_to_index, uuid, tc_pack_index(raw.index))) {
         tc_log_error("tc_pipeline_template_create: failed to publish UUID '%s'", uuid);
         tc_pool_free_slot(&g_pool, raw);
@@ -213,6 +214,11 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         tc_log_error("tc_pipeline_template_set_payload: invalid descriptor version or name");
         return false;
     }
+    if (desc->execution_model != TC_PIPELINE_EXECUTION_SINGLE_VIEW &&
+        desc->execution_model != TC_PIPELINE_EXECUTION_XR_MULTIVIEW) {
+        tc_log_error("tc_pipeline_template_set_payload: invalid execution model");
+        return false;
+    }
     if ((desc->pass_count && !desc->passes)
         || (desc->resource_count && !desc->resources)
         || (desc->dependency_count && !desc->dependencies)
@@ -237,6 +243,10 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         }
         if (desc->resources[i].samples == 0) {
             tc_log_error("tc_pipeline_template_set_payload: resource %u has zero samples", i);
+            return false;
+        }
+        if (desc->resources[i].array_layers == 0) {
+            tc_log_error("tc_pipeline_template_set_payload: resource %u has zero array layers", i);
             return false;
         }
         for (uint32_t previous = 0; previous < i; ++previous) {
@@ -471,6 +481,7 @@ bool tc_pipeline_template_set_payload(
     clear_payload(pipeline_template);
     pipeline_template->header.name = tc_intern_string(desc->name);
     pipeline_template->descriptor_version = desc->descriptor_version;
+    pipeline_template->execution_model = desc->execution_model;
     pipeline_template->passes = passes;
     pipeline_template->pass_count = desc->pass_count;
     pipeline_template->resources = resources;
@@ -559,6 +570,7 @@ size_t tc_pipeline_template_serialize(
     write_bytes(&writer, magic, sizeof(magic));
     write_u32(&writer, TC_PIPELINE_TEMPLATE_BINARY_VERSION);
     write_u32(&writer, pipeline_template->descriptor_version);
+    write_u32(&writer, (uint32_t)pipeline_template->execution_model);
     write_string(&writer, pipeline_template->header.name);
     write_u32(&writer, pipeline_template->pass_count);
     write_u32(&writer, pipeline_template->resource_count);
@@ -582,6 +594,7 @@ size_t tc_pipeline_template_serialize(
         write_i32(&writer, value->height);
         write_f32(&writer, value->scale);
         write_u32(&writer, value->samples);
+        write_u32(&writer, value->array_layers);
         write_u32(&writer, value->flags);
     }
     for (uint32_t i = 0; i < pipeline_template->dependency_count; ++i) {
@@ -716,6 +729,7 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
     read_bytes(&reader, magic, sizeof(magic));
     uint32_t binary_version = read_u32(&reader);
     desc.descriptor_version = read_u32(&reader);
+    desc.execution_model = (tc_pipeline_execution_model)read_u32(&reader);
     desc.name = read_string(&reader);
     desc.pass_count = read_u32(&reader);
     desc.resource_count = read_u32(&reader);
@@ -764,6 +778,7 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
         value->height = read_i32(&reader);
         value->scale = read_f32(&reader);
         value->samples = read_u32(&reader);
+        value->array_layers = read_u32(&reader);
         value->flags = read_u32(&reader);
     }
     for (uint32_t i = 0; reader.valid && i < desc.dependency_count; ++i) {

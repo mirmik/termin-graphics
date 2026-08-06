@@ -294,6 +294,7 @@ static void apply_resource_spec_attrs(nb::handle py_spec, ResourceSpec& out_spec
     }
 
     out_spec.samples = nb::cast<int>(py_spec.attr("samples"));
+    out_spec.array_layers = nb::cast<int>(py_spec.attr("array_layers"));
 
     value = py_spec.attr("clear_color");
     if (!value.is_none()) {

@@ -685,6 +685,11 @@ BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
 }
 
 TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
+    if (desc.array_layers != 1) {
+        tc_log(TC_LOG_ERROR,
+               "D3D11RenderDevice::create_texture: layered textures are not supported");
+        return {};
+    }
     if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::create_texture")) {
         return {};
     }
