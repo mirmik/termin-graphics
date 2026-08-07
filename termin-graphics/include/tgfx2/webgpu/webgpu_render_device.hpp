@@ -167,10 +167,20 @@ public:
     const std::string& device_error_message() const { return error_state_->message; }
 
 private:
+    struct TextureOpState;
+
     WebGpuRenderDevice(wgpu::Instance instance, wgpu::Adapter adapter,
                        wgpu::Device device, wgpu::Surface surface,
                        uint32_t width, uint32_t height,
                        std::shared_ptr<WebGpuErrorState> error_state);
+
+    void ensure_texture_op_state();
+    PipelineHandle texture_op_pipeline(
+        PixelFormat format, uint32_t sample_count, bool blit);
+    ResourceSetHandle texture_op_resource_set(
+        PipelineHandle pipeline, TextureHandle source, bool blit);
+    void release_texture_op_source(TextureHandle source);
+    void release_texture_op_state();
 
     friend class WebGpuCommandList;
 
@@ -195,6 +205,7 @@ private:
     WebGpuHandlePool<WebGpuPipeline> pipelines_;
     WebGpuHandlePool<WebGpuResourceSet> resource_sets_;
     SamplerHandle default_sampler_;
+    std::unique_ptr<TextureOpState> texture_ops_;
 
     struct CachedTcShaderEntry {
         ShaderHandle vs;

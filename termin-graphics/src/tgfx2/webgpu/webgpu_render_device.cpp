@@ -3,6 +3,7 @@
 #include "tgfx2/webgpu/webgpu_command_list.hpp"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <stdexcept>
 #include <string_view>
@@ -35,6 +36,98 @@ void webgpu_invalidate_tc_mesh(uint32_t pool_index, void* user) {
 
 namespace tgfx {
 namespace {
+
+constexpr std::string_view texture_op_clear_wgsl = R"wgsl(
+struct ClearParams {
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> params: ClearParams;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, 1.0),
+        vec2<f32>(3.0, 1.0),
+        vec2<f32>(-1.0, -3.0));
+    return vec4<f32>(positions[index], 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return params.color;
+}
+)wgsl";
+
+constexpr std::string_view texture_op_clear_layout = R"json({
+  "version": 3,
+  "target": "webgpu",
+  "resources": [
+    {
+      "name": "params",
+      "kind": "constant_buffer",
+      "stage_mask": 2,
+      "size": 16,
+      "webgpu": {"group": 0, "binding": 0}
+    }
+  ]
+})json";
+
+constexpr std::string_view texture_op_blit_wgsl = R"wgsl(
+struct BlitParams {
+    uv_min: vec2<f32>,
+    uv_size: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0) var<uniform> params: BlitParams;
+@group(0) @binding(1) var source_texture: texture_2d<f32>;
+@group(0) @binding(2) var source_sampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
+    let coordinates = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 2.0));
+    let coordinate = coordinates[index];
+    var output: VertexOutput;
+    output.position = vec4<f32>(
+        coordinate * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0),
+        0.0, 1.0);
+    output.uv = params.uv_min + coordinate * params.uv_size;
+    return output;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    return textureSample(source_texture, source_sampler, input.uv);
+}
+)wgsl";
+
+constexpr std::string_view texture_op_blit_layout = R"json({
+  "version": 3,
+  "target": "webgpu",
+  "resources": [
+    {
+      "name": "params",
+      "kind": "constant_buffer",
+      "stage_mask": 1,
+      "size": 16,
+      "webgpu": {"group": 0, "binding": 0}
+    },
+    {
+      "name": "source_texture",
+      "kind": "texture",
+      "stage_mask": 2,
+      "webgpu": {"group": 0, "binding": 1, "sampler_binding": 2}
+    }
+  ]
+})json";
 
 [[noreturn]] void fail(const std::string& message) {
     tc_log_error("WebGPU: %s", message.c_str());
@@ -218,6 +311,45 @@ wgpu::AddressMode address(AddressMode mode) {
     fail("unknown sampler address mode");
 }
 
+bool color_format(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8_UNorm:
+        case PixelFormat::RG8_UNorm:
+        case PixelFormat::RGBA8_UNorm:
+        case PixelFormat::BGRA8_UNorm:
+        case PixelFormat::R16F:
+        case PixelFormat::RG16F:
+        case PixelFormat::RGBA16F:
+        case PixelFormat::R32F:
+        case PixelFormat::RG32F:
+        case PixelFormat::RGBA32F:
+        case PixelFormat::RGBA8_sRGB:
+        case PixelFormat::BGRA8_sRGB:
+            return true;
+        case PixelFormat::RGB8_UNorm:
+        case PixelFormat::D24_UNorm:
+        case PixelFormat::D24_UNorm_S8_UInt:
+        case PixelFormat::D32F:
+        case PixelFormat::Undefined:
+            return false;
+    }
+    return false;
+}
+
+bool linearly_filterable_color_format(PixelFormat format) {
+    return color_format(format) &&
+        format != PixelFormat::R32F &&
+        format != PixelFormat::RG32F &&
+        format != PixelFormat::RGBA32F;
+}
+
+bool rect_inside(termin::Bounds2i rect, uint32_t width, uint32_t height) {
+    return rect.width() > 0 && rect.height() > 0 &&
+        rect.x0 >= 0 && rect.y0 >= 0 &&
+        rect.x1 <= static_cast<int>(width) &&
+        rect.y1 <= static_cast<int>(height);
+}
+
 wgpu::CompareFunction compare(CompareOp op) {
     switch (op) {
         case CompareOp::Never: return wgpu::CompareFunction::Never;
@@ -274,6 +406,20 @@ wgpu::PrimitiveTopology topology(PrimitiveTopology value) {
 }
 
 } // namespace
+
+struct WebGpuRenderDevice::TextureOpState {
+    ShaderHandle clear_vertex;
+    ShaderHandle clear_fragment;
+    ShaderHandle blit_vertex;
+    ShaderHandle blit_fragment;
+    BufferHandle clear_params;
+    BufferHandle blit_params;
+    SamplerHandle linear_sampler;
+    std::unordered_map<uint64_t, PipelineHandle> clear_pipelines;
+    std::unordered_map<uint64_t, PipelineHandle> blit_pipelines;
+    std::unordered_map<uint32_t, ResourceSetHandle> clear_sets;
+    std::unordered_map<uint64_t, ResourceSetHandle> blit_sets;
+};
 
 void WebGpuRenderDevice::request_async(
     const WebGpuDeviceRequest& request, WebGpuDeviceCallback callback) {
@@ -391,6 +537,7 @@ WebGpuRenderDevice::~WebGpuRenderDevice() {
     tc_mesh_registry_remove_destroy_hook(&webgpu_invalidate_tc_mesh, this);
     tc_texture_registry_remove_destroy_hook(&webgpu_invalidate_tc_texture, this);
     tc_shader_registry_remove_destroy_hook(&webgpu_invalidate_tc_shader, this);
+    release_texture_op_state();
     for (auto& [_, entry] : tc_mesh_cache_) {
         if (entry.vbo) destroy(entry.vbo);
         if (entry.ebo) destroy(entry.ebo);
@@ -410,18 +557,188 @@ void WebGpuRenderDevice::wait_idle() {
     tc_log_warn("WebGPU: wait_idle is asynchronous and intentionally a no-op");
 }
 
+void WebGpuRenderDevice::ensure_texture_op_state() {
+    if (texture_ops_) return;
+    texture_ops_ = std::make_unique<TextureOpState>();
+
+    auto create_op_shader = [this](
+        ShaderStage stage,
+        std::string_view source,
+        std::string_view layout,
+        const char* name) {
+        ShaderDesc desc;
+        desc.stage = stage;
+        desc.source = source;
+        desc.resource_layout_json = layout;
+        desc.entry_point = stage == ShaderStage::Vertex ? "vs_main" : "fs_main";
+        desc.debug_name = name;
+        return create_shader(desc);
+    };
+    texture_ops_->clear_vertex = create_op_shader(
+        ShaderStage::Vertex, texture_op_clear_wgsl,
+        texture_op_clear_layout, "webgpu-texture-clear-vs");
+    texture_ops_->clear_fragment = create_op_shader(
+        ShaderStage::Fragment, texture_op_clear_wgsl,
+        texture_op_clear_layout, "webgpu-texture-clear-fs");
+    texture_ops_->blit_vertex = create_op_shader(
+        ShaderStage::Vertex, texture_op_blit_wgsl,
+        texture_op_blit_layout, "webgpu-texture-blit-vs");
+    texture_ops_->blit_fragment = create_op_shader(
+        ShaderStage::Fragment, texture_op_blit_wgsl,
+        texture_op_blit_layout, "webgpu-texture-blit-fs");
+
+    BufferDesc params;
+    params.size = sizeof(float) * 4;
+    params.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
+    texture_ops_->clear_params = create_buffer(params);
+    texture_ops_->blit_params = create_buffer(params);
+
+    SamplerDesc sampler;
+    sampler.min_filter = FilterMode::Linear;
+    sampler.mag_filter = FilterMode::Linear;
+    sampler.mip_filter = FilterMode::Nearest;
+    sampler.address_u = AddressMode::ClampToEdge;
+    sampler.address_v = AddressMode::ClampToEdge;
+    sampler.address_w = AddressMode::ClampToEdge;
+    texture_ops_->linear_sampler = create_sampler(sampler);
+}
+
+PipelineHandle WebGpuRenderDevice::texture_op_pipeline(
+    PixelFormat format, uint32_t sample_count, bool blit) {
+    ensure_texture_op_state();
+    const uint64_t key =
+        (static_cast<uint64_t>(static_cast<uint32_t>(format)) << 32) |
+        sample_count;
+    auto& cache = blit
+        ? texture_ops_->blit_pipelines
+        : texture_ops_->clear_pipelines;
+    const auto found = cache.find(key);
+    if (found != cache.end()) return found->second;
+
+    PipelineDesc desc;
+    desc.vertex_shader = blit
+        ? texture_ops_->blit_vertex : texture_ops_->clear_vertex;
+    desc.fragment_shader = blit
+        ? texture_ops_->blit_fragment : texture_ops_->clear_fragment;
+    desc.color_formats = {format};
+    desc.depth_format = PixelFormat::Undefined;
+    desc.sample_count = sample_count;
+    desc.raster.cull = CullMode::None;
+    const PipelineHandle pipeline = create_pipeline(desc);
+    cache.emplace(key, pipeline);
+    return pipeline;
+}
+
+ResourceSetHandle WebGpuRenderDevice::texture_op_resource_set(
+    PipelineHandle pipeline, TextureHandle source, bool blit) {
+    ensure_texture_op_state();
+    if (!blit) {
+        const auto found = texture_ops_->clear_sets.find(pipeline.id);
+        if (found != texture_ops_->clear_sets.end()) return found->second;
+    } else {
+        const uint64_t key =
+            (static_cast<uint64_t>(pipeline.id) << 32) | source.id;
+        const auto found = texture_ops_->blit_sets.find(key);
+        if (found != texture_ops_->blit_sets.end()) return found->second;
+    }
+
+    std::array<BoundResourceBinding, 2> bindings;
+    bindings[0].slot.kind = ShaderResourceKind::ConstantBuffer;
+    bindings[0].slot.scope = ShaderResourceScope::Material;
+    bindings[0].slot.stage_mask = blit ? 1u : 2u;
+    bindings[0].slot.placement.kind = BackendPlacementKind::WebGPU;
+    bindings[0].slot.placement.webgpu.binding = 0;
+    bindings[0].slot.debug_name = blit ? "blit_params" : "clear_params";
+    bindings[0].value.kind = BoundResourceKind::UniformBuffer;
+    bindings[0].value.buffer = blit
+        ? texture_ops_->blit_params : texture_ops_->clear_params;
+    bindings[0].value.range = sizeof(float) * 4;
+
+    uint32_t binding_count = 1;
+    if (blit) {
+        bindings[1].slot.kind = ShaderResourceKind::Texture;
+        bindings[1].slot.scope = ShaderResourceScope::Material;
+        bindings[1].slot.stage_mask = 2;
+        bindings[1].slot.placement.kind = BackendPlacementKind::WebGPU;
+        bindings[1].slot.placement.webgpu.binding = 1;
+        bindings[1].slot.placement.webgpu.has_sampler_binding = true;
+        bindings[1].slot.placement.webgpu.sampler_binding = 2;
+        bindings[1].slot.debug_name = "source_texture";
+        bindings[1].value.kind = BoundResourceKind::SampledTexture;
+        bindings[1].value.texture = source;
+        bindings[1].value.sampler = texture_ops_->linear_sampler;
+        binding_count = 2;
+    }
+
+    BoundResourceGroupView group;
+    group.scope = ShaderResourceScope::Material;
+    group.bindings = bindings.data();
+    group.binding_count = binding_count;
+    BoundResourceSetDesc desc;
+    desc.resource_layout_token = pipeline_resource_layout_token(pipeline);
+    desc.groups = &group;
+    desc.group_count = 1;
+    const ResourceSetHandle set = create_bound_resource_set(desc);
+    if (blit) {
+        const uint64_t key =
+            (static_cast<uint64_t>(pipeline.id) << 32) | source.id;
+        texture_ops_->blit_sets.emplace(key, set);
+    } else {
+        texture_ops_->clear_sets.emplace(pipeline.id, set);
+    }
+    return set;
+}
+
+void WebGpuRenderDevice::release_texture_op_source(TextureHandle source) {
+    if (!texture_ops_) return;
+    for (auto it = texture_ops_->blit_sets.begin();
+            it != texture_ops_->blit_sets.end();) {
+        if (static_cast<uint32_t>(it->first) == source.id) {
+            destroy(it->second);
+            it = texture_ops_->blit_sets.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void WebGpuRenderDevice::release_texture_op_state() {
+    if (!texture_ops_) return;
+    for (const auto& [_, set] : texture_ops_->blit_sets) destroy(set);
+    for (const auto& [_, set] : texture_ops_->clear_sets) destroy(set);
+    for (const auto& [_, pipeline] : texture_ops_->blit_pipelines) destroy(pipeline);
+    for (const auto& [_, pipeline] : texture_ops_->clear_pipelines) destroy(pipeline);
+    if (texture_ops_->clear_vertex) destroy(texture_ops_->clear_vertex);
+    if (texture_ops_->clear_fragment) destroy(texture_ops_->clear_fragment);
+    if (texture_ops_->blit_vertex) destroy(texture_ops_->blit_vertex);
+    if (texture_ops_->blit_fragment) destroy(texture_ops_->blit_fragment);
+    if (texture_ops_->clear_params) destroy(texture_ops_->clear_params);
+    if (texture_ops_->blit_params) destroy(texture_ops_->blit_params);
+    if (texture_ops_->linear_sampler) destroy(texture_ops_->linear_sampler);
+    texture_ops_.reset();
+}
+
 void WebGpuRenderDevice::clear_texture(
     TextureHandle dst_handle,
     termin::Color4 color,
     termin::Bounds2i viewport) {
     const WebGpuTexture* dst = textures_.get(dst_handle.id);
     if (!dst) fail("clear_texture requires a valid destination texture");
+    if (!color_format(dst->desc.format) ||
+            !has_flag(dst->desc.usage, TextureUsage::ColorAttachment)) {
+        fail("clear_texture requires a color-attachment destination texture");
+    }
     const int width = static_cast<int>(dst->desc.width);
     const int height = static_cast<int>(dst->desc.height);
-    if (viewport.x0 != 0 || viewport.y0 != 0 ||
-            viewport.x1 != width || viewport.y1 != height) {
-        fail("WebGPU clear_texture currently requires a full-texture viewport");
+    if (viewport.width() <= 0 || viewport.height() <= 0) {
+        fail("clear_texture requires a non-empty viewport");
     }
+    const int x0 = std::clamp(viewport.x0, 0, width);
+    const int y0 = std::clamp(viewport.y0, 0, height);
+    const int x1 = std::clamp(viewport.x1, 0, width);
+    const int y1 = std::clamp(viewport.y1, 0, height);
+    if (x1 <= x0 || y1 <= y0) return;
+
     RenderPassDesc pass;
     ColorAttachmentDesc attachment;
     attachment.texture = dst_handle;
@@ -429,10 +746,32 @@ void WebGpuRenderDevice::clear_texture(
     attachment.clear_color[1] = color.g;
     attachment.clear_color[2] = color.b;
     attachment.clear_color[3] = color.a;
+    const bool full = x0 == 0 && y0 == 0 && x1 == width && y1 == height;
+    attachment.load = full ? LoadOp::Clear : LoadOp::Load;
     pass.colors.push_back(attachment);
+    PipelineHandle partial_pipeline;
+    ResourceSetHandle partial_set;
+    if (!full) {
+        const std::array<float, 4> params{{color.r, color.g, color.b, color.a}};
+        ensure_texture_op_state();
+        upload_buffer(
+            texture_ops_->clear_params,
+            std::span<const uint8_t>(
+                reinterpret_cast<const uint8_t*>(params.data()), sizeof(params)));
+        partial_pipeline = texture_op_pipeline(
+            dst->desc.format, dst->desc.sample_count, false);
+        partial_set = texture_op_resource_set(partial_pipeline, {}, false);
+    }
     std::unique_ptr<ICommandList> commands = create_command_list();
     commands->begin();
     commands->begin_render_pass(pass);
+    if (!full) {
+        commands->set_viewport(x0, y0, x1 - x0, y1 - y0);
+        commands->set_scissor(x0, y0, x1 - x0, y1 - y0);
+        commands->bind_pipeline(partial_pipeline);
+        commands->bind_resource_set(partial_set);
+        commands->draw(3);
+    }
     commands->end_render_pass();
     commands->end();
     submit(*commands);
@@ -446,21 +785,82 @@ void WebGpuRenderDevice::blit_to_texture(
     const WebGpuTexture* src = textures_.get(src_handle.id);
     const WebGpuTexture* dst = textures_.get(dst_handle.id);
     if (!src || !dst) fail("blit_to_texture requires valid textures");
-    const bool full_source = src_rect.x0 == 0 && src_rect.y0 == 0 &&
-        src_rect.x1 == static_cast<int>(src->desc.width) &&
-        src_rect.y1 == static_cast<int>(src->desc.height);
-    const bool full_destination = dst_rect.x0 == 0 && dst_rect.y0 == 0 &&
-        dst_rect.x1 == static_cast<int>(dst->desc.width) &&
-        dst_rect.y1 == static_cast<int>(dst->desc.height);
-    if (!full_source || !full_destination ||
-            src->desc.width != dst->desc.width ||
-            src->desc.height != dst->desc.height ||
-            src->desc.sample_count != 1 || dst->desc.sample_count != 1) {
-        fail("WebGPU blit_to_texture requires equal single-sample full textures");
+    if (src_handle == dst_handle) fail("blit_to_texture does not support self-blits");
+    if (!rect_inside(src_rect, src->desc.width, src->desc.height) ||
+            !rect_inside(dst_rect, dst->desc.width, dst->desc.height)) {
+        fail("blit_to_texture requires non-empty in-bounds regions");
     }
+    if (!color_format(src->desc.format) || !color_format(dst->desc.format)) {
+        fail("blit_to_texture requires color textures");
+    }
+    const bool fast_copy =
+        src_rect.width() == dst_rect.width() &&
+        src_rect.height() == dst_rect.height() &&
+        src->desc.format == dst->desc.format &&
+        src->desc.sample_count == 1 && dst->desc.sample_count == 1 &&
+        has_flag(src->desc.usage, TextureUsage::CopySrc) &&
+        has_flag(dst->desc.usage, TextureUsage::CopyDst);
+    if (fast_copy) {
+        wgpu::CommandEncoder encoder = device_.CreateCommandEncoder();
+        wgpu::TexelCopyTextureInfo source;
+        source.texture = src->object;
+        source.origin = {
+            static_cast<uint32_t>(src_rect.x0),
+            static_cast<uint32_t>(src_rect.y0), 0};
+        wgpu::TexelCopyTextureInfo destination;
+        destination.texture = dst->object;
+        destination.origin = {
+            static_cast<uint32_t>(dst_rect.x0),
+            static_cast<uint32_t>(dst_rect.y0), 0};
+        const wgpu::Extent3D extent{
+            static_cast<uint32_t>(src_rect.width()),
+            static_cast<uint32_t>(src_rect.height()), 1};
+        encoder.CopyTextureToTexture(&source, &destination, &extent);
+        wgpu::CommandBuffer command = encoder.Finish();
+        queue_.Submit(1, &command);
+        return;
+    }
+    if (src->desc.sample_count != 1) {
+        fail("shader blit requires a single-sample source texture");
+    }
+    if (!linearly_filterable_color_format(src->desc.format)) {
+        fail("shader blit source format does not support portable linear filtering");
+    }
+    if (!has_flag(src->desc.usage, TextureUsage::Sampled) ||
+            !has_flag(dst->desc.usage, TextureUsage::ColorAttachment)) {
+        fail("shader blit requires Sampled source and ColorAttachment destination usage");
+    }
+
+    const std::array<float, 4> params{{
+        static_cast<float>(src_rect.x0) / static_cast<float>(src->desc.width),
+        static_cast<float>(src_rect.y0) / static_cast<float>(src->desc.height),
+        static_cast<float>(src_rect.width()) / static_cast<float>(src->desc.width),
+        static_cast<float>(src_rect.height()) / static_cast<float>(src->desc.height),
+    }};
+    ensure_texture_op_state();
+    upload_buffer(
+        texture_ops_->blit_params,
+        std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(params.data()), sizeof(params)));
+    const PipelineHandle pipeline = texture_op_pipeline(
+        dst->desc.format, dst->desc.sample_count, true);
+    RenderPassDesc pass;
+    ColorAttachmentDesc attachment;
+    attachment.texture = dst_handle;
+    attachment.load = LoadOp::Load;
+    pass.colors.push_back(attachment);
     std::unique_ptr<ICommandList> commands = create_command_list();
     commands->begin();
-    commands->copy_texture(src_handle, dst_handle);
+    commands->begin_render_pass(pass);
+    commands->set_viewport(
+        dst_rect.x0, dst_rect.y0, dst_rect.width(), dst_rect.height());
+    commands->set_scissor(
+        dst_rect.x0, dst_rect.y0, dst_rect.width(), dst_rect.height());
+    commands->bind_pipeline(pipeline);
+    commands->bind_resource_set(
+        texture_op_resource_set(pipeline, src_handle, true));
+    commands->draw(3);
+    commands->end_render_pass();
     commands->end();
     submit(*commands);
 }
@@ -776,6 +1176,7 @@ ResourceSetHandle WebGpuRenderDevice::create_bound_resource_set(
 
 void WebGpuRenderDevice::destroy(BufferHandle handle) { buffers_.remove(handle.id); }
 void WebGpuRenderDevice::destroy(TextureHandle handle) {
+    release_texture_op_source(handle);
     if (handle == acquired_surface_texture_) acquired_surface_texture_ = {};
     textures_.remove(handle.id);
 }
