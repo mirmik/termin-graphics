@@ -46,6 +46,13 @@ source получает нейтральные view/mask inputs и наполн�
 отдельный `termin_render_core`, тогда как scene traversal/services остаются в
 `termin_render`.
 
+Для adapter-specific CPU data `RenderItemCollection` предоставляет
+type-erased ownership: source сохраняет `shared_ptr<const Payload>`, а
+`tc_render_item::source.adapter_data` указывает на удерживаемое snapshot
+значение. Core не знает concrete payload type; invalidation уничтожает payload
+ownership, но сохраняет capacity контейнера для следующей публикации. Borrowed
+pointers на mutable source slots в immutable snapshot недопустимы.
+
 Non-texture framegraph resources расширяют executor через
 `FrameGraphResourceTypeDescriptor`. Registry хранит cold-path factory и
 необязательный sampled-texture callback с явным `Color`/`Depth` attachment

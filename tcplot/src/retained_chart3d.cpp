@@ -660,6 +660,10 @@ private:
         tc_scatter_item3d_style scatter_style{};
         tc_grid_item3d_style grid_style{};
         std::unique_ptr<tcplot::PlotEngine3D> engine;
+        mutable std::shared_ptr<const tcplot::PlotScene3DItemRenderData>
+            published_render_data;
+        mutable std::uint64_t published_geometry_revision = 0;
+        mutable std::uint64_t published_style_revision = 0;
     };
 
     Slot& allocate(tc_plot_item3d_kind kind) {
@@ -679,6 +683,9 @@ private:
         slot.style_revision = 1;
         slot.render_revision = 1;
         slot.gpu_revision = 0;
+        slot.published_render_data.reset();
+        slot.published_geometry_revision = 0;
+        slot.published_style_revision = 0;
         return slot;
     }
 
@@ -997,6 +1004,25 @@ bool PlotScene3DRenderItemSource::collect_items(
         return false;
     }
 
+    tcplot::PlotScene3DFrameRenderState frame;
+    frame.camera = scene_->camera_state();
+    frame.axis_scale = {
+        scene_->axis_scale_[0],
+        scene_->axis_scale_[1],
+        scene_->axis_scale_[2],
+    };
+    frame.surface_shading = scene_->shading_;
+    frame.surface_shading_strength = scene_->shading_strength_;
+    frame.surface_light_direction = {
+        scene_->light_.x,
+        scene_->light_.y,
+        scene_->light_.z,
+    };
+    scene_->bounds(frame.bounds_min.data(), frame.bounds_max.data());
+    frame.x_label = scene_->x_label_;
+    frame.y_label = scene_->y_label_;
+    frame.z_label = scene_->z_label_;
+
     counters.source_traversals = 1;
     for (const RetainedChart3D::Slot& slot : scene_->slots_) {
         if (!slot.alive) {
@@ -1028,7 +1054,42 @@ bool PlotScene3DRenderItemSource::collect_items(
         item.source.object_id = slot.index;
         item.source.generation = slot.generation;
         item.source.subobject_id = 0;
-        item.source.adapter_data = 0;
+        if (!slot.published_render_data ||
+            slot.published_geometry_revision != slot.geometry_revision ||
+            slot.published_style_revision != slot.style_revision) {
+            auto data =
+                std::make_shared<tcplot::PlotScene3DItemRenderData>();
+            data->kind = slot.kind;
+            data->x = slot.x;
+            data->y = slot.y;
+            data->z = slot.z;
+            data->rows = slot.rows;
+            data->columns = slot.columns;
+            data->surface_style = slot.surface_style;
+            data->scatter_style = slot.scatter_style;
+            data->grid_style = slot.grid_style;
+            slot.published_render_data = std::move(data);
+            slot.published_geometry_revision = slot.geometry_revision;
+            slot.published_style_revision = slot.style_revision;
+        }
+
+        auto payload =
+            std::make_shared<const tcplot::PlotScene3DRenderItemPayload>(
+                tcplot::PlotScene3DRenderItemPayload{
+                    .item = slot.published_render_data,
+                    .frame = frame,
+                    .geometry_revision = slot.geometry_revision,
+                    .style_revision = slot.style_revision,
+                    .render_revision = slot.render_revision,
+                });
+        const auto* retained_payload =
+            output.retain_adapter_payload(std::move(payload));
+        if (!retained_payload) {
+            tc::Log::error(
+                "[PlotScene3DRenderItemSource] failed to retain item payload");
+            return false;
+        }
+        item.source.adapter_data = reinterpret_cast<uintptr_t>(retained_payload);
         output.items.push_back(item);
         ++counters.producers;
     }
@@ -1063,6 +1124,30 @@ namespace tcplot {
 termin::RenderItemSource& plot_scene3d_render_item_source(
     tc_retained_chart3d& chart) {
     return chart.render_item_source;
+}
+
+const PlotScene3DRenderItemPayload* plot_scene3d_render_item_payload(
+    const tc_render_item& item) noexcept {
+    if (item.source.domain_id != PLOT_RENDER_ITEM_SOURCE_DOMAIN ||
+        item.source.adapter_data == 0 ||
+        (item.kind != PLOT_RENDER_ITEM_KIND_SURFACE &&
+         item.kind != PLOT_RENDER_ITEM_KIND_SCATTER &&
+         item.kind != PLOT_RENDER_ITEM_KIND_GRID)) {
+        return nullptr;
+    }
+    const auto* payload = reinterpret_cast<const PlotScene3DRenderItemPayload*>(
+        item.source.adapter_data);
+    if (!payload->item) {
+        return nullptr;
+    }
+    const bool kind_matches =
+        (item.kind == PLOT_RENDER_ITEM_KIND_SURFACE &&
+         payload->item->kind == TC_PLOT_ITEM3D_SURFACE) ||
+        (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
+         payload->item->kind == TC_PLOT_ITEM3D_SCATTER) ||
+        (item.kind == PLOT_RENDER_ITEM_KIND_GRID &&
+         payload->item->kind == TC_PLOT_ITEM3D_GRID);
+    return kind_matches ? payload : nullptr;
 }
 
 } // namespace tcplot

@@ -18,6 +18,10 @@ namespace termin {
 // domain semantics.
 struct RENDER_CORE_API RenderItemCollection {
     std::vector<tc_render_item> items;
+    // Source-adapter payloads whose concrete types remain outside render core.
+    // RenderItems may reference these values through source.adapter_data. The
+    // collection owns them for the complete immutable snapshot lifetime.
+    std::vector<std::shared_ptr<const void>> adapter_payloads;
     std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
     std::vector<std::unique_ptr<std::string>> text_batch_strings;
     std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
@@ -32,8 +36,21 @@ struct RENDER_CORE_API RenderItemCollection {
     RenderItemCollection(const RenderItemCollection&) = delete;
     RenderItemCollection& operator=(const RenderItemCollection&) = delete;
 
+    template <typename Payload>
+    const Payload* retain_adapter_payload(
+        std::shared_ptr<const Payload> payload)
+    {
+        if (!payload) {
+            return nullptr;
+        }
+        const Payload* value = payload.get();
+        adapter_payloads.emplace_back(std::move(payload));
+        return value;
+    }
+
     void clear() {
         items.clear();
+        adapter_payloads.clear();
         active_line_batch_points = 0;
         active_text_batch_strings = 0;
         active_foliage_batch_strings = 0;

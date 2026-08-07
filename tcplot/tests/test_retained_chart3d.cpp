@@ -71,6 +71,13 @@ const tc_render_item* find_render_item(
     return nullptr;
 }
 
+const tcplot::PlotScene3DRenderItemPayload* find_plot_payload(
+    const termin::RenderItemSnapshot& snapshot,
+    tc_plot_item3d_handle handle) {
+    const tc_render_item* item = find_render_item(snapshot, handle);
+    return item ? tcplot::plot_scene3d_render_item_payload(*item) : nullptr;
+}
+
 constexpr const char* kPlotSnapshotProbeType = "PlotScene3DSnapshotProbe";
 const termin::RenderItemSnapshot* g_probe_snapshot = nullptr;
 std::size_t g_probe_item_count = 0;
@@ -272,10 +279,58 @@ int main() {
                 item.source.domain_id == tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN &&
                     item.source.namespace_id ==
                         tc_retained_chart3d_scene_id(chart) &&
-                    item.source.adapter_data == 0,
-                "PlotScene3D item identity must be scene-neutral value data");
+                    item.source.adapter_data != 0 &&
+                    tcplot::plot_scene3d_render_item_payload(item) != nullptr,
+                "PlotScene3D item must retain an immutable adapter payload");
         }
+        const tcplot::PlotScene3DRenderItemPayload* first_surface_payload =
+            find_plot_payload(first_render_snapshot, surface);
+        const tcplot::PlotScene3DRenderItemPayload* first_scatter_payload =
+            find_plot_payload(first_render_snapshot, scatter);
+        require(
+            first_surface_payload && first_surface_payload->item &&
+                first_scatter_payload && first_scatter_payload->item,
+            "PlotScene3D payload lookup failed");
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                first_surface_payload->item->surface_style.wireframe == 0 &&
+                first_surface_payload->frame.x_label == "x",
+            "PlotScene3D payload lost item or chart values");
+        const tcplot::PlotScene3DRenderItemPayload* second_surface_payload =
+            find_plot_payload(second_render_snapshot, surface);
+        require(
+            second_surface_payload && second_surface_payload->item ==
+                first_surface_payload->item,
+            "unchanged item data must be shared between snapshots");
         execute_snapshot_probe(first_render_snapshot, host);
+
+        const double changed_z[] = {0.25, 0.75, 1.25, 0.5};
+        require(
+            tc_retained_chart3d_surface_set_data(
+                chart, surface, x, y, changed_z, 2, 2) != 0,
+            "failed to update surface data for snapshot isolation");
+        termin::RenderItemSnapshot geometry_changed_snapshot;
+        require(
+            render_item_source.publish(geometry_changed_snapshot, {}),
+            "PlotScene3D publication after geometry mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* changed_surface_payload =
+            find_plot_payload(geometry_changed_snapshot, surface);
+        require(
+            changed_surface_payload && changed_surface_payload->item &&
+                changed_surface_payload->item->z ==
+                    std::vector<double>(
+                        std::begin(changed_z), std::end(changed_z)) &&
+                changed_surface_payload->geometry_revision ==
+                    first_surface_payload->geometry_revision + 1 &&
+                changed_surface_payload->item != first_surface_payload->item,
+            "geometry mutation must publish a new immutable item payload");
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                find_plot_payload(geometry_changed_snapshot, scatter)->item ==
+                    first_scatter_payload->item,
+            "geometry mutation changed an older or unrelated snapshot payload");
 
         const auto surface_initial = snapshot(chart, surface);
         const auto scatter_initial = snapshot(chart, scatter);
@@ -310,6 +365,18 @@ int main() {
             same_snapshot(surface_initial, snapshot(chart, surface)) &&
                 same_snapshot(scatter_initial, snapshot(chart, scatter)),
             "camera changes must not invalidate item state");
+        termin::RenderItemSnapshot chart_state_snapshot;
+        require(
+            render_item_source.publish(chart_state_snapshot, {}),
+            "PlotScene3D publication after chart-state mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* chart_state_payload =
+            find_plot_payload(chart_state_snapshot, surface);
+        require(
+            chart_state_payload &&
+                chart_state_payload->frame.camera.azimuth == camera.azimuth &&
+                chart_state_payload->frame.surface_shading_strength == 0.4f &&
+                first_surface_payload->frame.camera.azimuth != camera.azimuth,
+            "chart-state mutation must publish values without altering older snapshots");
 
         require(
             tc_retained_chart3d_render(chart, 320, 240) != 0,
@@ -334,6 +401,19 @@ int main() {
                     surface_rendered.style_revision + 1 &&
                 surface_invalidated.gpu_revision == 0,
             "style change must preserve semantic geometry and invalidate GPU state");
+        termin::RenderItemSnapshot style_changed_snapshot;
+        require(
+            render_item_source.publish(style_changed_snapshot, {}),
+            "PlotScene3D publication after style mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* styled_surface_payload =
+            find_plot_payload(style_changed_snapshot, surface);
+        require(
+            styled_surface_payload && styled_surface_payload->item &&
+                styled_surface_payload->item->surface_style.wireframe == 1 &&
+                first_surface_payload->item->surface_style.wireframe == 0 &&
+                styled_surface_payload->style_revision ==
+                    first_surface_payload->style_revision + 1,
+            "style mutation must not alter an older snapshot payload");
         require(
             same_snapshot(scatter_rendered, snapshot(chart, scatter)),
             "surface style must not invalidate unrelated scatter");
@@ -401,12 +481,24 @@ int main() {
             find_render_item(replacement_snapshot, scatter) == nullptr &&
                 find_render_item(replacement_snapshot, replacement) != nullptr,
             "PlotScene3D snapshot must publish only the live slot generation");
+        const tcplot::PlotScene3DRenderItemPayload* replacement_payload =
+            find_plot_payload(replacement_snapshot, replacement);
+        require(
+            replacement_payload && replacement_payload->item &&
+                replacement_payload->item != first_scatter_payload->item,
+            "reused slot must not recycle the previous generation's payload");
         require(
             tc_retained_chart3d_destroy_item(chart, scatter) == 0,
             "stale handle must not destroy replacement item");
 
         tc_retained_chart3d_destroy(other);
         tc_retained_chart3d_destroy(chart);
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                first_surface_payload->frame.x_label == "x" &&
+                first_surface_payload->item->surface_style.wireframe == 0,
+            "snapshot-owned PlotScene3D payload did not survive chart destruction");
         std::printf("retained Chart3D lifecycle and invalidation test passed\n");
         return 0;
     } catch (const std::exception& error) {

@@ -86,10 +86,14 @@ geometry. Для retained batches произвольный geometric clip сей
 `RetainedChart3D` владеет `PlotScene3DRenderItemSource`, доступным C++ consumer
 через `plot_scene3d_render_item_source()`. Он публикует immutable surface,
 scatter и grid identities в общий `termin_render_core` без `tc_scene`, entity
-или component metadata. Это пока snapshot/execution boundary: конкретные
-chart encoders и framegraph output вводятся следующим срезом, а существующие
-per-item `PlotEngine3D` bodies временно продолжают обслуживать старый render
-path.
+или component metadata. Каждый item также ссылается на snapshot-owned
+`PlotScene3DRenderItemPayload`: item geometry/style переиспользуются через
+immutable shared value до смены revision, а camera/axis/light/bounds/labels
+копируются для конкретной публикации. Payload не заимствует retained slot и
+остаётся читаемым после последующих mutations, slot reuse и уничтожения chart.
+Конкретные chart encoders и framegraph output вводятся следующим срезом, а
+существующие per-item `PlotEngine3D` bodies временно продолжают обслуживать
+старый render path.
 
 `fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
 value-only layout boundary. Tick spacing и font size задаются в logical pixels
