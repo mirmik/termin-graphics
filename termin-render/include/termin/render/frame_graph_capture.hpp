@@ -86,6 +86,13 @@ public:
     bool has_capture() const { return captured_; }
     void reset_capture() { captured_ = false; }
 
+    // Exact CPU readback of the captured texture. Color is returned as
+    // top-down RGBA float32 values and depth as top-down float32 values. The
+    // caller owns the bounded CPU buffer; no graphics object crosses the
+    // render-thread boundary.
+    bool read_color_rgba_float(std::vector<float>& out) const;
+    bool read_depth_float(std::vector<float>& out) const;
+
 private:
     void release();
     void ensure_capture_tex(

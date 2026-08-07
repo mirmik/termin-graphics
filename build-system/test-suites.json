@@ -312,6 +312,8 @@
     {"id": "tcplot-gui-native-tests", "module": "tcplot-gui-native", "executor": "ctest", "roots": ["tcplot-gui-native/tests"]},
     {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
     {"id": "termin-image-tests-native", "module": "termin-image", "executor": "ctest", "roots": ["termin-image/tests"]},
+    {"id": "termin-framegraph-remote-tests-native", "module": "termin-framegraph-remote", "executor": "ctest", "roots": ["termin-framegraph-remote/tests"]},
+    {"id": "termin-framegraph-remote-target-tests-native", "module": "termin-framegraph-remote-target", "executor": "ctest", "roots": ["termin-framegraph-remote-target/tests"]},
     {"id": "termin-profiler-remote-tests-native", "module": "termin-profiler-remote", "executor": "ctest", "roots": ["termin-profiler-remote/tests"]},
     {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
     {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
