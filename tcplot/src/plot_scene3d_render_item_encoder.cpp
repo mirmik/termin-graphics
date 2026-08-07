@@ -26,7 +26,7 @@ namespace tcplot
     {
 
         constexpr const char* kPlot3DShaderUuid = "termin-engine-tcplot-3d";
-        constexpr uint32_t kSurfaceFloatsPerVertex = 19;
+        constexpr uint32_t kPlot3DFloatsPerVertex = 19;
 
         struct Plot3DDrawData
         {
@@ -80,24 +80,65 @@ namespace tcplot
             vertices.push_back(static_cast<float>(data.rows - 1));
         }
 
-        termin::RenderItemTaskRejection plan_surface_shader(
+        void append_scatter_vertex(std::vector<float>& vertices,
+                                   float x,
+                                   float y,
+                                   float z,
+                                   const tc_scatter_item3d_style& style)
+        {
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+            vertices.push_back(style.color_r);
+            vertices.push_back(style.color_g);
+            vertices.push_back(style.color_b);
+            vertices.push_back(style.color_a);
+            for (uint32_t index = 0; index < 12; ++index)
+            {
+                vertices.push_back(0.0f);
+            }
+        }
+
+        bool is_encoded_plot_item_kind(uint32_t kind)
+        {
+            return kind == PLOT_RENDER_ITEM_KIND_SURFACE ||
+                   kind == PLOT_RENDER_ITEM_KIND_SCATTER;
+        }
+
+        bool
+        payload_kind_matches_item(const tc_render_item& item,
+                                  const PlotScene3DRenderItemPayload& payload)
+        {
+            if (!payload.item)
+            {
+                return false;
+            }
+            return (item.kind == PLOT_RENDER_ITEM_KIND_SURFACE &&
+                    payload.item->kind == TC_PLOT_ITEM3D_SURFACE) ||
+                   (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
+                    payload.item->kind == TC_PLOT_ITEM3D_SCATTER);
+        }
+
+        termin::RenderItemTaskRejection plan_plot_scene3d_shader(
             const termin::RenderItemTaskPlanningRequest& request,
             termin::RenderItemTaskShaderPlan& out_plan,
             const char*& out_detail,
             void*)
         {
+            const PlotScene3DRenderItemPayload* payload =
+                request.item ? plot_scene3d_render_item_payload(*request.item)
+                             : nullptr;
             if (!request.item ||
-                request.item->kind != PLOT_RENDER_ITEM_KIND_SURFACE ||
-                !plot_scene3d_render_item_payload(*request.item))
+                !is_encoded_plot_item_kind(request.item->kind) || !payload ||
+                !payload_kind_matches_item(*request.item, *payload))
             {
                 out_detail =
-                    "surface item has no immutable PlotScene3D payload";
+                    "item has no matching immutable PlotScene3D payload";
                 return termin::RenderItemTaskRejection::ShaderPlanningRejected;
             }
             if (request.material_phase)
             {
-                out_detail =
-                    "PlotScene3D surface items do not accept material phases";
+                out_detail = "PlotScene3D items do not accept material phases";
                 return termin::RenderItemTaskRejection::MaterialPhaseForbidden;
             }
             const tc_shader_handle shader = plot3d_shader_handle();
@@ -109,11 +150,107 @@ namespace tcplot
             out_plan.final_shader = shader;
             if (!out_plan.add_shader_usage(shader))
             {
-                out_detail = "surface shader usage packet is full";
+                out_detail = "PlotScene3D shader usage packet is full";
                 return termin::RenderItemTaskRejection::ShaderPlanningRejected;
             }
             out_detail = nullptr;
             return termin::RenderItemTaskRejection::None;
+        }
+
+        bool prepare_plot_scene3d_draw(
+            tgfx::RenderContext2& context,
+            const termin::RenderItemDrawSubmitRequest& request,
+            const PlotScene3DRenderItemPayload& payload,
+            const PlotScene3DItemRenderData& data,
+            bool surface_mode,
+            const char* pass_name,
+            tgfx::VertexLayoutDesc& out_layout)
+        {
+            termin::MaterialPipelineShaderBinding shader_binding{};
+            if (!termin::ensure_material_pipeline_shader(context,
+                                                         *request.device,
+                                                         request.shader_handle,
+                                                         pass_name,
+                                                         shader_binding))
+            {
+                tc::Log::error("[%s] failed to prepare PlotScene3D shader",
+                               pass_name);
+                return false;
+            }
+
+            termin::OrbitCamera camera;
+            const tc_orbit_camera3d_state& camera_state = payload.frame.camera;
+            camera.target = {
+                camera_state.target_x,
+                camera_state.target_y,
+                camera_state.target_z,
+            };
+            camera.distance = camera_state.distance;
+            camera.azimuth = camera_state.azimuth;
+            camera.elevation = camera_state.elevation;
+            camera.fov_y = camera_state.fov_y;
+            camera.near_clip = camera_state.near_clip;
+            camera.far_clip = camera_state.far_clip;
+            const float aspect =
+                static_cast<float>(request.draw_context->viewport_width) /
+                static_cast<float>(request.draw_context->viewport_height);
+            const termin::Mat44f mvp =
+                camera.projection_matrix(aspect) * camera.view_matrix();
+
+            Plot3DDrawData draw{};
+            std::memcpy(draw.mvp, mvp.data, sizeof(draw.mvp));
+            for (int row = 0; row < 4; ++row)
+            {
+                draw.mvp[0 * 4 + row] *= payload.frame.axis_scale[0];
+                draw.mvp[1 * 4 + row] *= payload.frame.axis_scale[1];
+                draw.mvp[2 * 4 + row] *= payload.frame.axis_scale[2];
+            }
+            draw.params[0] = static_cast<float>(payload.frame.bounds_min[2]);
+            draw.params[1] = static_cast<float>(payload.frame.bounds_max[2]);
+            draw.axis_shading[0] = payload.frame.axis_scale[0];
+            draw.axis_shading[1] = payload.frame.axis_scale[1];
+            draw.axis_shading[2] = payload.frame.axis_scale[2];
+            if (surface_mode)
+            {
+                const tc_surface_item3d_style& style = data.surface_style;
+                draw.params[2] = style.wireframe == 0 ? 1.0f : 0.0f;
+                draw.params[3] = static_cast<float>(style.colormap) +
+                                 (style.colormap_reversed != 0 ? 100.0f : 0.0f);
+                draw.surface_color[0] = style.color_r;
+                draw.surface_color[1] = style.color_g;
+                draw.surface_color[2] = style.color_b;
+                draw.surface_color[3] = style.color_a;
+                draw.axis_shading[3] =
+                    style.wireframe == 0 && payload.frame.surface_shading
+                        ? 1.0f
+                        : 0.0f;
+                draw.light_strength[0] =
+                    payload.frame.surface_light_direction[0];
+                draw.light_strength[1] =
+                    payload.frame.surface_light_direction[1];
+                draw.light_strength[2] =
+                    payload.frame.surface_light_direction[2];
+                draw.light_strength[3] = std::clamp(
+                    payload.frame.surface_shading_strength, 0.0f, 1.0f);
+            }
+            context.bind_uniform_data(
+                "tcplot3d_draw", &draw, static_cast<uint32_t>(sizeof(draw)));
+
+            out_layout = {};
+            out_layout.stride = kPlot3DFloatsPerVertex * sizeof(float);
+            out_layout.use_shader_input_locations = true;
+            out_layout.attribute_count = 5;
+            out_layout.attributes[0] = {
+                0, tgfx::VertexFormat::Float3, 0, nullptr};
+            out_layout.attributes[1] = {
+                1, tgfx::VertexFormat::Float4, 3 * sizeof(float), nullptr};
+            out_layout.attributes[2] = {
+                2, tgfx::VertexFormat::Float4, 7 * sizeof(float), nullptr};
+            out_layout.attributes[3] = {
+                3, tgfx::VertexFormat::Float4, 11 * sizeof(float), nullptr};
+            out_layout.attributes[4] = {
+                4, tgfx::VertexFormat::Float4, 15 * sizeof(float), nullptr};
+            return true;
         }
 
         bool encode_surface(tgfx::RenderContext2& context,
@@ -159,11 +296,11 @@ namespace tcplot
                 return false;
             }
             const PlotScene3DItemRenderData& data = *payload->item;
-            if (data.surface_draw_vertex_count == 0 ||
-                data.surface_draw_vertices.size() !=
-                    static_cast<size_t>(data.surface_draw_vertex_count) *
-                        kSurfaceFloatsPerVertex ||
-                data.surface_draw_vertices.size() >
+            if (data.draw_vertex_count == 0 ||
+                data.draw_vertices.size() !=
+                    static_cast<size_t>(data.draw_vertex_count) *
+                        kPlot3DFloatsPerVertex ||
+                data.draw_vertices.size() >
                     std::numeric_limits<uint32_t>::max() / sizeof(float))
             {
                 tc::Log::error("[%s] PlotScene3D surface encoder received an "
@@ -172,83 +309,13 @@ namespace tcplot
                 return false;
             }
 
-            termin::MaterialPipelineShaderBinding shader_binding{};
-            if (!termin::ensure_material_pipeline_shader(context,
-                                                         *request.device,
-                                                         request.shader_handle,
-                                                         pass_name,
-                                                         shader_binding))
+            const tc_surface_item3d_style& style = data.surface_style;
+            tgfx::VertexLayoutDesc layout{};
+            if (!prepare_plot_scene3d_draw(
+                    context, request, *payload, data, true, pass_name, layout))
             {
-                tc::Log::error(
-                    "[%s] failed to prepare PlotScene3D surface shader",
-                    pass_name);
                 return false;
             }
-
-            termin::OrbitCamera camera;
-            const tc_orbit_camera3d_state& camera_state = payload->frame.camera;
-            camera.target = {
-                camera_state.target_x,
-                camera_state.target_y,
-                camera_state.target_z,
-            };
-            camera.distance = camera_state.distance;
-            camera.azimuth = camera_state.azimuth;
-            camera.elevation = camera_state.elevation;
-            camera.fov_y = camera_state.fov_y;
-            camera.near_clip = camera_state.near_clip;
-            camera.far_clip = camera_state.far_clip;
-            const float aspect =
-                static_cast<float>(request.draw_context->viewport_width) /
-                static_cast<float>(request.draw_context->viewport_height);
-            const termin::Mat44f mvp =
-                camera.projection_matrix(aspect) * camera.view_matrix();
-
-            Plot3DDrawData draw{};
-            std::memcpy(draw.mvp, mvp.data, sizeof(draw.mvp));
-            for (int row = 0; row < 4; ++row)
-            {
-                draw.mvp[0 * 4 + row] *= payload->frame.axis_scale[0];
-                draw.mvp[1 * 4 + row] *= payload->frame.axis_scale[1];
-                draw.mvp[2 * 4 + row] *= payload->frame.axis_scale[2];
-            }
-            const tc_surface_item3d_style& style = data.surface_style;
-            draw.params[0] = static_cast<float>(payload->frame.bounds_min[2]);
-            draw.params[1] = static_cast<float>(payload->frame.bounds_max[2]);
-            draw.params[2] = style.wireframe == 0 ? 1.0f : 0.0f;
-            draw.params[3] = static_cast<float>(style.colormap) +
-                             (style.colormap_reversed != 0 ? 100.0f : 0.0f);
-            draw.surface_color[0] = style.color_r;
-            draw.surface_color[1] = style.color_g;
-            draw.surface_color[2] = style.color_b;
-            draw.surface_color[3] = style.color_a;
-            draw.axis_shading[0] = payload->frame.axis_scale[0];
-            draw.axis_shading[1] = payload->frame.axis_scale[1];
-            draw.axis_shading[2] = payload->frame.axis_scale[2];
-            draw.axis_shading[3] =
-                style.wireframe == 0 && payload->frame.surface_shading ? 1.0f
-                                                                       : 0.0f;
-            draw.light_strength[0] = payload->frame.surface_light_direction[0];
-            draw.light_strength[1] = payload->frame.surface_light_direction[1];
-            draw.light_strength[2] = payload->frame.surface_light_direction[2];
-            draw.light_strength[3] =
-                std::clamp(payload->frame.surface_shading_strength, 0.0f, 1.0f);
-            context.bind_uniform_data(
-                "tcplot3d_draw", &draw, static_cast<uint32_t>(sizeof(draw)));
-
-            tgfx::VertexLayoutDesc layout{};
-            layout.stride = kSurfaceFloatsPerVertex * sizeof(float);
-            layout.use_shader_input_locations = true;
-            layout.attribute_count = 5;
-            layout.attributes[0] = {0, tgfx::VertexFormat::Float3, 0, nullptr};
-            layout.attributes[1] = {
-                1, tgfx::VertexFormat::Float4, 3 * sizeof(float), nullptr};
-            layout.attributes[2] = {
-                2, tgfx::VertexFormat::Float4, 7 * sizeof(float), nullptr};
-            layout.attributes[3] = {
-                3, tgfx::VertexFormat::Float4, 11 * sizeof(float), nullptr};
-            layout.attributes[4] = {
-                4, tgfx::VertexFormat::Float4, 15 * sizeof(float), nullptr};
 
             context.set_cull(tgfx::CullMode::None);
             context.set_depth_write(style.wireframe == 0);
@@ -259,13 +326,91 @@ namespace tcplot
             // geometry.
             context.set_blend(style.wireframe != 0);
             context.draw_transient_arrays(
-                data.surface_draw_vertices.data(),
-                static_cast<uint32_t>(data.surface_draw_vertices.size() *
+                data.draw_vertices.data(),
+                static_cast<uint32_t>(data.draw_vertices.size() *
                                       sizeof(float)),
-                data.surface_draw_vertex_count,
+                data.draw_vertex_count,
                 layout,
                 style.wireframe != 0 ? tgfx::PrimitiveTopology::LineList
                                      : tgfx::PrimitiveTopology::TriangleList);
+            return true;
+        }
+
+        bool encode_scatter(tgfx::RenderContext2& context,
+                            const tc_render_item& item,
+                            const termin::RenderItemDrawSubmitRequest& request,
+                            void*)
+        {
+            const char* pass_name = request.debug_pass_name
+                                        ? request.debug_pass_name
+                                        : "PlotScene3DScatter";
+            if (item.kind != PLOT_RENDER_ITEM_KIND_SCATTER)
+            {
+                tc::Log::error(
+                    "[%s] PlotScene3D scatter encoder received item kind %u",
+                    pass_name,
+                    item.kind);
+                return false;
+            }
+            if (request.phase != TC_PHASE_OPAQUE || request.material_phase)
+            {
+                tc::Log::error("[%s] PlotScene3D scatter encoder requires "
+                               "opaque no-material submission",
+                               pass_name);
+                return false;
+            }
+            if (!request.device || !request.draw_context ||
+                request.draw_context->viewport_width <= 0 ||
+                request.draw_context->viewport_height <= 0)
+            {
+                tc::Log::error("[%s] PlotScene3D scatter encoder requires a "
+                               "device and sized draw context",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DRenderItemPayload* payload =
+                plot_scene3d_render_item_payload(item);
+            if (!payload || !payload->item ||
+                payload->item->kind != TC_PLOT_ITEM3D_SCATTER)
+            {
+                tc::Log::error("[%s] PlotScene3D scatter encoder received a "
+                               "malformed payload",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DItemRenderData& data = *payload->item;
+            if (data.draw_vertex_count == 0 ||
+                data.draw_vertices.size() !=
+                    static_cast<size_t>(data.draw_vertex_count) *
+                        kPlot3DFloatsPerVertex ||
+                data.draw_vertices.size() >
+                    std::numeric_limits<uint32_t>::max() / sizeof(float))
+            {
+                tc::Log::error("[%s] PlotScene3D scatter encoder received an "
+                               "invalid draw stream",
+                               pass_name);
+                return false;
+            }
+
+            tgfx::VertexLayoutDesc layout{};
+            if (!prepare_plot_scene3d_draw(
+                    context, request, *payload, data, false, pass_name, layout))
+            {
+                return false;
+            }
+
+            context.set_cull(tgfx::CullMode::None);
+            context.set_depth_write(true);
+            context.set_depth_test(true);
+            context.set_depth_func(tgfx::CompareOp::Less);
+            context.set_blend(true);
+            context.draw_transient_arrays(
+                data.draw_vertices.data(),
+                static_cast<uint32_t>(data.draw_vertices.size() *
+                                      sizeof(float)),
+                data.draw_vertex_count,
+                layout,
+                tgfx::PrimitiveTopology::LineList);
             return true;
         }
 
@@ -273,8 +418,8 @@ namespace tcplot
 
     void build_plot_scene3d_surface_draw_stream(PlotScene3DItemRenderData& data)
     {
-        data.surface_draw_vertices.clear();
-        data.surface_draw_vertex_count = 0;
+        data.draw_vertices.clear();
+        data.draw_vertex_count = 0;
         if (data.kind != TC_PLOT_ITEM3D_SURFACE || data.rows < 2 ||
             data.columns < 2)
         {
@@ -297,14 +442,14 @@ namespace tcplot
         const size_t max_float_count =
             std::numeric_limits<uint32_t>::max() / sizeof(float);
         if (cell_count >
-            max_float_count / (vertices_per_cell * kSurfaceFloatsPerVertex))
+            max_float_count / (vertices_per_cell * kPlot3DFloatsPerVertex))
         {
             tc::Log::error("[PlotScene3DSurface] draw stream exceeds the "
                            "transient upload ABI");
             return;
         }
-        data.surface_draw_vertices.reserve(cell_count * vertices_per_cell *
-                                           kSurfaceFloatsPerVertex);
+        data.draw_vertices.reserve(cell_count * vertices_per_cell *
+                                   kPlot3DFloatsPerVertex);
         for (uint32_t row = 0; row + 1 < data.rows; ++row)
         {
             for (uint32_t column = 0; column + 1 < data.columns; ++column)
@@ -327,10 +472,8 @@ namespace tcplot
                     };
                     for (const auto& vertex : edge_vertices)
                     {
-                        append_surface_vertex(data.surface_draw_vertices,
-                                              data,
-                                              vertex[0],
-                                              vertex[1]);
+                        append_surface_vertex(
+                            data.draw_vertices, data, vertex[0], vertex[1]);
                     }
                 }
                 else
@@ -345,42 +488,118 @@ namespace tcplot
                     };
                     for (const auto& vertex : triangle_vertices)
                     {
-                        append_surface_vertex(data.surface_draw_vertices,
-                                              data,
-                                              vertex[0],
-                                              vertex[1]);
+                        append_surface_vertex(
+                            data.draw_vertices, data, vertex[0], vertex[1]);
                     }
                 }
             }
         }
-        data.surface_draw_vertex_count = static_cast<uint32_t>(
-            data.surface_draw_vertices.size() / kSurfaceFloatsPerVertex);
+        data.draw_vertex_count = static_cast<uint32_t>(
+            data.draw_vertices.size() / kPlot3DFloatsPerVertex);
     }
 
-    void ensure_plot_scene3d_surface_encoder_registered()
+    void build_plot_scene3d_scatter_draw_stream(PlotScene3DItemRenderData& data)
+    {
+        data.draw_vertices.clear();
+        data.draw_vertex_count = 0;
+        if (data.kind != TC_PLOT_ITEM3D_SCATTER || data.x.empty() ||
+            data.x.size() != data.y.size() || data.x.size() != data.z.size())
+        {
+            tc::Log::error("[PlotScene3DScatter] cannot build draw stream from "
+                           "mismatched data arrays");
+            return;
+        }
+
+        constexpr size_t kVerticesPerPoint = 6;
+        const size_t max_float_count =
+            std::numeric_limits<uint32_t>::max() / sizeof(float);
+        if (data.x.size() >
+            max_float_count / (kVerticesPerPoint * kPlot3DFloatsPerVertex))
+        {
+            tc::Log::error("[PlotScene3DScatter] draw stream exceeds the "
+                           "transient upload ABI");
+            return;
+        }
+
+        double minimum[3] = {data.x[0], data.y[0], data.z[0]};
+        double maximum[3] = {data.x[0], data.y[0], data.z[0]};
+        for (size_t index = 1; index < data.x.size(); ++index)
+        {
+            const double point[3] = {
+                data.x[index], data.y[index], data.z[index]};
+            for (size_t axis = 0; axis < 3; ++axis)
+            {
+                minimum[axis] = std::min(minimum[axis], point[axis]);
+                maximum[axis] = std::max(maximum[axis], point[axis]);
+            }
+        }
+        const double dx = maximum[0] - minimum[0];
+        const double dy = maximum[1] - minimum[1];
+        const double dz = maximum[2] - minimum[2];
+        const float cross_size = static_cast<float>(
+            std::sqrt(dx * dx + dy * dy + dz * dz) * 0.008 *
+            (std::max(data.scatter_style.size, 0.1f) / 4.0f));
+
+        data.draw_vertices.reserve(data.x.size() * kVerticesPerPoint *
+                                   kPlot3DFloatsPerVertex);
+        for (size_t index = 0; index < data.x.size(); ++index)
+        {
+            const float x = static_cast<float>(data.x[index]);
+            const float y = static_cast<float>(data.y[index]);
+            const float z = static_cast<float>(data.z[index]);
+            append_scatter_vertex(
+                data.draw_vertices, x - cross_size, y, z, data.scatter_style);
+            append_scatter_vertex(
+                data.draw_vertices, x + cross_size, y, z, data.scatter_style);
+            append_scatter_vertex(
+                data.draw_vertices, x, y - cross_size, z, data.scatter_style);
+            append_scatter_vertex(
+                data.draw_vertices, x, y + cross_size, z, data.scatter_style);
+            append_scatter_vertex(
+                data.draw_vertices, x, y, z - cross_size, data.scatter_style);
+            append_scatter_vertex(
+                data.draw_vertices, x, y, z + cross_size, data.scatter_style);
+        }
+        data.draw_vertex_count = static_cast<uint32_t>(
+            data.draw_vertices.size() / kPlot3DFloatsPerVertex);
+    }
+
+    void ensure_plot_scene3d_render_item_encoders_registered()
     {
         static std::once_flag once;
         std::call_once(once,
                        []
                        {
+                           termin::RenderItemEncoderCapabilities capabilities{};
+                           capabilities.phase_mask = TC_PHASE_OPAQUE;
+                           capabilities.supported_task_input_mask =
+                               termin::render_item_task_input_bit(
+                                   termin::RenderItemTaskInput::DrawContext);
+                           capabilities.required_task_input_mask =
+                               termin::render_item_task_input_bit(
+                                   termin::RenderItemTaskInput::DrawContext);
+                           capabilities.requires_draw_context = true;
+                           capabilities.consumes_common_resources = false;
+
                            termin::RenderItemDrawEncoderDesc descriptor{};
                            descriptor.encode = encode_surface;
-                           descriptor.plan_task_shader = plan_surface_shader;
+                           descriptor.plan_task_shader =
+                               plan_plot_scene3d_shader;
                            descriptor.debug_name = "PlotScene3DSurface";
-                           descriptor.capabilities.phase_mask = TC_PHASE_OPAQUE;
-                           descriptor.capabilities.supported_task_input_mask =
-                               termin::render_item_task_input_bit(
-                                   termin::RenderItemTaskInput::DrawContext);
-                           descriptor.capabilities.required_task_input_mask =
-                               termin::render_item_task_input_bit(
-                                   termin::RenderItemTaskInput::DrawContext);
-                           descriptor.capabilities.requires_draw_context = true;
-                           descriptor.capabilities.consumes_common_resources =
-                               false;
+                           descriptor.capabilities = capabilities;
                            if (!termin::register_render_item_draw_encoder(
                                    PLOT_RENDER_ITEM_KIND_SURFACE, descriptor))
                            {
                                tc::Log::error("[PlotScene3DSurface] failed to "
+                                              "register RenderItem encoder");
+                           }
+
+                           descriptor.encode = encode_scatter;
+                           descriptor.debug_name = "PlotScene3DScatter";
+                           if (!termin::register_render_item_draw_encoder(
+                                   PLOT_RENDER_ITEM_KIND_SCATTER, descriptor))
+                           {
+                               tc::Log::error("[PlotScene3DScatter] failed to "
                                               "register RenderItem encoder");
                            }
                        });

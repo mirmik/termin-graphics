@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -60,6 +61,30 @@ bool same_snapshot(
            left.geometry_revision == right.geometry_revision &&
            left.style_revision == right.style_revision &&
            left.gpu_revision == right.gpu_revision;
+}
+
+std::size_t count_non_clear_pixels(
+    tcplot::GpuHost& host,
+    uint32_t texture_id,
+    uint32_t width,
+    uint32_t height) {
+    tgfx::TextureHandle texture{};
+    texture.id = texture_id;
+    std::vector<float> pixels(
+        static_cast<std::size_t>(width) * height * 4u,
+        0.0f);
+    require(
+        host.device().read_texture_rgba_float(texture, pixels.data()),
+        "failed to read retained Chart3D encoder output");
+    std::size_t count = 0;
+    for (std::size_t index = 0; index + 3 < pixels.size(); index += 4) {
+        if (std::abs(pixels[index + 0] - 0.08f) > 0.03f ||
+            std::abs(pixels[index + 1] - 0.09f) > 0.03f ||
+            std::abs(pixels[index + 2] - 0.11f) > 0.03f) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 const tc_render_item* find_render_item(
@@ -299,11 +324,29 @@ int main() {
             first_surface_payload->item->z ==
                 std::vector<double>(std::begin(z), std::end(z)) &&
                 first_surface_payload->item->surface_style.wireframe == 0 &&
-                first_surface_payload->item->surface_draw_vertex_count == 6 &&
-                first_surface_payload->item->surface_draw_vertices.size() ==
+                first_surface_payload->item->draw_vertex_count == 6 &&
+                first_surface_payload->item->draw_vertices.size() ==
                     6u * 19u &&
+                first_scatter_payload->item->x ==
+                    std::vector<double>(
+                        std::begin(scatter_x), std::end(scatter_x)) &&
+                first_scatter_payload->item->draw_vertex_count == 18 &&
+                first_scatter_payload->item->draw_vertices.size() ==
+                    18u * 19u &&
                 first_surface_payload->frame.x_label == "x",
             "PlotScene3D payload lost item or chart values");
+        const float expected_scatter_cross_size = static_cast<float>(
+            std::sqrt(1.25 * 1.25 + 0.75 * 0.75 + 0.5 * 0.5) *
+            0.008 * (scatter_style.size / 4.0));
+        require(
+            std::abs(
+                first_scatter_payload->item->draw_vertices[0] -
+                (-0.5f - expected_scatter_cross_size)) < 1e-6f &&
+                first_scatter_payload->item->draw_vertices[1] == 0.5f &&
+                first_scatter_payload->item->draw_vertices[2] == 0.25f &&
+                first_scatter_payload->item->draw_vertices[3] ==
+                    scatter_style.color_r,
+            "PlotScene3D scatter stream lost legacy cross geometry semantics");
 
         termin::RenderItemEncoderCapabilities surface_capabilities{};
         require(
@@ -338,11 +381,34 @@ int main() {
                     surface_tasks.at(surface_plan.task_index).final_shader),
             "PlotScene3D surface task planning failed");
 
+        termin::RenderItemEncoderCapabilities scatter_capabilities{};
+        require(
+            termin::get_render_item_encoder_capabilities(
+                tcplot::PLOT_RENDER_ITEM_KIND_SCATTER,
+                scatter_capabilities) &&
+                scatter_capabilities.phase_mask == TC_PHASE_OPAQUE &&
+                scatter_capabilities.requires_draw_context &&
+                !scatter_capabilities.consumes_common_resources,
+            "PlotScene3D scatter encoder capabilities are invalid");
+        termin::RenderItemTaskPlanningRequest scatter_planning =
+            surface_planning;
+        scatter_planning.item = scatter_render_item;
+        scatter_planning.item_index = 1;
+        scatter_planning.source_draw_index = 1;
+        termin::RenderTaskList scatter_tasks;
+        const termin::RenderItemTaskPlanningResult scatter_plan =
+            termin::plan_render_item_task(scatter_planning, scatter_tasks);
+        require(
+            scatter_plan.accepted() && scatter_tasks.size() == 1 &&
+                !tc_shader_handle_is_invalid(
+                    scatter_tasks.at(scatter_plan.task_index).final_shader),
+            "PlotScene3D scatter task planning failed");
+
         auto malformed_surface_data =
             std::make_shared<tcplot::PlotScene3DItemRenderData>(
                 *first_surface_payload->item);
-        malformed_surface_data->surface_draw_vertices.clear();
-        malformed_surface_data->surface_draw_vertex_count = 0;
+        malformed_surface_data->draw_vertices.clear();
+        malformed_surface_data->draw_vertex_count = 0;
         tcplot::PlotScene3DRenderItemPayload malformed_surface_payload =
             *first_surface_payload;
         malformed_surface_payload.item = std::move(malformed_surface_data);
@@ -365,6 +431,26 @@ int main() {
             !termin::submit_render_item_draw(
                 host.ctx(), malformed_surface_item, malformed_submission),
             "PlotScene3D surface encoder accepted a malformed draw stream");
+
+        auto malformed_scatter_data =
+            std::make_shared<tcplot::PlotScene3DItemRenderData>(
+                *first_scatter_payload->item);
+        malformed_scatter_data->draw_vertices.clear();
+        malformed_scatter_data->draw_vertex_count = 0;
+        tcplot::PlotScene3DRenderItemPayload malformed_scatter_payload =
+            *first_scatter_payload;
+        malformed_scatter_payload.item = std::move(malformed_scatter_data);
+        tc_render_item malformed_scatter_item = *scatter_render_item;
+        malformed_scatter_item.source.adapter_data = reinterpret_cast<uintptr_t>(
+            &malformed_scatter_payload);
+        malformed_submission.shader_handle =
+            scatter_tasks.at(scatter_plan.task_index).final_shader;
+        malformed_submission.debug_pass_name =
+            "PlotScene3D malformed scatter test";
+        require(
+            !termin::submit_render_item_draw(
+                host.ctx(), malformed_scatter_item, malformed_submission),
+            "PlotScene3D scatter encoder accepted a malformed draw stream");
 
         termin::RenderItemTaskPlanningContract unsupported_surface_contract =
             surface_contract;
@@ -403,6 +489,54 @@ int main() {
                 material_surface_tasks.empty(),
             "PlotScene3D surface planner accepted a material phase");
         surface_planning.material_phase = nullptr;
+
+        scatter_planning.contract = &unsupported_surface_contract;
+        termin::RenderTaskList unsupported_scatter_tasks;
+        require(
+            termin::plan_render_item_task(
+                scatter_planning,
+                unsupported_scatter_tasks).rejection ==
+                    termin::RenderItemTaskRejection::PassOutputUnsupported &&
+                unsupported_scatter_tasks.empty(),
+            "PlotScene3D scatter planner accepted an unsupported output");
+        scatter_planning.contract = &missing_input_contract;
+        termin::RenderTaskList missing_scatter_input_tasks;
+        require(
+            termin::plan_render_item_task(
+                scatter_planning,
+                missing_scatter_input_tasks).rejection ==
+                    termin::RenderItemTaskRejection::RequiredInputMissing &&
+                missing_scatter_input_tasks.empty(),
+            "PlotScene3D scatter planner accepted missing draw context input");
+        scatter_planning.contract = &surface_contract;
+        scatter_planning.material_phase =
+            reinterpret_cast<tc_material_phase*>(uintptr_t{1});
+        termin::RenderTaskList material_scatter_tasks;
+        require(
+            termin::plan_render_item_task(
+                scatter_planning,
+                material_scatter_tasks).rejection ==
+                    termin::RenderItemTaskRejection::MaterialPhaseForbidden &&
+                material_scatter_tasks.empty(),
+            "PlotScene3D scatter planner accepted a material phase");
+        scatter_planning.material_phase = nullptr;
+
+        const tc_plot_item3d_handle isolated_scatter =
+            tc_retained_chart3d_add_scatter(
+                other,
+                scatter_x,
+                scatter_y,
+                scatter_z,
+                3,
+                &scatter_style);
+        const uint32_t isolated_scatter_texture =
+            tc_retained_chart3d_render(other, 320, 240);
+        require(
+            isolated_scatter_texture != 0 &&
+                snapshot(other, isolated_scatter).gpu_revision != 0 &&
+                count_non_clear_pixels(
+                    host, isolated_scatter_texture, 320, 240) > 5,
+            "PlotScene3D scatter encoder produced no visible output");
         const tcplot::PlotScene3DRenderItemPayload* second_surface_payload =
             find_plot_payload(second_render_snapshot, surface);
         require(
@@ -437,6 +571,43 @@ int main() {
                 find_plot_payload(geometry_changed_snapshot, scatter)->item ==
                     first_scatter_payload->item,
             "geometry mutation changed an older or unrelated snapshot payload");
+
+        const double changed_scatter_x[] = {-1.0, 0.0, 1.0};
+        const double changed_scatter_y[] = {0.0, 0.75, -0.5};
+        const double changed_scatter_z[] = {0.25, 1.0, 0.5};
+        require(
+            tc_retained_chart3d_scatter_set_data(
+                chart,
+                scatter,
+                changed_scatter_x,
+                changed_scatter_y,
+                changed_scatter_z,
+                3) != 0,
+            "failed to update scatter data for snapshot isolation");
+        termin::RenderItemSnapshot scatter_geometry_snapshot;
+        require(
+            render_item_source.publish(scatter_geometry_snapshot, {}),
+            "PlotScene3D publication after scatter mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* changed_scatter_payload =
+            find_plot_payload(scatter_geometry_snapshot, scatter);
+        require(
+            changed_scatter_payload && changed_scatter_payload->item &&
+                changed_scatter_payload->item->x ==
+                    std::vector<double>(
+                        std::begin(changed_scatter_x),
+                        std::end(changed_scatter_x)) &&
+                changed_scatter_payload->item->draw_vertex_count == 18 &&
+                changed_scatter_payload->geometry_revision ==
+                    first_scatter_payload->geometry_revision + 1 &&
+                changed_scatter_payload->item != first_scatter_payload->item &&
+                find_plot_payload(scatter_geometry_snapshot, surface)->item ==
+                    changed_surface_payload->item,
+            "scatter mutation must replace only its immutable item payload");
+        require(
+            first_scatter_payload->item->x ==
+                std::vector<double>(
+                    std::begin(scatter_x), std::end(scatter_x)),
+            "scatter mutation altered an older snapshot payload");
 
         const auto surface_initial = snapshot(chart, surface);
         const auto scatter_initial = snapshot(chart, scatter);
@@ -489,27 +660,9 @@ int main() {
         require(
             first_render_texture != 0,
             "initial retained render failed");
-        tgfx::TextureHandle first_render_handle{};
-        first_render_handle.id = first_render_texture;
-        std::vector<float> first_render_pixels(320u * 240u * 4u, 0.0f);
         require(
-            host.device().read_texture_rgba_float(
-                first_render_handle,
-                first_render_pixels.data()),
-            "failed to read retained Chart3D encoder output");
-        std::size_t non_clear_pixels = 0;
-        for (std::size_t index = 0;
-             index + 3 < first_render_pixels.size();
-             index += 4) {
-            if (std::abs(first_render_pixels[index + 0] - 0.08f) > 0.03f ||
-                std::abs(first_render_pixels[index + 1] - 0.09f) > 0.03f ||
-                std::abs(first_render_pixels[index + 2] - 0.11f) > 0.03f) {
-                ++non_clear_pixels;
-            }
-        }
-        require(
-            non_clear_pixels > 100,
-            "PlotScene3D surface encoder produced no visible output");
+            count_non_clear_pixels(host, first_render_texture, 320, 240) > 100,
+            "PlotScene3D retained encoders produced no visible output");
         const auto surface_rendered = snapshot(chart, surface);
         const auto scatter_rendered = snapshot(chart, scatter);
         require(
@@ -539,8 +692,8 @@ int main() {
         require(
             styled_surface_payload && styled_surface_payload->item &&
                 styled_surface_payload->item->surface_style.wireframe == 1 &&
-                styled_surface_payload->item->surface_draw_vertex_count == 12 &&
-                first_surface_payload->item->surface_draw_vertex_count == 6 &&
+                styled_surface_payload->item->draw_vertex_count == 12 &&
+                first_surface_payload->item->draw_vertex_count == 6 &&
                 first_surface_payload->item->surface_style.wireframe == 0 &&
                 styled_surface_payload->style_revision ==
                     first_surface_payload->style_revision + 1,
@@ -548,6 +701,46 @@ int main() {
         require(
             same_snapshot(scatter_rendered, snapshot(chart, scatter)),
             "surface style must not invalidate unrelated scatter");
+
+        scatter_style.size = 8.0f;
+        scatter_style.color_g = 0.75f;
+        require(
+            tc_retained_chart3d_scatter_set_style(
+                chart, scatter, &scatter_style) != 0,
+            "failed to update scatter style");
+        const auto scatter_invalidated = snapshot(chart, scatter);
+        require(
+            scatter_invalidated.geometry_revision ==
+                    scatter_rendered.geometry_revision &&
+                scatter_invalidated.style_revision ==
+                    scatter_rendered.style_revision + 1 &&
+                scatter_invalidated.gpu_revision == 0 &&
+                same_snapshot(surface_invalidated, snapshot(chart, surface)),
+            "scatter style change must invalidate only scatter GPU state");
+        termin::RenderItemSnapshot scatter_style_snapshot;
+        require(
+            render_item_source.publish(scatter_style_snapshot, {}),
+            "PlotScene3D publication after scatter style mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* styled_scatter_payload =
+            find_plot_payload(scatter_style_snapshot, scatter);
+        require(
+            styled_scatter_payload && styled_scatter_payload->item &&
+                styled_scatter_payload->item->scatter_style.size == 8.0f &&
+                styled_scatter_payload->item->draw_vertex_count == 18 &&
+                styled_scatter_payload->item !=
+                    changed_scatter_payload->item &&
+                changed_scatter_payload->item->scatter_style.size == 5.0f &&
+                styled_scatter_payload->style_revision ==
+                    changed_scatter_payload->style_revision + 1,
+            "scatter style mutation must replace its immutable draw stream");
+
+        tc_scatter_item3d_style invalid_scatter_style = scatter_style;
+        invalid_scatter_style.size = -1.0f;
+        require(
+            tc_retained_chart3d_scatter_set_style(
+                chart, scatter, &invalid_scatter_style) == 0 &&
+                same_snapshot(scatter_invalidated, snapshot(chart, scatter)),
+            "rejected scatter style must not mutate item revisions");
 
         tc_surface_item3d_style invalid_style = surface_style;
         invalid_style.surface_grid_width_px = -1.0f;
@@ -565,9 +758,14 @@ int main() {
         require(
             snapshot(chart, surface).gpu_revision != 0,
             "style update must be synchronized by render");
+        const auto scatter_after_style_render = snapshot(chart, scatter);
         require(
-            same_snapshot(scatter_rendered, snapshot(chart, scatter)),
-            "resizing must not rebuild unrelated item geometry");
+            scatter_after_style_render.geometry_revision ==
+                    scatter_invalidated.geometry_revision &&
+                scatter_after_style_render.style_revision ==
+                    scatter_invalidated.style_revision &&
+                scatter_after_style_render.gpu_revision != 0,
+            "resized render must submit scatter without rebuilding its stream");
 
         tc_retained_chart3d_release_gpu(chart);
         require(

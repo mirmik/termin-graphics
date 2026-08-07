@@ -91,12 +91,13 @@ scatter и grid identities в общий `termin_render_core` без `tc_scene`,
 immutable shared value до смены revision, а camera/axis/light/bounds/labels
 копируются для конкретной публикации. Payload не заимствует retained slot и
 остаётся читаемым после последующих mutations, slot reuse и уничтожения chart.
-Surface payload дополнительно кэширует encoder-ready vertex stream по geometry
-и style revisions. Tcplot-owned surface planner выбирает builtin tcplot3d
-shader, а encoder загружает stream через общий transient vertex ring и рисует
-его через `submit_render_item_draw()`. Даже старый offscreen entry point теперь
-планирует и отправляет surface через этот общий контракт; surface slot больше
-не содержит `PlotEngine3D`. Scatter/grid bodies, chart framegraph pass и
+Surface и scatter payloads дополнительно кэшируют общий item-local
+encoder-ready vertex stream по geometry и style revisions. Tcplot-owned
+planners выбирают builtin tcplot3d shader, а encoders загружают stream через
+общий transient vertex ring и рисуют его через `submit_render_item_draw()`.
+Даже старый offscreen entry point теперь планирует и отправляет оба kind через
+этот контракт с сохранением порядка surface/grid/scatter; surface и scatter
+slots больше не содержат `PlotEngine3D`. Grid body, chart framegraph pass и
 отдельный world-text/chrome path остаются следующими срезами.
 
 `fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
