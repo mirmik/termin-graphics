@@ -85,6 +85,16 @@
       "kinds": ["cmake", "documentation"]
     },
     {
+      "id": "termin-frame-profiler",
+      "path": "termin-frame-profiler",
+      "kinds": ["cmake"]
+    },
+    {
+      "id": "termin-profiler",
+      "path": "termin-profiler",
+      "kinds": ["application", "cmake", "documentation"]
+    },
+    {
       "id": "termin-profiler-remote",
       "path": "termin-profiler-remote",
       "kinds": ["cmake", "documentation"]
