@@ -10,15 +10,18 @@ const SceneRenderServices* require_scene_render_services(
     const char* consumer)
 {
     const char* name = consumer ? consumer : "SceneRenderServices";
-    if (!context.scene_services) {
+    const SceneRenderServices* services = context.capabilities
+        ? context.capabilities->find<SceneRenderServices>()
+        : nullptr;
+    if (!services) {
         tc::Log::error("[%s] render execution has no SceneRenderServices capability", name);
         return nullptr;
     }
-    if (!context.scene_services->scene.valid()) {
+    if (!services->scene.valid()) {
         tc::Log::error("[%s] SceneRenderServices contains an invalid scene", name);
         return nullptr;
     }
-    return context.scene_services;
+    return services;
 }
 
 } // namespace termin

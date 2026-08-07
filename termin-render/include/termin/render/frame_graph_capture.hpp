@@ -119,7 +119,7 @@ enum class FrameGraphCaptureRequestKind {
 
 // One frame-local request supplied by an execution instrumentation provider.
 // It is never stored by a pipeline or pass and is valid only for the duration
-// of one RenderEngine::render_scene_pipeline_offscreen call.
+// of one RenderEngine::execute_pipeline call.
 struct FrameGraphCaptureRequest {
     FrameGraphCaptureRequestKind kind = FrameGraphCaptureRequestKind::Resource;
     uint64_t generation = 0;

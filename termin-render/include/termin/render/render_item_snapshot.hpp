@@ -10,6 +10,8 @@
 
 namespace termin {
 
+struct ExecuteContext;
+
 struct RenderItemSnapshotCounters {
     uint64_t source_traversals = 0;
     uint64_t producers = 0;
@@ -47,5 +49,9 @@ public:
 RENDER_API bool render_item_matches_phase(
     const tc_render_item& item,
     tc_phase_mask phase);
+
+RENDER_API const RenderItemSnapshot* require_render_item_snapshot(
+    const ExecuteContext& context,
+    const char* consumer);
 
 } // namespace termin

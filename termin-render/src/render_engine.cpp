@@ -21,18 +21,13 @@
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
+#include "termin/render/execute_context.hpp"
 #include "termin/render/frame_graph_capture.hpp"
-#include "termin/render/render_scene_item_collector.hpp"
-#include "termin/render/scene_render_services.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
-#include "core/tc_scene.h"
-#include "core/tc_scene_render_state.h"
-#include "core/tc_scene_render_mount.h"
-#include "core/tc_component.h"
 }
 
 namespace termin {
@@ -271,7 +266,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
         }
         if (!default_rt_ctx.output_color_tex) {
             tc::Log::warn(
-                "RenderEngine::render_scene_pipeline_offscreen: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
+                "RenderEngine::execute_pipeline: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
                 RESOURCE_FORMAT_RENDER_TARGET
             );
             return tgfx::PixelFormat::RGBA8_UNorm;
@@ -279,7 +274,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
         tgfx::TextureDesc output_desc = device.texture_desc(default_rt_ctx.output_color_tex);
         if (output_desc.format == tgfx::PixelFormat::Undefined) {
             tc::Log::warn(
-                "RenderEngine::render_scene_pipeline_offscreen: output_color_tex has undefined format; using rgba8"
+                "RenderEngine::execute_pipeline: output_color_tex has undefined format; using rgba8"
             );
             return tgfx::PixelFormat::RGBA8_UNorm;
         }
@@ -292,7 +287,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
     }
 
     tc::Log::warn(
-        "RenderEngine::render_scene_pipeline_offscreen: unknown FBO color format '%s'; using rgba8",
+        "RenderEngine::execute_pipeline: unknown FBO color format '%s'; using rgba8",
         format.c_str()
     );
     return tgfx::PixelFormat::RGBA8_UNorm;
@@ -392,27 +387,41 @@ void RenderEngine::ensure_tgfx2() {
     }
 }
 
-void RenderEngine::render_scene_pipeline_offscreen(
-    RenderPipeline& pipeline,
-    tc_scene_handle scene,
-    const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
-    const std::vector<Light>& lights,
-    const std::string& default_render_target,
-    const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests
-) {
-    if (!pipeline.is_valid()) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
+void RenderEngine::execute_pipeline(const RenderExecution& execution) {
+    if (!execution.pipeline || !execution.pipeline->is_valid()) {
+        tc::Log::error("RenderEngine::execute_pipeline: pipeline is null");
         return;
+    }
+    RenderPipeline& pipeline = *execution.pipeline;
+    const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests =
+        execution.debug_capture_requests;
+
+    std::unordered_map<std::string, RenderTargetContext> render_target_contexts;
+    render_target_contexts.reserve(execution.targets.size());
+    for (const auto& [name, target] : execution.targets) {
+        if (!target.context) {
+            tc::Log::error(
+                "RenderEngine::execute_pipeline: target '%s' has no RenderTargetContext",
+                name.c_str());
+            return;
+        }
+        if (!target.render_items || !target.render_items->valid()) {
+            tc::Log::error(
+                "RenderEngine::execute_pipeline: target '%s' has no published RenderItemSnapshot",
+                name.c_str());
+            return;
+        }
+        render_target_contexts.emplace(name, *target.context);
     }
     ensure_tgfx2();
     tgfx::IRenderDevice* device = tgfx2_device();
     tgfx::RenderContext2* ctx2 = tgfx2_ctx();
     if (!device) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: tgfx2 device unavailable");
+        tc::Log::error("RenderEngine::execute_pipeline: tgfx2 device unavailable");
         return;
     }
     if (render_target_contexts.empty()) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: no render target contexts");
+        tc::Log::error("RenderEngine::execute_pipeline: no render target contexts");
         return;
     }
 
@@ -429,7 +438,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     double end_frame_ms = 0.0;
     std::unordered_map<std::string, RenderPassTimingStats> local_pass_stats;
 
-    std::string default_target = default_render_target;
+    std::string default_target = execution.default_render_target;
     if (default_target.empty()) {
         default_target = render_target_contexts.begin()->first;
     }
@@ -448,12 +457,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
     if (!fg) {
         tc_profiler_end_section();
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: failed to get frame graph");
+        tc::Log::error("RenderEngine::execute_pipeline: failed to get frame graph");
         return;
     }
 
     if (tc_frame_graph_get_error(fg) != TC_FG_OK) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: frame graph error: %s",
+        tc::Log::error("RenderEngine::execute_pipeline: frame graph error: %s",
                        tc_frame_graph_get_error_message(fg));
         tc_profiler_end_section();
         return;
@@ -597,7 +606,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
+                    "RenderEngine::execute_pipeline: failed to allocate color_texture '%s'",
                     canon);
                 tc_profiler_end_section();
                 return;
@@ -639,7 +648,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
+                    "RenderEngine::execute_pipeline: failed to allocate depth_texture '%s'",
                     canon);
                 tc_profiler_end_section();
                 return;
@@ -700,7 +709,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         if (!fbo_pool.ensure_native(*device, canon, target_desc)) {
             tc::Log::error(
-                "RenderEngine::render_scene_pipeline_offscreen: failed to allocate fbo '%s'",
+                "RenderEngine::execute_pipeline: failed to allocate fbo '%s'",
                 canon);
             tc_profiler_end_section();
             return;
@@ -735,7 +744,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             }
             if (!rt_ctx.output_color_tex && !rt_ctx.output_depth_tex) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: render target context '%s' requested clear but output textures are missing",
+                    "RenderEngine::execute_pipeline: render target context '%s' requested clear but output textures are missing",
                     render_target_name.c_str());
                 continue;
             }
@@ -1069,21 +1078,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
 
-    // One lazy snapshot per logical render target/view. The map owns stable
-    // storage until every pass in this execution has completed.
-    render_item_snapshot_scratch_.resize(render_target_contexts.size());
-    std::unordered_map<const RenderTargetContext*, RenderItemSnapshot*>
-        render_item_snapshots;
-    render_item_snapshots.reserve(render_target_contexts.size());
-    size_t snapshot_index = 0;
-    for (const auto& [name, target] : render_target_contexts) {
-        (void)name;
-        RenderItemSnapshot& snapshot =
-            render_item_snapshot_scratch_[snapshot_index++];
-        snapshot.invalidate_keep_capacity();
-        render_item_snapshots.emplace(&target, &snapshot);
-    }
-
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -1109,6 +1103,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             rt_it = default_it;
         }
         const RenderTargetContext& rt_ctx = rt_it->second;
+        const RenderExecutionTarget& execution_target =
+            execution.targets.at(rt_it->first);
 
         std::vector<const char*> reads = collect_pass_dependencies(pass, tc_pass_get_reads);
         std::vector<const char*> writes = collect_pass_dependencies(pass, tc_pass_get_writes);
@@ -1275,15 +1271,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.render_rect = rt_ctx.render_rect;
         ctx.view = rt_ctx.view;
         ctx.render_target_name = rt_ctx.name;
-        ctx.render_item_snapshot = render_item_snapshots.at(&rt_ctx);
-        const SceneRenderServices scene_services{
-            .scene = TcSceneRef(scene),
-            .internal_entities = rt_ctx.internal_entities,
-            .lights = lights,
-            .layer_mask = rt_ctx.layer_mask,
-            .render_category_mask = rt_ctx.render_category_mask,
-        };
-        ctx.scene_services = &scene_services;
+        ctx.render_item_snapshot = execution_target.render_items;
+        ctx.capabilities = execution_target.capabilities;
         for (FrameGraphCaptureRequest* request : debug_capture_requests) {
             if (!request
                     || request->kind != FrameGraphCaptureRequestKind::InternalSymbol
@@ -1355,9 +1344,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     if (collect_render_timing) {
         RenderEngineTimingStats& stats = render_engine_timing_stats();
-        for (const auto& [target, snapshot] : render_item_snapshots) {
-            (void)target;
-            const RenderItemSnapshotCounters& counters = snapshot->counters();
+        for (const auto& [name, target] : execution.targets) {
+            (void)name;
+            const RenderItemSnapshotCounters& counters =
+                target.render_items->counters();
             stats.render_item_scene_traversals += counters.source_traversals;
             stats.render_item_producers += counters.producers;
             stats.render_items += counters.emitted_items;

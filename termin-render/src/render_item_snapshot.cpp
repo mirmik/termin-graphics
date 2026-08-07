@@ -1,5 +1,8 @@
 #include <termin/render/render_item_snapshot.hpp>
 
+#include <tcbase/tc_log.hpp>
+#include <termin/render/execute_context.hpp>
+
 extern "C" {
 #include <tgfx/resources/tc_material.h>
 #include <tgfx/resources/tc_material_registry.h>
@@ -100,6 +103,22 @@ bool render_item_matches_phase(
     }
     tc_material_phase* phase = resolve_phase(item);
     return phase && phase->phase == requested_phase;
+}
+
+const RenderItemSnapshot* require_render_item_snapshot(
+    const ExecuteContext& context,
+    const char* consumer)
+{
+    const char* name = consumer ? consumer : "RenderItemSnapshot";
+    if (!context.render_item_snapshot) {
+        tc::Log::error("[%s] render execution has no RenderItemSnapshot", name);
+        return nullptr;
+    }
+    if (!context.render_item_snapshot->valid()) {
+        tc::Log::error("[%s] RenderItemSnapshot was not published before execution", name);
+        return nullptr;
+    }
+    return context.render_item_snapshot;
 }
 
 } // namespace termin

@@ -5,6 +5,7 @@
 
 #include <tcbase/tc_log.hpp>
 #include <termin/render/render_engine.hpp>
+#include <termin/render/scene_render_execution.hpp>
 #include <termin/tc_scene.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
@@ -40,10 +41,13 @@ void bind_render_engine(nb::module_& m) {
             const std::string& default_render_target
         ) {
             std::vector<Light> lights;
-            self.render_scene_pipeline_offscreen(
+            SceneInternalEntityMap internal_entities;
+            render_scene_pipeline_offscreen(
+                self,
                 pipeline,
                 scene_ref.handle(),
                 render_target_contexts,
+                internal_entities,
                 lights,
                 default_render_target
             );

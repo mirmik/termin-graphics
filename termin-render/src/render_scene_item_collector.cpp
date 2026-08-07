@@ -1,6 +1,4 @@
 #include <termin/render/render_scene_item_collector.hpp>
-#include <termin/render/execute_context.hpp>
-#include <termin/render/scene_render_services.hpp>
 
 #include <tcbase/tc_log.hpp>
 #include <cstring>
@@ -127,40 +125,6 @@ tc_component* render_scene_item_component(const tc_render_item& item)
         return nullptr;
     }
     return reinterpret_cast<tc_component*>(item.source.adapter_data);
-}
-
-RenderItemSnapshot* ensure_render_item_snapshot(
-    ExecuteContext& context,
-    const char* debug_pass_name)
-{
-    if (!context.render_item_snapshot) {
-        tc::Log::error("[%s] render execution has no RenderItem snapshot storage",
-                       debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
-        return nullptr;
-    }
-    if (context.render_item_snapshot->valid()) {
-        return context.render_item_snapshot;
-    }
-
-    const SceneRenderServices* services = require_scene_render_services(
-        context, debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
-    if (!services) {
-        return nullptr;
-    }
-
-    RenderSceneItemCollectRequest request{};
-    request.scene = services->scene.handle();
-    request.layer_mask = services->layer_mask;
-    request.render_category_mask = services->render_category_mask;
-    request.debug_pass_name = debug_pass_name;
-    request.camera = context.view.primary_view();
-    request.scene_context = &services->scene;
-    if (!collect_scene_render_item_snapshot(*context.render_item_snapshot, request)) {
-        tc::Log::error("[%s] failed to build scene RenderItem snapshot",
-                       debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
-        return nullptr;
-    }
-    return context.render_item_snapshot;
 }
 
 } // namespace termin

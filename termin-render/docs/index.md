@@ -28,8 +28,15 @@ diagnostics. Game-scene данные не являются его обязате
 Pass, которому нужны `TcSceneRef`, lights, internal entities или scene masks,
 явно запрашивает `SceneRenderServices`. Scene-specific shader discovery так же
 объявляется отдельным `SceneShaderUsageProvider`, а не методом generic
-`CxxFramePass`. Пока оба слоя собираются в одном target; физическое выделение
-render core должно следовать за отделением generic executor и item source.
+`CxxFramePass`.
+
+`RenderEngine::execute_pipeline(RenderExecution)` принимает только нейтральные
+targets, заранее опубликованные immutable snapshots и type-safe
+`RenderExecutionCapabilities`. `render_scene_pipeline_offscreen()` находится в
+отдельном scene adapter header, собирает snapshots/services до execution и не
+дублирует scheduler/resource implementation. Пока оба слоя собираются в одном
+target; физическое выделение render core должно следовать за введением общего
+item-source contract.
 
 ## Публичный API
 

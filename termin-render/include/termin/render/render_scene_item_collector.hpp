@@ -80,9 +80,4 @@ RENDER_API bool collect_scene_render_item_snapshot(
 RENDER_API tc_component* render_scene_item_component(
     const tc_render_item& item);
 
-struct ExecuteContext;
-RENDER_API RenderItemSnapshot* ensure_render_item_snapshot(
-    ExecuteContext& context,
-    const char* debug_pass_name);
-
 } // namespace termin

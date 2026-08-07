@@ -87,12 +87,14 @@ set(TERMIN_RENDER_SOURCES
     src/material_ubo_apply.cpp
     src/render_pipeline.cpp
     src/render_engine.cpp
+    src/render_execution_capabilities.cpp
     src/render_item_mesh.cpp
     src/render_item_snapshot.cpp
     src/render_scene_item_collector.cpp
     src/render_item_submission.cpp
     src/render_task.cpp
     src/scene_render_services.cpp
+    src/scene_render_execution.cpp
     src/world2d_ordering.cpp
     src/world2d_quad_geometry.cpp
     src/shader_abi.cpp
@@ -163,11 +165,13 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_pipeline.hpp
     include/termin/render/tc_pipeline_template.hpp
     include/termin/render/render_engine.hpp
+    include/termin/render/render_execution_capabilities.hpp
     include/termin/render/render_item_submission.hpp
     include/termin/render/render_item_collection.hpp
     include/termin/render/render_item_snapshot.hpp
     include/termin/render/render_scene_item_collector.hpp
     include/termin/render/scene_render_services.hpp
+    include/termin/render/scene_render_execution.hpp
     include/termin/render/scene_shader_usage_provider.hpp
     include/termin/render/world2d_ordering.hpp
     include/termin/render/world2d_quad_geometry.hpp
@@ -435,6 +439,19 @@ if(TERMIN_RENDER_BUILD_TESTS)
     add_test(
         NAME termin_render_item_snapshot_test
         COMMAND termin_render_item_snapshot_test)
+
+    add_executable(
+        termin_render_execution_test
+        tests/test_render_execution.cpp)
+    target_include_directories(
+        termin_render_execution_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard)
+    target_link_libraries(
+        termin_render_execution_test
+        PRIVATE termin_render)
+    add_test(
+        NAME termin_render_execution_test
+        COMMAND termin_render_execution_test)
 
     add_executable(
         termin_render_scene_item_snapshot_test

@@ -338,7 +338,9 @@ void bind_render_framework(nb::module_& m) {
         .def_rw("render_rect", &ExecuteContext::render_rect)
         .def_prop_ro("scene_services",
             [](const ExecuteContext& ctx) -> const SceneRenderServices* {
-                return ctx.scene_services;
+                return ctx.capabilities
+                    ? ctx.capabilities->find<SceneRenderServices>()
+                    : nullptr;
             },
             nb::rv_policy::reference_internal)
         // Stage 7: expose the tgfx2 RenderContext2 pointer so Python

@@ -8,6 +8,7 @@
 
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_camera.hpp>
+#include <termin/render/render_execution_capabilities.hpp>
 #include <termin/render/render_export.hpp>
 
 #include <tgfx2/descriptors.hpp>
@@ -20,7 +21,6 @@ namespace termin {
 
 class ShadowMapArrayResource;
 class RenderItemSnapshot;
-struct SceneRenderServices;
 struct FrameGraphCaptureRequest;
 
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
@@ -70,10 +70,10 @@ public:
     std::string render_target_name;
     // Borrowed from RenderEngine for this scene/view execution. Immutable
     // after its first successful collection and shared by all geometry passes.
-    RenderItemSnapshot* render_item_snapshot = nullptr;
-    // Optional typed adapter capability. Generic execution code must not
-    // interpret or require scene services.
-    const SceneRenderServices* scene_services = nullptr;
+    const RenderItemSnapshot* render_item_snapshot = nullptr;
+    // Adapter-owned typed services borrowed for this execution. Generic
+    // execution forwards the registry without interpreting its contents.
+    const RenderExecutionCapabilities* capabilities = nullptr;
     // Frame-local debugger requests for this pass. These pointers are valid
     // only until the enclosing RenderEngine execution returns.
     std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;

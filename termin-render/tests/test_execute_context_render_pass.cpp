@@ -27,7 +27,7 @@ void capture_scene_service_log(tc_log_level level, const char* message)
 
 TEST_CASE("ExecuteContext is constructible without scene services") {
     termin::ExecuteContext context;
-    CHECK(context.scene_services == nullptr);
+    CHECK(context.capabilities == nullptr);
     CHECK(context.view.primary_view() == nullptr);
 }
 
