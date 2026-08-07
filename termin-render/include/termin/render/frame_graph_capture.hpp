@@ -21,7 +21,7 @@ class IRenderDevice;
 
 namespace termin {
 
-RENDER_API std::pair<int, int> bounded_frame_graph_capture_dimensions(
+RENDER_CORE_API std::pair<int, int> bounded_frame_graph_capture_dimensions(
     int width, int height, std::uint32_t max_long_edge);
 
 class CxxFramePass;
@@ -58,7 +58,7 @@ struct TextureInfo {
 // presenter samples it for its channel/HDR-highlight overlay and for
 // read_pixels-based stats. Created lazily through the same device
 // the host RenderContext2 draws with.
-class RENDER_API FrameGraphCapture {
+class RENDER_CORE_API FrameGraphCapture {
 private:
     tgfx::IRenderDevice* device_ = nullptr;
     tgfx::TextureHandle capture_tex_;
@@ -119,7 +119,7 @@ enum class FrameGraphCaptureRequestKind {
 
 // One frame-local request supplied by an execution instrumentation provider.
 // It is never stored by a pipeline or pass and is valid only for the duration
-// of one RenderEngine::render_scene_pipeline_offscreen call.
+// of one RenderEngine::execute_pipeline call.
 struct FrameGraphCaptureRequest {
     FrameGraphCaptureRequestKind kind = FrameGraphCaptureRequestKind::Resource;
     uint64_t generation = 0;
@@ -150,7 +150,7 @@ struct FrameGraphPresenterDraw {
 // channel-picker / HDR-highlight fragment shader. Target is a
 // tgfx::TextureHandle — either a native pool entry or an external
 // wrap of the debug window's default framebuffer.
-class RENDER_API FrameGraphPresenter {
+class RENDER_CORE_API FrameGraphPresenter {
 private:
     tgfx::IRenderDevice* device2_ = nullptr;
     // FS-only shader via tc_shader registry (VS comes from ctx2->fsq_vertex_shader()).

@@ -30,25 +30,25 @@ struct ShaderAbiResourceDecl {
     std::span<const char* const> legacy_aliases;
 };
 
-RENDER_API const ShaderAbiResourceDecl& shader_abi_resource(
+RENDER_CORE_API const ShaderAbiResourceDecl& shader_abi_resource(
     ShaderAbiResourceId id);
 
-RENDER_API const ShaderAbiResourceDecl* find_shader_abi_resource(
+RENDER_CORE_API const ShaderAbiResourceDecl* find_shader_abi_resource(
     std::string_view name);
 
-RENDER_API bool shader_abi_name_matches(
+RENDER_CORE_API bool shader_abi_name_matches(
     const ShaderAbiResourceDecl& decl,
     std::string_view name);
 
-RENDER_API bool shader_abi_name_is_legacy_alias(
+RENDER_CORE_API bool shader_abi_name_is_legacy_alias(
     const ShaderAbiResourceDecl& decl,
     std::string_view name);
 
-RENDER_API bool shader_abi_binding_matches(
+RENDER_CORE_API bool shader_abi_binding_matches(
     const ShaderAbiResourceDecl& decl,
     const tc_shader_resource_binding& binding);
 
-RENDER_API const tc_shader_resource_binding* find_shader_abi_resource_binding(
+RENDER_CORE_API const tc_shader_resource_binding* find_shader_abi_resource_binding(
     const tc_shader* shader,
     ShaderAbiResourceId id);
 

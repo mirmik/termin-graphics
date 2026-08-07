@@ -11,28 +11,28 @@
 
 namespace termin {
 
-struct RENDER_API UnknownPassStats {
+struct RENDER_CORE_API UnknownPassStats {
     size_t degraded = 0;
     size_t upgraded = 0;
     size_t skipped = 0;
     size_t failed = 0;
 };
 
-struct RENDER_API UnknownPassPreparationHooks {
+struct RENDER_CORE_API UnknownPassPreparationHooks {
     std::function<tc_value(void*, const char*)> serialize;
     std::function<tc_pass*()> create_replacement;
 };
 
 class UnknownPassDegradationPlan;
 
-RENDER_API bool prepare_passes_to_unknown(
+RENDER_CORE_API bool prepare_passes_to_unknown(
     const std::vector<std::string>& type_names,
     UnknownPassDegradationPlan& plan,
     std::string* error,
     const UnknownPassPreparationHooks& hooks
 );
 
-class RENDER_API UnknownPassDegradationPlan {
+class RENDER_CORE_API UnknownPassDegradationPlan {
 public:
     UnknownPassDegradationPlan();
     UnknownPassDegradationPlan(UnknownPassDegradationPlan&&) noexcept;
@@ -52,7 +52,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
 
-    friend RENDER_API bool prepare_passes_to_unknown(
+    friend RENDER_CORE_API bool prepare_passes_to_unknown(
         const std::vector<std::string>&,
         UnknownPassDegradationPlan&,
         std::string*,
@@ -60,18 +60,18 @@ private:
     );
 };
 
-RENDER_API bool prepare_passes_to_unknown(
+RENDER_CORE_API bool prepare_passes_to_unknown(
     const std::vector<std::string>& type_names,
     UnknownPassDegradationPlan& plan,
     std::string* error = nullptr,
     const UnknownPassPreparationHooks& hooks = {}
 );
 
-RENDER_API UnknownPassStats degrade_passes_to_unknown(
+RENDER_CORE_API UnknownPassStats degrade_passes_to_unknown(
     const std::vector<std::string>& type_names
 );
 
-RENDER_API UnknownPassStats upgrade_unknown_passes(
+RENDER_CORE_API UnknownPassStats upgrade_unknown_passes(
     const std::vector<std::string>& type_names = {}
 );
 

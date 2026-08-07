@@ -52,12 +52,12 @@ EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
     float near_clip = 0.1f;
     float far_clip = 100.0f;
 
-    if (ctx.camera) {
-        view = ctx.camera->get_view_matrix().to_float();
-        projection = ctx.camera->get_projection_matrix().to_float();
-        camera_position = ctx.camera->get_position();
-        near_clip = static_cast<float>(ctx.camera->near_clip);
-        far_clip = static_cast<float>(ctx.camera->far_clip);
+    if (const RenderCamera* primary = ctx.view.primary_view()) {
+        view = primary->get_view_matrix().to_float();
+        projection = primary->get_projection_matrix().to_float();
+        camera_position = primary->get_position();
+        near_clip = static_cast<float>(primary->near_clip);
+        far_clip = static_cast<float>(primary->far_clip);
     }
 
     return make_engine_per_frame_uniforms(

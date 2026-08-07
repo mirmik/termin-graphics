@@ -3,8 +3,46 @@
 GUARD_TEST_MAIN();
 
 #include <array>
+#include <string>
 
 #include <termin/render/execute_context.hpp>
+#include <termin/render/scene_render_services.hpp>
+
+extern "C" {
+#include <tcbase/tc_log.h>
+}
+
+namespace {
+
+std::string captured_scene_service_log;
+
+void capture_scene_service_log(tc_log_level level, const char* message)
+{
+    if (level >= TC_LOG_ERROR && message) {
+        captured_scene_service_log = message;
+    }
+}
+
+} // namespace
+
+TEST_CASE("ExecuteContext is constructible without scene services") {
+    termin::ExecuteContext context;
+    CHECK(context.capabilities == nullptr);
+    CHECK(context.view.primary_view() == nullptr);
+}
+
+TEST_CASE("missing SceneRenderServices is an observable error") {
+    termin::ExecuteContext context;
+    captured_scene_service_log.clear();
+    tc_log_set_callback(capture_scene_service_log);
+    const auto* services =
+        termin::require_scene_render_services(context, "SceneOnlyTestPass");
+    tc_log_set_callback(nullptr);
+
+    CHECK(services == nullptr);
+    CHECK(captured_scene_service_log.find("SceneOnlyTestPass") != std::string::npos);
+    CHECK(captured_scene_service_log.find("no SceneRenderServices") != std::string::npos);
+}
 
 TEST_CASE("ExecuteContext builds an ordered MRT pass from independent resources") {
     termin::ExecuteContext context;

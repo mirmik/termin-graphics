@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <memory>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -23,6 +22,7 @@ struct tc_mesh;
 
 #include <termin/render/render_context.hpp>
 #include <termin/render/render_export.hpp>
+#include <termin/render/render_item_collection.hpp>
 
 namespace tgfx { class RenderContext2; }
 
@@ -57,30 +57,6 @@ protected:
 private:
     static tc_phase_mask _cb_phase_mask(tc_component* c);
     static bool _cb_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
-};
-
-struct RENDER_API RenderItemCollection {
-    std::vector<tc_render_item> items;
-    std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
-    std::vector<std::unique_ptr<std::string>> text_batch_strings;
-    std::vector<std::unique_ptr<std::string>> foliage_batch_strings;
-    size_t active_line_batch_points = 0;
-    size_t active_text_batch_strings = 0;
-    size_t active_foliage_batch_strings = 0;
-
-    RenderItemCollection() = default;
-    ~RenderItemCollection() = default;
-    RenderItemCollection(RenderItemCollection&&) noexcept = default;
-    RenderItemCollection& operator=(RenderItemCollection&&) noexcept = default;
-    RenderItemCollection(const RenderItemCollection&) = delete;
-    RenderItemCollection& operator=(const RenderItemCollection&) = delete;
-
-    void clear() {
-        items.clear();
-        active_line_batch_points = 0;
-        active_text_batch_strings = 0;
-        active_foliage_batch_strings = 0;
-    }
 };
 
 RENDER_API bool collect_drawable_render_items(

@@ -17,6 +17,7 @@
 #include <termin/render/graph_alias_pass.hpp>
 #include <termin/render/render_pipeline.hpp>
 #include <termin/render/shader_usage_collector.hpp>
+#include <termin/render/scene_render_services.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_context.hpp>
@@ -283,6 +284,23 @@ void bind_render_framework(nb::module_& m) {
     nb::class_<FrameGraphResource>(m, "FrameGraphResource")
         .def("resource_type", &FrameGraphResource::resource_type);
 
+    nb::class_<SceneRenderServices>(m, "SceneRenderServices")
+        .def_prop_ro("scene", [](const SceneRenderServices& services) {
+            return services.scene;
+        })
+        .def_prop_ro("internal_entities",
+            [](const SceneRenderServices& services) -> nb::object {
+                if (!tc_entity_handle_valid(services.internal_entities)) {
+                    return nb::none();
+                }
+                return nb::cast(Entity(services.internal_entities));
+            })
+        .def_prop_ro("lights", [](const SceneRenderServices& services) {
+            return std::vector<Light>(services.lights.begin(), services.lights.end());
+        })
+        .def_ro("layer_mask", &SceneRenderServices::layer_mask)
+        .def_ro("render_category_mask", &SceneRenderServices::render_category_mask);
+
     nb::class_<ExecuteContext>(m, "ExecuteContext")
         .def(nb::init<>())
         .def("__init__", [](ExecuteContext* self, nb::kwargs kwargs) {
@@ -294,62 +312,37 @@ void bind_render_framework(nb::module_& m) {
                 self->render_rect.width = nb::cast<int>(t[2]);
                 self->render_rect.height = nb::cast<int>(t[3]);
             }
-            if (kwargs.contains("scene")) {
-                nb::object s = nb::borrow<nb::object>(kwargs["scene"]);
-                if (!s.is_none()) {
-                    if (nb::isinstance<TcSceneRef>(s)) {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    } else {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    }
-                }
-            }
             if (kwargs.contains("render_target_name")) {
                 self->render_target_name = nb::cast<std::string>(kwargs["render_target_name"]);
             }
-            if (kwargs.contains("internal_entities")) {
-                nb::object ent = nb::borrow<nb::object>(kwargs["internal_entities"]);
-                if (!ent.is_none()) {
-                    self->internal_entities = nb::cast<Entity>(ent).handle();
+            if (kwargs.contains("view")) {
+                nb::object view = nb::borrow<nb::object>(kwargs["view"]);
+                if (!view.is_none()) {
+                    self->view.primary = nb::cast<RenderCamera>(view);
                 }
-            }
-            if (kwargs.contains("lights")) {
-                nb::object l = nb::borrow<nb::object>(kwargs["lights"]);
-                if (!l.is_none()) {
-                    self->lights = nb::cast<std::vector<Light>>(l);
-                }
-            }
-            if (kwargs.contains("layer_mask")) {
-                self->layer_mask = nb::cast<uint64_t>(kwargs["layer_mask"]);
-            }
-            if (kwargs.contains("render_category_mask")) {
-                self->render_category_mask = nb::cast<uint64_t>(kwargs["render_category_mask"]);
             }
         })
-        .def_prop_rw("camera",
-            [](const ExecuteContext& ctx) -> RenderCamera* { return ctx.camera; },
-            [](ExecuteContext& ctx, RenderCamera* camera) { ctx.camera = camera; },
+        .def_prop_rw("view",
+            [](const ExecuteContext& ctx) -> const RenderCamera* {
+                return ctx.view.primary_view();
+            },
+            [](ExecuteContext& ctx, const RenderCamera* view) {
+                if (view) {
+                    ctx.view.primary = *view;
+                } else {
+                    ctx.view.primary.reset();
+                }
+            },
             nb::rv_policy::reference)
         .def_rw("render_target_name", &ExecuteContext::render_target_name)
-        .def_prop_rw("internal_entities",
-            [](const ExecuteContext& ctx) -> nb::object {
-                if (!tc_entity_handle_valid(ctx.internal_entities)) {
-                    return nb::none();
-                }
-                return nb::cast(Entity(ctx.internal_entities));
-            },
-            [](ExecuteContext& ctx, nb::object entity_obj) {
-                if (entity_obj.is_none()) {
-                    ctx.internal_entities = TC_ENTITY_HANDLE_INVALID;
-                    return;
-                }
-                ctx.internal_entities = nb::cast<Entity>(entity_obj).handle();
-            })
         .def_rw("render_rect", &ExecuteContext::render_rect)
-        .def_rw("scene", &ExecuteContext::scene)
-        .def_rw("lights", &ExecuteContext::lights)
-        .def_rw("layer_mask", &ExecuteContext::layer_mask)
-        .def_rw("render_category_mask", &ExecuteContext::render_category_mask)
+        .def_prop_ro("scene_services",
+            [](const ExecuteContext& ctx) -> const SceneRenderServices* {
+                return ctx.capabilities
+                    ? ctx.capabilities->find<SceneRenderServices>()
+                    : nullptr;
+            },
+            nb::rv_policy::reference_internal)
         // Stage 7: expose the tgfx2 RenderContext2 pointer so Python
         // passes can open a ctx2 render pass, bind shaders/textures,
         // and dispatch draws without going through the legacy
@@ -480,6 +473,12 @@ void bind_render_framework(nb::module_& m) {
         .def("__init__", [](RenderContext* self, nb::kwargs kwargs) {
             new (self) RenderContext();
 
+            if (kwargs.contains("scene") || kwargs.contains("camera")) {
+                throw nb::type_error(
+                    "RenderContext is scene-neutral and no longer accepts scene or camera; "
+                    "provide resolved matrices and render masks instead");
+            }
+
             if (kwargs.contains("phase")) {
                 nb::handle value = kwargs["phase"];
                 if (nb::isinstance<nb::str>(value)) {
@@ -494,16 +493,6 @@ void bind_render_framework(nb::module_& m) {
                     self->phase = phase;
                 } else {
                     self->phase = nb::cast<tc_phase_mask>(value);
-                }
-            }
-            if (kwargs.contains("scene")) {
-                nb::object s = nb::borrow<nb::object>(kwargs["scene"]);
-                if (!s.is_none()) {
-                    if (nb::isinstance<TcSceneRef>(s)) {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    } else {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    }
                 }
             }
             if (kwargs.contains("layer_mask")) {
@@ -536,24 +525,13 @@ void bind_render_framework(nb::module_& m) {
                     self->model = mat44f_from_buffer_compatible_object(model, "model");
                 }
             }
-            if (kwargs.contains("camera")) {
-                nb::object camera = nb::borrow<nb::object>(kwargs["camera"]);
-                if (!camera.is_none()) {
-                    self->camera = nb::cast<RenderCamera*>(camera);
-                }
-            }
         })
         .def_rw("phase", &RenderContext::phase)
-        .def_rw("scene", &RenderContext::scene)
         .def_rw("layer_mask", &RenderContext::layer_mask)
         .def_rw("render_category_mask", &RenderContext::render_category_mask)
         .def_rw("view", &RenderContext::view)
         .def_rw("projection", &RenderContext::projection)
         .def_rw("model", &RenderContext::model)
-        .def_prop_rw("camera",
-            [](const RenderContext& self) -> RenderCamera* { return self.camera; },
-            [](RenderContext& self, RenderCamera* camera) { self.camera = camera; },
-            nb::rv_policy::reference)
         .def("mvp", &RenderContext::mvp);
 
     nb::class_<HDRStats>(m, "HDRStats")

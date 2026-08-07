@@ -8,7 +8,7 @@
 
 namespace termin {
 
-class RENDER_API GraphAliasPass : public CxxFramePass {
+class RENDER_CORE_API GraphAliasPass : public CxxFramePass {
 public:
     std::vector<std::string> read_resources;
     std::vector<std::string> write_resources;

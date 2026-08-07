@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "core/tc_component.h"
 #include "tgfx/resources/tc_material.h"
 #include "tgfx/resources/tc_mesh_registry.h"
 #include "tgfx/resources/tc_texture.h"
@@ -31,6 +30,24 @@ typedef enum tc_render_item_flags {
     TC_RENDER_ITEM_FLAG_HAS_OVERRIDE_COLOR = 1u << 3,
     TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM = 1u << 4,
 } tc_render_item_flags;
+
+typedef enum tc_render_item_source_domain {
+    TC_RENDER_ITEM_SOURCE_DOMAIN_NONE = 0,
+    TC_RENDER_ITEM_SOURCE_DOMAIN_SCENE = 1,
+    /* Further domain ids are owned by render-item source adapters. */
+} tc_render_item_source_domain;
+
+typedef struct tc_render_item_source {
+    /* Stable identity interpreted by the source adapter. */
+    uint64_t domain_id;
+    uint64_t namespace_id;
+    uint64_t object_id;
+    uint32_t generation;
+    uint32_t subobject_id;
+    /* Frame-snapshot-local adapter metadata. Generic render code must not
+       interpret this value. */
+    uintptr_t adapter_data;
+} tc_render_item_source;
 
 #define TC_RENDER_ITEM_INLINE_UNIFORM_NAME_CAPACITY 64u
 #define TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY 256u
@@ -133,7 +150,7 @@ typedef union tc_render_item_payload {
 typedef struct tc_render_item {
     uint32_t kind;
     uint32_t flags;
-    tc_component* component;
+    tc_render_item_source source;
     int geometry_id;
     tc_material_phase* material_phase;
     tc_material_handle material;

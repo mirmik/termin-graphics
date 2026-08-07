@@ -2,26 +2,21 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include <tgfx2/enums.hpp>
 #include <tgfx2/handles.hpp>
-#include "termin/render/frame_pass.hpp"
-#include "termin/render/execute_context.hpp"
+#include <termin/geom/rect2.hpp>
 #include "termin/render/render_camera.hpp"
+#include "termin/render/render_execution_capabilities.hpp"
+#include "termin/render/render_item_snapshot.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/render_export.hpp"
-#include "termin/render/render_scene_item_collector.hpp"
-#include <termin/lighting/light.hpp>
-#include "termin/lighting/shadow.hpp"
-#include <termin/tc_scene.hpp>
 
 extern "C" {
 #include "render/tc_frame_graph.h"
-#include "core/tc_scene.h"
 }
 
 // tgfx2 forward declarations. Windowed hosts inject the canonical graphics
@@ -49,12 +44,10 @@ struct RenderPipelineCacheStats {
 struct RenderTargetContext {
 public:
     std::string name;
-    RenderCamera camera;
-    std::optional<StereoRenderViews> stereo_views;
+    RenderViewState view;
     // Render extent for this target. This is not the UI viewport's screen
     // rectangle; display placement is handled later during present/blit.
     Rect2i render_rect{0, 0, 0, 0};
-    tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
     uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
     uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
 
@@ -76,15 +69,28 @@ public:
     std::unordered_map<std::string, tgfx::TextureHandle> external_textures;
 };
 
-class RENDER_API RenderEngine {
+// One immutable input bundle for a logical render target. Every pointer is
+// borrowed and must remain valid until execute_pipeline() returns.
+struct RenderExecutionTarget {
+    const RenderTargetContext* context = nullptr;
+    const RenderItemSnapshot* render_items = nullptr;
+    const RenderExecutionCapabilities* capabilities = nullptr;
+};
+
+// Scene-neutral pipeline execution request. Adapters own source traversal,
+// immutable snapshot publication and concrete capability lifetimes.
+struct RenderExecution {
+    RenderPipeline* pipeline = nullptr;
+    std::unordered_map<std::string, RenderExecutionTarget> targets;
+    std::string default_render_target;
+    std::vector<FrameGraphCaptureRequest*> debug_capture_requests;
+};
+
+class RENDER_CORE_API RenderEngine {
 private:
     std::unique_ptr<tgfx::GraphicsHost> owned_graphics_host_;
     tgfx::GraphicsHost* graphics_host_ = nullptr;
     std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
-    // Reused between executions. invalidate_keep_capacity() defines the
-    // frame/view ownership boundary while retaining payload allocations.
-    std::vector<RenderSceneItemSnapshot> render_item_snapshot_scratch_;
-
 public:
     void set_graphics_host(tgfx::GraphicsHost& graphics_host);
     void ensure_tgfx2();
@@ -112,14 +118,7 @@ public:
     RenderEngine();
     ~RenderEngine();
 
-    void render_scene_pipeline_offscreen(
-        RenderPipeline& pipeline,
-        tc_scene_handle scene,
-        const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
-        const std::vector<Light>& lights,
-        const std::string& default_render_target = "",
-        const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests = {}
-    );
+    void execute_pipeline(const RenderExecution& execution);
 };
 
 } // namespace termin

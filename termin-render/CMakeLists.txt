@@ -44,6 +44,46 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
+set(TERMIN_RENDER_CORE_SOURCES
+    src/tc_viewport_config.c
+    src/tc_pass.c
+    src/tc_pipeline_template_registry.c
+    src/tc_pipeline.c
+    src/tc_frame_graph.c
+    src/fbo_pool.cpp
+    src/frame_pass.cpp
+    src/builtin_passes.cpp
+    src/frame_uniforms.cpp
+    src/frame_graph_capture.cpp
+    src/frame_graph_resource_registry.cpp
+    src/execute_context.cpp
+    src/graph_alias_pass.cpp
+    src/material_pipeline.cpp
+    src/material_pipeline_contracts.cpp
+    src/material_pipeline_shader_assembler.cpp
+    src/material_ubo_apply.cpp
+    src/render_pipeline.cpp
+    src/render_engine.cpp
+    src/render_execution_capabilities.cpp
+    src/render_item_mesh.cpp
+    src/render_item_source.cpp
+    src/render_item_snapshot.cpp
+    src/render_item_submission.cpp
+    src/render_task.cpp
+    src/world2d_ordering.cpp
+    src/world2d_quad_geometry.cpp
+    src/shader_abi.cpp
+    src/shader_resource_apply.cpp
+    src/shader_contract.cpp
+    src/tgfx2_bridge.cpp
+    src/vertex_transform_contracts.cpp
+    src/tc_project_settings.c
+    src/tc_inspect_pass_adapter.cpp
+    src/tc_pass_ref.cpp
+    src/unknown_pass.cpp
+    src/unknown_pass_ops.cpp
+)
+
 set(TERMIN_RENDER_SOURCES
     src/termin_render_version.c
     src/tc_component_python_drawable.c
@@ -57,54 +97,22 @@ set(TERMIN_RENDER_SOURCES
     src/tc_scene_render_mount.c
     src/tc_scene_render_state.c
     src/tc_scene_skybox.c
-    src/tc_viewport_config.c
     src/tc_render_target.c
     src/tc_render_target_config.c
-    src/tc_pass.c
-    src/tc_pipeline_template_registry.c
-    src/tc_pipeline.c
-    src/tc_frame_graph.c
     src/tc_scene_render_ext.cpp
     src/viewport_config.cpp
     src/render_target_config.cpp
     src/drawable.cpp
     src/debug_geometry.cpp
     src/render_lifecycle.cpp
-    src/fbo_pool.cpp
-    src/frame_pass.cpp
-    src/builtin_passes.cpp
     src/camera_capability.cpp
-    src/frame_uniforms.cpp
-    src/frame_graph_capture.cpp
-    src/execute_context.cpp
-    src/graph_alias_pass.cpp
     src/graph_compiler.cpp
     src/graph_data.cpp
     src/graph_node_def.cpp
-    src/material_pipeline.cpp
-    src/material_pipeline_contracts.cpp
-    src/material_pipeline_shader_assembler.cpp
-    src/material_ubo_apply.cpp
-    src/render_pipeline.cpp
-    src/render_engine.cpp
-    src/render_item_mesh.cpp
     src/render_scene_item_collector.cpp
-    src/render_item_submission.cpp
-    src/render_task.cpp
-    src/world2d_ordering.cpp
-    src/world2d_quad_geometry.cpp
-    src/shader_abi.cpp
+    src/scene_render_services.cpp
+    src/scene_render_execution.cpp
     src/shader_usage_collector.cpp
-    src/shader_resource_apply.cpp
-    src/shader_contract.cpp
-    src/tgfx2_bridge.cpp
-    src/vertex_transform_contracts.cpp
-    src/shadow.cpp
-    src/tc_project_settings.c
-    src/tc_inspect_pass_adapter.cpp
-    src/tc_pass_ref.cpp
-    src/unknown_pass.cpp
-    src/unknown_pass_ops.cpp
 )
 
 set(TERMIN_RENDER_HEADERS
@@ -149,6 +157,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/camera_capability.hpp
     include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_graph_capture.hpp
+    include/termin/render/frame_graph_resource_registry.hpp
     include/termin/render/graph_alias_pass.hpp
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp
@@ -161,8 +170,15 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_pipeline.hpp
     include/termin/render/tc_pipeline_template.hpp
     include/termin/render/render_engine.hpp
+    include/termin/render/render_execution_capabilities.hpp
     include/termin/render/render_item_submission.hpp
+    include/termin/render/render_item_collection.hpp
+    include/termin/render/render_item_source.hpp
+    include/termin/render/render_item_snapshot.hpp
     include/termin/render/render_scene_item_collector.hpp
+    include/termin/render/scene_render_services.hpp
+    include/termin/render/scene_render_execution.hpp
+    include/termin/render/scene_shader_usage_provider.hpp
     include/termin/render/world2d_ordering.hpp
     include/termin/render/world2d_quad_geometry.hpp
     include/termin/render/python_render_item.hpp
@@ -174,7 +190,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin/viewport_config.hpp
     include/termin/render/vertex_transform_contracts.hpp
     include/termin/render_target_config.hpp
-    include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h
     include/tc_render_target_config.h
@@ -183,55 +198,77 @@ set(TERMIN_RENDER_HEADERS
 )
 
 if(TERMIN_RENDER_BUILD_SHARED)
+    add_library(termin_render_core SHARED ${TERMIN_RENDER_CORE_SOURCES})
+    target_compile_definitions(
+        termin_render_core PRIVATE TERMIN_RENDER_CORE_EXPORTS TC_EXPORTS)
     add_library(termin_render SHARED ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
     target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_EXPORTS TC_EXPORTS)
 else()
+    add_library(termin_render_core STATIC ${TERMIN_RENDER_CORE_SOURCES})
     add_library(termin_render STATIC ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
 endif()
 
 if(COMMAND termin_enable_unity_build_for)
+    termin_enable_unity_build_for(termin_render_core)
     termin_enable_unity_build_for(termin_render)
 endif()
 if(COMMAND termin_enable_pch_for)
+    termin_enable_pch_for(termin_render_core)
     termin_enable_pch_for(termin_render)
 endif()
 
+add_library(termin_render_core::termin_render_core ALIAS termin_render_core)
 add_library(termin_render::termin_render ALIAS termin_render)
 
-set_target_properties(termin_render PROPERTIES
+set_target_properties(termin_render_core termin_render PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
+termin_set_rpath_lib(termin_render_core)
 termin_set_rpath_lib(termin_render)
 
+target_include_directories(termin_render_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 target_include_directories(termin_render
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
+target_compile_features(termin_render_core PUBLIC cxx_std_20)
 target_compile_features(termin_render PUBLIC cxx_std_20)
 
-target_link_libraries(termin_render PUBLIC
+target_link_libraries(termin_render_core PUBLIC
     tcbase::termin_base
     tgfx::termin_graphics
     tgfx::termin_graphics2
-    termin_scene::termin_scene
     termin_inspect::termin_inspect
-    termin_lighting::termin_lighting
     termin_materials::termin_materials
 )
 
+target_link_libraries(termin_render PUBLIC
+    termin_render_core::termin_render_core
+    termin_scene::termin_scene
+    termin_lighting::termin_lighting
+)
+
 if(UNIX AND NOT APPLE)
+    target_link_libraries(termin_render_core PRIVATE m)
     target_link_libraries(termin_render PRIVATE m)
 endif()
 
 if(MSVC)
+    target_compile_options(termin_render_core PRIVATE /W3 /wd4251 /wd4275)
+    target_compile_definitions(termin_render_core PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(termin_render PRIVATE /W3 /wd4251 /wd4275)
     target_compile_definitions(termin_render PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
+    target_compile_options(termin_render_core PRIVATE -Wall -Wextra)
     target_compile_options(termin_render PRIVATE -Wall -Wextra)
 endif()
 
@@ -421,6 +458,29 @@ if(TERMIN_RENDER_BUILD_TESTS)
     add_test(NAME termin_render_world2d_quad_geometry_test COMMAND termin_render_world2d_quad_geometry_test)
 
     add_executable(
+        termin_render_item_snapshot_test
+        tests/test_render_item_snapshot.cpp)
+    target_link_libraries(
+        termin_render_item_snapshot_test
+        PRIVATE termin_render)
+    add_test(
+        NAME termin_render_item_snapshot_test
+        COMMAND termin_render_item_snapshot_test)
+
+    add_executable(
+        termin_render_execution_test
+        tests/test_render_execution.cpp)
+    target_include_directories(
+        termin_render_execution_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard)
+    target_link_libraries(
+        termin_render_execution_test
+        PRIVATE termin_render_core::termin_render_core)
+    add_test(
+        NAME termin_render_execution_test
+        COMMAND termin_render_execution_test)
+
+    add_executable(
         termin_render_scene_item_snapshot_test
         tests/test_render_scene_item_snapshot.cpp)
     target_link_libraries(
@@ -448,6 +508,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
         termin_render_world2d_ordering_test
         termin_render_world2d_quad_geometry_test
         termin_render_task_test
+        termin_render_item_snapshot_test
         termin_render_scene_item_snapshot_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
@@ -497,6 +558,13 @@ if(TERMIN_BUILD_PYTHON)
     )
 endif()
 
+install(TARGETS termin_render_core
+    EXPORT termin_render_coreTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
 install(TARGETS termin_render
     EXPORT termin_renderTargets
     LIBRARY DESTINATION lib
@@ -506,6 +574,12 @@ install(TARGETS termin_render
 
 install(DIRECTORY include/
     DESTINATION include
+)
+
+install(EXPORT termin_render_coreTargets
+    FILE termin_render_coreTargets.cmake
+    NAMESPACE termin_render_core::
+    DESTINATION lib/cmake/termin_render_core
 )
 
 install(EXPORT termin_renderTargets
@@ -522,8 +596,20 @@ configure_package_config_file(
     INSTALL_DESTINATION lib/cmake/termin_render
 )
 
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/termin_render_coreConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfig.cmake
+    INSTALL_DESTINATION lib/cmake/termin_render_core
+)
+
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
@@ -532,6 +618,12 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
     DESTINATION lib/cmake/termin_render
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfigVersion.cmake
+    DESTINATION lib/cmake/termin_render_core
 )
 
 termin_label_tests_in_directory("termin-render")

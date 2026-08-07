@@ -17,11 +17,11 @@ struct ShaderContractValidationOptions {
 
 // Validate a shader's generic interface contract against its resolved resource
 // layout. Absence of a contract is allowed unless `require_contract` is set.
-RENDER_API bool validate_shader_contract(
+RENDER_CORE_API bool validate_shader_contract(
     const tc_shader* shader,
     const ShaderContractValidationOptions& options = {});
 
-RENDER_API bool validate_shader_contract(
+RENDER_CORE_API bool validate_shader_contract(
     tc_shader_handle shader_handle,
     const ShaderContractValidationOptions& options = {});
 

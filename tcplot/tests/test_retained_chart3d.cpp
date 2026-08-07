@@ -1,8 +1,10 @@
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -10,8 +12,21 @@
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
+#include <termin/render/builtin_passes.hpp>
+#include <termin/render/execute_context.hpp>
+#include <termin/render/frame_pass.hpp>
+#include <termin/render/render_engine.hpp>
+#include <termin/render/render_item_submission.hpp>
+#include <termin/render/render_pipeline.hpp>
+#include <termin/render/render_task.hpp>
+
 #include "tcplot/gpu_host.hpp"
+#include "tcplot/plot_scene3d_render_item_source.hpp"
 #include "tcplot/retained_chart3d.h"
+
+extern "C" {
+#include <render/tc_pass.h>
+}
 
 namespace {
 
@@ -45,6 +60,93 @@ bool same_snapshot(
            left.geometry_revision == right.geometry_revision &&
            left.style_revision == right.style_revision &&
            left.gpu_revision == right.gpu_revision;
+}
+
+const tc_render_item* find_render_item(
+    const termin::RenderItemSnapshot& snapshot,
+    tc_plot_item3d_handle handle) {
+    for (const tc_render_item& item : snapshot.items()) {
+        if (item.source.namespace_id == handle.scene_id &&
+            item.source.object_id == handle.index &&
+            item.source.generation == handle.generation) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+const tcplot::PlotScene3DRenderItemPayload* find_plot_payload(
+    const termin::RenderItemSnapshot& snapshot,
+    tc_plot_item3d_handle handle) {
+    const tc_render_item* item = find_render_item(snapshot, handle);
+    return item ? tcplot::plot_scene3d_render_item_payload(*item) : nullptr;
+}
+
+constexpr const char* kPlotSnapshotProbeType = "PlotScene3DSnapshotProbe";
+const termin::RenderItemSnapshot* g_probe_snapshot = nullptr;
+std::size_t g_probe_item_count = 0;
+bool g_probe_executed = false;
+
+class PlotSnapshotProbe final : public termin::CxxFramePass {
+public:
+    PlotSnapshotProbe() {
+        pass_name_set(kPlotSnapshotProbeType);
+        link_to_type_registry(kPlotSnapshotProbeType);
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        g_probe_snapshot = context.render_item_snapshot;
+        g_probe_item_count = context.render_item_snapshot
+            ? context.render_item_snapshot->item_count()
+            : 0;
+        g_probe_executed = true;
+    }
+};
+
+void execute_snapshot_probe(
+    const termin::RenderItemSnapshot& snapshot,
+    tcplot::GpuHost& host) {
+    if (!tc_pass_registry_has("CxxFramePass")) {
+        termin::register_builtin_render_pass_types();
+    }
+    tc_pass_registry_unregister(kPlotSnapshotProbeType);
+    auto descriptor =
+        termin::FramePassTypeDescriptorBuilder::native<PlotSnapshotProbe>(
+            kPlotSnapshotProbeType,
+            "tcplot-test");
+    require(descriptor.commit(), "failed to register plot snapshot probe");
+
+    termin::RenderPipeline pipeline("plot-scene3d-source-test");
+    require(pipeline.is_valid(), "failed to create plot snapshot probe pipeline");
+    tc_pass* pass = tc_pass_registry_create(kPlotSnapshotProbeType);
+    require(pass != nullptr, "failed to create plot snapshot probe pass");
+    pipeline.add_pass(pass);
+
+    termin::RenderTargetContext target;
+    target.name = "PlotScene3DTarget";
+    target.render_rect = {0, 0, 1, 1};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name, termin::RenderExecutionTarget{
+        .context = &target,
+        .render_items = &snapshot,
+    });
+
+    g_probe_snapshot = nullptr;
+    g_probe_item_count = 0;
+    g_probe_executed = false;
+    termin::RenderEngine engine;
+    engine.set_graphics_host(host.graphics());
+    engine.execute_pipeline(execution);
+    require(g_probe_executed, "generic render pipeline did not execute plot probe");
+    require(g_probe_snapshot == &snapshot, "plot probe received another snapshot");
+    require(
+        g_probe_item_count == snapshot.item_count(),
+        "plot probe observed the wrong item count");
+
+    pipeline.destroy();
+    tc_pass_registry_unregister(kPlotSnapshotProbeType);
 }
 
 }  // namespace
@@ -84,6 +186,23 @@ int main() {
             tc_retained_chart3d_item_count(chart) == 1,
             "chart must create one default grid part");
 
+        termin::RenderItemSnapshot empty_snapshot;
+        const tc_plot_item3d_handle other_grid =
+            tc_retained_chart3d_grid_part(other);
+        require(
+            tc_retained_chart3d_destroy_item(other, other_grid) != 0,
+            "failed to remove the other chart default grid");
+        termin::RenderItemSource& empty_source =
+            tcplot::plot_scene3d_render_item_source(*other);
+        require(
+            empty_source.publish(empty_snapshot, {.debug_name = "EmptyPlotScene3D"}),
+            "empty PlotScene3D source publication failed");
+        require(
+            empty_snapshot.valid() && empty_snapshot.item_count() == 0 &&
+                empty_snapshot.counters().source_traversals == 1 &&
+                empty_snapshot.counters().producers == 0,
+            "empty PlotScene3D snapshot counters are invalid");
+
         const double x[] = {-1.0, 1.0, -1.0, 1.0};
         const double y[] = {-1.0, -1.0, 1.0, 1.0};
         const double z[] = {0.0, 0.5, 1.0, 0.25};
@@ -118,6 +237,207 @@ int main() {
                 scatter_x, scatter_y, scatter_z,
                 3, &scatter_style);
 
+        termin::RenderItemSource& render_item_source =
+            tcplot::plot_scene3d_render_item_source(*chart);
+        termin::RenderViewState first_view;
+        termin::RenderViewState second_view;
+        termin::RenderItemSnapshot first_render_snapshot;
+        termin::RenderItemSnapshot second_render_snapshot;
+        require(
+            render_item_source.publish(
+                first_render_snapshot,
+                {.view = &first_view, .debug_name = "PlotScene3D first view"}),
+            "first PlotScene3D source publication failed");
+        require(
+            render_item_source.publish(
+                second_render_snapshot,
+                {.view = &second_view, .debug_name = "PlotScene3D second view"}),
+            "second PlotScene3D source publication failed");
+        require(
+            first_render_snapshot.valid() && second_render_snapshot.valid() &&
+                first_render_snapshot.item_count() == 3 &&
+                second_render_snapshot.item_count() == 3,
+            "multi-view PlotScene3D snapshots must remain independently valid");
+        require(
+            first_render_snapshot.counters().source_traversals == 1 &&
+                first_render_snapshot.counters().producers == 3,
+            "PlotScene3D snapshot counters are invalid");
+
+        const tc_render_item* surface_render_item =
+            find_render_item(first_render_snapshot, surface);
+        const tc_render_item* scatter_render_item =
+            find_render_item(first_render_snapshot, scatter);
+        const tc_render_item* grid_render_item = find_render_item(
+            first_render_snapshot,
+            tc_retained_chart3d_grid_part(chart));
+        require(
+            surface_render_item && scatter_render_item && grid_render_item,
+            "PlotScene3D snapshot lost retained item identity");
+        require(
+            surface_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_SURFACE &&
+                scatter_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_SCATTER &&
+                grid_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_GRID,
+            "PlotScene3D snapshot published incorrect item kinds");
+        for (const tc_render_item& item : first_render_snapshot.items()) {
+            require(
+                item.source.domain_id == tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN &&
+                    item.source.namespace_id ==
+                        tc_retained_chart3d_scene_id(chart) &&
+                    item.source.adapter_data != 0 &&
+                    tcplot::plot_scene3d_render_item_payload(item) != nullptr,
+                "PlotScene3D item must retain an immutable adapter payload");
+        }
+        const tcplot::PlotScene3DRenderItemPayload* first_surface_payload =
+            find_plot_payload(first_render_snapshot, surface);
+        const tcplot::PlotScene3DRenderItemPayload* first_scatter_payload =
+            find_plot_payload(first_render_snapshot, scatter);
+        require(
+            first_surface_payload && first_surface_payload->item &&
+                first_scatter_payload && first_scatter_payload->item,
+            "PlotScene3D payload lookup failed");
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                first_surface_payload->item->surface_style.wireframe == 0 &&
+                first_surface_payload->item->surface_draw_vertex_count == 6 &&
+                first_surface_payload->item->surface_draw_vertices.size() ==
+                    6u * 19u &&
+                first_surface_payload->frame.x_label == "x",
+            "PlotScene3D payload lost item or chart values");
+
+        termin::RenderItemEncoderCapabilities surface_capabilities{};
+        require(
+            termin::get_render_item_encoder_capabilities(
+                tcplot::PLOT_RENDER_ITEM_KIND_SURFACE,
+                surface_capabilities) &&
+                surface_capabilities.phase_mask == TC_PHASE_OPAQUE &&
+                surface_capabilities.requires_draw_context &&
+                !surface_capabilities.consumes_common_resources,
+            "PlotScene3D surface encoder capabilities are invalid");
+        termin::RenderItemTaskPlanningContract surface_contract{};
+        surface_contract.phase = TC_PHASE_OPAQUE;
+        surface_contract.material_phase_policy =
+            termin::RenderItemMaterialPhasePolicy::Forbidden;
+        surface_contract.provided_input_mask =
+            termin::render_item_task_input_bit(
+                termin::RenderItemTaskInput::DrawContext);
+        surface_contract.required_input_mask =
+            surface_contract.provided_input_mask;
+        surface_contract.debug_pass_name = "PlotScene3D surface planning test";
+        termin::RenderItemTaskPlanningRequest surface_planning{};
+        surface_planning.item = surface_render_item;
+        surface_planning.item_index = 0;
+        surface_planning.source_draw_index = 0;
+        surface_planning.contract = &surface_contract;
+        termin::RenderTaskList surface_tasks;
+        const termin::RenderItemTaskPlanningResult surface_plan =
+            termin::plan_render_item_task(surface_planning, surface_tasks);
+        require(
+            surface_plan.accepted() && surface_tasks.size() == 1 &&
+                !tc_shader_handle_is_invalid(
+                    surface_tasks.at(surface_plan.task_index).final_shader),
+            "PlotScene3D surface task planning failed");
+
+        auto malformed_surface_data =
+            std::make_shared<tcplot::PlotScene3DItemRenderData>(
+                *first_surface_payload->item);
+        malformed_surface_data->surface_draw_vertices.clear();
+        malformed_surface_data->surface_draw_vertex_count = 0;
+        tcplot::PlotScene3DRenderItemPayload malformed_surface_payload =
+            *first_surface_payload;
+        malformed_surface_payload.item = std::move(malformed_surface_data);
+        tc_render_item malformed_surface_item = *surface_render_item;
+        malformed_surface_item.source.adapter_data = reinterpret_cast<uintptr_t>(
+            &malformed_surface_payload);
+        termin::RenderContext malformed_draw_context;
+        malformed_draw_context.phase = TC_PHASE_OPAQUE;
+        malformed_draw_context.viewport_width = 320;
+        malformed_draw_context.viewport_height = 240;
+        termin::RenderItemDrawSubmitRequest malformed_submission{};
+        malformed_submission.shader_handle =
+            surface_tasks.at(surface_plan.task_index).final_shader;
+        malformed_submission.device = &host.device();
+        malformed_submission.draw_context = &malformed_draw_context;
+        malformed_submission.phase = TC_PHASE_OPAQUE;
+        malformed_submission.debug_pass_name =
+            "PlotScene3D malformed surface test";
+        require(
+            !termin::submit_render_item_draw(
+                host.ctx(), malformed_surface_item, malformed_submission),
+            "PlotScene3D surface encoder accepted a malformed draw stream");
+
+        termin::RenderItemTaskPlanningContract unsupported_surface_contract =
+            surface_contract;
+        unsupported_surface_contract.phase = TC_PHASE_TRANSPARENT;
+        surface_planning.contract = &unsupported_surface_contract;
+        termin::RenderTaskList unsupported_surface_tasks;
+        require(
+            termin::plan_render_item_task(
+                surface_planning,
+                unsupported_surface_tasks).rejection ==
+                    termin::RenderItemTaskRejection::PassOutputUnsupported &&
+                unsupported_surface_tasks.empty(),
+            "PlotScene3D surface planner accepted an unsupported output");
+
+        termin::RenderItemTaskPlanningContract missing_input_contract =
+            surface_contract;
+        missing_input_contract.provided_input_mask = 0;
+        surface_planning.contract = &missing_input_contract;
+        termin::RenderTaskList missing_input_tasks;
+        require(
+            termin::plan_render_item_task(
+                surface_planning,
+                missing_input_tasks).rejection ==
+                    termin::RenderItemTaskRejection::RequiredInputMissing &&
+                missing_input_tasks.empty(),
+            "PlotScene3D surface planner accepted missing draw context input");
+        surface_planning.contract = &surface_contract;
+        surface_planning.material_phase =
+            reinterpret_cast<tc_material_phase*>(uintptr_t{1});
+        termin::RenderTaskList material_surface_tasks;
+        require(
+            termin::plan_render_item_task(
+                surface_planning,
+                material_surface_tasks).rejection ==
+                    termin::RenderItemTaskRejection::MaterialPhaseForbidden &&
+                material_surface_tasks.empty(),
+            "PlotScene3D surface planner accepted a material phase");
+        surface_planning.material_phase = nullptr;
+        const tcplot::PlotScene3DRenderItemPayload* second_surface_payload =
+            find_plot_payload(second_render_snapshot, surface);
+        require(
+            second_surface_payload && second_surface_payload->item ==
+                first_surface_payload->item,
+            "unchanged item data must be shared between snapshots");
+        execute_snapshot_probe(first_render_snapshot, host);
+
+        const double changed_z[] = {0.25, 0.75, 1.25, 0.5};
+        require(
+            tc_retained_chart3d_surface_set_data(
+                chart, surface, x, y, changed_z, 2, 2) != 0,
+            "failed to update surface data for snapshot isolation");
+        termin::RenderItemSnapshot geometry_changed_snapshot;
+        require(
+            render_item_source.publish(geometry_changed_snapshot, {}),
+            "PlotScene3D publication after geometry mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* changed_surface_payload =
+            find_plot_payload(geometry_changed_snapshot, surface);
+        require(
+            changed_surface_payload && changed_surface_payload->item &&
+                changed_surface_payload->item->z ==
+                    std::vector<double>(
+                        std::begin(changed_z), std::end(changed_z)) &&
+                changed_surface_payload->geometry_revision ==
+                    first_surface_payload->geometry_revision + 1 &&
+                changed_surface_payload->item != first_surface_payload->item,
+            "geometry mutation must publish a new immutable item payload");
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                find_plot_payload(geometry_changed_snapshot, scatter)->item ==
+                    first_scatter_payload->item,
+            "geometry mutation changed an older or unrelated snapshot payload");
+
         const auto surface_initial = snapshot(chart, surface);
         const auto scatter_initial = snapshot(chart, scatter);
         require(
@@ -151,10 +471,45 @@ int main() {
             same_snapshot(surface_initial, snapshot(chart, surface)) &&
                 same_snapshot(scatter_initial, snapshot(chart, scatter)),
             "camera changes must not invalidate item state");
-
+        termin::RenderItemSnapshot chart_state_snapshot;
         require(
-            tc_retained_chart3d_render(chart, 320, 240) != 0,
+            render_item_source.publish(chart_state_snapshot, {}),
+            "PlotScene3D publication after chart-state mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* chart_state_payload =
+            find_plot_payload(chart_state_snapshot, surface);
+        require(
+            chart_state_payload &&
+                chart_state_payload->frame.camera.azimuth == camera.azimuth &&
+                chart_state_payload->frame.surface_shading_strength == 0.4f &&
+                first_surface_payload->frame.camera.azimuth != camera.azimuth,
+            "chart-state mutation must publish values without altering older snapshots");
+
+        const uint32_t first_render_texture =
+            tc_retained_chart3d_render(chart, 320, 240);
+        require(
+            first_render_texture != 0,
             "initial retained render failed");
+        tgfx::TextureHandle first_render_handle{};
+        first_render_handle.id = first_render_texture;
+        std::vector<float> first_render_pixels(320u * 240u * 4u, 0.0f);
+        require(
+            host.device().read_texture_rgba_float(
+                first_render_handle,
+                first_render_pixels.data()),
+            "failed to read retained Chart3D encoder output");
+        std::size_t non_clear_pixels = 0;
+        for (std::size_t index = 0;
+             index + 3 < first_render_pixels.size();
+             index += 4) {
+            if (std::abs(first_render_pixels[index + 0] - 0.08f) > 0.03f ||
+                std::abs(first_render_pixels[index + 1] - 0.09f) > 0.03f ||
+                std::abs(first_render_pixels[index + 2] - 0.11f) > 0.03f) {
+                ++non_clear_pixels;
+            }
+        }
+        require(
+            non_clear_pixels > 100,
+            "PlotScene3D surface encoder produced no visible output");
         const auto surface_rendered = snapshot(chart, surface);
         const auto scatter_rendered = snapshot(chart, scatter);
         require(
@@ -175,6 +530,21 @@ int main() {
                     surface_rendered.style_revision + 1 &&
                 surface_invalidated.gpu_revision == 0,
             "style change must preserve semantic geometry and invalidate GPU state");
+        termin::RenderItemSnapshot style_changed_snapshot;
+        require(
+            render_item_source.publish(style_changed_snapshot, {}),
+            "PlotScene3D publication after style mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* styled_surface_payload =
+            find_plot_payload(style_changed_snapshot, surface);
+        require(
+            styled_surface_payload && styled_surface_payload->item &&
+                styled_surface_payload->item->surface_style.wireframe == 1 &&
+                styled_surface_payload->item->surface_draw_vertex_count == 12 &&
+                first_surface_payload->item->surface_draw_vertex_count == 6 &&
+                first_surface_payload->item->surface_style.wireframe == 0 &&
+                styled_surface_payload->style_revision ==
+                    first_surface_payload->style_revision + 1,
+            "style mutation must not alter an older snapshot payload");
         require(
             same_snapshot(scatter_rendered, snapshot(chart, scatter)),
             "surface style must not invalidate unrelated scatter");
@@ -218,6 +588,13 @@ int main() {
         require(
             tc_retained_chart3d_item_is_valid(chart, scatter) == 0,
             "destroyed handle must be stale");
+        termin::RenderItemSnapshot after_destroy_snapshot;
+        require(
+            render_item_source.publish(after_destroy_snapshot, {}),
+            "PlotScene3D publication after destroy failed");
+        require(
+            find_render_item(after_destroy_snapshot, scatter) == nullptr,
+            "destroyed item must disappear from PlotScene3D snapshots");
         const tc_plot_item3d_handle replacement =
             tc_retained_chart3d_add_scatter(
                 chart,
@@ -227,12 +604,32 @@ int main() {
             replacement.index == scatter.index &&
                 replacement.generation != scatter.generation,
             "reused slot must advance its generation");
+        termin::RenderItemSnapshot replacement_snapshot;
+        require(
+            render_item_source.publish(replacement_snapshot, {}),
+            "PlotScene3D publication after slot reuse failed");
+        require(
+            find_render_item(replacement_snapshot, scatter) == nullptr &&
+                find_render_item(replacement_snapshot, replacement) != nullptr,
+            "PlotScene3D snapshot must publish only the live slot generation");
+        const tcplot::PlotScene3DRenderItemPayload* replacement_payload =
+            find_plot_payload(replacement_snapshot, replacement);
+        require(
+            replacement_payload && replacement_payload->item &&
+                replacement_payload->item != first_scatter_payload->item,
+            "reused slot must not recycle the previous generation's payload");
         require(
             tc_retained_chart3d_destroy_item(chart, scatter) == 0,
             "stale handle must not destroy replacement item");
 
         tc_retained_chart3d_destroy(other);
         tc_retained_chart3d_destroy(chart);
+        require(
+            first_surface_payload->item->z ==
+                std::vector<double>(std::begin(z), std::end(z)) &&
+                first_surface_payload->frame.x_label == "x" &&
+                first_surface_payload->item->surface_style.wireframe == 0,
+            "snapshot-owned PlotScene3D payload did not survive chart destruction");
         std::printf("retained Chart3D lifecycle and invalidation test passed\n");
         return 0;
     } catch (const std::exception& error) {

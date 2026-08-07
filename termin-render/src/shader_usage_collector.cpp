@@ -12,6 +12,7 @@
 #include <termin/render/drawable.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_pipeline.hpp>
+#include <termin/render/scene_shader_usage_provider.hpp>
 #include <tgfx/resources/tc_material.h>
 
 namespace termin {
@@ -102,7 +103,12 @@ std::vector<TcShader> collect_shader_usages_for_pipeline(
             continue;
         }
 
-        cxx_pass->collect_shader_usages(
+        const auto* scene_provider =
+            dynamic_cast<const SceneShaderUsageProvider*>(cxx_pass);
+        if (!scene_provider) {
+            continue;
+        }
+        scene_provider->collect_scene_shader_usages(
             scene,
             [&](TcShader shader) {
                 append_shader_usage(shader, &ctx);

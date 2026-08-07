@@ -1,9 +1,9 @@
 # tcplot
 
-`tcplot` — lightweight plotting library поверх `termin-graphics`. Retained
-plot annotations используют `termin-visual-scene` как внутреннюю
-транзитивную зависимость; приложение по-прежнему линкует только
-`tcplot::tcplot`.
+`tcplot` — lightweight plotting library поверх `termin-graphics` и
+scene-neutral `termin_render_core`. Retained plot annotations используют
+`termin-visual-scene` как внутреннюю транзитивную зависимость; приложение
+по-прежнему линкует только `tcplot::tcplot`.
 
 Связанные документы:
 
@@ -82,6 +82,22 @@ geometry. Для retained batches произвольный geometric clip сей
 отклоняется; plot-area rectangle использует быстрый scissor contract.
 `PlotEngine2D` вызывает те же `Plot*SeriesGpu2D`, отдельного legacy renderer
 больше нет.
+
+`RetainedChart3D` владеет `PlotScene3DRenderItemSource`, доступным C++ consumer
+через `plot_scene3d_render_item_source()`. Он публикует immutable surface,
+scatter и grid identities в общий `termin_render_core` без `tc_scene`, entity
+или component metadata. Каждый item также ссылается на snapshot-owned
+`PlotScene3DRenderItemPayload`: item geometry/style переиспользуются через
+immutable shared value до смены revision, а camera/axis/light/bounds/labels
+копируются для конкретной публикации. Payload не заимствует retained slot и
+остаётся читаемым после последующих mutations, slot reuse и уничтожения chart.
+Surface payload дополнительно кэширует encoder-ready vertex stream по geometry
+и style revisions. Tcplot-owned surface planner выбирает builtin tcplot3d
+shader, а encoder загружает stream через общий transient vertex ring и рисует
+его через `submit_render_item_draw()`. Даже старый offscreen entry point теперь
+планирует и отправляет surface через этот общий контракт; surface slot больше
+не содержит `PlotEngine3D`. Scatter/grid bodies, chart framegraph pass и
+отдельный world-text/chrome path остаются следующими срезами.
 
 `fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
 value-only layout boundary. Tick spacing и font size задаются в logical pixels

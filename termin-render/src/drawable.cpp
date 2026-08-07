@@ -72,7 +72,9 @@ bool validate_render_item(
         phase_mark = context.phase == TC_PHASE_NONE ? "<snapshot>" : "<invalid>";
     }
     const char* pass_name = context.debug_pass_name ? context.debug_pass_name : "<unknown>";
-    tc_component* component = item.component ? item.component : source_component;
+    tc_component* component = item.source.adapter_data
+        ? reinterpret_cast<tc_component*>(item.source.adapter_data)
+        : source_component;
     const char* component_type = component_debug_name(component);
 
     if (item.kind == TC_RENDER_ITEM_KIND_INVALID) {
@@ -178,6 +180,35 @@ struct RenderItemVectorSinkData {
     const char* last_foliage_stored = nullptr;
 };
 
+tc_render_item_source scene_item_source(tc_component* component)
+{
+    tc_render_item_source source{};
+    if (!component) {
+        return source;
+    }
+    source.domain_id = TC_RENDER_ITEM_SOURCE_DOMAIN_SCENE;
+    source.adapter_data = reinterpret_cast<uintptr_t>(component);
+    const tc_entity_handle owner = component->owner;
+    if (!tc_entity_handle_valid(owner)) {
+        return source;
+    }
+    source.namespace_id =
+        (static_cast<uint64_t>(owner.pool.generation) << 32u) |
+        owner.pool.index;
+    tc_entity_pool* pool = tc_entity_pool_registry_get(owner.pool);
+    if (!pool) {
+        return source;
+    }
+    source.object_id = tc_entity_pool_runtime_id(pool, owner.id);
+    source.generation = owner.id.generation;
+    const size_t component_index =
+        tc_entity_pool_component_index(pool, owner.id, component);
+    source.subobject_id = component_index <= UINT32_MAX
+        ? static_cast<uint32_t>(component_index)
+        : UINT32_MAX;
+    return source;
+}
+
 bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
     auto* data = static_cast<RenderItemVectorSinkData*>(user_data);
     if (!data || !data->collection || !data->context || !item) {
@@ -190,8 +221,8 @@ bool emit_render_item_to_vector(const tc_render_item* item, void* user_data) {
     }
 
     tc_render_item copy = *item;
-    if (!copy.component) {
-        copy.component = data->component;
+    if (copy.source.adapter_data == 0u) {
+        copy.source = scene_item_source(data->component);
     }
     if (copy.kind == TC_RENDER_ITEM_KIND_LINE_BATCH &&
         copy.payload.line_batch.points &&

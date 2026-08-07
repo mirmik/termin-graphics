@@ -1,5 +1,4 @@
 #include <termin/render/render_scene_item_collector.hpp>
-#include <termin/render/execute_context.hpp>
 
 #include <tcbase/tc_log.hpp>
 #include <cstring>
@@ -13,7 +12,7 @@ const char* safe_pass_name(const RenderSceneItemCollectRequest& request)
 }
 
 struct CollectCallbackData {
-    RenderSceneItemCollector* collector = nullptr;
+    RenderItemCollection* output = nullptr;
     const RenderSceneItemCollectRequest* request = nullptr;
     bool ok = true;
     uint64_t producer_count = 0;
@@ -22,7 +21,7 @@ struct CollectCallbackData {
 bool collect_drawable_items_callback(tc_component* component, void* user_data)
 {
     auto* data = static_cast<CollectCallbackData*>(user_data);
-    if (!data || !data->collector || !data->request) {
+    if (!data || !data->output || !data->request) {
         tc::Log::error("[RenderSceneItemCollector] invalid scene callback state");
         return true;
     }
@@ -51,7 +50,7 @@ bool collect_drawable_items_callback(tc_component* component, void* user_data)
     context.camera = data->request->camera;
     context.user_context = data->request->user_context;
 
-    if (!collect_drawable_render_items(component, context, data->collector->storage())) {
+    if (!collect_drawable_render_items(component, context, *data->output)) {
         data->ok = false;
     }
     data->producer_count += 1;
@@ -67,7 +66,14 @@ void RenderSceneItemCollector::clear_keep_capacity()
 
 bool RenderSceneItemCollector::collect(const RenderSceneItemCollectRequest& request)
 {
-    clear_keep_capacity();
+    return collect_into(request, storage_);
+}
+
+bool RenderSceneItemCollector::collect_into(
+    const RenderSceneItemCollectRequest& request,
+    RenderItemCollection& output)
+{
+    output.clear();
     last_scene_traversals_ = 0;
     last_drawable_producers_ = 0;
 
@@ -78,7 +84,7 @@ bool RenderSceneItemCollector::collect(const RenderSceneItemCollectRequest& requ
         return false;
     }
     CollectCallbackData data;
-    data.collector = this;
+    data.output = &output;
     data.request = &request;
 
     tc_scene_foreach_drawable(
@@ -92,121 +98,51 @@ bool RenderSceneItemCollector::collect(const RenderSceneItemCollectRequest& requ
     return data.ok;
 }
 
-bool RenderSceneItemSnapshot::collect(const RenderSceneItemCollectRequest& request)
-{
-    RenderSceneItemCollectRequest snapshot_request = request;
-    snapshot_request.phase = TC_PHASE_NONE;
-    snapshot_request.flags |= TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE;
-    valid_ = collector_.collect(snapshot_request);
-    counters_.scene_traversals = collector_.last_scene_traversals();
-    counters_.emitted_items = collector_.item_count();
-    counters_.drawable_producers = collector_.last_drawable_producers();
-    for (RenderSceneItemPhaseBucket& bucket : phase_buckets_) {
-        bucket.item_indices.clear();
-    }
-    for (size_t item_index = 0; item_index < collector_.item_count(); ++item_index) {
-        const tc_render_item* item = collector_.item(item_index);
-        if (!item) {
-            continue;
-        }
-        tc_material_phase* phase = nullptr;
-        if (!tc_material_handle_is_invalid(item->material) &&
-            item->material_phase_index != SIZE_MAX) {
-            tc_material* material = tc_material_get(item->material);
-            if (material && item->material_phase_index < material->phase_count) {
-                phase = &material->phases[item->material_phase_index];
-            }
-        }
-        if (!phase) {
-            phase = item->material_phase;
-        }
-        if (!phase || !tc_phase_is_single(phase->phase)) {
-            continue;
-        }
+TcSceneRenderItemSource::TcSceneRenderItemSource(
+    tc_scene_handle scene,
+    const void* scene_context,
+    int scene_filter_flags)
+    : scene_(scene),
+      scene_context_(scene_context),
+      scene_filter_flags_(scene_filter_flags)
+{}
 
-        RenderSceneItemPhaseBucket* selected = nullptr;
-        for (RenderSceneItemPhaseBucket& bucket : phase_buckets_) {
-            if (bucket.phase == phase->phase) {
-                selected = &bucket;
-                break;
-            }
-        }
-        if (!selected) {
-            phase_buckets_.emplace_back();
-            selected = &phase_buckets_.back();
-            selected->phase = phase->phase;
-        }
-        selected->item_indices.push_back(item_index);
-    }
-    return valid_;
+const char* TcSceneRenderItemSource::source_name() const noexcept
+{
+    return "TcSceneRenderItemSource";
 }
 
-void RenderSceneItemSnapshot::invalidate_keep_capacity()
+bool TcSceneRenderItemSource::collect_items(
+    const RenderItemSourceRequest& request,
+    RenderItemCollection& output,
+    RenderItemSnapshotCounters& counters)
 {
-    collector_.clear_keep_capacity();
-    counters_ = RenderSceneItemSnapshotCounters{};
-    valid_ = false;
+    RenderSceneItemCollectRequest scene_request{};
+    scene_request.scene = scene_;
+    scene_request.phase = TC_PHASE_NONE;
+    scene_request.flags = TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE;
+    scene_request.layer_mask = request.layer_mask;
+    scene_request.render_category_mask = request.render_category_mask;
+    scene_request.debug_pass_name = request.debug_name;
+    scene_request.camera = request.view ? request.view->primary_view() : nullptr;
+    scene_request.scene_context = scene_context_;
+    scene_request.scene_filter_flags = scene_filter_flags_;
+
+    RenderSceneItemCollector collector;
+    if (!collector.collect_into(scene_request, output)) {
+        return false;
+    }
+    counters.source_traversals = collector.last_scene_traversals();
+    counters.producers = collector.last_drawable_producers();
+    return true;
 }
 
-std::span<const size_t> RenderSceneItemSnapshot::phase_item_indices(
-    tc_phase_mask phase) const
+tc_component* render_scene_item_component(const tc_render_item& item)
 {
-    if (!tc_phase_is_single(phase)) {
-        return {};
-    }
-    for (const RenderSceneItemPhaseBucket& bucket : phase_buckets_) {
-        if (bucket.phase == phase) {
-            return bucket.item_indices;
-        }
-    }
-    return {};
-}
-
-RenderSceneItemSnapshot* ensure_render_item_snapshot(
-    ExecuteContext& context,
-    const char* debug_pass_name)
-{
-    if (!context.render_item_snapshot) {
-        tc::Log::error("[%s] render execution has no RenderItem snapshot storage",
-                       debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
+    if (item.source.domain_id != TC_RENDER_ITEM_SOURCE_DOMAIN_SCENE) {
         return nullptr;
     }
-    if (context.render_item_snapshot->valid()) {
-        return context.render_item_snapshot;
-    }
-
-    RenderSceneItemCollectRequest request{};
-    request.scene = context.scene.handle();
-    request.layer_mask = context.layer_mask;
-    request.render_category_mask = context.render_category_mask;
-    request.debug_pass_name = debug_pass_name;
-    request.camera = context.camera;
-    request.scene_context = &context.scene;
-    if (!context.render_item_snapshot->collect(request)) {
-        tc::Log::error("[%s] failed to build scene RenderItem snapshot",
-                       debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
-        return nullptr;
-    }
-    return context.render_item_snapshot;
-}
-
-bool render_item_matches_phase(const tc_render_item& item, tc_phase_mask requested_phase)
-{
-    if (requested_phase == TC_PHASE_NONE) {
-        return true;
-    }
-    tc_material_phase* phase = nullptr;
-    if (!tc_material_handle_is_invalid(item.material) &&
-        item.material_phase_index != SIZE_MAX) {
-        tc_material* material = tc_material_get(item.material);
-        if (material && item.material_phase_index < material->phase_count) {
-            phase = &material->phases[item.material_phase_index];
-        }
-    }
-    if (!phase) {
-        phase = item.material_phase;
-    }
-    return phase && phase->phase == requested_phase;
+    return reinterpret_cast<tc_component*>(item.source.adapter_data);
 }
 
 } // namespace termin

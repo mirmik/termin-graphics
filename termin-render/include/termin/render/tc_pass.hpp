@@ -13,7 +13,6 @@
 #endif
 
 extern "C" {
-#include "core/tc_scene.h"
 #include "render/tc_pass.h"
 #include "tc_value.h"
 }
@@ -68,8 +67,8 @@ public:
         _c->viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
     }
 
-    RENDER_API void* object_ptr() const;
-    RENDER_API bool set_field(
+    RENDER_CORE_API void* object_ptr() const;
+    RENDER_CORE_API bool set_field(
         const std::string& field_name,
         const tc_value& value
     );

@@ -38,3 +38,9 @@ def test_render_context_rejects_wrong_matrix_dtype():
 
     with pytest.raises(RuntimeError, match="4x4 C-contiguous float32"):
         RenderContext(view=matrix)
+
+
+@pytest.mark.parametrize("removed_argument", ["scene", "camera"])
+def test_render_context_rejects_removed_scene_state(removed_argument):
+    with pytest.raises(TypeError, match="scene-neutral"):
+        RenderContext(**{removed_argument: None})

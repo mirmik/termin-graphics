@@ -1,4 +1,5 @@
 #include "tcplot/retained_chart3d.h"
+#include "tcplot/plot_scene3d_render_item_source.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -17,11 +18,32 @@
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/render_context.hpp>
+#include <termin/render/render_item_submission.hpp>
+#include <termin/render/render_task.hpp>
 
 #include "tcplot/engine3d.hpp"
 #include "tcplot/gpu_host.hpp"
+#include "plot_scene3d_render_item_encoder.hpp"
 
 namespace {
+
+class RetainedChart3D;
+
+class PlotScene3DRenderItemSource final : public termin::RenderItemSource {
+public:
+    explicit PlotScene3DRenderItemSource(RetainedChart3D& scene)
+        : scene_(&scene) {}
+
+protected:
+    const char* source_name() const noexcept override;
+    bool collect_items(
+        const termin::RenderItemSourceRequest& request,
+        termin::RenderItemCollection& output,
+        termin::RenderItemSnapshotCounters& counters) override;
+
+private:
+    RetainedChart3D* scene_;
+};
 
 std::atomic<std::uint64_t> g_next_plot_scene3d_id{1};
 
@@ -270,19 +292,6 @@ public:
         std::vector<double> copied_y = copy_values(y, count);
         std::vector<double> copied_z = copy_values(z, count);
 
-        // PlotEngine3D remains a temporary renderer body with its own CPU
-        // cache. Prepare that copy before committing authoritative state so
-        // allocation failures cannot leave the retained item half-mutated.
-        if (!slot->engine || !slot->engine->set_surface_data(
-                0,
-                copied_x,
-                copied_y,
-                copied_z,
-                rows,
-                columns)) {
-            throw std::runtime_error(
-                "failed to update retained surface renderer data");
-        }
         slot->x = std::move(copied_x);
         slot->y = std::move(copied_y);
         slot->z = std::move(copied_z);
@@ -587,15 +596,72 @@ public:
         ensure_offscreen(width, height);
         synchronize_grids();
 
+        PlotScene3DRenderItemSource surface_source(*this);
+        termin::RenderItemSnapshot surface_snapshot;
+        if (!surface_source.publish(
+                surface_snapshot,
+                {.debug_name = "RetainedChart3D surface render"})) {
+            throw std::runtime_error(
+                "failed to publish retained Chart3D render items");
+        }
+
+        termin::RenderItemTaskPlanningContract surface_contract{};
+        surface_contract.phase = TC_PHASE_OPAQUE;
+        surface_contract.material_phase_policy =
+            termin::RenderItemMaterialPhasePolicy::Forbidden;
+        surface_contract.provided_input_mask = termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+        surface_contract.required_input_mask = termin::render_item_task_input_bit(
+            termin::RenderItemTaskInput::DrawContext);
+        surface_contract.debug_pass_name = "RetainedChart3D/Surface";
+
+        termin::RenderContext surface_draw_context;
+        surface_draw_context.phase = TC_PHASE_OPAQUE;
+        surface_draw_context.viewport_width = width;
+        surface_draw_context.viewport_height = height;
+        termin::RenderTaskList surface_tasks;
+        surface_tasks.reserve(surface_snapshot.item_count());
+        bool success = true;
+        for (size_t item_index = 0;
+             item_index < surface_snapshot.item_count();
+             ++item_index) {
+            const tc_render_item* item = surface_snapshot.item(item_index);
+            if (!item || item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SURFACE) {
+                continue;
+            }
+            termin::RenderItemTaskPlanningRequest planning{};
+            planning.item = item;
+            planning.item_index = item_index;
+            planning.source_draw_index = item_index;
+            planning.contract = &surface_contract;
+            const termin::RenderItemTaskPlanningResult result =
+                termin::plan_render_item_task(planning, surface_tasks);
+            if (!result.accepted()) {
+                tc::Log::error(
+                    "[RetainedChart3D] surface task planning failed for slot %llu: %s",
+                    static_cast<unsigned long long>(item->source.object_id),
+                    termin::render_item_task_rejection_name(result.rejection));
+                success = false;
+                continue;
+            }
+            termin::RenderTask& task = surface_tasks.at(result.task_index);
+            task.draw_context = surface_draw_context;
+            task.debug_name = "PlotScene3D surface";
+        }
+
         tgfx::RenderContext2& context = host_->ctx();
         const float clear[4] = {0.08f, 0.09f, 0.11f, 1.0f};
         context.begin_frame();
         context.begin_pass(
             color_, depth_, clear, 1.0f, true);
 
-        for (Slot& slot : slots_) {
-            if (!slot.alive || slot.kind != TC_PLOT_ITEM3D_SURFACE) continue;
-            render_slot(slot, width, height, nullptr);
+        for (termin::RenderTask& task : surface_tasks) {
+            Slot* slot = task.item ? resolve_render_item(*task.item) : nullptr;
+            if (!slot || !submit_surface_task(task)) {
+                success = false;
+                continue;
+            }
+            slot->gpu_revision = slot->render_revision;
         }
         if (Slot* grid = resolve(grid_part_, TC_PLOT_ITEM3D_GRID)) {
             render_slot(*grid, width, height, &host_->font());
@@ -607,20 +673,22 @@ public:
 
         context.end_pass();
         context.end_frame();
-        return color_.id;
+        return success ? color_.id : 0;
     }
 
     void release_gpu() {
         for (Slot& slot : slots_) {
             if (slot.engine) {
                 slot.engine->release_gpu_resources();
-                slot.gpu_revision = 0;
             }
+            slot.gpu_revision = 0;
         }
         release_targets();
     }
 
 private:
+    friend class PlotScene3DRenderItemSource;
+
     struct Slot {
         std::uint32_t index = 0;
         std::uint32_t generation = 1;
@@ -639,6 +707,10 @@ private:
         tc_scatter_item3d_style scatter_style{};
         tc_grid_item3d_style grid_style{};
         std::unique_ptr<tcplot::PlotEngine3D> engine;
+        mutable std::shared_ptr<const tcplot::PlotScene3DItemRenderData>
+            published_render_data;
+        mutable std::uint64_t published_geometry_revision = 0;
+        mutable std::uint64_t published_style_revision = 0;
     };
 
     Slot& allocate(tc_plot_item3d_kind kind) {
@@ -658,6 +730,9 @@ private:
         slot.style_revision = 1;
         slot.render_revision = 1;
         slot.gpu_revision = 0;
+        slot.published_render_data.reset();
+        slot.published_geometry_revision = 0;
+        slot.published_style_revision = 0;
         return slot;
     }
 
@@ -702,6 +777,12 @@ private:
     }
 
     void rebuild(Slot& slot) {
+        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
+            slot.engine.reset();
+            ++slot.render_revision;
+            slot.gpu_revision = 0;
+            return;
+        }
         auto engine = std::make_unique<tcplot::PlotEngine3D>();
         engine->show_grid = slot.kind == TC_PLOT_ITEM3D_GRID;
         engine->show_series = slot.kind != TC_PLOT_ITEM3D_GRID;
@@ -709,31 +790,7 @@ private:
             slot.kind == TC_PLOT_ITEM3D_GRID &&
             slot.grid_style.labels_visible != 0;
 
-        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
-            const auto& style = slot.surface_style;
-            tcplot::SurfacePlotOptions options;
-            options.color = tcplot::Color4{
-                style.color_r, style.color_g, style.color_b, style.color_a};
-            options.colormap = colormap(style.colormap);
-            options.colormap_reversed = style.colormap_reversed != 0;
-            options.wireframe = style.wireframe != 0;
-            engine->surface(
-                slot.x, slot.y, slot.z,
-                slot.rows, slot.columns, options);
-            tcplot::SurfaceGridOptions grid;
-            grid.visible = style.surface_grid_visible != 0;
-            grid.row_step = style.surface_grid_row_step;
-            grid.col_step = style.surface_grid_col_step;
-            grid.width_px = style.surface_grid_width_px;
-            grid.color = tcplot::Color4{
-                style.surface_grid_r,
-                style.surface_grid_g,
-                style.surface_grid_b,
-                style.surface_grid_a};
-            if (!engine->set_surface_grid(0, grid)) {
-                throw std::runtime_error("failed to apply retained surface grid");
-            }
-        } else if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
+        if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
             const auto& style = slot.scatter_style;
             tcplot::ScatterPlotOptions options;
             options.color = tcplot::Color4{
@@ -768,37 +825,17 @@ private:
     }
 
     void apply_style(Slot& slot) {
+        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
+            slot.gpu_revision = 0;
+            return;
+        }
         if (!slot.engine) {
             rebuild(slot);
             return;
         }
 
         tcplot::PlotEngine3D& engine = *slot.engine;
-        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
-            const auto& style = slot.surface_style;
-            tcplot::SurfaceGridOptions grid;
-            grid.visible = style.surface_grid_visible != 0;
-            grid.row_step = style.surface_grid_row_step;
-            grid.col_step = style.surface_grid_col_step;
-            grid.width_px = style.surface_grid_width_px;
-            grid.color = tcplot::Color4{
-                style.surface_grid_r,
-                style.surface_grid_g,
-                style.surface_grid_b,
-                style.surface_grid_a};
-            if (!engine.set_surface_color(
-                    0,
-                    {style.color_r, style.color_g,
-                     style.color_b, style.color_a}) ||
-                !engine.set_surface_colormap(0, colormap(style.colormap)) ||
-                !engine.set_surface_colormap_reversed(
-                    0, style.colormap_reversed != 0) ||
-                !engine.set_surface_wireframe(0, style.wireframe != 0) ||
-                !engine.set_surface_grid(0, grid)) {
-                throw std::runtime_error(
-                    "failed to apply retained surface style");
-            }
-        } else if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
+        if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
             const auto& style = slot.scatter_style;
             if (!engine.set_scatter_style(
                     0,
@@ -860,6 +897,40 @@ private:
         }
     }
 
+    Slot* resolve_render_item(const tc_render_item& item) {
+        if (item.source.domain_id != tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN ||
+            item.source.namespace_id != scene_id_ ||
+            item.source.object_id >= slots_.size()) {
+            return nullptr;
+        }
+        Slot& slot = slots_[static_cast<size_t>(item.source.object_id)];
+        return slot.alive && slot.generation == item.source.generation
+            ? &slot : nullptr;
+    }
+
+    bool submit_surface_task(const termin::RenderTask& task) {
+        if (!task.item) {
+            tc::Log::error(
+                "[RetainedChart3D] cannot submit a surface task without an item");
+            return false;
+        }
+        termin::RenderItemDrawSubmitRequest submission{};
+        submission.shader_handle = task.final_shader;
+        submission.device = &host_->device();
+        submission.draw_context = &task.draw_context;
+        submission.phase = task.phase;
+        submission.debug_pass_name = "RetainedChart3D/Surface";
+        submission.debug_entity_name = task.debug_name.c_str();
+        if (!termin::submit_render_item_draw(
+                host_->ctx(), *task.item, submission)) {
+            tc::Log::error(
+                "[RetainedChart3D] surface submission failed for slot %llu",
+                static_cast<unsigned long long>(task.item->source.object_id));
+            return false;
+        }
+        return true;
+    }
+
     void synchronize_grids() {
         if (!bounds_dirty_) return;
         for (Slot& slot : slots_) {
@@ -874,6 +945,10 @@ private:
         int width,
         int height,
         tgfx::FontAtlas* font) {
+        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
+            throw std::logic_error(
+                "migrated surface item reached legacy PlotEngine3D renderer");
+        }
         if (!slot.engine) rebuild(slot);
         tcplot::PlotEngine3D& engine = *slot.engine;
         engine.camera = camera_;
@@ -962,6 +1037,122 @@ private:
     int msaa_samples_ = 4;
 };
 
+const char* PlotScene3DRenderItemSource::source_name() const noexcept {
+    return "PlotScene3DRenderItemSource";
+}
+
+bool PlotScene3DRenderItemSource::collect_items(
+    const termin::RenderItemSourceRequest&,
+    termin::RenderItemCollection& output,
+    termin::RenderItemSnapshotCounters& counters) {
+    if (!scene_) {
+        tc::Log::error(
+            "[PlotScene3DRenderItemSource] retained chart scene is unavailable");
+        return false;
+    }
+    tcplot::ensure_plot_scene3d_surface_encoder_registered();
+
+    tcplot::PlotScene3DFrameRenderState frame;
+    frame.camera = scene_->camera_state();
+    frame.axis_scale = {
+        scene_->axis_scale_[0],
+        scene_->axis_scale_[1],
+        scene_->axis_scale_[2],
+    };
+    frame.surface_shading = scene_->shading_;
+    frame.surface_shading_strength = scene_->shading_strength_;
+    frame.surface_light_direction = {
+        scene_->light_.x,
+        scene_->light_.y,
+        scene_->light_.z,
+    };
+    scene_->bounds(frame.bounds_min.data(), frame.bounds_max.data());
+    frame.x_label = scene_->x_label_;
+    frame.y_label = scene_->y_label_;
+    frame.z_label = scene_->z_label_;
+
+    counters.source_traversals = 1;
+    for (const RetainedChart3D::Slot& slot : scene_->slots_) {
+        if (!slot.alive) {
+            continue;
+        }
+
+        uint32_t render_kind = TC_RENDER_ITEM_KIND_INVALID;
+        switch (slot.kind) {
+            case TC_PLOT_ITEM3D_SURFACE:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_SURFACE;
+                break;
+            case TC_PLOT_ITEM3D_SCATTER:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_SCATTER;
+                break;
+            case TC_PLOT_ITEM3D_GRID:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_GRID;
+                break;
+            default:
+                tc::Log::error(
+                    "[PlotScene3DRenderItemSource] unsupported retained item kind %u",
+                    static_cast<unsigned>(slot.kind));
+                return false;
+        }
+
+        tc_render_item item{};
+        item.kind = render_kind;
+        item.source.domain_id = tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN;
+        item.source.namespace_id = scene_->scene_id_;
+        item.source.object_id = slot.index;
+        item.source.generation = slot.generation;
+        item.source.subobject_id = 0;
+        if (!slot.published_render_data ||
+            slot.published_geometry_revision != slot.geometry_revision ||
+            slot.published_style_revision != slot.style_revision) {
+            auto data =
+                std::make_shared<tcplot::PlotScene3DItemRenderData>();
+            data->kind = slot.kind;
+            data->x = slot.x;
+            data->y = slot.y;
+            data->z = slot.z;
+            data->rows = slot.rows;
+            data->columns = slot.columns;
+            data->surface_style = slot.surface_style;
+            data->scatter_style = slot.scatter_style;
+            data->grid_style = slot.grid_style;
+            if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
+                tcplot::build_plot_scene3d_surface_draw_stream(*data);
+                if (data->surface_draw_vertex_count == 0) {
+                    tc::Log::error(
+                        "[PlotScene3DRenderItemSource] failed to build surface draw stream for slot %u",
+                        slot.index);
+                    return false;
+                }
+            }
+            slot.published_render_data = std::move(data);
+            slot.published_geometry_revision = slot.geometry_revision;
+            slot.published_style_revision = slot.style_revision;
+        }
+
+        auto payload =
+            std::make_shared<const tcplot::PlotScene3DRenderItemPayload>(
+                tcplot::PlotScene3DRenderItemPayload{
+                    .item = slot.published_render_data,
+                    .frame = frame,
+                    .geometry_revision = slot.geometry_revision,
+                    .style_revision = slot.style_revision,
+                    .render_revision = slot.render_revision,
+                });
+        const auto* retained_payload =
+            output.retain_adapter_payload(std::move(payload));
+        if (!retained_payload) {
+            tc::Log::error(
+                "[PlotScene3DRenderItemSource] failed to retain item payload");
+            return false;
+        }
+        item.source.adapter_data = reinterpret_cast<uintptr_t>(retained_payload);
+        output.items.push_back(item);
+        ++counters.producers;
+    }
+    return true;
+}
+
 template <typename Result, typename Function>
 Result logged(const char* operation, Result failure, Function&& function) {
     try {
@@ -980,9 +1171,43 @@ Result logged(const char* operation, Result failure, Function&& function) {
 
 struct tc_retained_chart3d {
     explicit tc_retained_chart3d(tcplot::GpuHost& host)
-        : value(host) {}
+        : value(host), render_item_source(value) {}
     RetainedChart3D value;
+    PlotScene3DRenderItemSource render_item_source;
 };
+
+namespace tcplot {
+
+termin::RenderItemSource& plot_scene3d_render_item_source(
+    tc_retained_chart3d& chart) {
+    return chart.render_item_source;
+}
+
+const PlotScene3DRenderItemPayload* plot_scene3d_render_item_payload(
+    const tc_render_item& item) noexcept {
+    if (item.source.domain_id != PLOT_RENDER_ITEM_SOURCE_DOMAIN ||
+        item.source.adapter_data == 0 ||
+        (item.kind != PLOT_RENDER_ITEM_KIND_SURFACE &&
+         item.kind != PLOT_RENDER_ITEM_KIND_SCATTER &&
+         item.kind != PLOT_RENDER_ITEM_KIND_GRID)) {
+        return nullptr;
+    }
+    const auto* payload = reinterpret_cast<const PlotScene3DRenderItemPayload*>(
+        item.source.adapter_data);
+    if (!payload->item) {
+        return nullptr;
+    }
+    const bool kind_matches =
+        (item.kind == PLOT_RENDER_ITEM_KIND_SURFACE &&
+         payload->item->kind == TC_PLOT_ITEM3D_SURFACE) ||
+        (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
+         payload->item->kind == TC_PLOT_ITEM3D_SCATTER) ||
+        (item.kind == PLOT_RENDER_ITEM_KIND_GRID &&
+         payload->item->kind == TC_PLOT_ITEM3D_GRID);
+    return kind_matches ? payload : nullptr;
+}
+
+} // namespace tcplot
 
 extern "C" {
 

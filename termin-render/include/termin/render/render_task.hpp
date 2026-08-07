@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include <termin/entity/component.hpp>
 #include <termin/render/render_context.hpp>
 #include <termin/render/render_item_submission.hpp>
 
@@ -19,12 +18,10 @@ class RenderTaskExtension;
 // Pass-neutral part of a planned render submission.  It deliberately carries
 // no RenderItem-kind fields: mesh, line, text and foliage tasks use the same
 // lifetime-safe item/context/resource packet.
-struct RENDER_API RenderTask {
+struct RENDER_CORE_API RenderTask {
     size_t source_draw_index = SIZE_MAX;
     size_t item_index = SIZE_MAX;
     const tc_render_item* item = nullptr;
-    Entity entity;
-    tc_component* component = nullptr;
     tc_material_phase* material_phase = nullptr;
     tc_shader_handle final_shader = tc_shader_handle_invalid();
     std::array<tc_shader_handle, RenderItemTaskShaderPlan::MAX_SHADER_USAGES>
@@ -35,7 +32,7 @@ struct RENDER_API RenderTask {
     tc_phase_mask phase = TC_PHASE_NONE;
     VertexTransformKind vertex_transform_kind = VertexTransformKind::StaticMesh;
     bool has_vertex_transform_kind = false;
-    std::string entity_name;
+    std::string debug_name;
     RenderContext draw_context;
     RenderItemResourceBinding resources{};
     RenderTaskExtension* extension = nullptr;
@@ -52,13 +49,13 @@ public:
 
 // Pass-specific, typed UBO payloads are owned here on the heap so pointers in
 // RenderTask resource packets cannot be invalidated when task vectors grow.
-class RENDER_API RenderTaskExtension {
+class RENDER_CORE_API RenderTaskExtension {
 public:
     RenderTaskExtension();
     virtual ~RenderTaskExtension();
 };
 
-class RENDER_API RenderTaskList {
+class RENDER_CORE_API RenderTaskList {
     std::vector<RenderTask> tasks_;
     std::vector<std::unique_ptr<RenderTaskExtension>> extensions_;
 

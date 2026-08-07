@@ -21,17 +21,14 @@
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/tgfx2_interop.h"
 #include "termin/render/tgfx2_bridge.hpp"
+#include "termin/render/execute_context.hpp"
 #include "termin/render/frame_graph_capture.hpp"
-#include "termin/render/render_scene_item_collector.hpp"
+#include "termin/render/frame_graph_resource_registry.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
 #include "render/tc_pass.h"
 #include "render/tc_pipeline.h"
-#include "core/tc_scene.h"
-#include "core/tc_scene_render_state.h"
-#include "core/tc_scene_render_mount.h"
-#include "core/tc_component.h"
 }
 
 namespace termin {
@@ -270,7 +267,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
         }
         if (!default_rt_ctx.output_color_tex) {
             tc::Log::warn(
-                "RenderEngine::render_scene_pipeline_offscreen: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
+                "RenderEngine::execute_pipeline: FBO format '%s' requested but output_color_tex is invalid; using rgba8",
                 RESOURCE_FORMAT_RENDER_TARGET
             );
             return tgfx::PixelFormat::RGBA8_UNorm;
@@ -278,7 +275,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
         tgfx::TextureDesc output_desc = device.texture_desc(default_rt_ctx.output_color_tex);
         if (output_desc.format == tgfx::PixelFormat::Undefined) {
             tc::Log::warn(
-                "RenderEngine::render_scene_pipeline_offscreen: output_color_tex has undefined format; using rgba8"
+                "RenderEngine::execute_pipeline: output_color_tex has undefined format; using rgba8"
             );
             return tgfx::PixelFormat::RGBA8_UNorm;
         }
@@ -291,7 +288,7 @@ static tgfx::PixelFormat resolve_fbo_color_format(
     }
 
     tc::Log::warn(
-        "RenderEngine::render_scene_pipeline_offscreen: unknown FBO color format '%s'; using rgba8",
+        "RenderEngine::execute_pipeline: unknown FBO color format '%s'; using rgba8",
         format.c_str()
     );
     return tgfx::PixelFormat::RGBA8_UNorm;
@@ -394,27 +391,41 @@ void RenderEngine::ensure_tgfx2() {
     }
 }
 
-void RenderEngine::render_scene_pipeline_offscreen(
-    RenderPipeline& pipeline,
-    tc_scene_handle scene,
-    const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts,
-    const std::vector<Light>& lights,
-    const std::string& default_render_target,
-    const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests
-) {
-    if (!pipeline.is_valid()) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: pipeline is null");
+void RenderEngine::execute_pipeline(const RenderExecution& execution) {
+    if (!execution.pipeline || !execution.pipeline->is_valid()) {
+        tc::Log::error("RenderEngine::execute_pipeline: pipeline is null");
         return;
+    }
+    RenderPipeline& pipeline = *execution.pipeline;
+    const std::vector<FrameGraphCaptureRequest*>& debug_capture_requests =
+        execution.debug_capture_requests;
+
+    std::unordered_map<std::string, RenderTargetContext> render_target_contexts;
+    render_target_contexts.reserve(execution.targets.size());
+    for (const auto& [name, target] : execution.targets) {
+        if (!target.context) {
+            tc::Log::error(
+                "RenderEngine::execute_pipeline: target '%s' has no RenderTargetContext",
+                name.c_str());
+            return;
+        }
+        if (!target.render_items || !target.render_items->valid()) {
+            tc::Log::error(
+                "RenderEngine::execute_pipeline: target '%s' has no published RenderItemSnapshot",
+                name.c_str());
+            return;
+        }
+        render_target_contexts.emplace(name, *target.context);
     }
     ensure_tgfx2();
     tgfx::IRenderDevice* device = tgfx2_device();
     tgfx::RenderContext2* ctx2 = tgfx2_ctx();
     if (!device) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: tgfx2 device unavailable");
+        tc::Log::error("RenderEngine::execute_pipeline: tgfx2 device unavailable");
         return;
     }
     if (render_target_contexts.empty()) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: no render target contexts");
+        tc::Log::error("RenderEngine::execute_pipeline: no render target contexts");
         return;
     }
 
@@ -431,7 +442,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
     double end_frame_ms = 0.0;
     std::unordered_map<std::string, RenderPassTimingStats> local_pass_stats;
 
-    std::string default_target = default_render_target;
+    std::string default_target = execution.default_render_target;
     if (default_target.empty()) {
         default_target = render_target_contexts.begin()->first;
     }
@@ -450,12 +461,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
     tc_frame_graph* fg = tc_pipeline_get_frame_graph(pipeline.handle());
     if (!fg) {
         tc_profiler_end_section();
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: failed to get frame graph");
+        tc::Log::error("RenderEngine::execute_pipeline: failed to get frame graph");
         return;
     }
 
     if (tc_frame_graph_get_error(fg) != TC_FG_OK) {
-        tc::Log::error("RenderEngine::render_scene_pipeline_offscreen: frame graph error: %s",
+        tc::Log::error("RenderEngine::execute_pipeline: frame graph error: %s",
                        tc_frame_graph_get_error_message(fg));
         tc_profiler_end_section();
         return;
@@ -547,24 +558,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
             resource_type = spec->resource_type;
         }
 
-        if (resource_type == "shadow_map_array") {
-            auto& shadow_array = pipeline.shadow_arrays()[canon];
-            if (!shadow_array) {
-                int resolution = 1024;
-                if (spec && spec->size) {
-                    resolution = spec->size->first;
-                }
-                shadow_array = std::make_unique<ShadowMapArrayResource>(resolution);
-            }
-
-            std::vector<const char*> aliases = collect_alias_group(fg, canon);
-            size_t alias_count = aliases.size();
-            for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = shadow_array.get();
-            }
-            continue;
-        }
-
         if (resource_type == "color_texture" ||
             resource_type == "multiview_color_texture") {
             int tex_width = default_width;
@@ -599,7 +592,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate color_texture '%s'",
+                    "RenderEngine::execute_pipeline: failed to allocate color_texture '%s'",
                     canon);
                 tc_profiler_end_section();
                 return;
@@ -641,7 +634,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: failed to allocate depth_texture '%s'",
+                    "RenderEngine::execute_pipeline: failed to allocate depth_texture '%s'",
                     canon);
                 tc_profiler_end_section();
                 return;
@@ -659,13 +652,35 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
 
         if (resource_type != "fbo" && resource_type != "multiview_fbo") {
+            if (!spec) {
+                tc::Log::error(
+                    "RenderEngine::execute_pipeline: non-texture resource '%s' has no ResourceSpec",
+                    canon);
+                tc_profiler_end_section();
+                return;
+            }
+            auto& resource = pipeline_cache.frame_graph_resources[canon];
+            if (resource) {
+                const char* cached_type = resource->resource_type();
+                if (!cached_type || resource_type != cached_type) {
+                    resource.reset();
+                }
+            }
+            if (!resource) {
+                resource.reset(create_frame_graph_resource(*spec));
+            }
+            if (!resource) {
+                tc::Log::error(
+                    "RenderEngine::execute_pipeline: failed to allocate resource '%s' of type '%s'",
+                    canon,
+                    resource_type.c_str());
+                tc_profiler_end_section();
+                return;
+            }
             std::vector<const char*> aliases = collect_alias_group(fg, canon);
             size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = nullptr;
-                if (std::string(aliases[j]) != canon) {
-                    pipeline_cache.texture_alias_to_canonical[aliases[j]] = canon;
-                }
+                resources[aliases[j]] = resource.get();
             }
             continue;
         }
@@ -702,7 +717,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
         if (!fbo_pool.ensure_native(*device, canon, target_desc)) {
             tc::Log::error(
-                "RenderEngine::render_scene_pipeline_offscreen: failed to allocate fbo '%s'",
+                "RenderEngine::execute_pipeline: failed to allocate fbo '%s'",
                 canon);
             tc_profiler_end_section();
             return;
@@ -737,7 +752,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             }
             if (!rt_ctx.output_color_tex && !rt_ctx.output_depth_tex) {
                 tc::Log::error(
-                    "RenderEngine::render_scene_pipeline_offscreen: render target context '%s' requested clear but output textures are missing",
+                    "RenderEngine::execute_pipeline: render target context '%s' requested clear but output textures are missing",
                     render_target_name.c_str());
                 continue;
             }
@@ -993,8 +1008,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 return resolve_color(composition->second.color);
             }
             auto texture = tex2_resources.find(name);
-            return texture != tex2_resources.end()
-                ? texture->second : tgfx::TextureHandle{};
+            if (texture != tex2_resources.end()) {
+                return texture->second;
+            }
+            auto resource = resources.find(name);
+            if (resource == resources.end() || !resource->second) {
+                return {};
+            }
+            const FrameGraphResourceSampledTexture sampled =
+                frame_graph_resource_sampled_texture(*resource->second);
+            return sampled.kind == FrameGraphResourceSampledTextureKind::Color
+                ? sampled.texture : tgfx::TextureHandle{};
         };
         resolve_depth = [&](const std::string& name) -> tgfx::TextureHandle {
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
@@ -1018,8 +1042,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 return depth ? depth : resolve_color(composition->second.depth);
             }
             auto texture = tex2_depth_resources.find(name);
-            return texture != tex2_depth_resources.end()
-                ? texture->second : tgfx::TextureHandle{};
+            if (texture != tex2_depth_resources.end()) {
+                return texture->second;
+            }
+            auto resource = resources.find(name);
+            if (resource == resources.end() || !resource->second) {
+                return {};
+            }
+            const FrameGraphResourceSampledTexture sampled =
+                frame_graph_resource_sampled_texture(*resource->second);
+            return sampled.kind == FrameGraphResourceSampledTextureKind::Depth
+                ? sampled.texture : tgfx::TextureHandle{};
         };
 
         const tgfx::TextureHandle color = resolve_color(request.resource);
@@ -1071,21 +1104,6 @@ void RenderEngine::render_scene_pipeline_offscreen(
         }
     }
 
-    // One lazy snapshot per logical render target/view. The map owns stable
-    // storage until every pass in this execution has completed.
-    render_item_snapshot_scratch_.resize(render_target_contexts.size());
-    std::unordered_map<const RenderTargetContext*, RenderSceneItemSnapshot*>
-        render_item_snapshots;
-    render_item_snapshots.reserve(render_target_contexts.size());
-    size_t snapshot_index = 0;
-    for (const auto& [name, target] : render_target_contexts) {
-        (void)name;
-        RenderSceneItemSnapshot& snapshot =
-            render_item_snapshot_scratch_[snapshot_index++];
-        snapshot.invalidate_keep_capacity();
-        render_item_snapshots.emplace(&target, &snapshot);
-    }
-
     tc_profiler_begin_section("Execute Passes");
     for (size_t i = 0; i < schedule_count; i++) {
         tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
@@ -1111,6 +1129,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             rt_it = default_it;
         }
         const RenderTargetContext& rt_ctx = rt_it->second;
+        const RenderExecutionTarget& execution_target =
+            execution.targets.at(rt_it->first);
 
         std::vector<const char*> reads = collect_pass_dependencies(pass, tc_pass_get_reads);
         std::vector<const char*> writes = collect_pass_dependencies(pass, tc_pass_get_writes);
@@ -1121,7 +1141,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
-        ShadowArrayMap pass_shadow_arrays;
+        ResourceMap pass_frame_graph_resources;
 
         std::function<tgfx::TextureHandle(const std::string&)> resolve_depth_resource;
         std::function<tgfx::TextureHandle(const std::string&)> resolve_color_resource;
@@ -1187,20 +1207,19 @@ void RenderEngine::render_scene_pipeline_offscreen(
             return it != tex2_depth_resources.end() ? it->second : tgfx::TextureHandle{};
         };
 
-        auto collect_shadow_array = [&](const char* name) {
+        auto collect_frame_graph_resource = [&](const char* name) {
             auto it = resources.find(name);
             if (it != resources.end() && it->second) {
-                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
-                if (arr) {
-                    pass_shadow_arrays[name] = arr;
-                    // Also expose the array's first cascade as a regular
-                    // tex2 read, so generic passes (e.g. FrameDebugger)
-                    // can sample / blit shadow_maps without knowing about
-                    // the ShadowArrayMap side-channel. ColorPass still
-                    // iterates shadow_arrays for the full cascade set.
-                    if (!arr->entries.empty() &&
-                        arr->entries[0].depth_tex2) {
-                        pass_tex2_reads[name] = arr->entries[0].depth_tex2;
+                pass_frame_graph_resources[name] = it->second;
+                // A registered resource may expose a generic sampled view.
+                // This keeps debugger/blit passes independent of its type.
+                const FrameGraphResourceSampledTexture sampled =
+                    frame_graph_resource_sampled_texture(*it->second);
+                if (sampled.texture) {
+                    if (sampled.kind == FrameGraphResourceSampledTextureKind::Depth) {
+                        pass_tex2_depth_reads[name] = sampled.texture;
+                    } else {
+                        pass_tex2_reads[name] = sampled.texture;
                     }
                 }
             }
@@ -1223,7 +1242,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 }
                 continue;
             }
-            collect_shadow_array(read_name);
+            collect_frame_graph_resource(read_name);
             auto ext_it = rt_ctx.external_textures.find(read_name);
             if (ext_it != rt_ctx.external_textures.end() && ext_it->second) {
                 pass_tex2_reads[read_name] = ext_it->second;
@@ -1255,7 +1274,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                     pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
                 }
             } else {
-                collect_shadow_array(write_name);
+                collect_frame_graph_resource(write_name);
                 tgfx::TextureHandle color_handle = resolve_color_resource(write_name);
                 if (color_handle) {
                     pass_tex2_writes[write_name] = color_handle;
@@ -1273,19 +1292,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
-        ctx.shadow_arrays = std::move(pass_shadow_arrays);
+        ctx.frame_graph_resources = std::move(pass_frame_graph_resources);
         ctx.render_rect = rt_ctx.render_rect;
-        ctx.scene = TcSceneRef(scene);
+        ctx.view = rt_ctx.view;
         ctx.render_target_name = rt_ctx.name;
-        ctx.internal_entities = rt_ctx.internal_entities;
-        ctx.camera = const_cast<RenderCamera*>(&rt_ctx.camera);
-        ctx.stereo_views = rt_ctx.stereo_views
-            ? &*rt_ctx.stereo_views
-            : nullptr;
-        ctx.lights = lights;
-        ctx.layer_mask = rt_ctx.layer_mask;
-        ctx.render_category_mask = rt_ctx.render_category_mask;
-        ctx.render_item_snapshot = render_item_snapshots.at(&rt_ctx);
+        ctx.render_item_snapshot = execution_target.render_items;
+        ctx.capabilities = execution_target.capabilities;
         for (FrameGraphCaptureRequest* request : debug_capture_requests) {
             if (!request
                     || request->kind != FrameGraphCaptureRequestKind::InternalSymbol
@@ -1357,11 +1369,12 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
     if (collect_render_timing) {
         RenderEngineTimingStats& stats = render_engine_timing_stats();
-        for (const auto& [target, snapshot] : render_item_snapshots) {
-            (void)target;
-            const RenderSceneItemSnapshotCounters& counters = snapshot->counters();
-            stats.render_item_scene_traversals += counters.scene_traversals;
-            stats.render_item_producers += counters.drawable_producers;
+        for (const auto& [name, target] : execution.targets) {
+            (void)name;
+            const RenderItemSnapshotCounters& counters =
+                target.render_items->counters();
+            stats.render_item_scene_traversals += counters.source_traversals;
+            stats.render_item_producers += counters.producers;
             stats.render_items += counters.emitted_items;
         }
         stats.calls += 1;

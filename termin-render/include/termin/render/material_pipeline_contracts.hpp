@@ -65,24 +65,24 @@ struct MaterialPipelineResourceMergeResult {
     }
 };
 
-RENDER_API const char* material_pipeline_resource_owner_name(
+RENDER_CORE_API const char* material_pipeline_resource_owner_name(
     MaterialPipelineResourceOwner owner);
 
-RENDER_API const char* material_pipeline_diagnostic_code_name(
+RENDER_CORE_API const char* material_pipeline_diagnostic_code_name(
     MaterialPipelineDiagnosticCode code);
 
-RENDER_API MaterialPipelineResourceDecl material_pipeline_abi_resource_decl(
+RENDER_CORE_API MaterialPipelineResourceDecl material_pipeline_abi_resource_decl(
     ShaderAbiResourceId id,
     uint32_t stage_mask,
     MaterialPipelineResourceOwner owner,
     uint32_t size = 0);
 
-RENDER_API bool material_pipeline_merge_resource(
+RENDER_CORE_API bool material_pipeline_merge_resource(
     std::vector<MaterialPipelineResourceDecl>& resources,
     const MaterialPipelineResourceDecl& incoming,
     std::vector<MaterialPipelineDiagnostic>& diagnostics);
 
-RENDER_API MaterialPipelineResourceMergeResult material_pipeline_merge_resources(
+RENDER_CORE_API MaterialPipelineResourceMergeResult material_pipeline_merge_resources(
     std::span<const MaterialPipelineResourceDecl> resources);
 
 } // namespace termin
