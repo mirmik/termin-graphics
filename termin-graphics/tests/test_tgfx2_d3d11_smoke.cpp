@@ -10,6 +10,8 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
+#include "tgfx2_ordered_mrt_smoke.hpp"
+
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -222,6 +224,20 @@ std::filesystem::path find_text_smoke_font() {
 #endif
 
     return {};
+}
+
+bool render_ordered_mrt_smoke(
+    tgfx::IRenderDevice& device,
+    tgfx::ShaderHandle fullscreen_vertex,
+    tgfx::ShaderHandle mrt_fragment)
+{
+    return tgfx::tests::run_ordered_mrt_smoke(
+        device,
+        "D3D11",
+        [&](tgfx::RenderContext2& context) {
+            context.bind_shader(fullscreen_vertex, mrt_fragment);
+            context.draw_fullscreen_quad_with_bound_shader();
+        });
 }
 
 } // namespace
@@ -1340,6 +1356,7 @@ int main() {
         const auto& fsq_shader = tgfx::engine_fullscreen_quad_vertex_shader();
         const auto fsq_vs_path = shader_dir / (std::string(fsq_shader.uuid) + ".vs.cso");
         const auto render_context_ps_path = shader_dir / "d3d11-smoke-render-context.ps.cso";
+        const auto mrt_ps_path = shader_dir / "d3d11-smoke-ordered-mrt.ps.cso";
         const char* fsq_vs_source =
             "struct VSIn { float2 position : POSITION; float2 uv : TEXCOORD0; };\n"
             "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
@@ -1354,8 +1371,22 @@ int main() {
             "float4 main(VSOut input) : SV_Target0 {\n"
             "    return float4(0.20, 0.70, 0.35, 1.0);\n"
             "}\n";
+        const char* mrt_ps_source =
+            "struct MRTOutput {\n"
+            "    float4 target0 : SV_Target0;\n"
+            "    float4 target1 : SV_Target1;\n"
+            "    float4 target2 : SV_Target2;\n"
+            "};\n"
+            "MRTOutput main() {\n"
+            "    MRTOutput output;\n"
+            "    output.target0 = float4(0.0, 1.0, 1.0, 1.0);\n"
+            "    output.target1 = float4(1.0, 0.0, 1.0, 1.0);\n"
+            "    output.target2 = float4(1.0, 1.0, 0.0, 1.0);\n"
+            "    return output;\n"
+            "}\n";
         if (!compile_hlsl_to_file(fsq_vs_source, "vs_5_0", fsq_vs_path) ||
-            !compile_hlsl_to_file(render_context_ps_source, "ps_5_0", render_context_ps_path)) {
+            !compile_hlsl_to_file(render_context_ps_source, "ps_5_0", render_context_ps_path) ||
+            !compile_hlsl_to_file(mrt_ps_source, "ps_5_0", mrt_ps_path)) {
             return 1;
         }
 
@@ -1373,12 +1404,30 @@ int main() {
             return 1;
         }
 
+        std::vector<uint8_t> mrt_ps_bytecode;
+        if (!read_binary_file(mrt_ps_path, mrt_ps_bytecode)) {
+            return 1;
+        }
+        tgfx::ShaderDesc mrt_ps_desc;
+        mrt_ps_desc.stage = tgfx::ShaderStage::Fragment;
+        mrt_ps_desc.debug_name = "D3D11 ordered MRT smoke FS";
+        mrt_ps_desc.bytecode = std::move(mrt_ps_bytecode);
+        auto mrt_fs = device->create_shader(mrt_ps_desc);
+        if (!mrt_fs) {
+            std::fprintf(stderr, "D3D11 smoke: ordered MRT fragment shader creation failed\n");
+            return 1;
+        }
+
         tgfx::PipelineCache pipeline_cache(*device);
         tgfx::RenderContext2 ctx(*device, pipeline_cache);
         const float context_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
         auto fsq_vs = ctx.fsq_vertex_shader();
         if (!fsq_vs) {
             std::fprintf(stderr, "D3D11 smoke: RenderContext2 fullscreen quad VS failed\n");
+            return 1;
+        }
+        if (!render_ordered_mrt_smoke(*device, fsq_vs, mrt_fs)) {
+            std::fprintf(stderr, "D3D11 ordered MRT smoke failed\n");
             return 1;
         }
         ctx.begin_frame();
@@ -1940,6 +1989,7 @@ int main() {
 
         device->destroy(reflected_input_fs);
         device->destroy(reflected_input_vs);
+        device->destroy(mrt_fs);
         device->destroy(render_context_fs);
         device->destroy(normal_msaa_pipeline);
         device->destroy(normal_msaa_color);
