@@ -282,6 +282,12 @@ std::optional<DrawList2D> DrawList2DBuilder::freeze() {
     return result;
 }
 
+void DrawList2DBuilder::recycle(DrawList2D&& list) noexcept {
+    commands_ = std::move(list.commands_);
+    commands_.clear();
+    scopes_.clear();
+}
+
 void DrawList2DBuilder::clear() noexcept {
     commands_.clear();
     scopes_.clear();

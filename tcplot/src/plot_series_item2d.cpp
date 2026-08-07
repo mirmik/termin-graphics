@@ -310,6 +310,7 @@ struct PlotLineSeriesGpu2D::Impl {
   bool full_dirty = true;
   bool append_only = false;
   bool styled_uploaded = false;
+  double styled_cumulative_end = 0.0;
 
   void release() {
     if (device && vbo)
@@ -326,6 +327,7 @@ struct PlotLineSeriesGpu2D::Impl {
     full_dirty = true;
     append_only = false;
     styled_uploaded = false;
+    styled_cumulative_end = 0.0;
   }
 
   bool ensure_shader(tgfx::IRenderDevice &requested, bool styled) {
@@ -355,6 +357,8 @@ struct PlotLineSeriesGpu2D::Impl {
       capacity = 0;
       gpu_count = 0;
       full_dirty = true;
+      styled_uploaded = false;
+      styled_cumulative_end = 0.0;
     }
     if (wanted <= capacity && vbo)
       return true;
@@ -372,6 +376,8 @@ struct PlotLineSeriesGpu2D::Impl {
     floats_per_vertex = vbo ? stride_floats : 0;
     gpu_count = 0;
     full_dirty = true;
+    styled_uploaded = false;
+    styled_cumulative_end = 0.0;
     return static_cast<bool>(vbo);
   }
 };
@@ -382,7 +388,10 @@ PlotLineSeriesGpu2D::~PlotLineSeriesGpu2D() { release_gpu_resources(); }
 void PlotLineSeriesGpu2D::invalidate_data(bool append_only) {
   impl_->append_only = append_only && !impl_->full_dirty;
   impl_->full_dirty = !append_only || impl_->full_dirty;
-  impl_->styled_uploaded = false;
+  if (!append_only) {
+    impl_->styled_uploaded = false;
+    impl_->styled_cumulative_end = 0.0;
+  }
 }
 
 void PlotLineSeriesGpu2D::release_gpu_resources() {
@@ -462,11 +471,19 @@ bool PlotLineSeriesGpu2D::render(
   }
   if (!impl_->styled_uploaded || impl_->full_dirty ||
       impl_->gpu_count != vertex_count) {
+    const bool tail_update =
+        impl_->append_only && impl_->styled_uploaded &&
+        !impl_->full_dirty && impl_->gpu_count >= 2 &&
+        impl_->gpu_count < vertex_count && (impl_->gpu_count % 2) == 0;
+    const std::uint32_t first_point =
+        tail_update ? impl_->gpu_count / 2 - 1 : 0;
     std::vector<float> vertices;
-    vertices.reserve(static_cast<std::size_t>(vertex_count) * 10);
-    double cumulative = 0.0;
-    for (std::uint32_t index = 0; index < point_count; ++index) {
-      if (index > 0) {
+    vertices.reserve(
+        static_cast<std::size_t>(point_count - first_point) * 2 * 10);
+    double cumulative =
+        tail_update ? impl_->styled_cumulative_end : 0.0;
+    for (std::uint32_t index = first_point; index < point_count; ++index) {
+      if (index > first_point || (!tail_update && index > 0)) {
         const double dx = x[index] - x[index - 1];
         const double dy = y[index] - y[index - 1];
         cumulative += std::sqrt(dx * dx + dy * dy);
@@ -493,9 +510,11 @@ bool PlotLineSeriesGpu2D::render(
     context.device().upload_buffer(
         impl_->vbo, std::span<const std::uint8_t>{
                         reinterpret_cast<const std::uint8_t *>(vertices.data()),
-                        vertices.size() * sizeof(float)});
+                        vertices.size() * sizeof(float)},
+        static_cast<std::uint64_t>(first_point) * 2 * 10 * sizeof(float));
     impl_->gpu_count = vertex_count;
     impl_->styled_uploaded = true;
+    impl_->styled_cumulative_end = cumulative;
     impl_->full_dirty = false;
     impl_->append_only = false;
   }
@@ -789,6 +808,7 @@ PlotLineSeriesItem2D::PlotLineSeriesItem2D(PlotProjection2D projection,
       !valid_line_style(style)) {
     throw std::invalid_argument("invalid PlotLineSeriesItem2D state");
   }
+  batch_ = std::make_shared<LineRetainedBatch>(state_);
 }
 
 PlotLineSeriesItem2D::~PlotLineSeriesItem2D() = default;
@@ -897,8 +917,7 @@ bool PlotLineSeriesItem2D::paint(
           {area->x(), area->y(), area->width(), area->height()})) {
     return false;
   }
-  const bool painted =
-      context.retained_batch(std::make_shared<LineRetainedBatch>(state_));
+  const bool painted = context.retained_batch(batch_);
   const bool popped = context.pop_clip();
   return painted && popped;
 }
@@ -919,6 +938,7 @@ PlotScatterSeriesItem2D::PlotScatterSeriesItem2D(PlotProjection2D projection,
       !valid_scatter_style(style)) {
     throw std::invalid_argument("invalid PlotScatterSeriesItem2D state");
   }
+  batch_ = std::make_shared<ScatterRetainedBatch>(state_);
 }
 
 PlotScatterSeriesItem2D::~PlotScatterSeriesItem2D() = default;
@@ -1005,8 +1025,7 @@ bool PlotScatterSeriesItem2D::paint(
           {area->x(), area->y(), area->width(), area->height()})) {
     return false;
   }
-  const bool painted =
-      context.retained_batch(std::make_shared<ScatterRetainedBatch>(state_));
+  const bool painted = context.retained_batch(batch_);
   const bool popped = context.pop_clip();
   return painted && popped;
 }

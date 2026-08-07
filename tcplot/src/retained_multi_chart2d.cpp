@@ -219,9 +219,8 @@ namespace
                         "failed to snapshot multi-chart panel range");
                 if (range.x_min == x_min && range.x_max == x_max)
                     continue;
-                range.x_min = x_min;
-                range.x_max = x_max;
-                if (!tc_retained_chart2d_set_range(panel.chart, range))
+                if (!tc_retained_chart2d_set_x_range(
+                        panel.chart, x_min, x_max))
                     throw std::runtime_error(
                         "failed to update multi-chart shared X");
             }
@@ -411,8 +410,10 @@ namespace
                                                        pixel_scale_,
                                                        range)
                         : x_changed
-                              ? tc_retained_chart2d_set_range(
-                                    panel.chart, range)
+                              ? tc_retained_chart2d_set_x_range(
+                                    panel.chart,
+                                    shared_x_min_,
+                                    shared_x_max_)
                               : true;
                     if (!updated)
                         throw std::runtime_error(

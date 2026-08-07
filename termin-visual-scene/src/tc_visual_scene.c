@@ -6,6 +6,8 @@
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
 
+#include "tc_visual_scene_internal.h"
+
 typedef struct tc_graphic_item_slot {
     tc_graphic_item* item;
 } tc_graphic_item_slot;
@@ -18,6 +20,7 @@ struct tc_visual_scene {
     uint64_t id;
     tc_pool items;
     uint64_t next_stable_order;
+    uint64_t order_revision;
     bool clearing;
 };
 
@@ -37,6 +40,12 @@ static bool ensure_scene_pool(void) {
     }
     g_scene_pool_initialized = true;
     return true;
+}
+
+void tc_visual_scene_touch_order(tc_visual_scene* scene) {
+    if (scene == NULL) return;
+    ++scene->order_revision;
+    if (scene->order_revision == 0) scene->order_revision = 1;
 }
 
 static tc_handle scene_base_handle(
@@ -212,6 +221,7 @@ tc_visual_scene_handle tc_visual_scene_create(void) {
         return tc_visual_scene_handle_invalid();
     }
     scene->next_stable_order = 1;
+    scene->order_revision = 1;
     const tc_handle local = tc_pool_alloc(&g_scene_pool);
     if (tc_handle_is_invalid(local)) {
         tc_pool_free(&scene->items);
@@ -260,6 +270,13 @@ size_t tc_visual_scene_item_count(
     return scene != NULL
         ? tc_pool_count(&scene->items)
         : 0;
+}
+
+uint64_t tc_visual_scene_order_revision(
+    tc_visual_scene_handle handle)
+{
+    const tc_visual_scene* scene = resolve_scene(handle);
+    return scene != NULL ? scene->order_revision : 0;
 }
 
 tc_graphic_item_handle tc_visual_scene_adopt_item(
@@ -319,6 +336,7 @@ tc_graphic_item_handle tc_visual_scene_adopt_item(
         deleter(item);
         return tc_graphic_item_handle_invalid();
     }
+    tc_visual_scene_touch_order(scene);
     return item->handle;
 }
 
@@ -409,6 +427,7 @@ bool tc_visual_scene_replace_item(
         previous->vtable->on_destroy(previous, scene);
     }
     previous_deleter(previous);
+    tc_visual_scene_touch_order(scene);
     return true;
 }
 
@@ -524,6 +543,7 @@ bool tc_visual_scene_destroy_item(
             ? slot_for(scene, local_handle(handle))->item
             : NULL;
     if (item == NULL) return false;
+    tc_visual_scene_touch_order(scene);
     destroy_object(scene, item);
     return true;
 }

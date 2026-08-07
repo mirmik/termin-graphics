@@ -232,6 +232,9 @@ public:
 
     // Fails without consuming the builder if any state scope is unbalanced.
     std::optional<DrawList2D> freeze();
+    // Reclaims a consumed list's command storage for the next build. Call only
+    // after the list has finished executing.
+    void recycle(DrawList2D&& list) noexcept;
     void clear() noexcept;
 
 private:

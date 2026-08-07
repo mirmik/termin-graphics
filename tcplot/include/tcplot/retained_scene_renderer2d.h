@@ -13,6 +13,14 @@ extern "C" {
 
 typedef struct tc_retained_scene_renderer2d tc_retained_scene_renderer2d;
 
+typedef struct tc_retained_scene_renderer2d_timings {
+    double paint_ms;
+    double freeze_ms;
+    /* CPU time spent recording/submitting draw commands, not GPU wall time. */
+    double gpu_submit_ms;
+    double total_ms;
+} tc_retained_scene_renderer2d_timings;
+
 /*
  * Creates an offscreen renderer for a retained visual scene. Both borrowed
  * arguments must outlive the renderer. gpu_host is a tcplot::GpuHost* kept
@@ -44,6 +52,11 @@ TCPLOT_API uint32_t tc_retained_scene_renderer2d_render(
     tc_retained_scene_renderer2d* renderer,
     int width,
     int height);
+
+/* Snapshot for the last successful render call. */
+TCPLOT_API int tc_retained_scene_renderer2d_last_timings(
+    const tc_retained_scene_renderer2d* renderer,
+    tc_retained_scene_renderer2d_timings* out_timings);
 
 TCPLOT_API void tc_retained_scene_renderer2d_release_gpu(
     tc_retained_scene_renderer2d* renderer);

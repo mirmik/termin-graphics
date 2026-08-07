@@ -61,9 +61,7 @@ public:
     std::int64_t z_order() const noexcept {
         return item_.z_order;
     }
-    void set_z_order(std::int64_t z_order) noexcept {
-        item_.z_order = z_order;
-    }
+    void set_z_order(std::int64_t z_order) noexcept;
     void set_clip(std::optional<GeometricClip2D> clip);
     const std::optional<GeometricClip2D>& clip() const noexcept {
         return clip_;

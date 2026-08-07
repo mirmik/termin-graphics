@@ -55,6 +55,27 @@ fit_optional_plot_range2d(std::optional<PlotRange2D> data_bounds,
                           padding_fraction);
 }
 
+std::optional<PlotAxisTicks2D>
+make_plot_axis_ticks2d(double minimum, double maximum, float extent_px,
+                       float spacing_logical_px, float pixel_scale,
+                       int minimum_ticks) {
+  if (!std::isfinite(minimum) || !std::isfinite(maximum) ||
+      maximum <= minimum || !std::isfinite(extent_px) || extent_px <= 0.0f ||
+      !std::isfinite(spacing_logical_px) || spacing_logical_px <= 0.0f ||
+      !std::isfinite(pixel_scale) || pixel_scale <= 0.0f || minimum_ticks < 1) {
+    tc::Log::error("make_plot_axis_ticks2d rejected invalid layout input");
+    return std::nullopt;
+  }
+  const float spacing = spacing_logical_px * pixel_scale;
+  if (!std::isfinite(spacing) || spacing <= 0.0f) {
+    tc::Log::error("make_plot_axis_ticks2d spacing overflowed");
+    return std::nullopt;
+  }
+  const int maximum_tick_count =
+      std::max(static_cast<int>(extent_px / spacing), minimum_ticks);
+  return axis_ticks(minimum, maximum, maximum_tick_count);
+}
+
 std::optional<PlotTicks2D> make_plot_ticks2d(const PlotFrame2D &frame,
                                              float x_spacing_logical_px,
                                              float y_spacing_logical_px,
@@ -71,16 +92,15 @@ std::optional<PlotTicks2D> make_plot_ticks2d(const PlotFrame2D &frame,
     tc::Log::error("make_plot_ticks2d rejected invalid layout input");
     return std::nullopt;
   }
-  const float x_spacing = x_spacing_logical_px * frame.pixel_scale();
-  const float y_spacing = y_spacing_logical_px * frame.pixel_scale();
-  const int max_x_ticks =
-      std::max(static_cast<int>(area.width() / x_spacing), minimum_ticks);
-  const int max_y_ticks =
-      std::max(static_cast<int>(area.height() / y_spacing), minimum_ticks);
-  return PlotTicks2D{
-      axis_ticks(range.x_min(), range.x_max(), max_x_ticks),
-      axis_ticks(range.y_min(), range.y_max(), max_y_ticks),
-  };
+  const auto x = make_plot_axis_ticks2d(
+      range.x_min(), range.x_max(), area.width(), x_spacing_logical_px,
+      frame.pixel_scale(), minimum_ticks);
+  const auto y = make_plot_axis_ticks2d(
+      range.y_min(), range.y_max(), area.height(), y_spacing_logical_px,
+      frame.pixel_scale(), minimum_ticks);
+  if (!x || !y)
+    return std::nullopt;
+  return PlotTicks2D{*x, *y};
 }
 
 std::optional<PlotTextMetrics2D> measure_plot_text2d(tgfx::FontAtlas &font,
