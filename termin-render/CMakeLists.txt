@@ -89,6 +89,7 @@ set(TERMIN_RENDER_SOURCES
     src/render_engine.cpp
     src/render_execution_capabilities.cpp
     src/render_item_mesh.cpp
+    src/render_item_source.cpp
     src/render_item_snapshot.cpp
     src/render_scene_item_collector.cpp
     src/render_item_submission.cpp
@@ -168,6 +169,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_execution_capabilities.hpp
     include/termin/render/render_item_submission.hpp
     include/termin/render/render_item_collection.hpp
+    include/termin/render/render_item_source.hpp
     include/termin/render/render_item_snapshot.hpp
     include/termin/render/render_scene_item_collector.hpp
     include/termin/render/scene_render_services.hpp

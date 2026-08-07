@@ -13,6 +13,9 @@ extern "C" {
 namespace {
 
 int g_collect_calls = 0;
+uint64_t g_last_layer_mask = 0;
+uint64_t g_last_render_category_mask = 0;
+const void* g_last_camera = nullptr;
 tc_render_item_vec3 g_points[] = {
     {0.0, 0.0, 0.0},
     {1.0, 0.0, 0.0},
@@ -28,6 +31,9 @@ bool collect_items(
     assert(context);
     assert(context->phase == TC_PHASE_NONE || context->phase == TC_PHASE_EDITOR_DEBUG);
     ++g_collect_calls;
+    g_last_layer_mask = context->layer_mask;
+    g_last_render_category_mask = context->render_category_mask;
+    g_last_camera = context->camera;
     for (int phase_variant = 0; phase_variant < 2; ++phase_variant) {
         tc_render_item item{};
         item.kind = TC_RENDER_ITEM_KIND_LINE_BATCH;
@@ -61,13 +67,24 @@ int main()
     tc_entity_pool_add_component(pool, entity, &component);
     assert(tc_drawable_capability_attach(&component, &kDrawableVtable, &component));
 
-    termin::RenderSceneItemCollectRequest request{};
-    request.scene = scene;
-    request.scene_filter_flags = TC_SCENE_FILTER_NONE;
+    termin::TcSceneRenderItemSource source(
+        scene,
+        nullptr,
+        TC_SCENE_FILTER_NONE);
+    termin::RenderViewState view;
+    view.primary.emplace();
+    termin::RenderItemSourceRequest source_request{};
+    source_request.view = &view;
+    source_request.layer_mask = 1;
+    source_request.render_category_mask = 0x34;
+    source_request.debug_name = "render-item-snapshot-test";
 
     termin::RenderItemSnapshot first_view;
-    assert(termin::collect_scene_render_item_snapshot(first_view, request));
+    assert(source.publish(first_view, source_request));
     assert(g_collect_calls == 1);
+    assert(g_last_layer_mask == 1);
+    assert(g_last_render_category_mask == 0x34);
+    assert(g_last_camera == view.primary_view());
     assert(first_view.counters().source_traversals == 1);
     assert(first_view.counters().producers == 1);
     assert(first_view.counters().emitted_items == 2);
@@ -83,18 +100,21 @@ int main()
     assert(first_view.storage().line_batch_points.size() == 1);
 
     first_view.invalidate_keep_capacity();
-    assert(termin::collect_scene_render_item_snapshot(first_view, request));
+    assert(source.publish(first_view, source_request));
     assert(g_collect_calls == 2);
     assert(first_view.storage().line_batch_points.size() == 1);
 
     termin::RenderItemSnapshot second_view;
-    assert(termin::collect_scene_render_item_snapshot(second_view, request));
+    assert(source.publish(second_view, source_request));
     assert(g_collect_calls == 3);
     assert(second_view.counters().source_traversals == 1);
 
     // Editor-only geometry must be rejected before its producer is called for
     // service phases that it does not advertise (notably the normal pass).
     termin::RenderSceneItemCollector phase_filtered;
+    termin::RenderSceneItemCollectRequest request{};
+    request.scene = scene;
+    request.scene_filter_flags = TC_SCENE_FILTER_NONE;
     request.phase = TC_PHASE_NORMAL;
     assert(phase_filtered.collect(request));
     assert(g_collect_calls == 3);

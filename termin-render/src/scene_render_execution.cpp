@@ -55,15 +55,15 @@ void render_scene_pipeline_offscreen(
             target.layer_mask,
             target.render_category_mask);
 
-        RenderSceneItemCollectRequest collect_request{};
-        collect_request.scene = scene;
-        collect_request.layer_mask = target.layer_mask;
-        collect_request.render_category_mask = target.render_category_mask;
-        collect_request.debug_pass_name = "render_scene_pipeline_offscreen";
-        collect_request.camera = target.view.primary_view();
-        collect_request.scene_context = &scene_services.back().scene;
-        if (!collect_scene_render_item_snapshot(
-                snapshots[target_index], collect_request)) {
+        TcSceneRenderItemSource item_source(
+            scene,
+            &scene_services.back().scene);
+        RenderItemSourceRequest source_request{};
+        source_request.view = &target.view;
+        source_request.layer_mask = target.layer_mask;
+        source_request.render_category_mask = target.render_category_mask;
+        source_request.debug_name = name.c_str();
+        if (!item_source.publish(snapshots[target_index], source_request)) {
             tc::Log::error(
                 "render_scene_pipeline_offscreen: failed to publish RenderItem snapshot for target '%s'",
                 name.c_str());

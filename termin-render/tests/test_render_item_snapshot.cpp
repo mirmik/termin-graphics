@@ -1,31 +1,54 @@
 #include <cassert>
 #include <type_traits>
 
-#include <termin/render/render_item_snapshot.hpp>
+#include <termin/render/render_item_source.hpp>
+
+namespace {
+
+class SnapshotTestSource final : public termin::RenderItemSource {
+private:
+    tc_material_phase phase_{};
+
+protected:
+    const char* source_name() const noexcept override {
+        return "SnapshotTestSource";
+    }
+
+    bool collect_items(
+        const termin::RenderItemSourceRequest&,
+        termin::RenderItemCollection& collection,
+        termin::RenderItemSnapshotCounters& counters) override
+    {
+        tc_render_item item{};
+        item.kind = TC_RENDER_ITEM_KIND_MESH;
+        item.source.domain_id = 77;
+        item.source.namespace_id = 12;
+        item.source.object_id = 34;
+        item.source.generation = 5;
+        item.source.subobject_id = 6;
+        item.material_phase = &phase_;
+        collection.items.push_back(item);
+
+        counters.source_traversals = 1;
+        counters.producers = 1;
+        return true;
+    }
+
+public:
+    SnapshotTestSource() {
+        phase_.phase = TC_PHASE_EDITOR_DEBUG;
+    }
+};
+
+} // namespace
 
 int main()
 {
     static_assert(std::is_standard_layout_v<tc_render_item_source>);
 
-    tc_material_phase phase{};
-    phase.phase = TC_PHASE_EDITOR_DEBUG;
-
+    SnapshotTestSource source;
     termin::RenderItemSnapshot snapshot;
-    termin::RenderItemCollection& collection = snapshot.begin_collection();
-    tc_render_item item{};
-    item.kind = TC_RENDER_ITEM_KIND_MESH;
-    item.source.domain_id = 77;
-    item.source.namespace_id = 12;
-    item.source.object_id = 34;
-    item.source.generation = 5;
-    item.source.subobject_id = 6;
-    item.material_phase = &phase;
-    collection.items.push_back(item);
-
-    termin::RenderItemSnapshotCounters counters{};
-    counters.source_traversals = 1;
-    counters.producers = 1;
-    snapshot.finish_collection(counters);
+    assert(source.publish(snapshot, {}));
 
     assert(snapshot.valid());
     assert(snapshot.item_count() == 1);

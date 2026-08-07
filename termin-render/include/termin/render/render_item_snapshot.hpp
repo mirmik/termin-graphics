@@ -11,6 +11,7 @@
 namespace termin {
 
 struct ExecuteContext;
+class RenderItemSource;
 
 struct RenderItemSnapshotCounters {
     uint64_t source_traversals = 0;
@@ -23,18 +24,22 @@ struct RenderItemPhaseBucket {
     std::vector<size_t> item_indices;
 };
 
-// Scene-neutral immutable frame/view snapshot. A source adapter writes into
-// begin_collection(), then publishes the complete value with finish_collection().
+// Scene-neutral immutable frame/view snapshot. Only RenderItemSource can open
+// and publish its mutable collection lifecycle; consumers receive a complete
+// snapshot or an explicitly invalid value.
 class RENDER_API RenderItemSnapshot {
 private:
+    friend class RenderItemSource;
+
     RenderItemCollection storage_;
     RenderItemSnapshotCounters counters_{};
     std::vector<RenderItemPhaseBucket> phase_buckets_;
     bool valid_ = false;
 
-public:
     RenderItemCollection& begin_collection();
     void finish_collection(const RenderItemSnapshotCounters& counters);
+
+public:
     void invalidate_keep_capacity();
 
     const std::vector<tc_render_item>& items() const { return storage_.items; }

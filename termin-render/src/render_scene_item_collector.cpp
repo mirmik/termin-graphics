@@ -98,24 +98,42 @@ bool RenderSceneItemCollector::collect_into(
     return data.ok;
 }
 
-bool collect_scene_render_item_snapshot(
-    RenderItemSnapshot& snapshot,
-    const RenderSceneItemCollectRequest& request)
+TcSceneRenderItemSource::TcSceneRenderItemSource(
+    tc_scene_handle scene,
+    const void* scene_context,
+    int scene_filter_flags)
+    : scene_(scene),
+      scene_context_(scene_context),
+      scene_filter_flags_(scene_filter_flags)
+{}
+
+const char* TcSceneRenderItemSource::source_name() const noexcept
 {
-    RenderSceneItemCollectRequest snapshot_request = request;
-    snapshot_request.phase = TC_PHASE_NONE;
-    snapshot_request.flags |= TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE;
+    return "TcSceneRenderItemSource";
+}
+
+bool TcSceneRenderItemSource::collect_items(
+    const RenderItemSourceRequest& request,
+    RenderItemCollection& output,
+    RenderItemSnapshotCounters& counters)
+{
+    RenderSceneItemCollectRequest scene_request{};
+    scene_request.scene = scene_;
+    scene_request.phase = TC_PHASE_NONE;
+    scene_request.flags = TC_RENDER_ITEM_COLLECT_FLAG_ALLOW_MISSING_MATERIAL_PHASE;
+    scene_request.layer_mask = request.layer_mask;
+    scene_request.render_category_mask = request.render_category_mask;
+    scene_request.debug_pass_name = request.debug_name;
+    scene_request.camera = request.view ? request.view->primary_view() : nullptr;
+    scene_request.scene_context = scene_context_;
+    scene_request.scene_filter_flags = scene_filter_flags_;
+
     RenderSceneItemCollector collector;
-    RenderItemCollection& output = snapshot.begin_collection();
-    if (!collector.collect_into(snapshot_request, output)) {
-        snapshot.invalidate_keep_capacity();
+    if (!collector.collect_into(scene_request, output)) {
         return false;
     }
-    RenderItemSnapshotCounters counters{};
     counters.source_traversals = collector.last_scene_traversals();
     counters.producers = collector.last_drawable_producers();
-    counters.emitted_items = output.items.size();
-    snapshot.finish_collection(counters);
     return true;
 }
 

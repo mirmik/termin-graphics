@@ -6,7 +6,7 @@
 
 #include <termin/render/drawable.hpp>
 #include <termin/render/render_export.hpp>
-#include <termin/render/render_item_snapshot.hpp>
+#include <termin/render/render_item_source.hpp>
 
 extern "C" {
 #include <core/tc_scene.h>
@@ -73,9 +73,31 @@ public:
 
 };
 
-RENDER_API bool collect_scene_render_item_snapshot(
-    RenderItemSnapshot& snapshot,
-    const RenderSceneItemCollectRequest& request);
+// tc_scene implementation of the scene-neutral RenderItemSource contract.
+// Scene traversal and component metadata remain confined to this adapter.
+class RENDER_API TcSceneRenderItemSource final : public RenderItemSource {
+private:
+    tc_scene_handle scene_{};
+    const void* scene_context_ = nullptr;
+    int scene_filter_flags_ = TC_SCENE_FILTER_ENABLED
+                            | TC_SCENE_FILTER_VISIBLE
+                            | TC_SCENE_FILTER_ENTITY_ENABLED;
+
+protected:
+    const char* source_name() const noexcept override;
+    bool collect_items(
+        const RenderItemSourceRequest& request,
+        RenderItemCollection& output,
+        RenderItemSnapshotCounters& counters) override;
+
+public:
+    explicit TcSceneRenderItemSource(
+        tc_scene_handle scene,
+        const void* scene_context = nullptr,
+        int scene_filter_flags = TC_SCENE_FILTER_ENABLED
+                               | TC_SCENE_FILTER_VISIBLE
+                               | TC_SCENE_FILTER_ENTITY_ENABLED);
+};
 
 RENDER_API tc_component* render_scene_item_component(
     const tc_render_item& item);

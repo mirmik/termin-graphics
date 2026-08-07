@@ -34,9 +34,15 @@ Pass, которому нужны `TcSceneRef`, lights, internal entities или
 targets, заранее опубликованные immutable snapshots и type-safe
 `RenderExecutionCapabilities`. `render_scene_pipeline_offscreen()` находится в
 отдельном scene adapter header, собирает snapshots/services до execution и не
-дублирует scheduler/resource implementation. Пока оба слоя собираются в одном
-target; физическое выделение render core должно следовать за введением общего
-item-source contract.
+дублирует scheduler/resource implementation.
+
+`RenderItemSource::publish()` задаёт общий lifecycle публикации snapshot:
+source получает нейтральные view/mask inputs и наполняет только mutable
+`RenderItemCollection`, после чего базовый contract атомарно публикует snapshot
+либо инвалидирует частичный результат с диагностикой. `TcSceneRenderItemSource`
+является scene adapter implementation; executor и generic source header не
+знают о `tc_scene`, entities, components или lights. Пока оба слоя собираются
+в одном target; следующая граница — физическое выделение render core.
 
 ## Публичный API
 
