@@ -1,7 +1,9 @@
 #include "tcplot/retained_chart2d.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstring>
 #include <exception>
 #include <limits>
 #include <span>
@@ -32,6 +34,13 @@ namespace
     constexpr const char* kGridType = "tcplot.PlotGridItem2D";
     constexpr const char* kLineType = "tcplot.PlotLineSeriesItem2D";
     constexpr const char* kScatterType = "tcplot.PlotScatterSeriesItem2D";
+
+    std::atomic<uint64_t> next_chart_id{1};
+
+    tc_chart_series_handle2d invalid_series()
+    {
+        return {0, UINT32_MAX, 0};
+    }
 
     bool same(tc_graphic_item_handle a, tc_graphic_item_handle b)
     {
@@ -399,9 +408,10 @@ namespace
                                         size_t count,
                                         tc_plot_line_style_state2d style)
         {
-            tc_graphic_item_handle item = tc_plot_line_series_item2d_create(
-                scene_, projection_, x, y, scalar, count, style);
-            return adopt_series(item);
+            const tc_chart_series_handle2d series = add_named_line(
+                "", false, x, y, scalar, count, style);
+            const SeriesSlot* slot = resolve_series(series);
+            return slot ? slot->item : tc_graphic_item_handle_invalid();
         }
 
         tc_graphic_item_handle add_scatter(const double* x,
@@ -409,18 +419,208 @@ namespace
                                            size_t count,
                                            tc_plot_scatter_style_state2d style)
         {
-            tc_graphic_item_handle item = tc_plot_scatter_series_item2d_create(
-                scene_, projection_, x, y, count, style);
-            return adopt_series(item);
+            const tc_chart_series_handle2d series = add_named_scatter(
+                "", false, x, y, count, style);
+            const SeriesSlot* slot = resolve_series(series);
+            return slot ? slot->item : tc_graphic_item_handle_invalid();
         }
 
         bool remove_series(tc_graphic_item_handle item)
         {
+            for (SeriesSlot& slot : series_)
+            {
+                if (slot.alive && same(slot.item, item))
+                    return remove_semantic_series(series_handle(slot));
+            }
             if ((!tc_visual_scene_item_is_type(scene_, item, kLineType) &&
                  !tc_visual_scene_item_is_type(scene_, item, kScatterType)) ||
                 !same(tc_visual_scene_item_parent(scene_, item), series_root_))
                 return false;
             return tc_visual_scene_destroy_item(scene_, item);
+        }
+
+        tc_chart_series_handle2d add_named_line(
+            std::string name,
+            bool show_in_legend,
+            const double* x,
+            const double* y,
+            const double* scalar,
+            size_t count,
+            tc_plot_line_style_state2d style)
+        {
+            tc_graphic_item_handle item = adopt_series(
+                tc_plot_line_series_item2d_create(
+                    scene_, projection_, x, y, scalar, count, style));
+            if (tc_graphic_item_handle_is_invalid(item))
+                throw std::runtime_error("failed to create chart line series");
+            SeriesSlot* allocated = nullptr;
+            try
+            {
+                SeriesSlot& slot = allocate_series(TC_CHART_SERIES_LINE_2D);
+                allocated = &slot;
+                slot.item = item;
+                slot.name = std::move(name);
+                slot.show_in_legend = show_in_legend;
+                create_legend_items(slot);
+                update_legend();
+                return series_handle(slot);
+            }
+            catch (...)
+            {
+                if (allocated)
+                    rollback_series_allocation(*allocated);
+                tc_visual_scene_destroy_item(scene_, item);
+                throw;
+            }
+        }
+
+        tc_chart_series_handle2d add_named_scatter(
+            std::string name,
+            bool show_in_legend,
+            const double* x,
+            const double* y,
+            size_t count,
+            tc_plot_scatter_style_state2d style)
+        {
+            tc_graphic_item_handle item = adopt_series(
+                tc_plot_scatter_series_item2d_create(
+                    scene_, projection_, x, y, count, style));
+            if (tc_graphic_item_handle_is_invalid(item))
+                throw std::runtime_error(
+                    "failed to create chart scatter series");
+            SeriesSlot* allocated = nullptr;
+            try
+            {
+                SeriesSlot& slot =
+                    allocate_series(TC_CHART_SERIES_SCATTER_2D);
+                allocated = &slot;
+                slot.item = item;
+                slot.name = std::move(name);
+                slot.show_in_legend = show_in_legend;
+                create_legend_items(slot);
+                update_legend();
+                return series_handle(slot);
+            }
+            catch (...)
+            {
+                if (allocated)
+                    rollback_series_allocation(*allocated);
+                tc_visual_scene_destroy_item(scene_, item);
+                throw;
+            }
+        }
+
+        bool series_valid(tc_chart_series_handle2d series) const
+        {
+            return resolve_series(series) != nullptr;
+        }
+
+        bool series_snapshot(tc_chart_series_handle2d series,
+                             tc_chart_series_snapshot2d& snapshot) const
+        {
+            const SeriesSlot* slot = resolve_series(series);
+            if (!slot)
+                return false;
+            const auto bounds = series_item_bounds(slot->item);
+            bool visible = false;
+            if (!tc_visual_scene_item_get_visible(
+                    scene_, slot->item, &visible))
+                return false;
+            snapshot = {
+                slot->kind,
+                slot->item,
+                visible,
+                slot->show_in_legend,
+                bounds.has_value(),
+                bounds ? c_range(*bounds) : tc_plot_range2d{},
+            };
+            return true;
+        }
+
+        const std::string* series_name(tc_chart_series_handle2d series) const
+        {
+            const SeriesSlot* slot = resolve_series(series);
+            return slot ? &slot->name : nullptr;
+        }
+
+        bool set_series_name(tc_chart_series_handle2d series,
+                             std::string name)
+        {
+            SeriesSlot* slot = resolve_series(series);
+            if (!slot)
+                return false;
+            slot->name = std::move(name);
+            update_legend();
+            return true;
+        }
+
+        bool set_series_visible(tc_chart_series_handle2d series, bool visible)
+        {
+            SeriesSlot* slot = resolve_series(series);
+            if (!slot || !tc_visual_scene_item_set_visible(
+                             scene_, slot->item, visible))
+                return false;
+            update_legend();
+            return true;
+        }
+
+        bool set_series_legend_visible(tc_chart_series_handle2d series,
+                                       bool show)
+        {
+            SeriesSlot* slot = resolve_series(series);
+            if (!slot)
+                return false;
+            slot->show_in_legend = show;
+            update_legend();
+            return true;
+        }
+
+        bool set_line_series_style(tc_chart_series_handle2d series,
+                                   tc_plot_line_style_state2d style)
+        {
+            SeriesSlot* slot = resolve_series(series);
+            if (!slot || slot->kind != TC_CHART_SERIES_LINE_2D ||
+                !tc_plot_line_series_item2d_set_style(
+                    scene_, slot->item, style))
+                return false;
+            update_legend();
+            return true;
+        }
+
+        bool set_scatter_series_style(tc_chart_series_handle2d series,
+                                      tc_plot_scatter_style_state2d style)
+        {
+            SeriesSlot* slot = resolve_series(series);
+            if (!slot || slot->kind != TC_CHART_SERIES_SCATTER_2D ||
+                !tc_plot_scatter_series_item2d_set_style(
+                    scene_, slot->item, style))
+                return false;
+            update_legend();
+            return true;
+        }
+
+        bool remove_semantic_series(tc_chart_series_handle2d series)
+        {
+            SeriesSlot* slot = resolve_series_slot(series);
+            if (!slot)
+                return false;
+            const uint32_t index = slot->index;
+            if (!tc_graphic_item_handle_is_invalid(slot->legend_group))
+                tc_visual_scene_destroy_item(scene_, slot->legend_group);
+            if (!tc_graphic_item_handle_is_invalid(slot->item))
+                tc_visual_scene_destroy_item(scene_, slot->item);
+            slot->alive = false;
+            slot->item = tc_graphic_item_handle_invalid();
+            slot->legend_group = tc_graphic_item_handle_invalid();
+            slot->legend_swatch = tc_graphic_item_handle_invalid();
+            slot->legend_label = tc_graphic_item_handle_invalid();
+            slot->name.clear();
+            ++slot->generation;
+            if (slot->generation == 0)
+                ++slot->generation;
+            free_series_.push_back(index);
+            update_legend();
+            return true;
         }
 
     private:
@@ -453,6 +653,99 @@ namespace
             const char* type = nullptr;
             int64_t z_order = 0;
         };
+
+        struct SeriesSlot
+        {
+            uint32_t index = 0;
+            uint32_t generation = 1;
+            bool alive = false;
+            tc_chart_series_kind2d kind = TC_CHART_SERIES_INVALID_2D;
+            tc_graphic_item_handle item = tc_graphic_item_handle_invalid();
+            std::string name;
+            bool show_in_legend = false;
+            tc_graphic_item_handle legend_group =
+                tc_graphic_item_handle_invalid();
+            tc_graphic_item_handle legend_swatch =
+                tc_graphic_item_handle_invalid();
+            tc_graphic_item_handle legend_label =
+                tc_graphic_item_handle_invalid();
+        };
+
+        SeriesSlot& allocate_series(tc_chart_series_kind2d kind)
+        {
+            uint32_t index = 0;
+            if (free_series_.empty())
+            {
+                index = static_cast<uint32_t>(series_.size());
+                series_.push_back({});
+                series_.back().index = index;
+            }
+            else
+            {
+                index = free_series_.back();
+                free_series_.pop_back();
+            }
+            SeriesSlot& slot = series_[index];
+            slot.alive = true;
+            slot.kind = kind;
+            slot.show_in_legend = false;
+            return slot;
+        }
+
+        void rollback_series_allocation(SeriesSlot& slot)
+        {
+            if (!tc_graphic_item_handle_is_invalid(slot.legend_group))
+                tc_visual_scene_destroy_item(scene_, slot.legend_group);
+            slot.alive = false;
+            slot.item = tc_graphic_item_handle_invalid();
+            slot.legend_group = tc_graphic_item_handle_invalid();
+            slot.legend_swatch = tc_graphic_item_handle_invalid();
+            slot.legend_label = tc_graphic_item_handle_invalid();
+            slot.name.clear();
+            ++slot.generation;
+            if (slot.generation == 0)
+                ++slot.generation;
+            free_series_.push_back(slot.index);
+        }
+
+        tc_chart_series_handle2d series_handle(const SeriesSlot& slot) const
+        {
+            return {chart_id_, slot.index, slot.generation};
+        }
+
+        SeriesSlot* resolve_series_slot(tc_chart_series_handle2d series)
+        {
+            if (series.chart_id != chart_id_ ||
+                series.index >= series_.size())
+                return nullptr;
+            SeriesSlot& slot = series_[series.index];
+            if (!slot.alive || slot.generation != series.generation)
+                return nullptr;
+            return &slot;
+        }
+
+        SeriesSlot* resolve_series(tc_chart_series_handle2d series)
+        {
+            SeriesSlot* slot = resolve_series_slot(series);
+            if (!slot)
+                return nullptr;
+            const char* expected = slot->kind == TC_CHART_SERIES_LINE_2D
+                                       ? kLineType
+                                       : slot->kind ==
+                                                     TC_CHART_SERIES_SCATTER_2D
+                                             ? kScatterType
+                                             : nullptr;
+            return expected && tc_visual_scene_item_is_type(
+                                   scene_, slot->item, expected)
+                       ? slot
+                       : nullptr;
+        }
+
+        const SeriesSlot* resolve_series(
+            tc_chart_series_handle2d series) const
+        {
+            return const_cast<RetainedChart2D*>(this)->resolve_series(series);
+        }
 
         void require(tc_graphic_item_handle handle, const char* operation)
         {
@@ -514,6 +807,142 @@ namespace
             return result;
         }
 
+        void create_legend_items(SeriesSlot& slot)
+        {
+            slot.legend_group = create_group(legend_root_);
+            slot.legend_swatch = create_path(slot.legend_group);
+            slot.legend_label = create_text(
+                slot.legend_group, TC_VISUAL_TEXT_ANCHOR_LEFT);
+            tc_visual_scene_item_set_z_order(
+                scene_, slot.legend_group, 1);
+        }
+
+        tc_visual_stroke_paint2d legend_stroke(const SeriesSlot& slot) const
+        {
+            tc_visual_color4f color = theme_.foreground_color;
+            float width = 2.0f * pixel_scale_;
+            if (slot.kind == TC_CHART_SERIES_LINE_2D)
+            {
+                tc_plot_series_snapshot2d snapshot{};
+                tc_plot_line_style_state2d style{};
+                if (tc_plot_line_series_item2d_snapshot(
+                        scene_, slot.item, &snapshot, &style))
+                {
+                    color = {style.color.r,
+                             style.color.g,
+                             style.color.b,
+                             style.color.a};
+                    width = std::max(1.0f, style.thickness_px);
+                }
+            }
+            else if (slot.kind == TC_CHART_SERIES_SCATTER_2D)
+            {
+                tc_plot_series_snapshot2d snapshot{};
+                tc_plot_scatter_style_state2d style{};
+                if (tc_plot_scatter_series_item2d_snapshot(
+                        scene_, slot.item, &snapshot, &style))
+                {
+                    color = {style.color.r,
+                             style.color.g,
+                             style.color.b,
+                             style.color.a};
+                    width = std::max(2.0f, style.diameter_px);
+                }
+            }
+            bool visible = true;
+            tc_visual_scene_item_get_visible(scene_, slot.item, &visible);
+            if (!visible)
+                color.a *= 0.35f;
+            return stroke(color, width);
+        }
+
+        void update_legend()
+        {
+            if (tc_graphic_item_handle_is_invalid(legend_root_))
+                return;
+            const float scale = pixel_scale_;
+            const float gap = theme_.gap_logical_px * scale;
+            const float padding = std::max(4.0f * scale, gap);
+            const float font_size = theme_.font_size_logical_px * scale;
+            const auto metrics = tcplot::measure_plot_text2d(
+                host_->font(), "Mg", theme_.font_size_logical_px, scale);
+            if (!metrics)
+                throw std::runtime_error("failed to measure chart legend");
+
+            float widest_label = 0.0f;
+            size_t visible_count = 0;
+            for (SeriesSlot& slot : series_)
+            {
+                const bool participates = slot.alive &&
+                                          slot.show_in_legend &&
+                                          !slot.name.empty();
+                if (!tc_graphic_item_handle_is_invalid(slot.legend_group) &&
+                    !tc_visual_scene_item_set_visible(
+                        scene_, slot.legend_group, participates))
+                    throw std::runtime_error(
+                        "failed to update legend entry visibility");
+                if (!participates)
+                    continue;
+                const auto measured = tcplot::measure_plot_text2d(
+                    host_->font(), slot.name, theme_.font_size_logical_px, scale);
+                if (!measured)
+                    throw std::runtime_error("failed to measure legend label");
+                widest_label = std::max(widest_label, measured->width);
+                ++visible_count;
+            }
+
+            const bool visible = visible_count != 0;
+            if (!tc_visual_scene_item_set_visible(
+                    scene_, legend_root_, visible) ||
+                !tc_visual_scene_item_set_visible(
+                    scene_, legend_background_, visible))
+                throw std::runtime_error("failed to update legend visibility");
+            if (!visible)
+                return;
+
+            const float swatch_width = 24.0f * scale;
+            const float row_height = std::max(
+                metrics->line_height, 12.0f * scale) + gap;
+            const float width = padding * 2.0f + swatch_width + gap +
+                                widest_label;
+            const float height = padding * 2.0f +
+                                 row_height * visible_count - gap;
+            const float left = plot_area_.x + plot_area_.width - width - gap;
+            const float top = plot_area_.y + gap;
+            tc_visual_color4f background = theme_.plot_background_color;
+            background.a = std::max(background.a, 0.9f);
+            set_rect(legend_background_, {left, top, width, height}, background);
+
+            size_t row = 0;
+            for (SeriesSlot& slot : series_)
+            {
+                if (!slot.alive || !slot.show_in_legend || slot.name.empty())
+                    continue;
+                const float center_y = top + padding +
+                                       row * row_height +
+                                       metrics->line_height * 0.5f;
+                const std::vector<tc_visual_path_verb2d> verbs = {
+                    TC_VISUAL_PATH_MOVE_TO, TC_VISUAL_PATH_LINE_TO};
+                const std::vector<tc_vec2f> points = {
+                    {left + padding, center_y},
+                    {left + padding + swatch_width, center_y}};
+                tc_visual_stroke_paint2d paint = legend_stroke(slot);
+                if (!tc_visual_path_item2d_set(scene_,
+                                               slot.legend_swatch,
+                                               path_view(verbs, points),
+                                               nullptr,
+                                               &paint))
+                    throw std::runtime_error("failed to update legend swatch");
+                set_text(slot.legend_label,
+                         slot.name,
+                         {left + padding + swatch_width + gap,
+                          center_y + metrics->ascent * 0.5f},
+                         font_size,
+                         TC_VISUAL_TEXT_ANCHOR_LEFT);
+                ++row;
+            }
+        }
+
         void create_tree()
         {
             root_ = create_group(tc_graphic_item_handle_invalid());
@@ -548,6 +977,8 @@ namespace
             y_axis_label_item_ =
                 create_text(chrome_root_, TC_VISUAL_TEXT_ANCHOR_LEFT);
             legend_root_ = create_group(root_);
+            legend_background_ =
+                create_rect(legend_root_, theme_.plot_background_color);
             overlay_root_ = create_group(root_);
 
             tc_visual_scene_item_set_z_order(scene_, background_, -100);
@@ -558,6 +989,7 @@ namespace
             tc_visual_scene_item_set_z_order(scene_, annotations_root_, 30);
             tc_visual_scene_item_set_z_order(scene_, chrome_root_, 40);
             tc_visual_scene_item_set_z_order(scene_, legend_root_, 50);
+            tc_visual_scene_item_set_z_order(scene_, legend_background_, 0);
             tc_visual_scene_item_set_z_order(scene_, overlay_root_, 60);
         }
 
@@ -712,6 +1144,7 @@ namespace
                       plot_area_.y + plot_area_.height * 0.5f},
                      tick_font_px,
                      TC_VISUAL_TEXT_ANCHOR_LEFT);
+            update_legend();
             ++layout_revision_;
         }
 
@@ -903,6 +1336,48 @@ namespace
             return item;
         }
 
+        std::optional<tcplot::PlotRange2D>
+        series_item_bounds(tc_graphic_item_handle handle) const
+        {
+            double x_min = std::numeric_limits<double>::infinity();
+            double x_max = -std::numeric_limits<double>::infinity();
+            double y_min = std::numeric_limits<double>::infinity();
+            double y_max = -std::numeric_limits<double>::infinity();
+            bool found = false;
+            termin::visual::TcVisualScene scene{scene_};
+            std::span<const double> x;
+            std::span<const double> y;
+            if (const auto* line =
+                    tcplot::resolve_plot_line_series_item2d(scene, handle))
+            {
+                x = line->x();
+                y = line->y();
+            }
+            else if (const auto* scatter =
+                         tcplot::resolve_plot_scatter_series_item2d(scene,
+                                                                    handle))
+            {
+                x = scatter->x();
+                y = scatter->y();
+            }
+            else
+                return std::nullopt;
+            const size_t point_count = std::min(x.size(), y.size());
+            for (size_t point = 0; point < point_count; ++point)
+            {
+                if (!std::isfinite(x[point]) || !std::isfinite(y[point]))
+                    continue;
+                x_min = std::min(x_min, x[point]);
+                x_max = std::max(x_max, x[point]);
+                y_min = std::min(y_min, y[point]);
+                y_max = std::max(y_max, y[point]);
+                found = true;
+            }
+            if (!found)
+                return std::nullopt;
+            return tcplot::PlotRange2D{x_min, x_max, y_min, y_max};
+        }
+
         std::optional<tcplot::PlotRange2D> series_bounds() const
         {
             double x_min = std::numeric_limits<double>::infinity();
@@ -911,49 +1386,24 @@ namespace
             double y_max = -std::numeric_limits<double>::infinity();
             bool found = false;
             termin::visual::TcVisualScene scene{scene_};
-            const size_t count =
-                tc_visual_scene_item_child_count(scene_, series_root_);
-            for (size_t index = 0; index < count; ++index)
+            for (const SeriesSlot& slot : series_)
             {
-                const tc_graphic_item_handle handle =
-                    tc_visual_scene_item_child_at(scene_, series_root_, index);
-                const tc_graphic_item* item = scene.resolve(handle);
-                if (item == nullptr || !scene.effective_visible(*item))
+                const tc_graphic_item* item = scene.resolve(slot.item);
+                if (!slot.alive || item == nullptr ||
+                    !scene.effective_visible(*item))
                     continue;
-                std::span<const double> x;
-                std::span<const double> y;
-                if (const auto* line =
-                        tcplot::resolve_plot_line_series_item2d(scene, handle))
-                {
-                    x = line->x();
-                    y = line->y();
-                }
-                else if (const auto* scatter =
-                             tcplot::resolve_plot_scatter_series_item2d(scene,
-                                                                        handle))
-                {
-                    x = scatter->x();
-                    y = scatter->y();
-                }
-                else
-                {
+                const auto bounds = series_item_bounds(slot.item);
+                if (!bounds)
                     continue;
-                }
-                const size_t point_count = std::min(x.size(), y.size());
-                for (size_t point = 0; point < point_count; ++point)
-                {
-                    if (!std::isfinite(x[point]) || !std::isfinite(y[point]))
-                        continue;
-                    x_min = std::min(x_min, x[point]);
-                    x_max = std::max(x_max, x[point]);
-                    y_min = std::min(y_min, y[point]);
-                    y_max = std::max(y_max, y[point]);
-                    found = true;
-                }
+                x_min = std::min(x_min, bounds->x_min());
+                x_max = std::max(x_max, bounds->x_max());
+                y_min = std::min(y_min, bounds->y_min());
+                y_max = std::max(y_max, bounds->y_max());
+                found = true;
             }
-            if (!found)
-                return std::nullopt;
-            return tcplot::PlotRange2D{x_min, x_max, y_min, y_max};
+            return found ? std::optional<tcplot::PlotRange2D>{
+                               tcplot::PlotRange2D{x_min, x_max, y_min, y_max}}
+                         : std::nullopt;
         }
 
         void cleanup()
@@ -986,6 +1436,7 @@ namespace
         std::string title_;
         std::string x_label_;
         std::string y_label_;
+        uint64_t chart_id_ = next_chart_id.fetch_add(1);
         uint64_t layout_revision_ = 0;
         tcplot::ChartInteraction2D interaction_{};
         tc_plot_projection_handle2d projection_ =
@@ -1015,9 +1466,13 @@ namespace
         tc_graphic_item_handle y_axis_label_item_ =
             tc_graphic_item_handle_invalid();
         tc_graphic_item_handle legend_root_ = tc_graphic_item_handle_invalid();
+        tc_graphic_item_handle legend_background_ =
+            tc_graphic_item_handle_invalid();
         tc_graphic_item_handle overlay_root_ = tc_graphic_item_handle_invalid();
         std::vector<tc_graphic_item_handle> x_tick_labels_;
         std::vector<tc_graphic_item_handle> y_tick_labels_;
+        std::vector<SeriesSlot> series_;
+        std::vector<uint32_t> free_series_;
     };
 
     template <typename Result, typename Function>
@@ -1412,6 +1867,180 @@ extern "C"
                logged("remove_series",
                       false,
                       [&] { return chart->value.remove_series(series); });
+    }
+
+    tc_chart_series_handle2d
+    tc_retained_chart2d_add_named_line(tc_retained_chart2d* chart,
+                                       const char* name_utf8,
+                                       bool show_in_legend,
+                                       const double* x,
+                                       const double* y,
+                                       const double* scalar,
+                                       size_t point_count,
+                                       tc_plot_line_style_state2d style)
+    {
+        return chart ? logged("add_named_line",
+                              invalid_series(),
+                              [&]
+                              {
+                                  return chart->value.add_named_line(
+                                      name_utf8 ? name_utf8 : "",
+                                      show_in_legend,
+                                      x,
+                                      y,
+                                      scalar,
+                                      point_count,
+                                      style);
+                              })
+                     : invalid_series();
+    }
+
+    tc_chart_series_handle2d
+    tc_retained_chart2d_add_named_scatter(
+        tc_retained_chart2d* chart,
+        const char* name_utf8,
+        bool show_in_legend,
+        const double* x,
+        const double* y,
+        size_t point_count,
+        tc_plot_scatter_style_state2d style)
+    {
+        return chart ? logged("add_named_scatter",
+                              invalid_series(),
+                              [&]
+                              {
+                                  return chart->value.add_named_scatter(
+                                      name_utf8 ? name_utf8 : "",
+                                      show_in_legend,
+                                      x,
+                                      y,
+                                      point_count,
+                                      style);
+                              })
+                     : invalid_series();
+    }
+
+    bool tc_retained_chart2d_series_is_valid(
+        const tc_retained_chart2d* chart, tc_chart_series_handle2d series)
+    {
+        return chart && chart->value.series_valid(series);
+    }
+
+    bool tc_retained_chart2d_series_snapshot(
+        const tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_chart_series_snapshot2d* out_snapshot)
+    {
+        return chart && out_snapshot &&
+               chart->value.series_snapshot(series, *out_snapshot);
+    }
+
+    size_t tc_retained_chart2d_series_name_copy(
+        const tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        char* out_utf8,
+        size_t capacity)
+    {
+        if (!chart)
+            return 0;
+        const std::string* name = chart->value.series_name(series);
+        if (!name)
+            return 0;
+        const size_t required = name->size() + 1;
+        if (!out_utf8)
+            return required;
+        if (capacity < required)
+        {
+            tc::Log::error(
+                "RetainedChart2D: series_name_copy output is too small");
+            return 0;
+        }
+        std::memcpy(out_utf8, name->c_str(), required);
+        return required;
+    }
+
+    bool tc_retained_chart2d_series_set_name(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        const char* name_utf8)
+    {
+        return chart && logged("series_set_name",
+                               false,
+                               [&]
+                               {
+                                   return chart->value.set_series_name(
+                                       series, name_utf8 ? name_utf8 : "");
+                               });
+    }
+
+    bool tc_retained_chart2d_series_set_visible(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        bool visible)
+    {
+        return chart && logged("series_set_visible",
+                               false,
+                               [&]
+                               {
+                                   return chart->value.set_series_visible(
+                                       series, visible);
+                               });
+    }
+
+    bool tc_retained_chart2d_series_set_legend_visible(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        bool show_in_legend)
+    {
+        return chart && logged("series_set_legend_visible",
+                               false,
+                               [&]
+                               {
+                                   return chart->value
+                                       .set_series_legend_visible(
+                                           series, show_in_legend);
+                               });
+    }
+
+    bool tc_retained_chart2d_line_series_set_style(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_plot_line_style_state2d style)
+    {
+        return chart && logged("line_series_set_style",
+                               false,
+                               [&]
+                               {
+                                   return chart->value.set_line_series_style(
+                                       series, style);
+                               });
+    }
+
+    bool tc_retained_chart2d_scatter_series_set_style(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_plot_scatter_style_state2d style)
+    {
+        return chart && logged(
+                            "scatter_series_set_style",
+                            false,
+                            [&]
+                            {
+                                return chart->value.set_scatter_series_style(
+                                    series, style);
+                            });
+    }
+
+    bool tc_retained_chart2d_remove_semantic_series(
+        tc_retained_chart2d* chart, tc_chart_series_handle2d series)
+    {
+        return chart && logged("remove_semantic_series",
+                               false,
+                               [&]
+                               {
+                                   return chart->value.remove_semantic_series(
+                                       series);
+                               });
     }
 
 } // extern "C"

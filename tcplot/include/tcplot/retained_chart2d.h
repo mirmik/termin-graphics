@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <termin_visual_scene/tc_builtin_items2d.h>
 
@@ -15,6 +16,30 @@ extern "C"
 #endif
 
     typedef struct tc_retained_chart2d tc_retained_chart2d;
+
+    typedef struct tc_chart_series_handle2d
+    {
+        uint64_t chart_id;
+        uint32_t index;
+        uint32_t generation;
+    } tc_chart_series_handle2d;
+
+    typedef enum tc_chart_series_kind2d
+    {
+        TC_CHART_SERIES_INVALID_2D = 0,
+        TC_CHART_SERIES_LINE_2D = 1,
+        TC_CHART_SERIES_SCATTER_2D = 2,
+    } tc_chart_series_kind2d;
+
+    typedef struct tc_chart_series_snapshot2d
+    {
+        tc_chart_series_kind2d kind;
+        tc_graphic_item_handle item;
+        bool visible;
+        bool show_in_legend;
+        bool has_data_bounds;
+        tc_plot_range2d data_bounds;
+    } tc_chart_series_snapshot2d;
 
     typedef struct tc_chart2d_theme
     {
@@ -171,6 +196,64 @@ extern "C"
     TCPLOT_API bool
     tc_retained_chart2d_remove_series(tc_retained_chart2d* chart,
                                       tc_graphic_item_handle series);
+
+    // Semantic series are chart-owned generation handles. Their graphic item
+    // remains public for low-level scene customization, while name,
+    // visibility, legend participation and lifetime stay coherent at chart
+    // level.
+    TCPLOT_API tc_chart_series_handle2d
+    tc_retained_chart2d_add_named_line(tc_retained_chart2d* chart,
+                                       const char* name_utf8,
+                                       bool show_in_legend,
+                                       const double* x,
+                                       const double* y,
+                                       const double* scalar,
+                                       size_t point_count,
+                                       tc_plot_line_style_state2d style);
+    TCPLOT_API tc_chart_series_handle2d
+    tc_retained_chart2d_add_named_scatter(
+        tc_retained_chart2d* chart,
+        const char* name_utf8,
+        bool show_in_legend,
+        const double* x,
+        const double* y,
+        size_t point_count,
+        tc_plot_scatter_style_state2d style);
+    TCPLOT_API bool tc_retained_chart2d_series_is_valid(
+        const tc_retained_chart2d* chart, tc_chart_series_handle2d series);
+    TCPLOT_API bool tc_retained_chart2d_series_snapshot(
+        const tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_chart_series_snapshot2d* out_snapshot);
+    // Returns the required UTF-8 byte count including the terminator. Passing
+    // NULL/0 is the sizing query; insufficient output capacity returns 0.
+    TCPLOT_API size_t tc_retained_chart2d_series_name_copy(
+        const tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        char* out_utf8,
+        size_t capacity);
+    TCPLOT_API bool tc_retained_chart2d_series_set_name(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        const char* name_utf8);
+    TCPLOT_API bool tc_retained_chart2d_series_set_visible(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        bool visible);
+    TCPLOT_API bool tc_retained_chart2d_series_set_legend_visible(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        bool show_in_legend);
+    TCPLOT_API bool tc_retained_chart2d_line_series_set_style(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_plot_line_style_state2d style);
+    TCPLOT_API bool tc_retained_chart2d_scatter_series_set_style(
+        tc_retained_chart2d* chart,
+        tc_chart_series_handle2d series,
+        tc_plot_scatter_style_state2d style);
+    TCPLOT_API bool tc_retained_chart2d_remove_semantic_series(
+        tc_retained_chart2d* chart, tc_chart_series_handle2d series);
 
 #ifdef __cplusplus
 }
