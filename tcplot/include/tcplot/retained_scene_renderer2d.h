@@ -33,6 +33,12 @@ TCPLOT_API void tc_retained_scene_renderer2d_set_clear_color(
     float b,
     float a);
 
+TCPLOT_API int tc_retained_scene_renderer2d_set_msaa_samples(
+    tc_retained_scene_renderer2d* renderer,
+    int samples);
+TCPLOT_API int tc_retained_scene_renderer2d_msaa_samples(
+    const tc_retained_scene_renderer2d* renderer);
+
 /* Returns the tgfx texture handle id, or zero after a logged failure. */
 TCPLOT_API uint32_t tc_retained_scene_renderer2d_render(
     tc_retained_scene_renderer2d* renderer,

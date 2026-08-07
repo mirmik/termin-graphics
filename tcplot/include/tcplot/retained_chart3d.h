@@ -46,6 +46,10 @@ typedef struct tc_surface_item3d_style {
     uint32_t surface_grid_row_step;
     uint32_t surface_grid_col_step;
     float surface_grid_width_px;
+    float surface_grid_r;
+    float surface_grid_g;
+    float surface_grid_b;
+    float surface_grid_a;
 } tc_surface_item3d_style;
 
 typedef struct tc_scatter_item3d_style {
@@ -118,6 +122,14 @@ TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_add_surface(
     uint32_t rows,
     uint32_t columns,
     const tc_surface_item3d_style* style);
+TCPLOT_API int tc_retained_chart3d_surface_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle surface,
+    const double* x,
+    const double* y,
+    const double* z,
+    uint32_t rows,
+    uint32_t columns);
 TCPLOT_API int tc_retained_chart3d_surface_set_style(
     tc_retained_chart3d* chart,
     tc_plot_item3d_handle surface,
@@ -134,6 +146,13 @@ TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_add_scatter(
     const double* z,
     size_t count,
     const tc_scatter_item3d_style* style);
+TCPLOT_API int tc_retained_chart3d_scatter_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle scatter,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count);
 TCPLOT_API int tc_retained_chart3d_scatter_set_style(
     tc_retained_chart3d* chart,
     tc_plot_item3d_handle scatter,
@@ -179,6 +198,11 @@ TCPLOT_API int tc_retained_chart3d_set_axis_scale(
     float x,
     float y,
     float z);
+TCPLOT_API int tc_retained_chart3d_set_msaa_samples(
+    tc_retained_chart3d* chart,
+    int samples);
+TCPLOT_API int tc_retained_chart3d_msaa_samples(
+    const tc_retained_chart3d* chart);
 
 TCPLOT_API int tc_retained_chart3d_get_camera(
     const tc_retained_chart3d* chart,
@@ -186,6 +210,8 @@ TCPLOT_API int tc_retained_chart3d_get_camera(
 TCPLOT_API int tc_retained_chart3d_set_camera(
     tc_retained_chart3d* chart,
     const tc_orbit_camera3d_state* state);
+TCPLOT_API void tc_retained_chart3d_fit_camera(
+    tc_retained_chart3d* chart);
 TCPLOT_API void tc_retained_chart3d_reset_camera(
     tc_retained_chart3d* chart);
 

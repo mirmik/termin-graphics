@@ -44,8 +44,9 @@ tcplot::SurfaceColorMap colormap(std::uint32_t value) {
 tc_surface_item3d_style default_surface_style() {
     return {
         1.0f, 1.0f, 1.0f, 1.0f,
-        TC_PLOT_COLORMAP3D_VIRIDIS,
-        0, 0, 0, 8, 8, 1.25f,
+        TC_PLOT_COLORMAP3D_VIRIDIS, 0, 0,
+        0, 8, 8, 1.25f,
+        0.04f, 0.04f, 0.04f, 1.0f,
     };
 }
 
@@ -68,6 +69,11 @@ void validate(const tc_surface_item3d_style& style) {
             style.color_r, style.color_g, style.color_b, style.color_a) ||
         !std::isfinite(style.surface_grid_width_px) ||
         style.surface_grid_width_px <= 0 ||
+        !finite_color(
+            style.surface_grid_r,
+            style.surface_grid_g,
+            style.surface_grid_b,
+            style.surface_grid_a) ||
         style.surface_grid_row_step == 0 ||
         style.surface_grid_col_step == 0) {
         throw std::invalid_argument("invalid retained surface style");
@@ -109,7 +115,11 @@ bool same_style(
            left.surface_grid_visible == right.surface_grid_visible &&
            left.surface_grid_row_step == right.surface_grid_row_step &&
            left.surface_grid_col_step == right.surface_grid_col_step &&
-           left.surface_grid_width_px == right.surface_grid_width_px;
+           left.surface_grid_width_px == right.surface_grid_width_px &&
+           left.surface_grid_r == right.surface_grid_r &&
+           left.surface_grid_g == right.surface_grid_g &&
+           left.surface_grid_b == right.surface_grid_b &&
+           left.surface_grid_a == right.surface_grid_a;
 }
 
 bool same_style(
@@ -239,6 +249,79 @@ public:
         bounds_dirty_ = true;
         fit_camera();
         return handle(slot);
+    }
+
+    bool set_surface_data(
+        tc_plot_item3d_handle handle,
+        const double* x,
+        const double* y,
+        const double* z,
+        std::uint32_t rows,
+        std::uint32_t columns) {
+        Slot* slot = resolve(handle, TC_PLOT_ITEM3D_SURFACE);
+        if (!slot) return false;
+        if (rows < 2 || columns < 2) {
+            throw std::invalid_argument(
+                "retained surface requires at least a 2x2 grid");
+        }
+        const std::size_t count =
+            static_cast<std::size_t>(rows) * columns;
+        std::vector<double> copied_x = copy_values(x, count);
+        std::vector<double> copied_y = copy_values(y, count);
+        std::vector<double> copied_z = copy_values(z, count);
+
+        // PlotEngine3D remains a temporary renderer body with its own CPU
+        // cache. Prepare that copy before committing authoritative state so
+        // allocation failures cannot leave the retained item half-mutated.
+        if (!slot->engine || !slot->engine->set_surface_data(
+                0,
+                copied_x,
+                copied_y,
+                copied_z,
+                rows,
+                columns)) {
+            throw std::runtime_error(
+                "failed to update retained surface renderer data");
+        }
+        slot->x = std::move(copied_x);
+        slot->y = std::move(copied_y);
+        slot->z = std::move(copied_z);
+        slot->rows = rows;
+        slot->columns = columns;
+        ++slot->geometry_revision;
+        ++slot->render_revision;
+        slot->gpu_revision = 0;
+        bounds_dirty_ = true;
+        return true;
+    }
+
+    bool set_scatter_data(
+        tc_plot_item3d_handle handle,
+        const double* x,
+        const double* y,
+        const double* z,
+        std::size_t count) {
+        Slot* slot = resolve(handle, TC_PLOT_ITEM3D_SCATTER);
+        if (!slot) return false;
+        std::vector<double> copied_x = copy_values(x, count);
+        std::vector<double> copied_y = copy_values(y, count);
+        std::vector<double> copied_z = copy_values(z, count);
+        if (!slot->engine || !slot->engine->set_scatter_data(
+                0,
+                copied_x,
+                copied_y,
+                copied_z)) {
+            throw std::runtime_error(
+                "failed to update retained scatter renderer data");
+        }
+        slot->x = std::move(copied_x);
+        slot->y = std::move(copied_y);
+        slot->z = std::move(copied_z);
+        ++slot->geometry_revision;
+        ++slot->render_revision;
+        slot->gpu_revision = 0;
+        bounds_dirty_ = true;
+        return true;
     }
 
     tc_plot_item3d_handle add_grid(const tc_grid_item3d_style& style) {
@@ -387,6 +470,19 @@ public:
         axis_scale_[2] = z;
     }
 
+    void set_msaa_samples(int samples) {
+        if (samples < 1 || samples > 16 ||
+            (samples & (samples - 1)) != 0) {
+            throw std::invalid_argument(
+                "MSAA samples must be a power of two between 1 and 16");
+        }
+        if (samples == msaa_samples_) return;
+        msaa_samples_ = samples;
+        release_targets();
+    }
+
+    int msaa_samples() const { return msaa_samples_; }
+
     tc_orbit_camera3d_state camera_state() const {
         return {
             camera_.target.x,
@@ -425,15 +521,23 @@ public:
     void fit_camera() {
         double lo[3], hi[3];
         bounds(lo, hi);
+        const termin::Vec3f scaled_lo{
+            static_cast<float>(lo[0] * axis_scale_[0]),
+            static_cast<float>(lo[1] * axis_scale_[1]),
+            static_cast<float>(lo[2] * axis_scale_[2])};
+        const termin::Vec3f scaled_hi{
+            static_cast<float>(hi[0] * axis_scale_[0]),
+            static_cast<float>(hi[1] * axis_scale_[1]),
+            static_cast<float>(hi[2] * axis_scale_[2])};
         camera_.fit_bounds(
             termin::Vec3f{
-                static_cast<float>(lo[0]),
-                static_cast<float>(lo[1]),
-                static_cast<float>(lo[2])},
+                std::min(scaled_lo.x, scaled_hi.x),
+                std::min(scaled_lo.y, scaled_hi.y),
+                std::min(scaled_lo.z, scaled_hi.z)},
             termin::Vec3f{
-                static_cast<float>(hi[0]),
-                static_cast<float>(hi[1]),
-                static_cast<float>(hi[2])});
+                std::max(scaled_lo.x, scaled_hi.x),
+                std::max(scaled_lo.y, scaled_hi.y),
+                std::max(scaled_lo.z, scaled_hi.z)});
     }
 
     void reset_camera() {
@@ -513,14 +617,7 @@ public:
                 slot.gpu_revision = 0;
             }
         }
-        if (host_) {
-            if (color_.id != 0) host_->device().destroy(color_);
-            if (depth_.id != 0) host_->device().destroy(depth_);
-        }
-        color_ = {};
-        depth_ = {};
-        width_ = 0;
-        height_ = 0;
+        release_targets();
     }
 
 private:
@@ -628,7 +725,11 @@ private:
             grid.row_step = style.surface_grid_row_step;
             grid.col_step = style.surface_grid_col_step;
             grid.width_px = style.surface_grid_width_px;
-            grid.color = tcplot::Color4{0.04f, 0.04f, 0.04f, 1.0f};
+            grid.color = tcplot::Color4{
+                style.surface_grid_r,
+                style.surface_grid_g,
+                style.surface_grid_b,
+                style.surface_grid_a};
             if (!engine->set_surface_grid(0, grid)) {
                 throw std::runtime_error("failed to apply retained surface grid");
             }
@@ -680,7 +781,11 @@ private:
             grid.row_step = style.surface_grid_row_step;
             grid.col_step = style.surface_grid_col_step;
             grid.width_px = style.surface_grid_width_px;
-            grid.color = tcplot::Color4{0.04f, 0.04f, 0.04f, 1.0f};
+            grid.color = tcplot::Color4{
+                style.surface_grid_r,
+                style.surface_grid_g,
+                style.surface_grid_b,
+                style.surface_grid_a};
             if (!engine.set_surface_color(
                     0,
                     {style.color_r, style.color_g,
@@ -801,6 +906,8 @@ private:
         color_desc.usage = tgfx::TextureUsage::Sampled |
                            tgfx::TextureUsage::ColorAttachment |
                            tgfx::TextureUsage::CopySrc;
+        color_desc.sample_count =
+            static_cast<std::uint32_t>(msaa_samples_);
         color_ = host_->device().create_texture(color_desc);
 
         tgfx::TextureDesc depth_desc;
@@ -808,6 +915,8 @@ private:
         depth_desc.height = static_cast<std::uint32_t>(height);
         depth_desc.format = tgfx::PixelFormat::D24_UNorm;
         depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment;
+        depth_desc.sample_count =
+            static_cast<std::uint32_t>(msaa_samples_);
         depth_ = host_->device().create_texture(depth_desc);
         if (color_.id == 0 || depth_.id == 0) {
             throw std::runtime_error(
@@ -815,6 +924,17 @@ private:
         }
         width_ = width;
         height_ = height;
+    }
+
+    void release_targets() {
+        if (host_) {
+            if (color_.id != 0) host_->device().destroy(color_);
+            if (depth_.id != 0) host_->device().destroy(depth_);
+        }
+        color_ = {};
+        depth_ = {};
+        width_ = 0;
+        height_ = 0;
     }
 
     tcplot::GpuHost* host_;
@@ -839,6 +959,7 @@ private:
     tgfx::TextureHandle depth_{};
     int width_ = 0;
     int height_ = 0;
+    int msaa_samples_ = 4;
 };
 
 template <typename Result, typename Function>
@@ -926,6 +1047,21 @@ tc_plot_item3d_handle tc_retained_chart3d_add_surface(
         [&] { return chart->value.add_surface(x, y, z, rows, columns, resolved); });
 }
 
+int tc_retained_chart3d_surface_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle surface,
+    const double* x,
+    const double* y,
+    const double* z,
+    uint32_t rows,
+    uint32_t columns) {
+    if (!chart) return 0;
+    return logged("surface_set_data", 0, [&] {
+        return chart->value.set_surface_data(
+            surface, x, y, z, rows, columns) ? 1 : 0;
+    });
+}
+
 int tc_retained_chart3d_surface_set_style(
     tc_retained_chart3d* chart,
     tc_plot_item3d_handle surface,
@@ -955,6 +1091,20 @@ tc_plot_item3d_handle tc_retained_chart3d_add_scatter(
     return logged(
         "add_scatter", invalid_item(),
         [&] { return chart->value.add_scatter(x, y, z, count, resolved); });
+}
+
+int tc_retained_chart3d_scatter_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle scatter,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count) {
+    if (!chart) return 0;
+    return logged("scatter_set_data", 0, [&] {
+        return chart->value.set_scatter_data(
+            scatter, x, y, z, count) ? 1 : 0;
+    });
 }
 
 int tc_retained_chart3d_scatter_set_style(
@@ -1059,6 +1209,21 @@ int tc_retained_chart3d_set_axis_scale(
     });
 }
 
+int tc_retained_chart3d_set_msaa_samples(
+    tc_retained_chart3d* chart,
+    int samples) {
+    if (!chart) return 0;
+    return logged("set_msaa_samples", 0, [&] {
+        chart->value.set_msaa_samples(samples);
+        return 1;
+    });
+}
+
+int tc_retained_chart3d_msaa_samples(
+    const tc_retained_chart3d* chart) {
+    return chart ? chart->value.msaa_samples() : 0;
+}
+
 int tc_retained_chart3d_get_camera(
     const tc_retained_chart3d* chart,
     tc_orbit_camera3d_state* state) {
@@ -1075,6 +1240,10 @@ int tc_retained_chart3d_set_camera(
         chart->value.set_camera(*state);
         return 1;
     });
+}
+
+void tc_retained_chart3d_fit_camera(tc_retained_chart3d* chart) {
+    if (chart) chart->value.fit_camera();
 }
 
 void tc_retained_chart3d_reset_camera(tc_retained_chart3d* chart) {

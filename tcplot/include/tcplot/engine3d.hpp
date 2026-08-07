@@ -111,6 +111,18 @@ public:
     bool set_surface_color(size_t idx, Color4 color);
     bool set_surface_wireframe(size_t idx, bool wireframe);
     bool set_surface_grid(size_t idx, SurfaceGridOptions options);
+    bool set_surface_data(
+        size_t idx,
+        std::vector<double> x,
+        std::vector<double> y,
+        std::vector<double> z,
+        uint32_t rows,
+        uint32_t cols);
+    bool set_scatter_data(
+        size_t idx,
+        std::vector<double> x,
+        std::vector<double> y,
+        std::vector<double> z);
     bool set_scatter_style(size_t idx, Color4 color, double size);
     void set_grid_style(
         Color4 color,
