@@ -344,6 +344,13 @@ bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
     return true;
 }
 
+bool PlotEngine3D::set_surface_wireframe(size_t idx, bool wireframe) {
+    if (idx >= data.surfaces.size()) return false;
+    data.surfaces[idx].wireframe = wireframe;
+    dirty_ = true;
+    return true;
+}
+
 bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
     if (idx >= data.surfaces.size()) return false;
     SurfaceSeries& surf = data.surfaces[idx];
@@ -354,6 +361,26 @@ bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
     surf.grid_color = options.color;
     dirty_ = true;
     return true;
+}
+
+bool PlotEngine3D::set_scatter_style(
+    size_t idx,
+    Color4 color,
+    double size) {
+    if (idx >= data.scatters.size()) return false;
+    ScatterSeries& scatter = data.scatters[idx];
+    scatter.color = color;
+    scatter.size = size;
+    dirty_ = true;
+    return true;
+}
+
+void PlotEngine3D::set_grid_style(
+    Color4 color,
+    const std::array<Color4, 3>& colors) {
+    grid_color = color;
+    axis_colors = colors;
+    dirty_ = true;
 }
 
 void PlotEngine3D::toggle_marker_mode() {
@@ -405,6 +432,7 @@ void PlotEngine3D::release_meshes_() {
     surface_mesh_styles_.clear();
     wireframe_meshes_.clear();
     mesh_device_ = nullptr;
+    dirty_ = true;
 }
 
 void PlotEngine3D::release_gpu_resources() {

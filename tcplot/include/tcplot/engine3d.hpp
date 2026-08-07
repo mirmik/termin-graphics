@@ -109,7 +109,12 @@ public:
     bool set_surface_colormap(size_t idx, SurfaceColorMap colormap);
     bool set_surface_colormap_reversed(size_t idx, bool reversed);
     bool set_surface_color(size_t idx, Color4 color);
+    bool set_surface_wireframe(size_t idx, bool wireframe);
     bool set_surface_grid(size_t idx, SurfaceGridOptions options);
+    bool set_scatter_style(size_t idx, Color4 color, double size);
+    void set_grid_style(
+        Color4 color,
+        const std::array<Color4, 3>& axis_colors);
 
     void toggle_wireframe() { show_wireframe = !show_wireframe; }
     void toggle_marker_mode();

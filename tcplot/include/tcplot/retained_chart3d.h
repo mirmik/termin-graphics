@@ -165,16 +165,16 @@ TCPLOT_API void tc_retained_chart3d_set_axis_labels(
     const char* x_label,
     const char* y_label,
     const char* z_label);
-TCPLOT_API void tc_retained_chart3d_set_surface_shading(
+TCPLOT_API int tc_retained_chart3d_set_surface_shading(
     tc_retained_chart3d* chart,
     int enabled,
     float strength);
-TCPLOT_API void tc_retained_chart3d_set_light_direction(
+TCPLOT_API int tc_retained_chart3d_set_light_direction(
     tc_retained_chart3d* chart,
     float x,
     float y,
     float z);
-TCPLOT_API void tc_retained_chart3d_set_axis_scale(
+TCPLOT_API int tc_retained_chart3d_set_axis_scale(
     tc_retained_chart3d* chart,
     float x,
     float y,

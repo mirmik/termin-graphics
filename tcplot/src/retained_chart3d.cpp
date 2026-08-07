@@ -96,6 +96,51 @@ void validate(const tc_grid_item3d_style& style) {
     }
 }
 
+bool same_style(
+    const tc_surface_item3d_style& left,
+    const tc_surface_item3d_style& right) {
+    return left.color_r == right.color_r &&
+           left.color_g == right.color_g &&
+           left.color_b == right.color_b &&
+           left.color_a == right.color_a &&
+           left.colormap == right.colormap &&
+           left.colormap_reversed == right.colormap_reversed &&
+           left.wireframe == right.wireframe &&
+           left.surface_grid_visible == right.surface_grid_visible &&
+           left.surface_grid_row_step == right.surface_grid_row_step &&
+           left.surface_grid_col_step == right.surface_grid_col_step &&
+           left.surface_grid_width_px == right.surface_grid_width_px;
+}
+
+bool same_style(
+    const tc_scatter_item3d_style& left,
+    const tc_scatter_item3d_style& right) {
+    return left.color_r == right.color_r &&
+           left.color_g == right.color_g &&
+           left.color_b == right.color_b &&
+           left.color_a == right.color_a &&
+           left.size == right.size;
+}
+
+bool same_style(
+    const tc_grid_item3d_style& left,
+    const tc_grid_item3d_style& right) {
+    return left.grid_r == right.grid_r &&
+           left.grid_g == right.grid_g &&
+           left.grid_b == right.grid_b &&
+           left.grid_a == right.grid_a &&
+           left.x_axis_r == right.x_axis_r &&
+           left.x_axis_g == right.x_axis_g &&
+           left.x_axis_b == right.x_axis_b &&
+           left.y_axis_r == right.y_axis_r &&
+           left.y_axis_g == right.y_axis_g &&
+           left.y_axis_b == right.y_axis_b &&
+           left.z_axis_r == right.z_axis_r &&
+           left.z_axis_g == right.z_axis_g &&
+           left.z_axis_b == right.z_axis_b &&
+           left.labels_visible == right.labels_visible;
+}
+
 std::vector<double> copy_values(const double* values, std::size_t count) {
     if (!values || count == 0) {
         throw std::invalid_argument("retained 3D item data must not be empty");
@@ -210,9 +255,11 @@ public:
         Slot* slot = resolve(handle, TC_PLOT_ITEM3D_SURFACE);
         if (!slot) return false;
         validate(style);
+        if (same_style(slot->surface_style, style)) return true;
         slot->surface_style = style;
         ++slot->style_revision;
-        rebuild(*slot);
+        ++slot->render_revision;
+        apply_style(*slot);
         return true;
     }
 
@@ -222,9 +269,11 @@ public:
         Slot* slot = resolve(handle, TC_PLOT_ITEM3D_SCATTER);
         if (!slot) return false;
         validate(style);
+        if (same_style(slot->scatter_style, style)) return true;
         slot->scatter_style = style;
         ++slot->style_revision;
-        rebuild(*slot);
+        ++slot->render_revision;
+        apply_style(*slot);
         return true;
     }
 
@@ -234,9 +283,11 @@ public:
         Slot* slot = resolve(handle, TC_PLOT_ITEM3D_GRID);
         if (!slot) return false;
         validate(style);
+        if (same_style(slot->grid_style, style)) return true;
         slot->grid_style = style;
         ++slot->style_revision;
-        rebuild(*slot);
+        ++slot->render_revision;
+        apply_style(*slot);
         return true;
     }
 
@@ -420,6 +471,7 @@ public:
     void pointer_up() { dragging_ = false; }
 
     bool wheel(float delta) {
+        if (delta == 0 || !std::isfinite(delta)) return false;
         camera_.zoom(delta > 0 ? 0.9f : 1.0f / 0.9f);
         return true;
     }
@@ -456,7 +508,10 @@ public:
 
     void release_gpu() {
         for (Slot& slot : slots_) {
-            if (slot.engine) slot.engine->release_gpu_resources();
+            if (slot.engine) {
+                slot.engine->release_gpu_resources();
+                slot.gpu_revision = 0;
+            }
         }
         if (host_) {
             if (color_.id != 0) host_->device().destroy(color_);
@@ -608,6 +663,61 @@ private:
         }
         slot.engine = std::move(engine);
         ++slot.render_revision;
+        slot.gpu_revision = 0;
+    }
+
+    void apply_style(Slot& slot) {
+        if (!slot.engine) {
+            rebuild(slot);
+            return;
+        }
+
+        tcplot::PlotEngine3D& engine = *slot.engine;
+        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
+            const auto& style = slot.surface_style;
+            tcplot::SurfaceGridOptions grid;
+            grid.visible = style.surface_grid_visible != 0;
+            grid.row_step = style.surface_grid_row_step;
+            grid.col_step = style.surface_grid_col_step;
+            grid.width_px = style.surface_grid_width_px;
+            grid.color = tcplot::Color4{0.04f, 0.04f, 0.04f, 1.0f};
+            if (!engine.set_surface_color(
+                    0,
+                    {style.color_r, style.color_g,
+                     style.color_b, style.color_a}) ||
+                !engine.set_surface_colormap(0, colormap(style.colormap)) ||
+                !engine.set_surface_colormap_reversed(
+                    0, style.colormap_reversed != 0) ||
+                !engine.set_surface_wireframe(0, style.wireframe != 0) ||
+                !engine.set_surface_grid(0, grid)) {
+                throw std::runtime_error(
+                    "failed to apply retained surface style");
+            }
+        } else if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
+            const auto& style = slot.scatter_style;
+            if (!engine.set_scatter_style(
+                    0,
+                    {style.color_r, style.color_g,
+                     style.color_b, style.color_a},
+                    style.size)) {
+                throw std::runtime_error(
+                    "failed to apply retained scatter style");
+            }
+        } else if (slot.kind == TC_PLOT_ITEM3D_GRID) {
+            const auto& style = slot.grid_style;
+            engine.show_labels = style.labels_visible != 0;
+            engine.set_grid_style(
+                {style.grid_r, style.grid_g,
+                 style.grid_b, style.grid_a},
+                {
+                    tcplot::Color4{
+                        style.x_axis_r, style.x_axis_g, style.x_axis_b, 1},
+                    tcplot::Color4{
+                        style.y_axis_r, style.y_axis_g, style.y_axis_b, 1},
+                    tcplot::Color4{
+                        style.z_axis_r, style.z_axis_g, style.z_axis_b, 1},
+                });
+        }
         slot.gpu_revision = 0;
     }
 
@@ -914,38 +1024,38 @@ void tc_retained_chart3d_set_axis_labels(
         z_label ? z_label : "");
 }
 
-void tc_retained_chart3d_set_surface_shading(
+int tc_retained_chart3d_set_surface_shading(
     tc_retained_chart3d* chart,
     int enabled,
     float strength) {
-    if (!chart) return;
-    logged("set_surface_shading", false, [&] {
+    if (!chart) return 0;
+    return logged("set_surface_shading", 0, [&] {
         chart->value.set_shading(enabled != 0, strength);
-        return true;
+        return 1;
     });
 }
 
-void tc_retained_chart3d_set_light_direction(
+int tc_retained_chart3d_set_light_direction(
     tc_retained_chart3d* chart,
     float x,
     float y,
     float z) {
-    if (!chart) return;
-    logged("set_light_direction", false, [&] {
+    if (!chart) return 0;
+    return logged("set_light_direction", 0, [&] {
         chart->value.set_light(x, y, z);
-        return true;
+        return 1;
     });
 }
 
-void tc_retained_chart3d_set_axis_scale(
+int tc_retained_chart3d_set_axis_scale(
     tc_retained_chart3d* chart,
     float x,
     float y,
     float z) {
-    if (!chart) return;
-    logged("set_axis_scale", false, [&] {
+    if (!chart) return 0;
+    return logged("set_axis_scale", 0, [&] {
         chart->value.set_axis_scale(x, y, z);
-        return true;
+        return 1;
     });
 }
 

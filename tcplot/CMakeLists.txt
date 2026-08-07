@@ -194,6 +194,25 @@ if(TERMIN_BUILD_TESTS)
         termin_add_test_labels(
             tcplot_plot_marker_offscreen_test
             "termin:capability:vulkan")
+
+        add_executable(tcplot_retained_chart3d_test
+            tests/test_retained_chart3d.cpp)
+        target_link_libraries(tcplot_retained_chart3d_test PRIVATE
+            tcplot)
+        target_compile_definitions(tcplot_retained_chart3d_test PRIVATE
+            TCPLOT_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+        add_dependencies(tcplot_retained_chart3d_test termin_shaderc)
+        termin_set_rpath_test(tcplot_retained_chart3d_test)
+        add_test(NAME tcplot_retained_chart3d_test
+            COMMAND tcplot_retained_chart3d_test)
+        set_tests_properties(tcplot_retained_chart3d_test PROPERTIES
+            SKIP_RETURN_CODE 77
+            TIMEOUT 30
+            ENVIRONMENT
+                "TERMIN_SHADERC=$<TARGET_FILE:termin_shaderc>;TERMIN_BUILTIN_SHADER_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../termin-graphics/resources/builtin_shaders")
+        termin_add_test_labels(
+            tcplot_retained_chart3d_test
+            "termin:capability:vulkan")
     endif()
 endif()
 
