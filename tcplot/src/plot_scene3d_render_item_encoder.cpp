@@ -202,7 +202,7 @@ namespace tcplot {
             }
             context.bind_uniform_data("tcplot3d_draw", &draw, static_cast<uint32_t>(sizeof(draw)));
 
-            out_layout = {};
+            out_layout = tgfx::VertexLayoutDesc{};
             out_layout.stride = kPlot3DFloatsPerVertex * sizeof(float);
             out_layout.use_shader_input_locations = true;
             out_layout.attribute_count = 5;
