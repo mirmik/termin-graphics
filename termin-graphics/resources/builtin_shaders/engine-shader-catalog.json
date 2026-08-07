@@ -726,6 +726,17 @@
       }
     },
     {
+      "uuid": "termin-engine-output-transform",
+      "name": "OutputTransformEngineFS",
+      "language": "slang",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-output-transform.frag.slang",
+          "entry": "fs_main"
+        }
+      }
+    },
+    {
       "uuid": "termin-engine-multiview-tonemap",
       "name": "MultiviewTonemapEngineFS",
       "language": "slang",

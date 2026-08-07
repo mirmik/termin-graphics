@@ -1,4 +1,4 @@
-// Tonemap pass — HDR to LDR with ACES / Reinhard.
+// Linear HDR tone curve with ACES / Reinhard. No output encoding.
 //
 
 import termin_prelude;
