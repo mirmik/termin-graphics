@@ -19,6 +19,7 @@ namespace tcplot {
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_SURFACE = 0x54500001u;
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_SCATTER = 0x54500002u;
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_GRID = 0x54500003u;
+inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_LINE = 0x54500004u;
 
 // ASCII "tcplot3d" encoded as a stable adapter-owned 64-bit domain id.
 inline constexpr uint64_t PLOT_RENDER_ITEM_SOURCE_DOMAIN =
@@ -37,6 +38,7 @@ struct PlotScene3DItemRenderData {
     uint32_t columns = 0;
     tc_surface_item3d_style surface_style{};
     tc_scatter_item3d_style scatter_style{};
+    tc_line_item3d_style line_style{};
     tc_grid_item3d_style grid_style{};
 
     // Encoder-ready immutable stream. The layout is the builtin tcplot3d

@@ -127,7 +127,8 @@ namespace tcplot
         {
             return kind == PLOT_RENDER_ITEM_KIND_SURFACE ||
                    kind == PLOT_RENDER_ITEM_KIND_SCATTER ||
-                   kind == PLOT_RENDER_ITEM_KIND_GRID;
+                   kind == PLOT_RENDER_ITEM_KIND_GRID ||
+                   kind == PLOT_RENDER_ITEM_KIND_LINE;
         }
 
         bool
@@ -143,7 +144,9 @@ namespace tcplot
                    (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
                     payload.item->kind == TC_PLOT_ITEM3D_SCATTER) ||
                    (item.kind == PLOT_RENDER_ITEM_KIND_GRID &&
-                    payload.item->kind == TC_PLOT_ITEM3D_GRID);
+                    payload.item->kind == TC_PLOT_ITEM3D_GRID) ||
+                   (item.kind == PLOT_RENDER_ITEM_KIND_LINE &&
+                    payload.item->kind == TC_PLOT_ITEM3D_LINE);
         }
 
         termin::RenderItemTaskRejection plan_plot_scene3d_shader(
@@ -519,6 +522,66 @@ namespace tcplot
             return true;
         }
 
+        bool encode_line(tgfx::RenderContext2& context,
+                         const tc_render_item& item,
+                         const termin::RenderItemDrawSubmitRequest& request,
+                         void*)
+        {
+            const char* pass_name = request.debug_pass_name
+                                        ? request.debug_pass_name
+                                        : "PlotScene3DLine";
+            if (item.kind != PLOT_RENDER_ITEM_KIND_LINE ||
+                request.phase != TC_PHASE_OPAQUE || request.material_phase ||
+                !request.device || !request.draw_context ||
+                request.draw_context->viewport_width <= 0 ||
+                request.draw_context->viewport_height <= 0)
+            {
+                tc::Log::error("[%s] invalid retained line submission",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DRenderItemPayload* payload =
+                plot_scene3d_render_item_payload(item);
+            if (!payload || !payload->item ||
+                payload->item->kind != TC_PLOT_ITEM3D_LINE)
+            {
+                tc::Log::error("[%s] malformed retained line payload",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DItemRenderData& data = *payload->item;
+            if (data.draw_vertex_count == 0 ||
+                data.draw_vertices.size() !=
+                    static_cast<size_t>(data.draw_vertex_count) *
+                        kPlot3DFloatsPerVertex ||
+                data.draw_vertices.size() >
+                    std::numeric_limits<uint32_t>::max() / sizeof(float))
+            {
+                tc::Log::error("[%s] invalid retained line draw stream",
+                               pass_name);
+                return false;
+            }
+            tgfx::VertexLayoutDesc layout{};
+            if (!prepare_plot_scene3d_draw(
+                    context, request, *payload, data, false, pass_name, layout))
+            {
+                return false;
+            }
+            context.set_cull(tgfx::CullMode::None);
+            context.set_depth_write(true);
+            context.set_depth_test(true);
+            context.set_depth_func(tgfx::CompareOp::Less);
+            context.set_blend(true);
+            context.draw_transient_arrays(
+                data.draw_vertices.data(),
+                static_cast<uint32_t>(data.draw_vertices.size() *
+                                      sizeof(float)),
+                data.draw_vertex_count,
+                layout,
+                tgfx::PrimitiveTopology::LineList);
+            return true;
+        }
+
     } // namespace
 
     void build_plot_scene3d_surface_draw_stream(PlotScene3DItemRenderData& data)
@@ -669,6 +732,51 @@ namespace tcplot
             data.draw_vertices.size() / kPlot3DFloatsPerVertex);
     }
 
+    void build_plot_scene3d_line_draw_stream(PlotScene3DItemRenderData& data)
+    {
+        data.draw_vertices.clear();
+        data.draw_vertex_count = 0;
+        if (data.kind != TC_PLOT_ITEM3D_LINE || data.x.size() < 2 ||
+            data.x.size() != data.y.size() || data.x.size() != data.z.size())
+        {
+            tc::Log::error("[PlotScene3DLine] cannot build draw stream from "
+                           "mismatched data arrays");
+            return;
+        }
+        constexpr size_t kVerticesPerSegment = 2;
+        const size_t segment_count = data.x.size() - 1;
+        const size_t max_float_count =
+            std::numeric_limits<uint32_t>::max() / sizeof(float);
+        if (segment_count >
+            max_float_count /
+                (kVerticesPerSegment * kPlot3DFloatsPerVertex))
+        {
+            tc::Log::error("[PlotScene3DLine] draw stream exceeds the "
+                           "transient upload ABI");
+            return;
+        }
+        const tc_line_item3d_style& style = data.line_style;
+        data.draw_vertices.reserve(segment_count * kVerticesPerSegment *
+                                   kPlot3DFloatsPerVertex);
+        for (size_t index = 0; index < segment_count; ++index)
+        {
+            for (size_t endpoint = index; endpoint <= index + 1; ++endpoint)
+            {
+                append_line_vertex(
+                    data.draw_vertices,
+                    static_cast<float>(data.x[endpoint]),
+                    static_cast<float>(data.y[endpoint]),
+                    static_cast<float>(data.z[endpoint]),
+                    style.color_r,
+                    style.color_g,
+                    style.color_b,
+                    style.color_a);
+            }
+        }
+        data.draw_vertex_count = static_cast<uint32_t>(
+            data.draw_vertices.size() / kPlot3DFloatsPerVertex);
+    }
+
     void build_plot_scene3d_grid_draw_stream(
         PlotScene3DItemRenderData& data,
         const PlotScene3DFrameRenderState& frame)
@@ -811,6 +919,15 @@ namespace tcplot
                                    PLOT_RENDER_ITEM_KIND_GRID, descriptor))
                            {
                                tc::Log::error("[PlotScene3DGrid] failed to "
+                                              "register RenderItem encoder");
+                           }
+
+                           descriptor.encode = encode_line;
+                           descriptor.debug_name = "PlotScene3DLine";
+                           if (!termin::register_render_item_draw_encoder(
+                                   PLOT_RENDER_ITEM_KIND_LINE, descriptor))
+                           {
+                               tc::Log::error("[PlotScene3DLine] failed to "
                                               "register RenderItem encoder");
                            }
                        });

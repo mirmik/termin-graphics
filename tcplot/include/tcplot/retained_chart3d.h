@@ -22,7 +22,8 @@ typedef enum tc_plot_item3d_kind {
     TC_PLOT_ITEM3D_INVALID = 0,
     TC_PLOT_ITEM3D_SURFACE = 1,
     TC_PLOT_ITEM3D_SCATTER = 2,
-    TC_PLOT_ITEM3D_GRID = 3
+    TC_PLOT_ITEM3D_GRID = 3,
+    TC_PLOT_ITEM3D_LINE = 4
 } tc_plot_item3d_kind;
 
 typedef enum tc_plot_colormap3d {
@@ -59,6 +60,14 @@ typedef struct tc_scatter_item3d_style {
     float color_a;
     float size;
 } tc_scatter_item3d_style;
+
+typedef struct tc_line_item3d_style {
+    float color_r;
+    float color_g;
+    float color_b;
+    float color_a;
+    float thickness;
+} tc_line_item3d_style;
 
 typedef struct tc_grid_item3d_style {
     float grid_r;
@@ -98,6 +107,12 @@ typedef struct tc_orbit_camera3d_state {
 
 TCPLOT_API tc_retained_chart3d* tc_retained_chart3d_create(void* gpu_host);
 TCPLOT_API void tc_retained_chart3d_destroy(tc_retained_chart3d* chart);
+// A chart may be created before a graphics domain exists by passing null.
+// Attach the domain before the first render. Reattaching to the same host is
+// idempotent; changing hosts releases device-owned state first.
+TCPLOT_API int tc_retained_chart3d_attach_gpu_host(
+    tc_retained_chart3d* chart,
+    void* gpu_host);
 
 TCPLOT_API uint64_t tc_retained_chart3d_scene_id(
     const tc_retained_chart3d* chart);
@@ -161,6 +176,29 @@ TCPLOT_API int tc_retained_chart3d_scatter_get_style(
     const tc_retained_chart3d* chart,
     tc_plot_item3d_handle scatter,
     tc_scatter_item3d_style* style);
+
+TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_add_line(
+    tc_retained_chart3d* chart,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count,
+    const tc_line_item3d_style* style);
+TCPLOT_API int tc_retained_chart3d_line_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count);
+TCPLOT_API int tc_retained_chart3d_line_set_style(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    const tc_line_item3d_style* style);
+TCPLOT_API int tc_retained_chart3d_line_get_style(
+    const tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    tc_line_item3d_style* style);
 
 TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_add_grid(
     tc_retained_chart3d* chart,

@@ -664,9 +664,11 @@ void bind_tgfx2(nb::module_& m) {
     struct Tgfx2ContextHolder {
         tgfx::IRenderDevice*  device = nullptr;
         tgfx::RenderContext2* ctx    = nullptr;
+        tgfx::GraphicsHost* graphics_host = nullptr;
 
-        Tgfx2ContextHolder(tgfx::IRenderDevice* dev, tgfx::RenderContext2* rctx)
-            : device(dev), ctx(rctx) {}
+        Tgfx2ContextHolder(tgfx::IRenderDevice* dev, tgfx::RenderContext2* rctx,
+                           tgfx::GraphicsHost* host)
+            : device(dev), ctx(rctx), graphics_host(host) {}
     };
 
     // No default constructor exposed. Tgfx2Context is never created
@@ -689,7 +691,7 @@ void bind_tgfx2(nb::module_& m) {
                         "Tgfx2Context.from_runtime: runtime device is not the installed "
                         "application graphics device");
                 }
-                return new Tgfx2ContextHolder(dev, rctx);
+                return new Tgfx2ContextHolder(dev, rctx, &runtime);
             },
             nb::arg("runtime"),
             nb::rv_policy::take_ownership,
@@ -710,7 +712,8 @@ void bind_tgfx2(nb::module_& m) {
                         "Tgfx2Context.from_context: context device is not the "
                         "installed application graphics device");
                 }
-                return new Tgfx2ContextHolder(dev, &ctx);
+                return new Tgfx2ContextHolder(
+                    dev, &ctx, ctx.graphics_host());
             },
             nb::arg("ctx"),
             nb::rv_policy::take_ownership,
@@ -733,6 +736,17 @@ void bind_tgfx2(nb::module_& m) {
                 return *self.device;
             },
             nb::rv_policy::reference_internal)
+
+        .def_prop_ro("graphics_host",
+            [](Tgfx2ContextHolder& self) -> tgfx::GraphicsHost& {
+                if (!self.graphics_host) {
+                    throw std::runtime_error(
+                        "Tgfx2Context has no owning GraphicsHost");
+                }
+                return *self.graphics_host;
+            },
+            nb::rv_policy::reference_internal,
+            "The canonical GraphicsHost owning this context.")
 
         // Backend-neutral texture coordinate contract. Prefer this over
         // branching on the concrete backend name when deciding whether a

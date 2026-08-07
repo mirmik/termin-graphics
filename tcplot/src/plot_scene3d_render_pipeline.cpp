@@ -73,7 +73,8 @@ namespace tcplot
         {
             return kind == PLOT_RENDER_ITEM_KIND_SURFACE ||
                    kind == PLOT_RENDER_ITEM_KIND_GRID ||
-                   kind == PLOT_RENDER_ITEM_KIND_SCATTER;
+                   kind == PLOT_RENDER_ITEM_KIND_SCATTER ||
+                   kind == PLOT_RENDER_ITEM_KIND_LINE;
         }
 
         bool is_selected_grid(const tc_render_item& item,
@@ -96,6 +97,10 @@ namespace tcplot
             if (kind == PLOT_RENDER_ITEM_KIND_GRID)
             {
                 return "PlotScene3D grid";
+            }
+            if (kind == PLOT_RENDER_ITEM_KIND_LINE)
+            {
+                return "PlotScene3D line";
             }
             return "PlotScene3D scatter";
         }
@@ -236,9 +241,10 @@ namespace tcplot
                     internal_symbols_.push_back(task.debug_name);
                 }
 
-                constexpr std::array<std::uint32_t, 3> draw_order{
+                constexpr std::array<std::uint32_t, 4> draw_order{
                     PLOT_RENDER_ITEM_KIND_SURFACE,
                     PLOT_RENDER_ITEM_KIND_GRID,
+                    PLOT_RENDER_ITEM_KIND_LINE,
                     PLOT_RENDER_ITEM_KIND_SCATTER,
                 };
                 for (const std::uint32_t kind : draw_order)

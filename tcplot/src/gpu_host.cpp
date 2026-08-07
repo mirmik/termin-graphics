@@ -15,13 +15,18 @@ GpuHost::GpuHost(const std::string& ttf_path)
 GpuHost::GpuHost(const std::string& ttf_path, tgfx::BackendType backend) {
     owned_graphics_ = tgfx::GraphicsHost::create_application(backend);
     graphics_ = owned_graphics_.get();
-    font_ = std::make_unique<tgfx::FontAtlas>(ttf_path);
+    owned_font_ = std::make_unique<tgfx::FontAtlas>(ttf_path);
+    font_ = owned_font_.get();
 }
 
 GpuHost::GpuHost(const std::string& ttf_path, tgfx::GraphicsHost& graphics)
     : graphics_(&graphics) {
-    font_ = std::make_unique<tgfx::FontAtlas>(ttf_path);
+    owned_font_ = std::make_unique<tgfx::FontAtlas>(ttf_path);
+    font_ = owned_font_.get();
 }
+
+GpuHost::GpuHost(tgfx::GraphicsHost& graphics, tgfx::FontAtlas& font)
+    : graphics_(&graphics), font_(&font) {}
 
 GpuHost::~GpuHost() = default;
 

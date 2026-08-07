@@ -200,6 +200,42 @@ int main() {
         tcplot::GpuHost host(
             TCPLOT_TEST_FONT,
             tgfx::BackendType::Vulkan);
+        tc_retained_chart3d* detached = tc_retained_chart3d_create(nullptr);
+        require(detached != nullptr, "failed to create detached chart");
+        const double line_x[] = {-1.0, 0.0, 1.0};
+        const double line_y[] = {0.0, 1.0, 0.0};
+        const double line_z[] = {0.0, 0.5, 1.0};
+        tc_line_item3d_style line_style{
+            0.2f, 0.6f, 1.0f, 1.0f, 2.0f,
+        };
+        const tc_plot_item3d_handle line = tc_retained_chart3d_add_line(
+            detached, line_x, line_y, line_z, 3, &line_style);
+        require(
+            tc_retained_chart3d_item_is_valid(detached, line) != 0,
+            "detached chart must accept CPU line data before GPU attachment");
+        termin::RenderItemSnapshot detached_snapshot;
+        require(
+            tcplot::plot_scene3d_render_item_source(*detached).publish(
+                detached_snapshot,
+                {.debug_name = "DetachedPlotScene3D"}),
+            "detached chart snapshot publication failed");
+        const tc_render_item* line_render_item =
+            find_render_item(detached_snapshot, line);
+        require(
+            detached_snapshot.item_count() == 2 && line_render_item &&
+                line_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_LINE,
+            "detached chart did not publish its retained line item");
+        const auto* line_payload =
+            tcplot::plot_scene3d_render_item_payload(*line_render_item);
+        require(
+            line_payload && line_payload->item &&
+                line_payload->item->draw_vertex_count == 4,
+            "retained line draw stream must contain two line segments");
+        require(
+            tc_retained_chart3d_attach_gpu_host(detached, &host) != 0,
+            "failed to attach detached chart to its GPU host");
+        tc_retained_chart3d_destroy(detached);
+
         tc_retained_chart3d* chart = tc_retained_chart3d_create(&host);
         tc_retained_chart3d* other = tc_retained_chart3d_create(&host);
         require(chart != nullptr && other != nullptr, "failed to create charts");

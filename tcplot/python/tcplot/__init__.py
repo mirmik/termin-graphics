@@ -30,6 +30,8 @@ from tcplot._tcplot_native import (
     PlotDataMarkerSnapshot2D,
     PlotEngine2D,
     PlotEngine3D,
+    RetainedChart3D,
+    PlotItem3DHandle,
     SurfaceColorMap,
     MouseButton,
 )
@@ -48,6 +50,8 @@ __all__ = [
     "Plot3D",
     "PlotEngine2D",
     "PlotEngine3D",
+    "RetainedChart3D",
+    "PlotItem3DHandle",
     "PlotData",
     "LineSeries",
     "ScatterSeries",

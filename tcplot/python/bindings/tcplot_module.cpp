@@ -9,15 +9,18 @@ namespace tcplot_bindings {
     void bind_camera(nb::module_& m);
     void bind_annotations(nb::module_& m);
     void bind_engines(nb::module_& m);
+    void bind_retained_chart3d(nb::module_& m);
 }
 
 NB_MODULE(_tcplot_native, m) {
     m.doc() = "tcplot native Python bindings";
 
     nb::module_::import_("tcbase._geom_native");
+    nb::module_::import_("tgfx._tgfx_native");
 
     tcplot_bindings::bind_colors_and_data(m);
     tcplot_bindings::bind_camera(m);
     tcplot_bindings::bind_annotations(m);
     tcplot_bindings::bind_engines(m);
+    tcplot_bindings::bind_retained_chart3d(m);
 }
