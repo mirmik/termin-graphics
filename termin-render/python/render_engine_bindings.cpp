@@ -22,7 +22,20 @@ void bind_render_engine(nb::module_& m) {
         .def("ensure_tgfx2", &RenderEngine::ensure_tgfx2)
         .def(
             "configure_shader_artifacts",
-            &RenderEngine::configure_shader_artifacts,
+            [](
+                RenderEngine& self,
+                const std::string& artifact_root,
+                const std::string& cache_root,
+                const std::string& compiler_path,
+                bool dev_compile_enabled
+            ) {
+                self.configure_shader_artifacts(
+                    artifact_root,
+                    cache_root,
+                    compiler_path,
+                    dev_compile_enabled
+                );
+            },
             nb::arg("artifact_root"),
             nb::arg("cache_root"),
             nb::arg("compiler_path") = "",

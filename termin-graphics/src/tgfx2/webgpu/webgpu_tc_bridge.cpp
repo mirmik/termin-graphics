@@ -6,8 +6,6 @@
 #include "tgfx2/tc_texture_upload.hpp"
 
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <span>
 #include <string>
 
@@ -38,13 +36,16 @@ TextureUsage tc_usage_to_tgfx(uint32_t usage) {
     return static_cast<TextureUsage>(result);
 }
 
-bool read_text_file(const std::string& path, std::string& result) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
+bool read_text_file(
+    const termin::ShaderArtifactResolver& resolver,
+    const std::string& path,
+    std::string& result) {
+    std::vector<std::uint8_t> bytes;
+    if (!resolver.read_artifact(path, bytes)) {
         tc::Log::error("WebGpuRenderDevice: missing shader layout sidecar '%s'", path.c_str());
         return false;
     }
-    result.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    result.assign(bytes.begin(), bytes.end());
     if (result.empty()) {
         tc::Log::error("WebGpuRenderDevice: empty shader layout sidecar '%s'", path.c_str());
         return false;
@@ -70,7 +71,8 @@ bool load_webgpu_stage(
             resolver, shader->uuid, BackendType::WebGPU, stage, artifact_path)) {
         return false;
     }
-    return read_text_file(artifact_path + ".layout.json", desc.resource_layout_json);
+    return read_text_file(
+        resolver, artifact_path + ".layout.json", desc.resource_layout_json);
 }
 
 } // namespace

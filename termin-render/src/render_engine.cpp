@@ -329,13 +329,16 @@ void RenderEngine::configure_shader_artifacts(
     const std::string& artifact_root,
     const std::string& cache_root,
     const std::string& compiler_path,
-    bool dev_compile_enabled
+    bool dev_compile_enabled,
+    ShaderArtifactResolver::ReadCallback read_callback
 ) {
     shader_artifact_resolver_ = std::make_unique<ShaderArtifactResolver>(
         artifact_root,
         cache_root,
         compiler_path,
-        dev_compile_enabled
+        dev_compile_enabled,
+        false,
+        std::move(read_callback)
     );
     if (graphics_host_) {
         graphics_host_->configure_shader_artifacts(*shader_artifact_resolver_);

@@ -61,12 +61,14 @@ ShaderArtifactResolver::ShaderArtifactResolver(
     std::string cache_root,
     std::string compiler_path,
     bool dev_compile_enabled,
-    bool environment_fallback
+    bool environment_fallback,
+    ReadCallback read_callback
 ) : artifact_root_(std::move(artifact_root)),
     cache_root_(std::move(cache_root)),
     compiler_path_(std::move(compiler_path)),
     dev_compile_enabled_(dev_compile_enabled),
-    environment_fallback_(environment_fallback) {
+    environment_fallback_(environment_fallback),
+    read_callback_(std::move(read_callback)) {
 }
 
 const std::string& ShaderArtifactResolver::artifact_root() const {
@@ -101,16 +103,30 @@ bool ShaderArtifactResolver::dev_compile_enabled() const {
     return value && value[0] == '1';
 }
 
+bool ShaderArtifactResolver::read_artifact(
+    std::string_view path,
+    std::vector<std::uint8_t>& out) const {
+    if (read_callback_) return read_callback_(path, out);
+    std::ifstream input(std::filesystem::path(path), std::ios::binary);
+    if (!input) return false;
+    out.assign(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>());
+    return !out.empty();
+}
+
 void ShaderArtifactResolver::configure(
     std::string artifact_root,
     std::string cache_root,
     std::string compiler_path,
-    bool dev_compile_enabled
+    bool dev_compile_enabled,
+    ReadCallback read_callback
 ) {
     artifact_root_ = std::move(artifact_root);
     cache_root_ = std::move(cache_root);
     compiler_path_ = std::move(compiler_path);
     dev_compile_enabled_ = dev_compile_enabled;
+    read_callback_ = std::move(read_callback);
     ++revision_;
 }
 
@@ -1148,6 +1164,7 @@ static bool attach_shader_contract_from_resource_layout(
 }
 
 static bool apply_shader_resource_layout_sidecar(
+    const ShaderArtifactResolver& resolver,
     tc_shader* shader,
     const std::filesystem::path& artifact_path
 ) {
@@ -1156,19 +1173,18 @@ static bool apply_shader_resource_layout_sidecar(
     }
 
     const std::filesystem::path sidecar = shader_resource_layout_sidecar_path(artifact_path);
-    std::error_code ec;
-    if (!std::filesystem::exists(sidecar, ec) ||
-        std::filesystem::is_directory(sidecar, ec)) {
-        return true;
-    }
-
-    std::string text;
-    if (!read_text_file(sidecar, text)) {
+    std::vector<std::uint8_t> bytes;
+    if (!resolver.read_artifact(sidecar.generic_string(), bytes)) {
+        if (resolver.has_read_callback()) return true;
+        std::error_code ec;
+        if (!std::filesystem::exists(sidecar, ec) ||
+                std::filesystem::is_directory(sidecar, ec)) return true;
         tc_log(TC_LOG_ERROR,
                "tgfx2 shader resource layout: failed to read '%s'",
                sidecar.string().c_str());
         return false;
     }
+    const std::string text(bytes.begin(), bytes.end());
 
     std::vector<tc_shader_resource_binding> incoming;
     if (!parse_shader_resource_layout_sidecar(text, incoming)) {
@@ -1546,7 +1562,7 @@ bool tgfx2_shader_artifact_path(
                shader_uuid ? shader_uuid : "<null>");
         return false;
     }
-    if (root.empty()) {
+    if (root.empty() && !resolver.has_read_callback()) {
         return false;
     }
 
@@ -1560,8 +1576,9 @@ bool tgfx2_shader_artifact_path(
         return false;
     }
 
-    out = root + "/shaders/" + backend_dir + "/"
-        + shader_uuid + "." + stage_suffix + "." + artifact_ext;
+    out = root.empty() ? std::string() : root + "/";
+    out += "shaders/" + std::string(backend_dir) + "/" + shader_uuid +
+        "." + stage_suffix + "." + artifact_ext;
     return true;
 }
 
@@ -1592,13 +1609,10 @@ static bool load_shader_artifact_for_backend(
         return false;
     }
 
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
+    if (!resolver.read_artifact(path, out)) {
         tc_log(TC_LOG_ERROR, "tgfx2_load_shader_artifact: missing shader artifact '%s'", path.c_str());
         return false;
     }
-
-    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     if (out.empty()) {
         tc_log(TC_LOG_ERROR, "tgfx2_load_shader_artifact: empty shader artifact '%s'", path.c_str());
         return false;
@@ -1644,7 +1658,7 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
         if (!load_shader_artifact_for_backend(resolver, shader->uuid, backend, stage, out)) {
             return false;
         }
-        return apply_shader_resource_layout_sidecar(shader, artifact_path);
+        return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
     }
 
     const tc_shader_language language = (tc_shader_language)shader->language;
@@ -1674,10 +1688,10 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
                 stage,
                 compiler_fingerprint,
                 dependency_fingerprint)) {
-            return apply_shader_resource_layout_sidecar(shader, artifact_path);
+            return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
         }
         if (!supported) {
-            return apply_shader_resource_layout_sidecar(shader, artifact_path);
+            return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
         }
     } else if (!supported) {
         if (tc_shader_requires_artifacts(shader)) {
@@ -1708,7 +1722,7 @@ bool tgfx2_load_or_compile_shader_artifact_for_backend(
     if (!read_binary_file(artifact_path, out)) {
         return false;
     }
-    return apply_shader_resource_layout_sidecar(shader, artifact_path);
+    return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
 }
 
 bool tgfx2_load_or_compile_shader_artifact_for_backend(

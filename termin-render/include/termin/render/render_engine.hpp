@@ -102,7 +102,8 @@ public:
         const std::string& artifact_root,
         const std::string& cache_root,
         const std::string& compiler_path,
-        bool dev_compile_enabled
+        bool dev_compile_enabled,
+        ShaderArtifactResolver::ReadCallback read_callback = {}
     );
 
     RenderPipelineCacheStats pipeline_cache_stats() const;

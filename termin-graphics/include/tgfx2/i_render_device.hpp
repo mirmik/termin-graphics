@@ -37,12 +37,7 @@ public:
     virtual ~IRenderDevice() = default;
 
     void configure_shader_artifacts(const termin::ShaderArtifactResolver& resolver) {
-        shader_artifact_resolver_.configure(
-            resolver.artifact_root(),
-            resolver.cache_root(),
-            resolver.compiler_path(),
-            resolver.dev_compile_enabled()
-        );
+        shader_artifact_resolver_ = resolver;
         shader_artifact_resolver_configured_ = true;
     }
 
