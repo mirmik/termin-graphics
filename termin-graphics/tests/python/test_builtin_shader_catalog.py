@@ -30,7 +30,7 @@ def test_builtin_shader_manifest_is_complete_and_resolves_every_source() -> None
     catalog = json.loads((source_root / "engine-shader-catalog.json").read_text())
 
     assert _catalog_module().validate_catalog(catalog, source_root) == []
-    assert len(catalog["shaders"]) == 55
+    assert len(catalog["shaders"]) == 52
     assert all(
         shader["uuid"] != "termin-engine-foliage-shadow"
         for shader in catalog["shaders"]

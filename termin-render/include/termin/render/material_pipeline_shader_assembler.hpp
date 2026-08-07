@@ -37,6 +37,13 @@ namespace termin {
     struct MaterialPipelinePassContract {
         std::string debug_name;
 
+        // A pass may preserve an authored static vertex stage only when that
+        // stage is itself a complete, compatible implementation of the pass
+        // output ABI. Mono final-color passes can opt in; multiview and
+        // pass-owned output adapters must leave this disabled so assembly or
+        // explicit rejection remains authoritative.
+        bool allows_authored_vertex_stage = false;
+
         // Pass-owned material/shader ABI intent. This structure is deliberately
         // independent from drawable phase labels: a pass with phase_mark="opaque",
         // "depth", "actor_attribute", or any project-owned label can request any

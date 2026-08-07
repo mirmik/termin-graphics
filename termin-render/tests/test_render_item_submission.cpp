@@ -579,6 +579,7 @@ FragmentOutput fs_main() {
     item.payload.mesh.mesh_handle = mesh_handle;
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "static_color";
+    shader_contract.allows_authored_vertex_stage = true;
     shader_contract.required_material_fragment_input = termin::material_pipeline_standard_material_fragment_interface();
     shader_contract.vertex_output_adapter = termin::material_pipeline_standard_material_vertex_output_adapter();
     shader_contract.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(
@@ -609,6 +610,17 @@ FragmentOutput fs_main() {
     CHECK(termin::material_mesh_vertex_input_for_shader(tc_shader_get(task.final_shader),
                                                         termin::MaterialMeshVertexInput::FullMaterial) ==
           termin::MaterialMeshVertexInput::Position);
+
+    termin::MaterialPipelinePassContract multiview_contract = shader_contract;
+    multiview_contract.debug_name = "multiview_color";
+    multiview_contract.allows_authored_vertex_stage = false;
+    multiview_contract.vertex_output_adapter = termin::material_pipeline_multiview_material_vertex_output_adapter();
+    contract.shader_contract = &multiview_contract;
+    termin::RenderTaskList multiview_tasks;
+    termin::RenderItemTaskPlanningResult multiview_result =
+        termin::plan_render_item_task(request, multiview_tasks);
+    CHECK(multiview_result.rejection == termin::RenderItemTaskRejection::MeshVertexInputMismatch);
+    CHECK(multiview_tasks.empty());
 
     tc_mesh_shutdown();
     tc_material_shutdown();

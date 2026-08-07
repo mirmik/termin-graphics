@@ -386,6 +386,7 @@ namespace termin {
         const bool authored_static_material_shader =
             request.vertex_transform_kind == VertexTransformKind::StaticMesh &&
             !request.vertex_transform_contract.has_value() && shader_variant_op == TC_SHADER_VARIANT_NONE &&
+            pass_contract.allows_authored_vertex_stage &&
             pass_contract.fragment_composition == MaterialFragmentComposition::FinalColor &&
             original_shader.is_executable() && pass_contract.fragment_source_override.empty() &&
             original_shader.vertex_source()[0] != '\0';

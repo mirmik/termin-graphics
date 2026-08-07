@@ -272,6 +272,7 @@ FragmentOutput consume_test_surface_b(FragmentInput input) {
     termin::MaterialPipelinePassContract material_pass_contract() {
         termin::MaterialPipelinePassContract contract;
         contract.debug_name = "assembler_material_pass";
+        contract.allows_authored_vertex_stage = true;
         contract.required_material_fragment_input = termin::material_pipeline_standard_material_fragment_interface();
         contract.vertex_output_adapter = termin::material_pipeline_standard_material_vertex_output_adapter();
         contract.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(

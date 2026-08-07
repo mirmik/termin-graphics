@@ -88,8 +88,6 @@ typedef struct tc_render_item_line_batch_payload {
     const tc_render_item_vec3* points;
     size_t point_count;
     float width;
-    uint32_t render_mode;
-    tc_render_item_vec3 up_hint;
     int32_t tube_sides;
 } tc_render_item_line_batch_payload;
 
