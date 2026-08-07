@@ -29,6 +29,13 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_visual_scene REQUIRED)
 endif()
+if(COMMAND termin_require_package)
+    termin_require_package(
+        termin_render_core
+        termin_render_core::termin_render_core)
+else()
+    find_package(termin_render_core REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
@@ -92,6 +99,7 @@ target_link_libraries(tcplot PUBLIC
     tmesh::termin_mesh
     tgfx::termin_graphics2
     termin_visual_scene::termin_visual_scene
+    termin_render_core::termin_render_core
 )
 
 set_target_properties(tcplot PROPERTIES

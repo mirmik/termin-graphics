@@ -10,8 +10,19 @@
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
+#include <termin/render/builtin_passes.hpp>
+#include <termin/render/execute_context.hpp>
+#include <termin/render/frame_pass.hpp>
+#include <termin/render/render_engine.hpp>
+#include <termin/render/render_pipeline.hpp>
+
 #include "tcplot/gpu_host.hpp"
+#include "tcplot/plot_scene3d_render_item_source.hpp"
 #include "tcplot/retained_chart3d.h"
+
+extern "C" {
+#include <render/tc_pass.h>
+}
 
 namespace {
 
@@ -45,6 +56,86 @@ bool same_snapshot(
            left.geometry_revision == right.geometry_revision &&
            left.style_revision == right.style_revision &&
            left.gpu_revision == right.gpu_revision;
+}
+
+const tc_render_item* find_render_item(
+    const termin::RenderItemSnapshot& snapshot,
+    tc_plot_item3d_handle handle) {
+    for (const tc_render_item& item : snapshot.items()) {
+        if (item.source.namespace_id == handle.scene_id &&
+            item.source.object_id == handle.index &&
+            item.source.generation == handle.generation) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+constexpr const char* kPlotSnapshotProbeType = "PlotScene3DSnapshotProbe";
+const termin::RenderItemSnapshot* g_probe_snapshot = nullptr;
+std::size_t g_probe_item_count = 0;
+bool g_probe_executed = false;
+
+class PlotSnapshotProbe final : public termin::CxxFramePass {
+public:
+    PlotSnapshotProbe() {
+        pass_name_set(kPlotSnapshotProbeType);
+        link_to_type_registry(kPlotSnapshotProbeType);
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        g_probe_snapshot = context.render_item_snapshot;
+        g_probe_item_count = context.render_item_snapshot
+            ? context.render_item_snapshot->item_count()
+            : 0;
+        g_probe_executed = true;
+    }
+};
+
+void execute_snapshot_probe(
+    const termin::RenderItemSnapshot& snapshot,
+    tcplot::GpuHost& host) {
+    if (!tc_pass_registry_has("CxxFramePass")) {
+        termin::register_builtin_render_pass_types();
+    }
+    tc_pass_registry_unregister(kPlotSnapshotProbeType);
+    auto descriptor =
+        termin::FramePassTypeDescriptorBuilder::native<PlotSnapshotProbe>(
+            kPlotSnapshotProbeType,
+            "tcplot-test");
+    require(descriptor.commit(), "failed to register plot snapshot probe");
+
+    termin::RenderPipeline pipeline("plot-scene3d-source-test");
+    require(pipeline.is_valid(), "failed to create plot snapshot probe pipeline");
+    tc_pass* pass = tc_pass_registry_create(kPlotSnapshotProbeType);
+    require(pass != nullptr, "failed to create plot snapshot probe pass");
+    pipeline.add_pass(pass);
+
+    termin::RenderTargetContext target;
+    target.name = "PlotScene3DTarget";
+    target.render_rect = {0, 0, 1, 1};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name, termin::RenderExecutionTarget{
+        .context = &target,
+        .render_items = &snapshot,
+    });
+
+    g_probe_snapshot = nullptr;
+    g_probe_item_count = 0;
+    g_probe_executed = false;
+    termin::RenderEngine engine;
+    engine.set_graphics_host(host.graphics());
+    engine.execute_pipeline(execution);
+    require(g_probe_executed, "generic render pipeline did not execute plot probe");
+    require(g_probe_snapshot == &snapshot, "plot probe received another snapshot");
+    require(
+        g_probe_item_count == snapshot.item_count(),
+        "plot probe observed the wrong item count");
+
+    pipeline.destroy();
+    tc_pass_registry_unregister(kPlotSnapshotProbeType);
 }
 
 }  // namespace
@@ -84,6 +175,23 @@ int main() {
             tc_retained_chart3d_item_count(chart) == 1,
             "chart must create one default grid part");
 
+        termin::RenderItemSnapshot empty_snapshot;
+        const tc_plot_item3d_handle other_grid =
+            tc_retained_chart3d_grid_part(other);
+        require(
+            tc_retained_chart3d_destroy_item(other, other_grid) != 0,
+            "failed to remove the other chart default grid");
+        termin::RenderItemSource& empty_source =
+            tcplot::plot_scene3d_render_item_source(*other);
+        require(
+            empty_source.publish(empty_snapshot, {.debug_name = "EmptyPlotScene3D"}),
+            "empty PlotScene3D source publication failed");
+        require(
+            empty_snapshot.valid() && empty_snapshot.item_count() == 0 &&
+                empty_snapshot.counters().source_traversals == 1 &&
+                empty_snapshot.counters().producers == 0,
+            "empty PlotScene3D snapshot counters are invalid");
+
         const double x[] = {-1.0, 1.0, -1.0, 1.0};
         const double y[] = {-1.0, -1.0, 1.0, 1.0};
         const double z[] = {0.0, 0.5, 1.0, 0.25};
@@ -117,6 +225,57 @@ int main() {
                 chart,
                 scatter_x, scatter_y, scatter_z,
                 3, &scatter_style);
+
+        termin::RenderItemSource& render_item_source =
+            tcplot::plot_scene3d_render_item_source(*chart);
+        termin::RenderViewState first_view;
+        termin::RenderViewState second_view;
+        termin::RenderItemSnapshot first_render_snapshot;
+        termin::RenderItemSnapshot second_render_snapshot;
+        require(
+            render_item_source.publish(
+                first_render_snapshot,
+                {.view = &first_view, .debug_name = "PlotScene3D first view"}),
+            "first PlotScene3D source publication failed");
+        require(
+            render_item_source.publish(
+                second_render_snapshot,
+                {.view = &second_view, .debug_name = "PlotScene3D second view"}),
+            "second PlotScene3D source publication failed");
+        require(
+            first_render_snapshot.valid() && second_render_snapshot.valid() &&
+                first_render_snapshot.item_count() == 3 &&
+                second_render_snapshot.item_count() == 3,
+            "multi-view PlotScene3D snapshots must remain independently valid");
+        require(
+            first_render_snapshot.counters().source_traversals == 1 &&
+                first_render_snapshot.counters().producers == 3,
+            "PlotScene3D snapshot counters are invalid");
+
+        const tc_render_item* surface_render_item =
+            find_render_item(first_render_snapshot, surface);
+        const tc_render_item* scatter_render_item =
+            find_render_item(first_render_snapshot, scatter);
+        const tc_render_item* grid_render_item = find_render_item(
+            first_render_snapshot,
+            tc_retained_chart3d_grid_part(chart));
+        require(
+            surface_render_item && scatter_render_item && grid_render_item,
+            "PlotScene3D snapshot lost retained item identity");
+        require(
+            surface_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_SURFACE &&
+                scatter_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_SCATTER &&
+                grid_render_item->kind == tcplot::PLOT_RENDER_ITEM_KIND_GRID,
+            "PlotScene3D snapshot published incorrect item kinds");
+        for (const tc_render_item& item : first_render_snapshot.items()) {
+            require(
+                item.source.domain_id == tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN &&
+                    item.source.namespace_id ==
+                        tc_retained_chart3d_scene_id(chart) &&
+                    item.source.adapter_data == 0,
+                "PlotScene3D item identity must be scene-neutral value data");
+        }
+        execute_snapshot_probe(first_render_snapshot, host);
 
         const auto surface_initial = snapshot(chart, surface);
         const auto scatter_initial = snapshot(chart, scatter);
@@ -218,6 +377,13 @@ int main() {
         require(
             tc_retained_chart3d_item_is_valid(chart, scatter) == 0,
             "destroyed handle must be stale");
+        termin::RenderItemSnapshot after_destroy_snapshot;
+        require(
+            render_item_source.publish(after_destroy_snapshot, {}),
+            "PlotScene3D publication after destroy failed");
+        require(
+            find_render_item(after_destroy_snapshot, scatter) == nullptr,
+            "destroyed item must disappear from PlotScene3D snapshots");
         const tc_plot_item3d_handle replacement =
             tc_retained_chart3d_add_scatter(
                 chart,
@@ -227,6 +393,14 @@ int main() {
             replacement.index == scatter.index &&
                 replacement.generation != scatter.generation,
             "reused slot must advance its generation");
+        termin::RenderItemSnapshot replacement_snapshot;
+        require(
+            render_item_source.publish(replacement_snapshot, {}),
+            "PlotScene3D publication after slot reuse failed");
+        require(
+            find_render_item(replacement_snapshot, scatter) == nullptr &&
+                find_render_item(replacement_snapshot, replacement) != nullptr,
+            "PlotScene3D snapshot must publish only the live slot generation");
         require(
             tc_retained_chart3d_destroy_item(chart, scatter) == 0,
             "stale handle must not destroy replacement item");

@@ -1,4 +1,5 @@
 #include "tcplot/retained_chart3d.h"
+#include "tcplot/plot_scene3d_render_item_source.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -22,6 +23,24 @@
 #include "tcplot/gpu_host.hpp"
 
 namespace {
+
+class RetainedChart3D;
+
+class PlotScene3DRenderItemSource final : public termin::RenderItemSource {
+public:
+    explicit PlotScene3DRenderItemSource(RetainedChart3D& scene)
+        : scene_(&scene) {}
+
+protected:
+    const char* source_name() const noexcept override;
+    bool collect_items(
+        const termin::RenderItemSourceRequest& request,
+        termin::RenderItemCollection& output,
+        termin::RenderItemSnapshotCounters& counters) override;
+
+private:
+    RetainedChart3D* scene_;
+};
 
 std::atomic<std::uint64_t> g_next_plot_scene3d_id{1};
 
@@ -621,6 +640,8 @@ public:
     }
 
 private:
+    friend class PlotScene3DRenderItemSource;
+
     struct Slot {
         std::uint32_t index = 0;
         std::uint32_t generation = 1;
@@ -962,6 +983,58 @@ private:
     int msaa_samples_ = 4;
 };
 
+const char* PlotScene3DRenderItemSource::source_name() const noexcept {
+    return "PlotScene3DRenderItemSource";
+}
+
+bool PlotScene3DRenderItemSource::collect_items(
+    const termin::RenderItemSourceRequest&,
+    termin::RenderItemCollection& output,
+    termin::RenderItemSnapshotCounters& counters) {
+    if (!scene_) {
+        tc::Log::error(
+            "[PlotScene3DRenderItemSource] retained chart scene is unavailable");
+        return false;
+    }
+
+    counters.source_traversals = 1;
+    for (const RetainedChart3D::Slot& slot : scene_->slots_) {
+        if (!slot.alive) {
+            continue;
+        }
+
+        uint32_t render_kind = TC_RENDER_ITEM_KIND_INVALID;
+        switch (slot.kind) {
+            case TC_PLOT_ITEM3D_SURFACE:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_SURFACE;
+                break;
+            case TC_PLOT_ITEM3D_SCATTER:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_SCATTER;
+                break;
+            case TC_PLOT_ITEM3D_GRID:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_GRID;
+                break;
+            default:
+                tc::Log::error(
+                    "[PlotScene3DRenderItemSource] unsupported retained item kind %u",
+                    static_cast<unsigned>(slot.kind));
+                return false;
+        }
+
+        tc_render_item item{};
+        item.kind = render_kind;
+        item.source.domain_id = tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN;
+        item.source.namespace_id = scene_->scene_id_;
+        item.source.object_id = slot.index;
+        item.source.generation = slot.generation;
+        item.source.subobject_id = 0;
+        item.source.adapter_data = 0;
+        output.items.push_back(item);
+        ++counters.producers;
+    }
+    return true;
+}
+
 template <typename Result, typename Function>
 Result logged(const char* operation, Result failure, Function&& function) {
     try {
@@ -980,9 +1053,19 @@ Result logged(const char* operation, Result failure, Function&& function) {
 
 struct tc_retained_chart3d {
     explicit tc_retained_chart3d(tcplot::GpuHost& host)
-        : value(host) {}
+        : value(host), render_item_source(value) {}
     RetainedChart3D value;
+    PlotScene3DRenderItemSource render_item_source;
 };
+
+namespace tcplot {
+
+termin::RenderItemSource& plot_scene3d_render_item_source(
+    tc_retained_chart3d& chart) {
+    return chart.render_item_source;
+}
+
+} // namespace tcplot
 
 extern "C" {
 
