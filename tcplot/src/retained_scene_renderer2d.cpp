@@ -91,6 +91,19 @@ public:
         clear_color_[3] = a;
     }
 
+    void set_msaa_samples(int samples) {
+        if (samples < 1 || samples > 16 ||
+            (samples & (samples - 1)) != 0) {
+            throw std::invalid_argument(
+                "MSAA samples must be a power of two between 1 and 16");
+        }
+        if (samples == msaa_samples_) return;
+        msaa_samples_ = samples;
+        release_target();
+    }
+
+    int msaa_samples() const { return msaa_samples_; }
+
     uint32_t render(int width, int height) {
         if (width <= 0 || height <= 0) {
             tc::Log::error(
@@ -143,12 +156,7 @@ public:
 
     void release_gpu() {
         canvas_.release_gpu();
-        if (host_ && offscreen_color_.id != 0) {
-            host_->device().destroy(offscreen_color_);
-        }
-        offscreen_color_ = {};
-        offscreen_width_ = 0;
-        offscreen_height_ = 0;
+        release_target();
     }
 
 private:
@@ -169,6 +177,7 @@ private:
         desc.usage = tgfx::TextureUsage::Sampled |
                      tgfx::TextureUsage::ColorAttachment |
                      tgfx::TextureUsage::CopySrc;
+        desc.sample_count = static_cast<uint32_t>(msaa_samples_);
         offscreen_color_ = host_->device().create_texture(desc);
         if (offscreen_color_.id == 0) {
             throw std::runtime_error(
@@ -178,6 +187,15 @@ private:
         offscreen_height_ = height;
     }
 
+    void release_target() {
+        if (host_ && offscreen_color_.id != 0) {
+            host_->device().destroy(offscreen_color_);
+        }
+        offscreen_color_ = {};
+        offscreen_width_ = 0;
+        offscreen_height_ = 0;
+    }
+
     tcplot::GpuHost* host_;
     termin::visual::TcVisualScene scene_;
     tgfx::Canvas2DRenderer canvas_;
@@ -185,6 +203,7 @@ private:
     tgfx::TextureHandle offscreen_color_{};
     int offscreen_width_ = 0;
     int offscreen_height_ = 0;
+    int msaa_samples_ = 4;
     float clear_color_[4] = {0.08f, 0.09f, 0.11f, 1.0f};
 };
 
@@ -263,6 +282,21 @@ void tc_retained_scene_renderer2d_set_clear_color(
         return;
     }
     renderer->value.set_clear_color(r, g, b, a);
+}
+
+int tc_retained_scene_renderer2d_set_msaa_samples(
+    tc_retained_scene_renderer2d* renderer,
+    int samples) {
+    if (!renderer) return 0;
+    return logged_call("set_msaa_samples", 0, [&] {
+        renderer->value.set_msaa_samples(samples);
+        return 1;
+    });
+}
+
+int tc_retained_scene_renderer2d_msaa_samples(
+    const tc_retained_scene_renderer2d* renderer) {
+    return renderer ? renderer->value.msaa_samples() : 0;
 }
 
 uint32_t tc_retained_scene_renderer2d_render(

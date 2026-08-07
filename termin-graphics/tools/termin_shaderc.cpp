@@ -1584,18 +1584,22 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
     std::string slang_target;
     std::vector<std::string> extra_args;
     std::string native_clip_y_up_define;
+    std::string shader_target_vulkan_define;
     std::string d3d11_profile;
     if (options.target == "vulkan") {
         slang_target = "spirv";
         native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=0";
+        shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=1";
         extra_args = {"-profile", "spirv_1_5"};
     } else if (options.target == "opengl") {
         slang_target = "glsl";
         native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=0";
+        shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
         extra_args = {"-profile", "glsl_450"};
     } else if (options.target == "d3d11") {
         slang_target = "hlsl";
         native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
+        shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
         d3d11_profile = d3d11_profile_for_stage(options.stage);
         if (d3d11_profile.empty()) {
             std::cerr << "termin_shaderc: unsupported D3D11 stage: " << options.stage << "\n";
@@ -1610,6 +1614,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         }
         slang_target = "wgsl";
         native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
+        shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
     } else {
         std::cerr << "termin_shaderc: unsupported target: " << options.target << "\n";
         return false;
@@ -1665,6 +1670,7 @@ static bool compile_slang(const CompileOptions& options, const char* argv0) {
         "-stage", slang_stage,
         "-target", slang_target,
         native_clip_y_up_define,
+        shader_target_vulkan_define,
         *matrix_layout_arg,
     };
     for (const std::string& include_dir : include_dirs) {

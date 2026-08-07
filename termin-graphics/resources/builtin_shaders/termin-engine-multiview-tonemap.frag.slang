@@ -1,4 +1,5 @@
-// Two-layer HDR to XR target tonemap. SV_ViewID selects the matching source layer.
+// Two-layer HDR to XR target tonemap. Vulkan SV_ViewID selects the matching
+// source layer; unsupported backends compile the source as a mono shader.
 
 import termin_prelude;
 
@@ -36,7 +37,15 @@ float3 reinhard_tonemap(float3 x) {
 }
 
 [shader("fragment")]
-FragmentOutput fs_main(FragmentInput input, uint view_id : SV_ViewID) {
+FragmentOutput fs_main(
+    FragmentInput input
+#if TERMIN_SHADER_TARGET_VULKAN
+    , uint view_id : SV_ViewID
+#endif
+) {
+#if !TERMIN_SHADER_TARGET_VULKAN
+    const uint view_id = 0;
+#endif
     float3 color = u_input.Sample(float3(input.uv, float(min(view_id, 1u)))).rgb;
     color *= u_params.exposure;
     if (u_params.method == 0) color = aces_tonemap(color);

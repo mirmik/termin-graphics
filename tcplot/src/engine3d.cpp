@@ -363,6 +363,45 @@ bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
     return true;
 }
 
+bool PlotEngine3D::set_surface_data(
+    size_t idx,
+    std::vector<double> x,
+    std::vector<double> y,
+    std::vector<double> z,
+    uint32_t rows,
+    uint32_t cols) {
+    if (idx >= data.surfaces.size() || rows < 2 || cols < 2) return false;
+    const std::size_t count = static_cast<std::size_t>(rows) * cols;
+    if (x.size() != count || y.size() != count || z.size() != count) {
+        return false;
+    }
+    SurfaceSeries& surface = data.surfaces[idx];
+    surface.X = std::move(x);
+    surface.Y = std::move(y);
+    surface.Z = std::move(z);
+    surface.rows = rows;
+    surface.cols = cols;
+    dirty_ = true;
+    return true;
+}
+
+bool PlotEngine3D::set_scatter_data(
+    size_t idx,
+    std::vector<double> x,
+    std::vector<double> y,
+    std::vector<double> z) {
+    if (idx >= data.scatters.size() || x.empty() ||
+        x.size() != y.size() || x.size() != z.size()) {
+        return false;
+    }
+    ScatterSeries& scatter = data.scatters[idx];
+    scatter.x = std::move(x);
+    scatter.y = std::move(y);
+    scatter.z = std::move(z);
+    dirty_ = true;
+    return true;
+}
+
 bool PlotEngine3D::set_scatter_style(
     size_t idx,
     Color4 color,
