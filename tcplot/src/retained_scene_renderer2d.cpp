@@ -183,6 +183,19 @@ private:
             throw std::runtime_error(
                 "RetainedSceneRenderer2D failed to create offscreen texture");
         }
+        const tgfx::TextureDesc actual =
+            host_->device().texture_desc(offscreen_color_);
+        if (!tgfx::has_flag(
+                actual.usage, tgfx::TextureUsage::ColorAttachment)) {
+            host_->device().destroy(offscreen_color_);
+            offscreen_color_ = {};
+            throw std::runtime_error(
+                "RetainedSceneRenderer2D created an offscreen texture without "
+                "ColorAttachment usage (requested=" +
+                std::to_string(static_cast<uint32_t>(desc.usage)) +
+                ", actual=" +
+                std::to_string(static_cast<uint32_t>(actual.usage)) + ")");
+        }
         offscreen_width_ = width;
         offscreen_height_ = height;
     }
