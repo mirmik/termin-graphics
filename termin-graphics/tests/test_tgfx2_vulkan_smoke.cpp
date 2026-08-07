@@ -25,6 +25,8 @@
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
+#include "tgfx2_ordered_mrt_smoke.hpp"
+
 extern "C" {
 #include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_shader_registry.h"
@@ -364,99 +366,17 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
 }
 
 static bool render_ordered_mrt_smoke(tgfx::IRenderDevice& device) {
-    constexpr uint32_t kWidth = 16;
-    constexpr uint32_t kHeight = 16;
-
-    tgfx::TextureDesc target_desc;
-    target_desc.width = kWidth;
-    target_desc.height = kHeight;
-    target_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    target_desc.usage =
-        tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
-
-    std::array<tgfx::TextureHandle, 3> targets = {
-        device.create_texture(target_desc),
-        device.create_texture(target_desc),
-        device.create_texture(target_desc),
-    };
-    if (!targets[0] || !targets[1] || !targets[2]) {
-        fprintf(stderr, "Vulkan MRT smoke: failed to create three targets\n");
-        return false;
-    }
-
-    tgfx::RenderPassDesc pass;
-    pass.colors.resize(targets.size());
-    const float clear_colors[3][4] = {
-        {1.0f, 0.0f, 0.0f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f},
-        {0.0f, 0.0f, 1.0f, 1.0f},
-    };
-    for (size_t i = 0; i < targets.size(); ++i) {
-        pass.colors[i].texture = targets[i];
-        pass.colors[i].load = tgfx::LoadOp::Clear;
-        pass.colors[i].store = tgfx::StoreOp::Store;
-        std::memcpy(
-            pass.colors[i].clear_color,
-            clear_colors[i],
-            sizeof(clear_colors[i]));
-    }
-
-    {
-        tgfx::PipelineCache cache(device);
-        tgfx::RenderContext2 context(device, cache);
-        context.begin_frame();
-        if (!context.begin_pass(pass)) {
-            fprintf(stderr, "Vulkan MRT smoke: clear pass rejected\n");
-            return false;
-        }
-        context.end_pass();
-        context.end_frame();
-    }
-    device.wait_idle();
-
-    auto pixel_matches = [](
-        const float pixel[4],
-        float r,
-        float g,
-        float b
-    ) {
-        constexpr float epsilon = 0.05f;
-        return std::abs(pixel[0] - r) < epsilon &&
-            std::abs(pixel[1] - g) < epsilon &&
-            std::abs(pixel[2] - b) < epsilon &&
-            pixel[3] > 0.9f;
-    };
-
-    float pixels[3][4]{};
-    bool clear_ok = true;
-    for (size_t i = 0; i < targets.size(); ++i) {
-        clear_ok =
-            device.read_pixel_rgba8(
-                targets[i],
-                kWidth / 2,
-                kHeight / 2,
-                pixels[i]) &&
-            clear_ok;
-    }
-    clear_ok =
-        clear_ok &&
-        pixel_matches(pixels[0], 1, 0, 0) &&
-        pixel_matches(pixels[1], 0, 1, 0) &&
-        pixel_matches(pixels[2], 0, 0, 1);
-
     tgfx::ShaderDesc vertex_desc;
     vertex_desc.stage = tgfx::ShaderStage::Vertex;
     vertex_desc.source = mrt_vertex_src;
     vertex_desc.debug_name = "vulkan-ordered-mrt-smoke:vertex";
-    const tgfx::ShaderHandle vertex =
-        device.create_shader(vertex_desc);
+    const tgfx::ShaderHandle vertex = device.create_shader(vertex_desc);
 
     tgfx::ShaderDesc fragment_desc;
     fragment_desc.stage = tgfx::ShaderStage::Fragment;
     fragment_desc.source = mrt_fragment_src;
     fragment_desc.debug_name = "vulkan-ordered-mrt-smoke:fragment";
-    const tgfx::ShaderHandle fragment =
-        device.create_shader(fragment_desc);
+    const tgfx::ShaderHandle fragment = device.create_shader(fragment_desc);
     if (!vertex || !fragment) {
         fprintf(stderr, "Vulkan MRT smoke: shader creation failed\n");
         return false;
@@ -484,56 +404,18 @@ static bool render_ordered_mrt_smoke(tgfx::IRenderDevice& device) {
         {0, tgfx::VertexFormat::Float2, 0},
     };
 
-    for (auto& color : pass.colors) {
-        color.load = tgfx::LoadOp::Load;
-    }
-    {
-        tgfx::PipelineCache cache(device);
-        tgfx::RenderContext2 context(device, cache);
-        context.begin_frame();
-        if (!context.begin_pass(pass)) {
-            fprintf(stderr, "Vulkan MRT smoke: draw pass rejected\n");
-            return false;
-        }
-        context.set_depth_test(false);
-        context.set_depth_write(false);
-        context.set_blend(false);
-        context.set_cull(tgfx::CullMode::None);
-        context.bind_shader(vertex, fragment);
-        context.set_vertex_layout(vertex_layout);
-        context.draw_arrays(vertex_buffer, 3);
-        context.end_pass();
-        context.end_frame();
-    }
-    device.wait_idle();
-
-    bool draw_ok = true;
-    for (size_t i = 0; i < targets.size(); ++i) {
-        draw_ok =
-            device.read_pixel_rgba8(
-                targets[i],
-                kWidth / 2,
-                kHeight / 2,
-                pixels[i]) &&
-            draw_ok;
-    }
-    draw_ok =
-        draw_ok &&
-        pixel_matches(pixels[0], 0, 1, 1) &&
-        pixel_matches(pixels[1], 1, 0, 1) &&
-        pixel_matches(pixels[2], 1, 1, 0);
-
-    printf(
-        "Ordered MRT clear: %s, SV_Target routing: %s\n",
-        clear_ok ? "ok" : "failed",
-        draw_ok ? "ok" : "failed");
+    const bool passed = tgfx::tests::run_ordered_mrt_smoke(
+        device,
+        "Vulkan",
+        [&](tgfx::RenderContext2& context) {
+            context.bind_shader(vertex, fragment);
+            context.set_vertex_layout(vertex_layout);
+            context.draw_arrays(vertex_buffer, 3);
+        });
     device.destroy(vertex_buffer);
     device.destroy(vertex);
     device.destroy(fragment);
-    for (const auto target : targets) {
-        device.destroy(target);
-    }
-    return clear_ok && draw_ok;
+    return passed;
 }
 
 static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {

@@ -22,6 +22,8 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/vertex_layout.hpp"
 
+#include "tgfx2_ordered_mrt_smoke.hpp"
+
 extern "C" {
 #include "tgfx/resources/tc_shader.h"
 }
@@ -55,6 +57,18 @@ layout(binding = 0) uniform sampler2D source_texture;
 out vec4 FragColor;
 void main() {
     FragColor = textureLod(source_texture, vec2(0.5, 0.5), 1.0);
+}
+)";
+
+static const char* kMrtFragmentSource = R"(
+#version 420 core
+layout(location = 0) out vec4 Target0;
+layout(location = 1) out vec4 Target1;
+layout(location = 2) out vec4 Target2;
+void main() {
+    Target0 = vec4(0.0, 1.0, 1.0, 1.0);
+    Target1 = vec4(1.0, 0.0, 1.0, 1.0);
+    Target2 = vec4(1.0, 1.0, 0.0, 1.0);
 }
 )";
 
@@ -109,6 +123,34 @@ static bool create_context(SDLGLContext& out) {
     }
 
     return true;
+}
+
+static bool render_ordered_mrt_smoke(
+    tgfx::IRenderDevice& device,
+    tgfx::ShaderHandle vertex,
+    const tgfx::VertexBufferLayout& vertex_layout,
+    tgfx::BufferHandle vertex_buffer)
+{
+    tgfx::ShaderDesc fragment_desc;
+    fragment_desc.stage = tgfx::ShaderStage::Fragment;
+    fragment_desc.source = kMrtFragmentSource;
+    fragment_desc.debug_name = "opengl-ordered-mrt:fragment";
+    const tgfx::ShaderHandle fragment = device.create_shader(fragment_desc);
+    if (!fragment) {
+        std::fprintf(stderr, "OpenGL MRT smoke: fragment shader creation failed\n");
+        return false;
+    }
+
+    const bool passed = tgfx::tests::run_ordered_mrt_smoke(
+        device,
+        "OpenGL",
+        [&](tgfx::RenderContext2& context) {
+            context.bind_shader(vertex, fragment);
+            context.set_vertex_layout(vertex_layout);
+            context.draw_arrays(vertex_buffer, 3);
+        });
+    device.destroy(fragment);
+    return passed;
 }
 
 int main() {
@@ -194,6 +236,9 @@ int main() {
         vb,
         std::span<const uint8_t>(
             reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+
+    const bool ordered_mrt_ok =
+        render_ordered_mrt_smoke(*device, vs, vertex_layout, vb);
 
     const float color_block[] = {0.20f, 0.70f, 0.10f, 1.0f};
     tgfx::BufferDesc ubo_desc;
@@ -479,7 +524,7 @@ int main() {
     device->destroy(fs);
     device.reset();
 
-    if (!pass_ok || !srgb_sampling_ok || !linear_sampling_ok) {
+    if (!pass_ok || !srgb_sampling_ok || !linear_sampling_ok || !ordered_mrt_ok) {
         std::fprintf(stderr, "OpenGL bound resource set smoke failed\n");
         return 1;
     }
