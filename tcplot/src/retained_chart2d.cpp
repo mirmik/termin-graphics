@@ -16,6 +16,7 @@
 #include <termin_visual_scene/tc_visual_scene_item2d.h>
 #include <tgfx2/font_atlas.hpp>
 
+#include "tcplot/chart_interaction2d.hpp"
 #include "tcplot/gpu_host.hpp"
 #include "tcplot/plot_frame2d.hpp"
 #include "tcplot/plot_layout2d.hpp"
@@ -300,6 +301,39 @@ namespace
             set_range(next);
         }
 
+        bool pointer_down(float x, float y, int button)
+        {
+            return interaction_.pointer_down(frame(), x, y, button);
+        }
+
+        bool pointer_move(float x, float y)
+        {
+            const auto next = interaction_.pointer_move(x, y);
+            if (!next)
+                return false;
+            set_range(c_range(*next));
+            return true;
+        }
+
+        bool pointer_up(int button)
+        {
+            return interaction_.pointer_up(button);
+        }
+
+        bool wheel(float x, float y, float steps, bool x_only)
+        {
+            const auto next = interaction_.wheel(frame(), x, y, steps, x_only);
+            if (!next)
+                return false;
+            set_range(c_range(*next));
+            return true;
+        }
+
+        void cancel_interaction()
+        {
+            interaction_.cancel();
+        }
+
         void set_theme(tc_chart2d_theme theme)
         {
             if (!valid_theme(theme))
@@ -390,6 +424,28 @@ namespace
         }
 
     private:
+        tcplot::PlotFrame2D frame() const
+        {
+            return {
+                {viewport_.x, viewport_.y, viewport_.width, viewport_.height},
+                {plot_area_.x,
+                 plot_area_.y,
+                 plot_area_.width,
+                 plot_area_.height},
+                {range_.x_min, range_.x_max, range_.y_min, range_.y_max},
+                {plot_area_.x,
+                 plot_area_.y,
+                 plot_area_.width,
+                 plot_area_.height},
+                pixel_scale_,
+            };
+        }
+
+        static tc_plot_range2d c_range(const tcplot::PlotRange2D& value)
+        {
+            return {value.x_min(), value.x_max(), value.y_min(), value.y_max()};
+        }
+
         struct PartSlot
         {
             tc_graphic_item_handle* handle = nullptr;
@@ -931,6 +987,7 @@ namespace
         std::string x_label_;
         std::string y_label_;
         uint64_t layout_revision_ = 0;
+        tcplot::ChartInteraction2D interaction_{};
         tc_plot_projection_handle2d projection_ =
             tc_plot_projection_handle2d_invalid();
         tc_graphic_item_handle root_ = tc_graphic_item_handle_invalid();
@@ -1200,6 +1257,51 @@ extern "C"
                           chart->value.fit(padding_fraction, false, true);
                           return true;
                       });
+    }
+
+    bool tc_retained_chart2d_pointer_down(tc_retained_chart2d* chart,
+                                          float x,
+                                          float y,
+                                          int button)
+    {
+        return chart &&
+               logged("pointer_down",
+                      false,
+                      [&] { return chart->value.pointer_down(x, y, button); });
+    }
+
+    bool tc_retained_chart2d_pointer_move(tc_retained_chart2d* chart,
+                                          float x,
+                                          float y)
+    {
+        return chart && logged("pointer_move",
+                               false,
+                               [&] { return chart->value.pointer_move(x, y); });
+    }
+
+    bool tc_retained_chart2d_pointer_up(tc_retained_chart2d* chart,
+                                        float,
+                                        float,
+                                        int button)
+    {
+        return chart && logged("pointer_up",
+                               false,
+                               [&] { return chart->value.pointer_up(button); });
+    }
+
+    bool tc_retained_chart2d_wheel(
+        tc_retained_chart2d* chart, float x, float y, float steps, bool x_only)
+    {
+        return chart &&
+               logged("wheel",
+                      false,
+                      [&] { return chart->value.wheel(x, y, steps, x_only); });
+    }
+
+    void tc_retained_chart2d_cancel_interaction(tc_retained_chart2d* chart)
+    {
+        if (chart)
+            chart->value.cancel_interaction();
     }
 
     bool tc_retained_chart2d_set_theme(tc_retained_chart2d* chart,

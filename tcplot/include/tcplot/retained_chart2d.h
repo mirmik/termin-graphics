@@ -114,6 +114,26 @@ extern "C"
                                               double padding_fraction);
     TCPLOT_API bool tc_retained_chart2d_fit_y(tc_retained_chart2d* chart,
                                               double padding_fraction);
+
+    // Frontend-neutral navigation in framebuffer coordinates. Middle-button
+    // drag pans; wheel steps zoom around the cursor. The return value reports
+    // whether the event was consumed by the plot area.
+    TCPLOT_API bool tc_retained_chart2d_pointer_down(tc_retained_chart2d* chart,
+                                                     float x,
+                                                     float y,
+                                                     int button);
+    TCPLOT_API bool tc_retained_chart2d_pointer_move(tc_retained_chart2d* chart,
+                                                     float x,
+                                                     float y);
+    TCPLOT_API bool tc_retained_chart2d_pointer_up(tc_retained_chart2d* chart,
+                                                   float x,
+                                                   float y,
+                                                   int button);
+    TCPLOT_API bool tc_retained_chart2d_wheel(
+        tc_retained_chart2d* chart, float x, float y, float steps, bool x_only);
+    TCPLOT_API void
+    tc_retained_chart2d_cancel_interaction(tc_retained_chart2d* chart);
+
     TCPLOT_API bool
     tc_retained_chart2d_set_theme(tc_retained_chart2d* chart,
                                   const tc_chart2d_theme* theme);
