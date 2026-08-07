@@ -1030,10 +1030,14 @@ void RenderEngine::render_scene_pipeline_offscreen(
             return;
         }
         request.capture->reset_capture();
-        request.capture->capture_direct_via_ctx2(ctx2, primary, 0, 0);
+        request.capture->capture_direct_via_ctx2(
+            ctx2, primary, 0, 0, tgfx::PixelFormat::RGBA8_UNorm,
+            request.max_long_edge);
         if (request.depth_capture) {
             if (color && depth && depth != color) {
-                request.depth_capture->capture_direct_via_ctx2(ctx2, depth, 0, 0);
+                request.depth_capture->capture_direct_via_ctx2(
+                    ctx2, depth, 0, 0, tgfx::PixelFormat::RGBA8_UNorm,
+                    request.max_long_edge);
             } else {
                 request.depth_capture->reset_capture();
             }
