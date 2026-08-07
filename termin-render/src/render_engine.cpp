@@ -23,6 +23,7 @@
 #include "termin/render/tgfx2_bridge.hpp"
 #include "termin/render/execute_context.hpp"
 #include "termin/render/frame_graph_capture.hpp"
+#include "termin/render/frame_graph_resource_registry.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
@@ -554,24 +555,6 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
             resource_type = spec->resource_type;
         }
 
-        if (resource_type == "shadow_map_array") {
-            auto& shadow_array = pipeline.shadow_arrays()[canon];
-            if (!shadow_array) {
-                int resolution = 1024;
-                if (spec && spec->size) {
-                    resolution = spec->size->first;
-                }
-                shadow_array = std::make_unique<ShadowMapArrayResource>(resolution);
-            }
-
-            std::vector<const char*> aliases = collect_alias_group(fg, canon);
-            size_t alias_count = aliases.size();
-            for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = shadow_array.get();
-            }
-            continue;
-        }
-
         if (resource_type == "color_texture" ||
             resource_type == "multiview_color_texture") {
             int tex_width = default_width;
@@ -666,13 +649,35 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         }
 
         if (resource_type != "fbo" && resource_type != "multiview_fbo") {
+            if (!spec) {
+                tc::Log::error(
+                    "RenderEngine::execute_pipeline: non-texture resource '%s' has no ResourceSpec",
+                    canon);
+                tc_profiler_end_section();
+                return;
+            }
+            auto& resource = pipeline_cache.frame_graph_resources[canon];
+            if (resource) {
+                const char* cached_type = resource->resource_type();
+                if (!cached_type || resource_type != cached_type) {
+                    resource.reset();
+                }
+            }
+            if (!resource) {
+                resource.reset(create_frame_graph_resource(*spec));
+            }
+            if (!resource) {
+                tc::Log::error(
+                    "RenderEngine::execute_pipeline: failed to allocate resource '%s' of type '%s'",
+                    canon,
+                    resource_type.c_str());
+                tc_profiler_end_section();
+                return;
+            }
             std::vector<const char*> aliases = collect_alias_group(fg, canon);
             size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
-                resources[aliases[j]] = nullptr;
-                if (std::string(aliases[j]) != canon) {
-                    pipeline_cache.texture_alias_to_canonical[aliases[j]] = canon;
-                }
+                resources[aliases[j]] = resource.get();
             }
             continue;
         }
@@ -1000,8 +1005,17 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
                 return resolve_color(composition->second.color);
             }
             auto texture = tex2_resources.find(name);
-            return texture != tex2_resources.end()
-                ? texture->second : tgfx::TextureHandle{};
+            if (texture != tex2_resources.end()) {
+                return texture->second;
+            }
+            auto resource = resources.find(name);
+            if (resource == resources.end() || !resource->second) {
+                return {};
+            }
+            const FrameGraphResourceSampledTexture sampled =
+                frame_graph_resource_sampled_texture(*resource->second);
+            return sampled.kind == FrameGraphResourceSampledTextureKind::Color
+                ? sampled.texture : tgfx::TextureHandle{};
         };
         resolve_depth = [&](const std::string& name) -> tgfx::TextureHandle {
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
@@ -1025,8 +1039,17 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
                 return depth ? depth : resolve_color(composition->second.depth);
             }
             auto texture = tex2_depth_resources.find(name);
-            return texture != tex2_depth_resources.end()
-                ? texture->second : tgfx::TextureHandle{};
+            if (texture != tex2_depth_resources.end()) {
+                return texture->second;
+            }
+            auto resource = resources.find(name);
+            if (resource == resources.end() || !resource->second) {
+                return {};
+            }
+            const FrameGraphResourceSampledTexture sampled =
+                frame_graph_resource_sampled_texture(*resource->second);
+            return sampled.kind == FrameGraphResourceSampledTextureKind::Depth
+                ? sampled.texture : tgfx::TextureHandle{};
         };
 
         const tgfx::TextureHandle color = resolve_color(request.resource);
@@ -1115,7 +1138,7 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         Tex2Map pass_tex2_writes;
         Tex2Map pass_tex2_depth_reads;
         Tex2Map pass_tex2_depth_writes;
-        ShadowArrayMap pass_shadow_arrays;
+        ResourceMap pass_frame_graph_resources;
 
         std::function<tgfx::TextureHandle(const std::string&)> resolve_depth_resource;
         std::function<tgfx::TextureHandle(const std::string&)> resolve_color_resource;
@@ -1181,20 +1204,19 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
             return it != tex2_depth_resources.end() ? it->second : tgfx::TextureHandle{};
         };
 
-        auto collect_shadow_array = [&](const char* name) {
+        auto collect_frame_graph_resource = [&](const char* name) {
             auto it = resources.find(name);
             if (it != resources.end() && it->second) {
-                auto* arr = dynamic_cast<ShadowMapArrayResource*>(it->second);
-                if (arr) {
-                    pass_shadow_arrays[name] = arr;
-                    // Also expose the array's first cascade as a regular
-                    // tex2 read, so generic passes (e.g. FrameDebugger)
-                    // can sample / blit shadow_maps without knowing about
-                    // the ShadowArrayMap side-channel. ColorPass still
-                    // iterates shadow_arrays for the full cascade set.
-                    if (!arr->entries.empty() &&
-                        arr->entries[0].depth_tex2) {
-                        pass_tex2_reads[name] = arr->entries[0].depth_tex2;
+                pass_frame_graph_resources[name] = it->second;
+                // A registered resource may expose a generic sampled view.
+                // This keeps debugger/blit passes independent of its type.
+                const FrameGraphResourceSampledTexture sampled =
+                    frame_graph_resource_sampled_texture(*it->second);
+                if (sampled.texture) {
+                    if (sampled.kind == FrameGraphResourceSampledTextureKind::Depth) {
+                        pass_tex2_depth_reads[name] = sampled.texture;
+                    } else {
+                        pass_tex2_reads[name] = sampled.texture;
                     }
                 }
             }
@@ -1217,7 +1239,7 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
                 }
                 continue;
             }
-            collect_shadow_array(read_name);
+            collect_frame_graph_resource(read_name);
             auto ext_it = rt_ctx.external_textures.find(read_name);
             if (ext_it != rt_ctx.external_textures.end() && ext_it->second) {
                 pass_tex2_reads[read_name] = ext_it->second;
@@ -1249,7 +1271,7 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
                     pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
                 }
             } else {
-                collect_shadow_array(write_name);
+                collect_frame_graph_resource(write_name);
                 tgfx::TextureHandle color_handle = resolve_color_resource(write_name);
                 if (color_handle) {
                     pass_tex2_writes[write_name] = color_handle;
@@ -1267,7 +1289,7 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         ctx.tex2_writes = std::move(pass_tex2_writes);
         ctx.tex2_depth_reads = std::move(pass_tex2_depth_reads);
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
-        ctx.shadow_arrays = std::move(pass_shadow_arrays);
+        ctx.frame_graph_resources = std::move(pass_frame_graph_resources);
         ctx.render_rect = rt_ctx.render_rect;
         ctx.view = rt_ctx.view;
         ctx.render_target_name = rt_ctx.name;

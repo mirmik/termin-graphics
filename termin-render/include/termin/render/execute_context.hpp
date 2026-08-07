@@ -19,7 +19,6 @@ class RenderContext2;
 
 namespace termin {
 
-class ShadowMapArrayResource;
 class RenderItemSnapshot;
 struct FrameGraphCaptureRequest;
 
@@ -27,11 +26,6 @@ struct FrameGraphCaptureRequest;
 // consume entries from tex2_reads/tex2_writes (and the depth variants
 // below) directly.
 using Tex2Map = std::unordered_map<std::string, tgfx::TextureHandle>;
-
-// Non-FBO framegraph resources indexed by canonical name. Currently
-// only populated for shadow_map_array resources — ShadowPass writes
-// into one, ColorPass reads from one.
-using ShadowArrayMap = std::unordered_map<std::string, ShadowMapArrayResource*>;
 
 // Pass-local declaration of one named framegraph color output. Array order is
 // shader-visible: entry N maps to fragment output location N.
@@ -60,10 +54,10 @@ public:
     // texture; empty entry = no depth texture available.
     Tex2Map tex2_depth_reads;
     Tex2Map tex2_depth_writes;
-    // Non-FBO framegraph resources (shadow map arrays). Keyed by
-    // canonical name; same key serves reads and writes since shadow
-    // arrays are written by one pass and read by another.
-    ShadowArrayMap shadow_arrays;
+    // Non-texture framegraph resources used by this pass. The map contains
+    // only declared reads/writes and preserves canonical aliases without
+    // exposing any domain-specific resource type to the executor contract.
+    ResourceMap frame_graph_resources;
     // Render extent for the pass. This is not a display viewport rectangle.
     Rect2i render_rect;
     RenderViewState view;
@@ -77,6 +71,19 @@ public:
     // Frame-local debugger requests for this pass. These pointers are valid
     // only until the enclosing RenderEngine execution returns.
     std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;
+
+    FrameGraphResource* get_frame_graph_resource(
+        const std::string& name) const
+    {
+        auto it = frame_graph_resources.find(name);
+        return it == frame_graph_resources.end() ? nullptr : it->second;
+    }
+
+    template <typename ResourceT>
+    ResourceT* get_frame_graph_resource_as(const std::string& name) const
+    {
+        return dynamic_cast<ResourceT*>(get_frame_graph_resource(name));
+    }
 
     RENDER_API const std::string* requested_internal_symbol() const;
     RENDER_API bool should_capture_internal(const char* symbol) const;

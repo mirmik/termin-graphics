@@ -9,6 +9,7 @@
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/texture_pool.hpp>
+#include <tgfx/frame_graph_resource.hpp>
 
 #include <termin/render/render_export.hpp>
 #include "termin/render/fbo_pool.hpp"
@@ -19,9 +20,6 @@
 extern "C" {
 #include "render/tc_pipeline.h"
 }
-
-// Full definition needed for unique_ptr member in PipelineRenderCache
-#include "termin/lighting/shadow.hpp"
 
 namespace termin {
 
@@ -41,7 +39,8 @@ public:
 struct RENDER_API PipelineRenderCache {
     FBOPool fbo_pool;
     PipelineTexturePool texture_pool;
-    std::unordered_map<std::string, std::unique_ptr<ShadowMapArrayResource>> shadow_arrays;
+    std::unordered_map<std::string, std::unique_ptr<FrameGraphResource>>
+        frame_graph_resources;
     std::vector<ResourceSpec> specs;
     std::unordered_map<std::string, ResourceView> resource_views;
     std::unordered_map<std::string, FboComposition> fbo_compositions;
@@ -108,10 +107,6 @@ public:
     }
     tgfx::IRenderDevice* tex2_device() {
         return fbo_pool().device();
-    }
-
-    std::unordered_map<std::string, std::unique_ptr<ShadowMapArrayResource>>& shadow_arrays() {
-        return cache().shadow_arrays;
     }
 
     // Destroy pipeline in pool (frees passes, render_cache, frame_graph)

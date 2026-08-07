@@ -4,12 +4,16 @@ GUARD_TEST_MAIN();
 
 #include <termin/render/builtin_passes.hpp>
 #include <termin/render/execute_context.hpp>
+#include <termin/render/frame_graph_resource_registry.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_engine.hpp>
 #include <termin/render/render_item_source.hpp>
 
 #include <cstddef>
+#include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 extern "C" {
 #include <render/tc_pass.h>
@@ -27,7 +31,8 @@ std::string g_error_log;
 
 void capture_error(tc_log_level level, const char* message) {
     if (level >= TC_LOG_ERROR && message) {
-        g_error_log = message;
+        g_error_log += message;
+        g_error_log += '\n';
     }
 }
 
@@ -106,6 +111,137 @@ protected:
     }
 };
 
+constexpr const char* kTestResourceType = "test_non_texture_resource";
+int g_resource_create_count = 0;
+int g_resource_destroy_count = 0;
+int g_resource_preview_count = 0;
+bool g_resource_producer_executed = false;
+bool g_resource_alias_executed = false;
+
+class TestFrameGraphResource final : public termin::FrameGraphResource {
+public:
+    int extent = 0;
+
+    explicit TestFrameGraphResource(int extent_value)
+        : extent(extent_value)
+    {}
+
+    ~TestFrameGraphResource() override {
+        ++g_resource_destroy_count;
+    }
+
+    const char* resource_type() const override {
+        return kTestResourceType;
+    }
+};
+
+termin::FrameGraphResource* create_test_resource(
+    const termin::ResourceSpec& spec)
+{
+    ++g_resource_create_count;
+    return new TestFrameGraphResource(spec.size ? spec.size->first : 0);
+}
+
+termin::FrameGraphResourceSampledTexture preview_test_resource(
+    const termin::FrameGraphResource& resource)
+{
+    CHECK(std::string(resource.resource_type()) == kTestResourceType);
+    ++g_resource_preview_count;
+    return {
+        .texture = tgfx::TextureHandle{42},
+        .kind = termin::FrameGraphResourceSampledTextureKind::Depth,
+    };
+}
+
+class TestResourceProducer final : public termin::CxxFramePass {
+public:
+    TestResourceProducer() {
+        pass_name_set("TestResourceProducer");
+    }
+
+    std::set<const char*> compute_writes() const override {
+        return {"test_resource"};
+    }
+
+    std::vector<termin::ResourceSpec> get_resource_specs() const override {
+        return {termin::ResourceSpec{
+            "test_resource",
+            kTestResourceType,
+            std::pair<int, int>{17, 17},
+        }};
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        auto* resource =
+            context.get_frame_graph_resource_as<TestFrameGraphResource>(
+                "test_resource");
+        REQUIRE(resource != nullptr);
+        CHECK(resource->extent == 17);
+        CHECK(context.tex2_reads.find("test_resource")
+            == context.tex2_reads.end());
+        const auto preview = context.tex2_depth_reads.find("test_resource");
+        REQUIRE(preview != context.tex2_depth_reads.end());
+        CHECK(preview->second == tgfx::TextureHandle{42});
+        g_resource_producer_executed = true;
+    }
+};
+
+class TestResourceAlias final : public termin::CxxFramePass {
+public:
+    TestResourceAlias() {
+        pass_name_set("TestResourceAlias");
+    }
+
+    std::set<const char*> compute_reads() const override {
+        return {"test_resource"};
+    }
+
+    std::set<const char*> compute_writes() const override {
+        return {"test_resource_alias"};
+    }
+
+    std::vector<std::pair<std::string, std::string>>
+    get_inplace_aliases() const override
+    {
+        return {{"test_resource", "test_resource_alias"}};
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        auto* original = context.get_frame_graph_resource_as<TestFrameGraphResource>(
+            "test_resource");
+        auto* alias = context.get_frame_graph_resource_as<TestFrameGraphResource>(
+            "test_resource_alias");
+        REQUIRE(original != nullptr);
+        CHECK(alias == original);
+        g_resource_alias_executed = true;
+    }
+};
+
+class UnknownResourceProducer final : public termin::CxxFramePass {
+public:
+    UnknownResourceProducer() {
+        pass_name_set("UnknownResourceProducer");
+    }
+
+    std::set<const char*> compute_writes() const override {
+        return {"unknown_resource"};
+    }
+
+    std::vector<termin::ResourceSpec> get_resource_specs() const override {
+        return {termin::ResourceSpec{"unknown_resource", "unknown_resource_type"}};
+    }
+
+    void execute(termin::ExecuteContext&) override {
+        FAIL("pass with an unknown resource kind must not execute");
+    }
+};
+
+void publish_empty_snapshot(termin::RenderItemSnapshot& snapshot)
+{
+    InMemoryRenderItemSource source(0);
+    REQUIRE(source.publish(snapshot, {}));
+}
+
 void register_probe() {
     if (!tc_pass_registry_has("CxxFramePass")) {
         termin::register_builtin_render_pass_types();
@@ -155,6 +291,26 @@ TEST_CASE("failed item source publication invalidates partial output and logs") 
     CHECK(snapshot.item_count() == 0);
     CHECK(g_error_log.find("FailingRenderItemSource") != std::string::npos);
     CHECK(g_error_log.find("FailureTarget") != std::string::npos);
+}
+
+TEST_CASE("non-texture resource registry rejects duplicate registrations observably") {
+    if (termin::has_frame_graph_resource_type(kTestResourceType)) {
+        REQUIRE(termin::unregister_frame_graph_resource_type(kTestResourceType));
+    }
+    g_error_log.clear();
+    tc_log_set_callback(capture_error);
+    CHECK(termin::register_frame_graph_resource_type({
+        .resource_type = kTestResourceType,
+        .create = create_test_resource,
+        .sampled_texture = preview_test_resource,
+    }));
+    CHECK(!termin::register_frame_graph_resource_type({
+        .resource_type = kTestResourceType,
+        .create = create_test_resource,
+    }));
+    tc_log_set_callback(nullptr);
+    CHECK(g_error_log.find("already registered") != std::string::npos);
+    CHECK(termin::unregister_frame_graph_resource_type(kTestResourceType));
 }
 
 } // namespace
@@ -222,4 +378,79 @@ TEST_CASE("generic pipeline executes empty and populated non-scene sources") {
     tc_pass_registry_unregister(kProbeType);
     g_expected_snapshot = nullptr;
     g_expected_item_count = 0;
+}
+
+TEST_CASE("generic execution allocates and binds registered non-texture resources once") {
+    REQUIRE(termin::register_frame_graph_resource_type({
+        .resource_type = kTestResourceType,
+        .create = create_test_resource,
+        .sampled_texture = preview_test_resource,
+    }));
+    g_resource_create_count = 0;
+    g_resource_destroy_count = 0;
+    g_resource_preview_count = 0;
+
+    termin::RenderPipeline pipeline("generic-resource-execution-test");
+    REQUIRE(pipeline.is_valid());
+    auto* alias = new TestResourceAlias();
+    auto* producer = new TestResourceProducer();
+    pipeline.add_pass(alias->tc_pass_ptr());
+    pipeline.add_pass(producer->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "GenericResourceTarget";
+    target.render_rect = {0, 0, 1, 1};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name, termin::RenderExecutionTarget{
+        .context = &target,
+        .render_items = &snapshot,
+    });
+
+    termin::RenderEngine engine;
+    for (int execution_index = 0; execution_index < 2; ++execution_index) {
+        g_resource_producer_executed = false;
+        g_resource_alias_executed = false;
+        engine.execute_pipeline(execution);
+        CHECK(g_resource_producer_executed);
+        CHECK(g_resource_alias_executed);
+    }
+    CHECK(g_resource_create_count == 1);
+    CHECK(g_resource_preview_count >= 2);
+    CHECK(g_resource_destroy_count == 0);
+
+    pipeline.destroy();
+    CHECK(g_resource_destroy_count == 1);
+    CHECK(termin::unregister_frame_graph_resource_type(kTestResourceType));
+}
+
+TEST_CASE("generic execution rejects an unknown serialized resource kind") {
+    termin::RenderPipeline pipeline("unknown-resource-execution-test");
+    REQUIRE(pipeline.is_valid());
+    auto* producer = new UnknownResourceProducer();
+    pipeline.add_pass(producer->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "UnknownResourceTarget";
+    target.render_rect = {0, 0, 1, 1};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.targets.emplace(target.name, termin::RenderExecutionTarget{
+        .context = &target,
+        .render_items = &snapshot,
+    });
+
+    g_error_log.clear();
+    tc_log_set_callback(capture_error);
+    termin::RenderEngine engine;
+    engine.execute_pipeline(execution);
+    tc_log_set_callback(nullptr);
+    CHECK(g_error_log.find("unknown_resource") != std::string::npos);
+    CHECK(g_error_log.find("unknown_resource_type") != std::string::npos);
+    pipeline.destroy();
 }

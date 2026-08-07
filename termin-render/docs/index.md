@@ -44,6 +44,14 @@ source получает нейтральные view/mask inputs и наполн�
 знают о `tc_scene`, entities, components или lights. Пока оба слоя собираются
 в одном target; следующая граница — физическое выделение render core.
 
+Non-texture framegraph resources расширяют executor через
+`FrameGraphResourceTypeDescriptor`. Registry хранит cold-path factory и
+необязательный sampled-texture callback с явным `Color`/`Depth` attachment
+kind; `PipelineRenderCache` владеет
+созданными `FrameGraphResource`, а каждый pass получает только объявленные
+reads/writes через `ExecuteContext::frame_graph_resources`. Неизвестный kind
+является logged validation error и не превращается неявно в FBO.
+
 ## Публичный API
 
 Python package: `termin.render` / `termin.render_framework` через пакет `termin-render`.
@@ -67,7 +75,9 @@ attachments:
 - `fbo` — tuple resource with color and optional depth attachments.
 - `color_texture` — sampled/view reference to an FBO color attachment.
 - `depth_texture` — sampled/view reference to an FBO depth attachment.
-- `shadow` — shadow-map resource.
+- `shadow_map_array` — зарегистрированный `termin-render-passes` ресурс;
+  generic executor знает только его `FrameGraphResource` contract и sampled
+  preview.
 
 `FboSplit` and `FboJoin` are compile-time graph utility nodes. They do not
 create runtime passes or `tc_pass` instances. Direct conversion between `fbo`,

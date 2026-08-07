@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <trent/json.h>
 
-#include "termin/lighting/shadow.hpp"
 #include "termin/render/frame_pass.hpp"
 #include "termin/render/builtin_passes.hpp"
 #include "termin/render/tc_pass.hpp"

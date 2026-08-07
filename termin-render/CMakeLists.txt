@@ -76,6 +76,7 @@ set(TERMIN_RENDER_SOURCES
     src/camera_capability.cpp
     src/frame_uniforms.cpp
     src/frame_graph_capture.cpp
+    src/frame_graph_resource_registry.cpp
     src/execute_context.cpp
     src/graph_alias_pass.cpp
     src/graph_compiler.cpp
@@ -104,7 +105,6 @@ set(TERMIN_RENDER_SOURCES
     src/shader_contract.cpp
     src/tgfx2_bridge.cpp
     src/vertex_transform_contracts.cpp
-    src/shadow.cpp
     src/tc_project_settings.c
     src/tc_inspect_pass_adapter.cpp
     src/tc_pass_ref.cpp
@@ -154,6 +154,7 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/camera_capability.hpp
     include/termin/render/frame_uniforms.hpp
     include/termin/render/frame_graph_capture.hpp
+    include/termin/render/frame_graph_resource_registry.hpp
     include/termin/render/graph_alias_pass.hpp
     include/termin/render/graph_compiler.hpp
     include/termin/render/graph_data.hpp
@@ -186,7 +187,6 @@ set(TERMIN_RENDER_HEADERS
     include/termin/viewport_config.hpp
     include/termin/render/vertex_transform_contracts.hpp
     include/termin/render_target_config.hpp
-    include/termin/lighting/shadow.hpp
     include/tc_project_settings.h
     include/tc_viewport_config.h
     include/tc_render_target_config.h
