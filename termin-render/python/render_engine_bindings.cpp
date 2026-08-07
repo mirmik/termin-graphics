@@ -56,7 +56,18 @@ void bind_render_engine(nb::module_& m) {
     nb::class_<RenderTargetContext>(m, "RenderTargetContext")
         .def(nb::init<>())
         .def_rw("name", &RenderTargetContext::name)
-        .def_rw("camera", &RenderTargetContext::camera)
+        .def_prop_rw("view",
+            [](const RenderTargetContext& context) -> const RenderCamera* {
+                return context.view.primary_view();
+            },
+            [](RenderTargetContext& context, const RenderCamera* view) {
+                if (view) {
+                    context.view.primary = *view;
+                } else {
+                    context.view.primary.reset();
+                }
+            },
+            nb::rv_policy::reference)
         .def_rw("render_rect", &RenderTargetContext::render_rect)
         .def_rw("layer_mask", &RenderTargetContext::layer_mask)
         .def_rw("render_category_mask", &RenderTargetContext::render_category_mask)

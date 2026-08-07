@@ -9,9 +9,6 @@
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/render/render_export.hpp>
-#include <termin/lighting/light.hpp>
-#include <termin/tc_scene.hpp>
-#include <core/tc_entity_pool.h>
 
 #include <tgfx2/descriptors.hpp>
 
@@ -23,6 +20,7 @@ namespace termin {
 
 class ShadowMapArrayResource;
 class RenderItemSnapshot;
+struct SceneRenderServices;
 struct FrameGraphCaptureRequest;
 
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
@@ -68,17 +66,14 @@ public:
     ShadowArrayMap shadow_arrays;
     // Render extent for the pass. This is not a display viewport rectangle.
     Rect2i render_rect;
-    TcSceneRef scene;
-    RenderCamera* camera = nullptr;
-    const StereoRenderViews* stereo_views = nullptr;
+    RenderViewState view;
     std::string render_target_name;
-    tc_entity_handle internal_entities = TC_ENTITY_HANDLE_INVALID;
-    std::vector<Light> lights;
-    uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
-    uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
     // Borrowed from RenderEngine for this scene/view execution. Immutable
     // after its first successful collection and shared by all geometry passes.
     RenderItemSnapshot* render_item_snapshot = nullptr;
+    // Optional typed adapter capability. Generic execution code must not
+    // interpret or require scene services.
+    const SceneRenderServices* scene_services = nullptr;
     // Frame-local debugger requests for this pass. These pointers are valid
     // only until the enclosing RenderEngine execution returns.
     std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;

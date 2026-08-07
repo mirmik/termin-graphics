@@ -23,6 +23,7 @@
 #include "termin/render/tgfx2_bridge.hpp"
 #include "termin/render/frame_graph_capture.hpp"
 #include "termin/render/render_scene_item_collector.hpp"
+#include "termin/render/scene_render_services.hpp"
 
 extern "C" {
 #include "render/tc_frame_graph.h"
@@ -1272,17 +1273,17 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.tex2_depth_writes = std::move(pass_tex2_depth_writes);
         ctx.shadow_arrays = std::move(pass_shadow_arrays);
         ctx.render_rect = rt_ctx.render_rect;
-        ctx.scene = TcSceneRef(scene);
+        ctx.view = rt_ctx.view;
         ctx.render_target_name = rt_ctx.name;
-        ctx.internal_entities = rt_ctx.internal_entities;
-        ctx.camera = const_cast<RenderCamera*>(&rt_ctx.camera);
-        ctx.stereo_views = rt_ctx.stereo_views
-            ? &*rt_ctx.stereo_views
-            : nullptr;
-        ctx.lights = lights;
-        ctx.layer_mask = rt_ctx.layer_mask;
-        ctx.render_category_mask = rt_ctx.render_category_mask;
         ctx.render_item_snapshot = render_item_snapshots.at(&rt_ctx);
+        const SceneRenderServices scene_services{
+            .scene = TcSceneRef(scene),
+            .internal_entities = rt_ctx.internal_entities,
+            .lights = lights,
+            .layer_mask = rt_ctx.layer_mask,
+            .render_category_mask = rt_ctx.render_category_mask,
+        };
+        ctx.scene_services = &scene_services;
         for (FrameGraphCaptureRequest* request : debug_capture_requests) {
             if (!request
                     || request->kind != FrameGraphCaptureRequestKind::InternalSymbol

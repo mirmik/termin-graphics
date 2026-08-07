@@ -49,8 +49,7 @@ struct RenderPipelineCacheStats {
 struct RenderTargetContext {
 public:
     std::string name;
-    RenderCamera camera;
-    std::optional<StereoRenderViews> stereo_views;
+    RenderViewState view;
     // Render extent for this target. This is not the UI viewport's screen
     // rectangle; display placement is handled later during present/blit.
     Rect2i render_rect{0, 0, 0, 0};

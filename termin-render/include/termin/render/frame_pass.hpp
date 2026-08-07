@@ -4,7 +4,6 @@
 #include <any>
 #include <cstdlib>
 #include <cstring>
-#include <functional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -18,7 +17,6 @@
 #endif
 
 extern "C" {
-#include <core/tc_scene_pool.h>
 #include "render/tc_pass.h"
 }
 
@@ -29,7 +27,6 @@ extern "C" {
 #include <termin/geom/rect2.hpp>
 #include <termin/render/resource_spec.hpp>
 #include <termin/render/render_export.hpp>
-#include <tgfx/tgfx_shader_handle.hpp>
 
 namespace termin {
 
@@ -175,14 +172,6 @@ public:
 
     virtual void execute(ExecuteContext& ctx) {
         (void)ctx;
-    }
-
-    virtual void collect_shader_usages(
-        tc_scene_handle scene,
-        const std::function<void(TcShader)>& emit
-    ) const {
-        (void)scene;
-        (void)emit;
     }
 
     virtual std::set<const char*> compute_reads() const {

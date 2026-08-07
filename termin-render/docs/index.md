@@ -19,6 +19,18 @@
 - Python package/bindings в `python/termin/render*`.
 - Tests в `tests/`.
 
+## Execution boundary
+
+`ExecuteContext` — scene-neutral контракт исполнения pass: GPU resources,
+attachments, viewport, `RenderViewState`, immutable render-item snapshot и
+diagnostics. Game-scene данные не являются его обязательной частью.
+
+Pass, которому нужны `TcSceneRef`, lights, internal entities или scene masks,
+явно запрашивает `SceneRenderServices`. Scene-specific shader discovery так же
+объявляется отдельным `SceneShaderUsageProvider`, а не методом generic
+`CxxFramePass`. Пока оба слоя собираются в одном target; физическое выделение
+render core должно следовать за отделением generic executor и item source.
+
 ## Публичный API
 
 Python package: `termin.render` / `termin.render_framework` через пакет `termin-render`.

@@ -92,6 +92,7 @@ set(TERMIN_RENDER_SOURCES
     src/render_scene_item_collector.cpp
     src/render_item_submission.cpp
     src/render_task.cpp
+    src/scene_render_services.cpp
     src/world2d_ordering.cpp
     src/world2d_quad_geometry.cpp
     src/shader_abi.cpp
@@ -166,6 +167,8 @@ set(TERMIN_RENDER_HEADERS
     include/termin/render/render_item_collection.hpp
     include/termin/render/render_item_snapshot.hpp
     include/termin/render/render_scene_item_collector.hpp
+    include/termin/render/scene_render_services.hpp
+    include/termin/render/scene_shader_usage_provider.hpp
     include/termin/render/world2d_ordering.hpp
     include/termin/render/world2d_quad_geometry.hpp
     include/termin/render/python_render_item.hpp

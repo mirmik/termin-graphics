@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <termin/geom/mat44.hpp>
 #include <termin/geom/vec3.hpp>
 
@@ -24,6 +26,19 @@ public:
 struct StereoRenderViews {
     RenderCamera left;
     RenderCamera right;
+};
+
+// Scene-neutral view constants for one render execution. The primary view is
+// optional so resource-only passes and tests do not need to manufacture a
+// camera. Stereo views supplement, rather than replace, the primary sorting
+// and compatibility view.
+struct RenderViewState {
+    std::optional<RenderCamera> primary;
+    std::optional<StereoRenderViews> stereo;
+
+    const RenderCamera* primary_view() const {
+        return primary ? &*primary : nullptr;
+    }
 };
 
 } // namespace termin

@@ -1,5 +1,6 @@
 #include <termin/render/render_scene_item_collector.hpp>
 #include <termin/render/execute_context.hpp>
+#include <termin/render/scene_render_services.hpp>
 
 #include <tcbase/tc_log.hpp>
 #include <cstring>
@@ -141,13 +142,19 @@ RenderItemSnapshot* ensure_render_item_snapshot(
         return context.render_item_snapshot;
     }
 
+    const SceneRenderServices* services = require_scene_render_services(
+        context, debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
+    if (!services) {
+        return nullptr;
+    }
+
     RenderSceneItemCollectRequest request{};
-    request.scene = context.scene.handle();
-    request.layer_mask = context.layer_mask;
-    request.render_category_mask = context.render_category_mask;
+    request.scene = services->scene.handle();
+    request.layer_mask = services->layer_mask;
+    request.render_category_mask = services->render_category_mask;
     request.debug_pass_name = debug_pass_name;
-    request.camera = context.camera;
-    request.scene_context = &context.scene;
+    request.camera = context.view.primary_view();
+    request.scene_context = &services->scene;
     if (!collect_scene_render_item_snapshot(*context.render_item_snapshot, request)) {
         tc::Log::error("[%s] failed to build scene RenderItem snapshot",
                        debug_pass_name ? debug_pass_name : "RenderItemSnapshot");
