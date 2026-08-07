@@ -15,17 +15,13 @@
 #include <tcbase/tc_log.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
-#include <tgfx2/font_atlas.hpp>
 #include <tgfx2/i_render_device.hpp>
-#include <tgfx2/render_context.hpp>
-#include <termin/render/render_item_submission.hpp>
-#include <termin/render/render_task.hpp>
 
 #include "tcplot/gpu_host.hpp"
 #include "tcplot/orbit_camera.hpp"
 #include "tcplot/styles.hpp"
-#include "plot_scene3d_chart_chrome.hpp"
 #include "plot_scene3d_render_item_encoder.hpp"
+#include "plot_scene3d_render_pipeline.hpp"
 
 namespace {
 
@@ -192,6 +188,7 @@ class RetainedChart3D {
 public:
     explicit RetainedChart3D(tcplot::GpuHost& host)
         : host_(&host),
+          render_pipeline_(host),
           scene_id_(g_next_plot_scene3d_id.fetch_add(1)) {
         grid_part_ = add_grid(default_grid_style());
     }
@@ -596,131 +593,35 @@ public:
                 "failed to publish retained Chart3D render items");
         }
 
-        termin::RenderItemTaskPlanningContract item_contract{};
-        item_contract.phase = TC_PHASE_OPAQUE;
-        item_contract.material_phase_policy =
-            termin::RenderItemMaterialPhasePolicy::Forbidden;
-        item_contract.provided_input_mask = termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
-        item_contract.required_input_mask = termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
-        item_contract.debug_pass_name = "RetainedChart3D/Items";
-
-        termin::RenderContext item_draw_context;
-        item_draw_context.phase = TC_PHASE_OPAQUE;
-        item_draw_context.viewport_width = width;
-        item_draw_context.viewport_height = height;
-        termin::RenderTaskList item_tasks;
-        item_tasks.reserve(item_snapshot.item_count());
-        bool success = true;
-        const tcplot::PlotScene3DRenderItemPayload* selected_grid_payload =
-            nullptr;
-        for (size_t item_index = 0;
-             item_index < item_snapshot.item_count();
-             ++item_index) {
-            const tc_render_item* item = item_snapshot.item(item_index);
-            if (!item ||
-                (item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SURFACE &&
-                 item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SCATTER &&
-                 item->kind != tcplot::PLOT_RENDER_ITEM_KIND_GRID)) {
-                continue;
-            }
-            if (item->kind == tcplot::PLOT_RENDER_ITEM_KIND_GRID &&
-                !is_selected_grid_item(*item)) {
-                continue;
-            }
-            if (item->kind == tcplot::PLOT_RENDER_ITEM_KIND_GRID) {
-                selected_grid_payload =
-                    tcplot::plot_scene3d_render_item_payload(*item);
-            }
-            termin::RenderItemTaskPlanningRequest planning{};
-            planning.item = item;
-            planning.item_index = item_index;
-            planning.source_draw_index = item_index;
-            planning.contract = &item_contract;
-            const termin::RenderItemTaskPlanningResult result =
-                termin::plan_render_item_task(planning, item_tasks);
-            if (!result.accepted()) {
-                tc::Log::error(
-                    "[RetainedChart3D] item task planning failed for slot %llu: %s",
-                    static_cast<unsigned long long>(item->source.object_id),
-                    termin::render_item_task_rejection_name(result.rejection));
-                success = false;
-                continue;
-            }
-            termin::RenderTask& task = item_tasks.at(result.task_index);
-            task.draw_context = item_draw_context;
-            task.debug_name =
-                item->kind == tcplot::PLOT_RENDER_ITEM_KIND_SURFACE
-                    ? "PlotScene3D surface"
-                    : item->kind == tcplot::PLOT_RENDER_ITEM_KIND_GRID
-                        ? "PlotScene3D grid"
-                        : "PlotScene3D scatter";
-        }
-
-        tgfx::RenderContext2& context = host_->ctx();
-        const float clear[4] = {0.08f, 0.09f, 0.11f, 1.0f};
-        context.begin_frame();
-        context.begin_pass(
-            color_, depth_, clear, 1.0f, true);
-
-        for (termin::RenderTask& task : item_tasks) {
-            if (!task.item ||
-                task.item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SURFACE) {
-                continue;
-            }
-            Slot* slot = task.item ? resolve_render_item(*task.item) : nullptr;
-            if (!slot || !submit_plot_task(task)) {
-                success = false;
-                continue;
-            }
-            slot->gpu_revision = slot->render_revision;
-        }
-        for (termin::RenderTask& task : item_tasks) {
-            if (!task.item ||
-                task.item->kind != tcplot::PLOT_RENDER_ITEM_KIND_GRID) {
-                continue;
-            }
-            Slot* slot = resolve_render_item(*task.item);
-            if (!slot || !submit_plot_task(task)) {
-                success = false;
-                continue;
-            }
-            slot->gpu_revision = slot->render_revision;
-        }
-        for (termin::RenderTask& task : item_tasks) {
-            if (!task.item ||
-                task.item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SCATTER) {
-                continue;
-            }
-            Slot* slot = resolve_render_item(*task.item);
-            if (!slot || !submit_plot_task(task)) {
-                success = false;
-                continue;
-            }
-            slot->gpu_revision = slot->render_revision;
-        }
-        if (selected_grid_payload && selected_grid_payload->item &&
-            selected_grid_payload->item->grid_style.labels_visible != 0) {
-            chrome_renderer_.draw_grid_labels(
-                context,
-                host_->font(),
-                selected_grid_payload->frame,
-                selected_grid_payload->item->grid_style,
+        const tcplot::PlotScene3DRenderResult render_result =
+            render_pipeline_.execute(
+                item_snapshot,
+                scene_id_,
+                grid_part_.index,
+                grid_part_.generation,
+                color_,
+                depth_,
                 width,
                 height);
+        for (const tcplot::PlotScene3DRenderedItem& rendered_item :
+             render_result.rendered_items) {
+            if (rendered_item.object_id >= slots_.size()) {
+                continue;
+            }
+            Slot& slot = slots_[static_cast<std::size_t>(
+                rendered_item.object_id)];
+            if (slot.alive && slot.generation == rendered_item.generation) {
+                slot.gpu_revision = slot.render_revision;
+            }
         }
-
-        context.end_pass();
-        context.end_frame();
-        return success ? color_.id : 0;
+        return render_result.success ? color_.id : 0;
     }
 
     void release_gpu() {
         for (Slot& slot : slots_) {
             slot.gpu_revision = 0;
         }
-        chrome_renderer_.release_gpu();
+        render_pipeline_.release_gpu();
         release_targets();
     }
 
@@ -892,36 +793,6 @@ private:
             ? &slot : nullptr;
     }
 
-    bool is_selected_grid_item(const tc_render_item& item) const {
-        return item.source.domain_id == tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN &&
-               item.source.namespace_id == scene_id_ &&
-               item.source.object_id == grid_part_.index &&
-               item.source.generation == grid_part_.generation;
-    }
-
-    bool submit_plot_task(const termin::RenderTask& task) {
-        if (!task.item) {
-            tc::Log::error(
-                "[RetainedChart3D] cannot submit a task without an item");
-            return false;
-        }
-        termin::RenderItemDrawSubmitRequest submission{};
-        submission.shader_handle = task.final_shader;
-        submission.device = &host_->device();
-        submission.draw_context = &task.draw_context;
-        submission.phase = task.phase;
-        submission.debug_pass_name = "RetainedChart3D/Items";
-        submission.debug_entity_name = task.debug_name.c_str();
-        if (!termin::submit_render_item_draw(
-                host_->ctx(), *task.item, submission)) {
-            tc::Log::error(
-                "[RetainedChart3D] item submission failed for slot %llu",
-                static_cast<unsigned long long>(task.item->source.object_id));
-            return false;
-        }
-        return true;
-    }
-
     void ensure_offscreen(int width, int height) {
         if (width_ == width && height_ == height &&
             color_.id != 0 && depth_.id != 0) {
@@ -969,6 +840,7 @@ private:
     }
 
     tcplot::GpuHost* host_;
+    tcplot::PlotScene3DRenderPipeline render_pipeline_;
     std::uint64_t scene_id_;
     std::vector<Slot> slots_;
     std::vector<std::uint32_t> free_;
@@ -990,7 +862,6 @@ private:
     int width_ = 0;
     int height_ = 0;
     int msaa_samples_ = 4;
-    tcplot::PlotScene3DChartChromeRenderer chrome_renderer_;
 };
 
 const char* PlotScene3DRenderItemSource::source_name() const noexcept {
