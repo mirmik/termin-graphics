@@ -27,7 +27,7 @@ struct RenderItemPhaseBucket {
 // Scene-neutral immutable frame/view snapshot. Only RenderItemSource can open
 // and publish its mutable collection lifecycle; consumers receive a complete
 // snapshot or an explicitly invalid value.
-class RENDER_API RenderItemSnapshot {
+class RENDER_CORE_API RenderItemSnapshot {
 private:
     friend class RenderItemSource;
 
@@ -51,11 +51,11 @@ public:
     std::span<const size_t> phase_item_indices(tc_phase_mask phase) const;
 };
 
-RENDER_API bool render_item_matches_phase(
+RENDER_CORE_API bool render_item_matches_phase(
     const tc_render_item& item,
     tc_phase_mask phase);
 
-RENDER_API const RenderItemSnapshot* require_render_item_snapshot(
+RENDER_CORE_API const RenderItemSnapshot* require_render_item_snapshot(
     const ExecuteContext& context,
     const char* consumer);
 

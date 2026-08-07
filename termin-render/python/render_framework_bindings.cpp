@@ -473,6 +473,12 @@ void bind_render_framework(nb::module_& m) {
         .def("__init__", [](RenderContext* self, nb::kwargs kwargs) {
             new (self) RenderContext();
 
+            if (kwargs.contains("scene") || kwargs.contains("camera")) {
+                throw nb::type_error(
+                    "RenderContext is scene-neutral and no longer accepts scene or camera; "
+                    "provide resolved matrices and render masks instead");
+            }
+
             if (kwargs.contains("phase")) {
                 nb::handle value = kwargs["phase"];
                 if (nb::isinstance<nb::str>(value)) {
@@ -487,16 +493,6 @@ void bind_render_framework(nb::module_& m) {
                     self->phase = phase;
                 } else {
                     self->phase = nb::cast<tc_phase_mask>(value);
-                }
-            }
-            if (kwargs.contains("scene")) {
-                nb::object s = nb::borrow<nb::object>(kwargs["scene"]);
-                if (!s.is_none()) {
-                    if (nb::isinstance<TcSceneRef>(s)) {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    } else {
-                        self->scene = nb::cast<TcSceneRef>(s);
-                    }
                 }
             }
             if (kwargs.contains("layer_mask")) {
@@ -529,24 +525,13 @@ void bind_render_framework(nb::module_& m) {
                     self->model = mat44f_from_buffer_compatible_object(model, "model");
                 }
             }
-            if (kwargs.contains("camera")) {
-                nb::object camera = nb::borrow<nb::object>(kwargs["camera"]);
-                if (!camera.is_none()) {
-                    self->camera = nb::cast<RenderCamera*>(camera);
-                }
-            }
         })
         .def_rw("phase", &RenderContext::phase)
-        .def_rw("scene", &RenderContext::scene)
         .def_rw("layer_mask", &RenderContext::layer_mask)
         .def_rw("render_category_mask", &RenderContext::render_category_mask)
         .def_rw("view", &RenderContext::view)
         .def_rw("projection", &RenderContext::projection)
         .def_rw("model", &RenderContext::model)
-        .def_prop_rw("camera",
-            [](const RenderContext& self) -> RenderCamera* { return self.camera; },
-            [](RenderContext& self, RenderCamera* camera) { self.camera = camera; },
-            nb::rv_policy::reference)
         .def("mvp", &RenderContext::mvp);
 
     nb::class_<HDRStats>(m, "HDRStats")

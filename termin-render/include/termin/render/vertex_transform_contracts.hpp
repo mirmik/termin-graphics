@@ -98,58 +98,58 @@ struct VertexOutputAdapter {
     std::vector<MaterialPipelineResourceDecl> resources;
 };
 
-RENDER_API bool vertex_transform_provider_is_modular(
+RENDER_CORE_API bool vertex_transform_provider_is_modular(
     const VertexTransformProvider& provider);
 
-RENDER_API const char* vertex_transform_kind_name(VertexTransformKind kind);
-RENDER_API const char* material_pipeline_value_type_name(MaterialPipelineValueType type);
+RENDER_CORE_API const char* vertex_transform_kind_name(VertexTransformKind kind);
+RENDER_CORE_API const char* material_pipeline_value_type_name(MaterialPipelineValueType type);
 
-RENDER_API MaterialFragmentInterface material_pipeline_standard_material_fragment_interface();
+RENDER_CORE_API MaterialFragmentInterface material_pipeline_standard_material_fragment_interface();
 
-RENDER_API VertexInputContract material_pipeline_full_material_mesh_input();
-RENDER_API VertexInputContract material_pipeline_position_mesh_input();
-RENDER_API VertexInputContract material_pipeline_position_normal_mesh_input();
-RENDER_API VertexInputContract material_pipeline_skinned_material_mesh_input();
-RENDER_API VertexInputContract material_pipeline_skinned_position_mesh_input();
-RENDER_API VertexInputContract material_pipeline_skinned_position_normal_mesh_input();
-RENDER_API VertexInputContract material_pipeline_foliage_material_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_full_material_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_position_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_position_normal_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_skinned_material_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_skinned_position_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_skinned_position_normal_mesh_input();
+RENDER_CORE_API VertexInputContract material_pipeline_foliage_material_mesh_input();
 
-RENDER_API MaterialPipelineResourceDecl material_pipeline_draw_resource_decl(
+RENDER_CORE_API MaterialPipelineResourceDecl material_pipeline_draw_resource_decl(
     std::string name,
     uint32_t stage_mask,
     uint32_t size = 64u);
 
-RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_common_vertex_resources(
+RENDER_CORE_API std::vector<MaterialPipelineResourceDecl> material_pipeline_common_vertex_resources(
     std::string draw_resource_name,
     uint32_t draw_resource_size = 64u);
 
-RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_pass_vertex_resources(
+RENDER_CORE_API std::vector<MaterialPipelineResourceDecl> material_pipeline_pass_vertex_resources(
     std::string draw_resource_name,
     uint32_t draw_resource_size = 64u);
 
-RENDER_API std::vector<MaterialPipelineResourceDecl> material_pipeline_foliage_vertex_resources();
+RENDER_CORE_API std::vector<MaterialPipelineResourceDecl> material_pipeline_foliage_vertex_resources();
 
-RENDER_API VertexTransformProvider material_pipeline_make_static_mesh_vertex_transform_provider(
+RENDER_CORE_API VertexTransformProvider material_pipeline_make_static_mesh_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile,
     std::string model_expression);
 
-RENDER_API VertexTransformProvider material_pipeline_make_skinned_mesh_vertex_transform_provider(
+RENDER_CORE_API VertexTransformProvider material_pipeline_make_skinned_mesh_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile,
     std::string model_expression);
 
-RENDER_API VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter();
-RENDER_API VertexOutputAdapter material_pipeline_multiview_material_vertex_output_adapter();
+RENDER_CORE_API VertexOutputAdapter material_pipeline_standard_material_vertex_output_adapter();
+RENDER_CORE_API VertexOutputAdapter material_pipeline_multiview_material_vertex_output_adapter();
 
-RENDER_API VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
+RENDER_CORE_API VertexTransformProvider material_pipeline_make_foliage_material_vertex_transform_provider(
     std::string debug_name);
 
-RENDER_API VertexTransformProvider material_pipeline_make_foliage_vertex_transform_provider(
+RENDER_CORE_API VertexTransformProvider material_pipeline_make_foliage_vertex_transform_provider(
     std::string debug_name,
     MeshVertexTransformProfile profile);
 
-RENDER_API bool material_pipeline_interface_produces(
+RENDER_CORE_API bool material_pipeline_interface_produces(
     const MaterialFragmentInterface& interface,
     const std::string& semantic_name,
     MaterialPipelineValueType type);

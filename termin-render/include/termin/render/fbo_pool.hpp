@@ -19,7 +19,7 @@ namespace termin {
 
 using FBOPoolEntry = tgfx::RenderTargetEntry;
 
-class RENDER_API FBOPool : public tgfx::RenderTargetPool {
+class RENDER_CORE_API FBOPool : public tgfx::RenderTargetPool {
 public:
     std::unordered_map<std::string, std::string> alias_to_canonical;
 

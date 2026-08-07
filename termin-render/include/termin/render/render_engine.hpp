@@ -86,7 +86,7 @@ struct RenderExecution {
     std::vector<FrameGraphCaptureRequest*> debug_capture_requests;
 };
 
-class RENDER_API RenderEngine {
+class RENDER_CORE_API RenderEngine {
 private:
     std::unique_ptr<tgfx::GraphicsHost> owned_graphics_host_;
     tgfx::GraphicsHost* graphics_host_ = nullptr;

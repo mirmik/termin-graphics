@@ -20,7 +20,7 @@ struct RenderItemSourceRequest {
 // Publishes a complete immutable snapshot through one guarded lifecycle.
 // Implementations collect into the supplied storage but cannot publish a
 // partial snapshot themselves.
-class RENDER_API RenderItemSource {
+class RENDER_CORE_API RenderItemSource {
 public:
     virtual ~RenderItemSource();
 

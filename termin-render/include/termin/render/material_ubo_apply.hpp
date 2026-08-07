@@ -22,7 +22,7 @@ namespace termin {
 // coercion, and Bool fields accept either TC_UNIFORM_BOOL or TC_UNIFORM_INT,
 // normalized to int32 0/1. Returns false without touching dst on mismatch and
 // logs the incompatible uniform/reflected field types.
-RENDER_API bool pack_material_uniform_value_to_std140_field(
+RENDER_CORE_API bool pack_material_uniform_value_to_std140_field(
     const tc_uniform_value& uniform,
     const char* field_type,
     uint8_t* dst);
@@ -31,7 +31,7 @@ RENDER_API bool pack_material_uniform_value_to_std140_field(
 // packs + binds the phase's uniforms. Textures from phase->textures[] are
 // bound by reflected resource name. Missing reflected resources are logged.
 // Returns true when any material resource was bound.
-RENDER_API bool apply_material_phase_ubo(
+RENDER_CORE_API bool apply_material_phase_ubo(
     tc_material_phase* phase,
     const tc_shader* shader,
     tgfx::IRenderDevice& device,

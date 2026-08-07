@@ -16,7 +16,7 @@ namespace termin {
 // Owns every borrowed payload referenced by its active RenderItems. The
 // storage retains capacity between frame snapshots but publishes no source-
 // domain semantics.
-struct RENDER_API RenderItemCollection {
+struct RENDER_CORE_API RenderItemCollection {
     std::vector<tc_render_item> items;
     std::vector<std::vector<tc_render_item_vec3>> line_batch_points;
     std::vector<std::unique_ptr<std::string>> text_batch_strings;

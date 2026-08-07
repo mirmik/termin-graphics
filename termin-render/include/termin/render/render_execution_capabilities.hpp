@@ -10,12 +10,12 @@ namespace termin {
 // Marker base for adapter-owned services borrowed by one render execution.
 // The registry exposes only type-safe lookup; generic execution never needs
 // to know which concrete adapter capabilities are present.
-class RENDER_API RenderExecutionCapability {
+class RENDER_CORE_API RenderExecutionCapability {
 public:
     virtual ~RenderExecutionCapability() = default;
 };
 
-class RENDER_API RenderExecutionCapabilities {
+class RENDER_CORE_API RenderExecutionCapabilities {
 private:
     std::vector<const RenderExecutionCapability*> values_;
 

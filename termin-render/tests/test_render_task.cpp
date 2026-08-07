@@ -21,7 +21,7 @@ TEST_CASE("RenderTaskList keeps task resource packets valid after planning growt
     termin::RenderTask& first = tasks.append();
     first.extension = &payload;
     first.final_shader = tc_shader_handle{7};
-    first.entity_name = "first";
+    first.debug_name = "first";
 
     const termin::RenderItemNamedUniformBinding uniform{
         "draw_data", payload.model.data(),
@@ -32,7 +32,7 @@ TEST_CASE("RenderTaskList keeps task resource packets valid after planning growt
                         std::span{&texture, size_t{1}});
 
     for (int i = 0; i < 64; ++i) {
-        tasks.append().entity_name = "later";
+        tasks.append().debug_name = "later";
     }
 
     REQUIRE(tasks.size() == 65u);
@@ -44,7 +44,7 @@ TEST_CASE("RenderTaskList keeps task resource packets valid after planning growt
     CHECK(stable.resources.named_textures[0].texture.id == 9u);
     CHECK(stable.resources.named_textures[0].sampler.id == 3u);
     CHECK(stable.final_shader.index == 7u);
-    CHECK(stable.entity_name == "first");
+    CHECK(stable.debug_name == "first");
 }
 
 GUARD_TEST_MAIN();

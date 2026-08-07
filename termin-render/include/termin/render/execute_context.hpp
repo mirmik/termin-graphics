@@ -85,9 +85,9 @@ public:
         return dynamic_cast<ResourceT*>(get_frame_graph_resource(name));
     }
 
-    RENDER_API const std::string* requested_internal_symbol() const;
-    RENDER_API bool should_capture_internal(const char* symbol) const;
-    RENDER_API bool capture_internal(
+    RENDER_CORE_API const std::string* requested_internal_symbol() const;
+    RENDER_CORE_API bool should_capture_internal(const char* symbol) const;
+    RENDER_CORE_API bool capture_internal(
         const char* symbol,
         tgfx::TextureHandle texture,
         int width = 0,
@@ -99,7 +99,7 @@ public:
     // ordered attachment contract consumed by RenderContext2. This does not
     // create or cache an FBO-like aggregate; the composition exists only for
     // the pass invocation.
-    RENDER_API bool build_render_pass(
+    RENDER_CORE_API bool build_render_pass(
         std::span<const FrameGraphColorAttachment> colors,
         const FrameGraphDepthAttachment* depth,
         tgfx::RenderPassDesc& out_pass

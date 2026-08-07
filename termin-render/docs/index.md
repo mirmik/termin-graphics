@@ -1,6 +1,7 @@
 # termin-render
 
-`termin-render` содержит rendering framework поверх canonical engine resources: render pipelines, frame graph, render engine bindings, scene render mount data и render-state integration helpers.
+Модуль публикует два слоя rendering framework: scene-neutral
+`termin_render_core` и зависящий от него scene adapter `termin_render`.
 
 Связанные документы:
 
@@ -41,8 +42,9 @@ source получает нейтральные view/mask inputs и наполн�
 `RenderItemCollection`, после чего базовый contract атомарно публикует snapshot
 либо инвалидирует частичный результат с диагностикой. `TcSceneRenderItemSource`
 является scene adapter implementation; executor и generic source header не
-знают о `tc_scene`, entities, components или lights. Пока оба слоя собираются
-в одном target; следующая граница — физическое выделение render core.
+знают о `tc_scene`, entities, components или lights. Они собираются в
+отдельный `termin_render_core`, тогда как scene traversal/services остаются в
+`termin_render`.
 
 Non-texture framegraph resources расширяют executor через
 `FrameGraphResourceTypeDescriptor`. Registry хранит cold-path factory и
@@ -56,7 +58,10 @@ reads/writes через `ExecuteContext::frame_graph_resources`. Неизвес�
 
 Python package: `termin.render` / `termin.render_framework` через пакет `termin-render`.
 
-C++ API публикуется через headers из `include/` и CMake package `termin_render`.
+C++ API публикуется через headers из `include/`. Scene-neutral consumers
+используют CMake package/target
+`termin_render_core::termin_render_core`; engine scene consumers —
+`termin_render::termin_render`.
 
 `termin.render.ViewportConfig` and `termin.render.RenderTargetConfig` are the
 canonical Python bindings for scene render mount configuration, with matching

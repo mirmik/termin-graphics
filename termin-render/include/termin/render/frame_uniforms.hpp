@@ -36,7 +36,7 @@ struct StereoPerFrameStd140 {
 static_assert(sizeof(StereoPerFrameStd140) == 704,
               "StereoPerFrameStd140 must contain exactly two std140 view blocks");
 
-RENDER_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
+RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
     const Mat44f& view,
     const Mat44f& projection,
     const Vec3& camera_position,
@@ -46,23 +46,23 @@ RENDER_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
     float far_clip
 );
 
-RENDER_API StereoPerFrameStd140 make_stereo_per_frame_uniforms(
+RENDER_CORE_API StereoPerFrameStd140 make_stereo_per_frame_uniforms(
     const StereoRenderViews& views,
     float width,
     float height
 );
 
-RENDER_API void bind_engine_frame_uniform_data(
+RENDER_CORE_API void bind_engine_frame_uniform_data(
     tgfx::RenderContext2& ctx2,
     const void* data,
     uint32_t size,
     const tc_shader* shader);
 
-RENDER_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
+RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
     const ExecuteContext& ctx
 );
 
-RENDER_API void bind_engine_per_frame_uniforms(
+RENDER_CORE_API void bind_engine_per_frame_uniforms(
     tgfx::RenderContext2& ctx2,
     const EnginePerFrameStd140& uniforms,
     const tc_shader* shader);

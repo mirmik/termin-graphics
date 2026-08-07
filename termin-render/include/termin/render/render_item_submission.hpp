@@ -213,7 +213,7 @@ struct RenderItemDrawEncoderDesc {
     RenderItemEncoderCapabilities capabilities{};
 };
 
-RENDER_API bool set_render_item_inline_uniform(
+RENDER_CORE_API bool set_render_item_inline_uniform(
     tc_render_item& item,
     const char* name,
     const void* data,
@@ -222,27 +222,27 @@ RENDER_API bool set_render_item_inline_uniform(
 // Registers an encoder for a non-mesh RenderItem kind owned by another package.
 // Passes bind pass/material resources before submit; encoders bind only
 // payload-kind-specific resources and issue backend draw commands.
-RENDER_API bool register_render_item_draw_encoder(
+RENDER_CORE_API bool register_render_item_draw_encoder(
     uint32_t item_kind,
     const RenderItemDrawEncoderDesc& desc);
 
-RENDER_API bool unregister_render_item_draw_encoder(
+RENDER_CORE_API bool unregister_render_item_draw_encoder(
     uint32_t item_kind,
     RenderItemDrawEncoderFn encode,
     void* user_data = nullptr);
 
-RENDER_API bool get_render_item_encoder_capabilities(
+RENDER_CORE_API bool get_render_item_encoder_capabilities(
     uint32_t item_kind,
     RenderItemEncoderCapabilities& out);
 
-RENDER_API bool render_item_encoder_supports_phase(
+RENDER_CORE_API bool render_item_encoder_supports_phase(
     uint32_t item_kind,
     tc_phase_mask phase);
 
 // Explicit shader-planning hook for encoders whose current shader candidate is
 // already final. Registering this hook is intentional: #205 can replace it per
 // item kind without extending Drawable or introducing a second pass protocol.
-RENDER_API RenderItemTaskRejection plan_render_item_passthrough_shader(
+RENDER_CORE_API RenderItemTaskRejection plan_render_item_passthrough_shader(
     const RenderItemTaskPlanningRequest& request,
     RenderItemTaskShaderPlan& out_plan,
     const char*& out_detail,
@@ -250,14 +250,14 @@ RENDER_API RenderItemTaskRejection plan_render_item_passthrough_shader(
 
 // Plan and append one owned task. A rejection never mutates out_tasks and is
 // always logged with pass, encoder, item kind and a structured reason.
-RENDER_API RenderItemTaskPlanningResult plan_render_item_task(
+RENDER_CORE_API RenderItemTaskPlanningResult plan_render_item_task(
     const RenderItemTaskPlanningRequest& request,
     RenderTaskList& out_tasks);
 
-RENDER_API const char* render_item_task_rejection_name(
+RENDER_CORE_API const char* render_item_task_rejection_name(
     RenderItemTaskRejection rejection);
 
-RENDER_API bool bind_render_item_common_resources(
+RENDER_CORE_API bool bind_render_item_common_resources(
     tgfx::RenderContext2& ctx,
     const tc_shader* shader,
     const RenderItemDrawSubmitRequest& request);
@@ -265,14 +265,14 @@ RENDER_API bool bind_render_item_common_resources(
 // Bind small item-local constant-buffer data carried directly by a typed
 // RenderItem. This replaces backend-specific Drawable upload callbacks while
 // keeping the payload valid across deferred collection and submission.
-RENDER_API bool bind_render_item_inline_uniform(
+RENDER_CORE_API bool bind_render_item_inline_uniform(
     tgfx::RenderContext2& ctx,
     const tc_render_item& item,
     const tc_shader* shader,
     const char* debug_pass_name,
     const char* debug_entity_name);
 
-RENDER_API bool submit_render_item_draw(
+RENDER_CORE_API bool submit_render_item_draw(
     tgfx::RenderContext2& ctx,
     const tc_render_item& item,
     const RenderItemDrawSubmitRequest& request);

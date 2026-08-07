@@ -38,7 +38,7 @@ struct World2DOrderPolicy {
 // Returns false when an enabled depth policy encounters a non-finite depth.
 // On failure the input is left untouched, so the owning collector can reject
 // the malformed frame and log it with producer context.
-RENDER_API bool sort_world2d_order_entries(
+RENDER_CORE_API bool sort_world2d_order_entries(
     std::span<World2DOrderEntry> entries,
     World2DOrderPolicy policy = {});
 

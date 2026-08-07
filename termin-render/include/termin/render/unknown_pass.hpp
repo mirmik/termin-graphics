@@ -8,7 +8,7 @@
 
 namespace termin {
 
-class RENDER_API UnknownPass final : public CxxFramePass {
+class RENDER_CORE_API UnknownPass final : public CxxFramePass {
 public:
     std::string original_type;
     tc_value original_data = tc_value_dict_new();
@@ -28,6 +28,6 @@ public:
     std::vector<std::string> get_internal_symbols() const override;
 };
 
-RENDER_API void ensure_unknown_pass_registered();
+RENDER_CORE_API void ensure_unknown_pass_registered();
 
 } // namespace termin

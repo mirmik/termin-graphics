@@ -76,7 +76,7 @@ inline tc_value make_pass_graph_metadata(
     return graph;
 }
 
-class RENDER_API CxxFramePass {
+class RENDER_CORE_API CxxFramePass {
 public:
     tc_pass _c;
 
@@ -225,7 +225,7 @@ private:
     void _cleanup_tc_pass();
 };
 
-class RENDER_API FramePassTypeDescriptorBuilder {
+class RENDER_CORE_API FramePassTypeDescriptorBuilder {
     tc_runtime_type_descriptor* _descriptor = nullptr;
     tc::InspectFacetBuilder _inspect;
     std::string _type_name;

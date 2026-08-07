@@ -25,7 +25,7 @@ namespace termin {
 
 using PipelineTextureEntry = tgfx::TexturePoolEntry;
 
-class RENDER_API PipelineTexturePool : public tgfx::TexturePool {
+class RENDER_CORE_API PipelineTexturePool : public tgfx::TexturePool {
 public:
     PipelineTexturePool() = default;
     PipelineTexturePool(PipelineTexturePool&&) = default;
@@ -36,7 +36,7 @@ public:
 };
 
 // Opaque render cache stored in tc_pipeline.render_cache
-struct RENDER_API PipelineRenderCache {
+struct RENDER_CORE_API PipelineRenderCache {
     FBOPool fbo_pool;
     PipelineTexturePool texture_pool;
     std::unordered_map<std::string, std::unique_ptr<FrameGraphResource>>
@@ -49,7 +49,7 @@ struct RENDER_API PipelineRenderCache {
 
 // Mutable execution instance. It owns live passes and device-local caches while
 // holding a strong reference to an immutable/backend-neutral TcPipelineTemplate.
-class RENDER_API RenderPipeline {
+class RENDER_CORE_API RenderPipeline {
 public:
     tc_pipeline_handle handle_;
 
