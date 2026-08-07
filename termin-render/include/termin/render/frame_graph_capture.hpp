@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <tcbase/tc_log.hpp>
@@ -19,6 +20,9 @@ class IRenderDevice;
 }
 
 namespace termin {
+
+RENDER_API std::pair<int, int> bounded_frame_graph_capture_dimensions(
+    int width, int height, std::uint32_t max_long_edge);
 
 class CxxFramePass;
 
@@ -75,7 +79,8 @@ public:
         tgfx::TextureHandle src_tex,
         int width,
         int height,
-        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm
+        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm,
+        std::uint32_t max_long_edge = 0
     );
 
     tgfx::TextureHandle capture_tex() const { return capture_tex_; }
@@ -123,6 +128,9 @@ struct FrameGraphCaptureRequest {
     std::string internal_symbol;
     FrameGraphCapture* capture = nullptr;
     FrameGraphCapture* depth_capture = nullptr;
+    // Zero keeps the source dimensions. A non-zero limit scales the owned
+    // capture texture before readback while preserving aspect ratio.
+    std::uint32_t max_long_edge = 0;
     bool paused = false;
     FrameGraphCaptureRequestStatus status = FrameGraphCaptureRequestStatus::Pending;
 };

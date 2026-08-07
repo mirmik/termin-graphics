@@ -45,7 +45,8 @@ bool ExecuteContext::capture_internal(
             continue;
         }
         request->capture->reset_capture();
-        request->capture->capture_direct_via_ctx2(ctx2, texture, width, height, format);
+        request->capture->capture_direct_via_ctx2(
+            ctx2, texture, width, height, format, request->max_long_edge);
         request->status = request->capture->has_capture()
             ? FrameGraphCaptureRequestStatus::Captured
             : FrameGraphCaptureRequestStatus::ResourceUnavailable;
