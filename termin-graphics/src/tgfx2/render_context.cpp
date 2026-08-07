@@ -88,8 +88,9 @@ static const uint32_t FSQ_INDICES[] = { 0, 1, 2, 0, 2, 3 };
 // Construction / Destruction
 // ============================================================================
 
-RenderContext2::RenderContext2(IRenderDevice& device, PipelineCache& cache)
-    : device_(device), cache_(cache) {}
+RenderContext2::RenderContext2(IRenderDevice& device, PipelineCache& cache,
+                               GraphicsHost* graphics_host)
+    : device_(device), cache_(cache), graphics_host_(graphics_host) {}
 
 RenderContext2::~RenderContext2() {
     if (current_resource_set_) device_.destroy(current_resource_set_);

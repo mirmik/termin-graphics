@@ -91,13 +91,17 @@ scatter и grid identities в общий `termin_render_core` без `tc_scene`,
 immutable shared value до смены revision, а camera/axis/light/bounds/labels
 копируются для конкретной публикации. Payload не заимствует retained slot и
 остаётся читаемым после последующих mutations, slot reuse и уничтожения chart.
-Surface payload дополнительно кэширует encoder-ready vertex stream по geometry
-и style revisions. Tcplot-owned surface planner выбирает builtin tcplot3d
-shader, а encoder загружает stream через общий transient vertex ring и рисует
-его через `submit_render_item_draw()`. Даже старый offscreen entry point теперь
-планирует и отправляет surface через этот общий контракт; surface slot больше
-не содержит `PlotEngine3D`. Scatter/grid bodies, chart framegraph pass и
-отдельный world-text/chrome path остаются следующими срезами.
+Surface, scatter и grid payloads дополнительно кэшируют encoder-ready vertex
+stream по geometry и style revisions; grid stream также обновляется при смене
+chart bounds. Tcplot-owned planners выбирают builtin tcplot3d shader, а
+encoders загружают stream через общий transient vertex ring и рисуют его через
+`submit_render_item_draw()`. `RetainedChart3D::render()` публикует snapshot и
+передаёт его tcplot-owned geometry/chrome pipeline, исполняемому общим
+`termin::RenderEngine`. Geometry pass сохраняет порядок surface/grid/scatter,
+а следующий inplace chrome pass рисует tick и axis labels из того же immutable
+frame snapshot. Color/depth/MSAA attachments приходят через
+`RenderTargetContext`; ручного begin/end frame/pass lifecycle и per-item
+`PlotEngine3D` в retained chart больше нет.
 
 `fit_plot_range2d()`, `make_plot_ticks2d()` и `measure_plot_text2d()` образуют
 value-only layout boundary. Tick spacing и font size задаются в logical pixels

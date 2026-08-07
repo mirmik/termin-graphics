@@ -139,7 +139,8 @@ void GraphicsHost::ensure_context_() {
         owned_cache_ = std::make_unique<PipelineCache>(*device_);
     }
     if (!owned_ctx_) {
-        owned_ctx_ = std::make_unique<RenderContext2>(*device_, *owned_cache_);
+        owned_ctx_ = std::make_unique<RenderContext2>(
+            *device_, *owned_cache_, this);
     }
 }
 

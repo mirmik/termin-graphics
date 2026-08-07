@@ -10,6 +10,7 @@ nanobind_add_module(_tcplot_native NB_SHARED
     bindings/camera_bindings.cpp
     bindings/annotation_bindings.cpp
     bindings/engine_bindings.cpp
+    bindings/retained_chart3d_bindings.cpp
 )
 
 target_link_libraries(_tcplot_native PRIVATE

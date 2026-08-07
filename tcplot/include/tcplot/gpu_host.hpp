@@ -32,7 +32,8 @@ class TCPLOT_API GpuHost {
 private:
     std::unique_ptr<tgfx::GraphicsHost> owned_graphics_;
     tgfx::GraphicsHost* graphics_ = nullptr;
-    std::unique_ptr<tgfx::FontAtlas>      font_;
+    std::unique_ptr<tgfx::FontAtlas> owned_font_;
+    tgfx::FontAtlas* font_ = nullptr;
 
 public:
     // Create the full tgfx2 stack. Backend is picked by env
@@ -44,6 +45,10 @@ public:
 
     // Embedded plots borrow the application's canonical graphics domain.
     GpuHost(const std::string& ttf_path, tgfx::GraphicsHost& graphics);
+
+    // Embedded adapters may borrow the application's existing font atlas as
+    // well as its graphics domain. Both objects must outlive this GpuHost.
+    GpuHost(tgfx::GraphicsHost& graphics, tgfx::FontAtlas& font);
 
     ~GpuHost();
 

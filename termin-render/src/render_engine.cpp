@@ -239,6 +239,32 @@ static bool is_external_output_resource(const char* name) {
     return is_external_color_output(name) || is_external_depth_output(name);
 }
 
+using ExternalResourcePredicate = bool (*)(const char*);
+
+static const char* find_external_alias(
+    tc_frame_graph* frame_graph,
+    const char* resource_name,
+    ExternalResourcePredicate predicate
+) {
+    if (!frame_graph || !resource_name || !predicate) {
+        return nullptr;
+    }
+    const char* canonical =
+        tc_frame_graph_canonical_resource(frame_graph, resource_name);
+    if (predicate(canonical)) {
+        return canonical;
+    }
+    // In-place passes intentionally keep the input resource as the framegraph
+    // canonical name. When their output is caller-owned (for example OUTPUT),
+    // the whole alias group must still resolve to that external attachment.
+    for (const char* alias : collect_alias_group(frame_graph, canonical)) {
+        if (predicate(alias)) {
+            return alias;
+        }
+    }
+    return nullptr;
+}
+
 static bool is_external_graph_input_resource(
     const char* name,
     const std::unordered_map<std::string, RenderTargetContext>& render_target_contexts
@@ -528,7 +554,7 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
             continue;
         }
 
-        if (is_external_output_resource(canon) ||
+        if (find_external_alias(fg, canon, is_external_output_resource) ||
             is_external_graph_input_resource(canon, render_target_contexts)) {
             // OUTPUT/DISPLAY/RT_* are viewport-owned native textures, and
             // External RT resources are supplied through RenderTargetContext.
@@ -989,6 +1015,10 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         std::function<tgfx::TextureHandle(const std::string&)> resolve_depth;
         std::function<tgfx::TextureHandle(const std::string&)> resolve_color;
         resolve_color = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (find_external_alias(
+                    fg, name.c_str(), is_external_color_output)) {
+                return rt_ctx.output_color_tex;
+            }
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
             const std::string canonical = canonical_c ? canonical_c : name;
             if (canonical != name) {
@@ -1021,6 +1051,10 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
                 ? sampled.texture : tgfx::TextureHandle{};
         };
         resolve_depth = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (find_external_alias(
+                    fg, name.c_str(), is_external_output_resource)) {
+                return rt_ctx.output_depth_tex;
+            }
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
             const std::string canonical = canonical_c ? canonical_c : name;
             if (canonical != name) {
@@ -1147,6 +1181,10 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         std::function<tgfx::TextureHandle(const std::string&)> resolve_color_resource;
 
         resolve_color_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (find_external_alias(
+                    fg, name.c_str(), is_external_color_output)) {
+                return rt_ctx.output_color_tex;
+            }
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
             std::string canonical = canonical_c ? canonical_c : name;
             if (canonical != name) {
@@ -1179,6 +1217,10 @@ void RenderEngine::execute_pipeline(const RenderExecution& execution) {
         };
 
         resolve_depth_resource = [&](const std::string& name) -> tgfx::TextureHandle {
+            if (find_external_alias(
+                    fg, name.c_str(), is_external_output_resource)) {
+                return rt_ctx.output_depth_tex;
+            }
             const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
             std::string canonical = canonical_c ? canonical_c : name;
             if (canonical != name) {

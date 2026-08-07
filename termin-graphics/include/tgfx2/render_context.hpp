@@ -38,6 +38,8 @@ struct tc_shader_resource_binding;
 
 namespace tgfx {
 
+class GraphicsHost;
+
 class IRenderDevice;
 class ICommandList;
 class PipelineCache;
@@ -67,6 +69,7 @@ private:
 
     IRenderDevice& device_;
     PipelineCache& cache_;
+    GraphicsHost* graphics_host_ = nullptr;
     std::unique_ptr<ICommandList> cmd_;
 
     // --- Pending state ---
@@ -194,7 +197,8 @@ private:
         const char* action) const;
 
 public:
-    RenderContext2(IRenderDevice& device, PipelineCache& cache);
+    RenderContext2(IRenderDevice& device, PipelineCache& cache,
+                   GraphicsHost* graphics_host = nullptr);
     // Virtual so the compiler emits a vtable + typeinfo in a single
     // translation unit (render_context.cpp) and exports them from
     // libtermin_graphics2.so. Without this, each nanobind extension
@@ -396,6 +400,7 @@ public:
 
     // --- Access ---
     IRenderDevice& device() { return device_; }
+    GraphicsHost* graphics_host() const { return graphics_host_; }
 
     // Return the built-in fullscreen-quad vertex shader, lazily creating it
     // and the FSQ VBO/IBO on first access. Exposed for passes that provide

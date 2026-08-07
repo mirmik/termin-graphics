@@ -19,14 +19,16 @@ namespace tcplot {
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_SURFACE = 0x54500001u;
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_SCATTER = 0x54500002u;
 inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_GRID = 0x54500003u;
+inline constexpr uint32_t PLOT_RENDER_ITEM_KIND_LINE = 0x54500004u;
 
 // ASCII "tcplot3d" encoded as a stable adapter-owned 64-bit domain id.
 inline constexpr uint64_t PLOT_RENDER_ITEM_SOURCE_DOMAIN =
     UINT64_C(0x7463706c6f743364);
 
-// Immutable item-local CPU data shared by snapshots until the retained item
-// changes. A mutation installs a new value instead of modifying data already
-// visible to a published snapshot.
+// Immutable CPU draw data shared by snapshots until its retained inputs
+// change. Surface/scatter inputs are item-local; grid geometry also depends on
+// chart bounds and receives a geometry revision when those bounds may change.
+// A mutation installs a new value instead of modifying published data.
 struct PlotScene3DItemRenderData {
     tc_plot_item3d_kind kind = TC_PLOT_ITEM3D_INVALID;
     std::vector<double> x;
@@ -36,14 +38,15 @@ struct PlotScene3DItemRenderData {
     uint32_t columns = 0;
     tc_surface_item3d_style surface_style{};
     tc_scatter_item3d_style scatter_style{};
+    tc_line_item3d_style line_style{};
     tc_grid_item3d_style grid_style{};
 
-    // Encoder-ready immutable surface stream. The layout is the builtin
-    // tcplot3d vertex ABI (19 floats per vertex); vertices are already
-    // expanded in draw order so submission can use the shared transient
-    // vertex ring without owning device-lifetime buffers in a snapshot.
-    std::vector<float> surface_draw_vertices;
-    uint32_t surface_draw_vertex_count = 0;
+    // Encoder-ready immutable stream. The layout is the builtin tcplot3d
+    // vertex ABI (19 floats per vertex); vertices are already expanded in draw
+    // order so submission can use the shared transient vertex ring without
+    // owning device-lifetime buffers in a snapshot.
+    std::vector<float> draw_vertices;
+    uint32_t draw_vertex_count = 0;
 };
 
 // Chart-wide values captured independently for every publication. They are

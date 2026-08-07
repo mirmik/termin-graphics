@@ -117,6 +117,61 @@ int g_resource_destroy_count = 0;
 int g_resource_preview_count = 0;
 bool g_resource_producer_executed = false;
 bool g_resource_alias_executed = false;
+bool g_external_alias_producer_executed = false;
+bool g_external_alias_consumer_executed = false;
+
+constexpr const char* kExternalAliasIntermediate =
+    "ExternalAliasIntermediate";
+
+class ExternalAliasProducer final : public termin::CxxFramePass {
+public:
+    ExternalAliasProducer() {
+        pass_name_set("ExternalAliasProducer");
+    }
+
+    std::set<const char*> compute_writes() const override {
+        return {kExternalAliasIntermediate};
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        const auto output = context.tex2_writes.find(
+            kExternalAliasIntermediate);
+        REQUIRE(output != context.tex2_writes.end());
+        CHECK_EQ(output->second.id, 777u);
+        g_external_alias_producer_executed = true;
+    }
+};
+
+class ExternalAliasConsumer final : public termin::CxxFramePass {
+public:
+    ExternalAliasConsumer() {
+        pass_name_set("ExternalAliasConsumer");
+    }
+
+    std::set<const char*> compute_reads() const override {
+        return {kExternalAliasIntermediate};
+    }
+
+    std::set<const char*> compute_writes() const override {
+        return {"OUTPUT"};
+    }
+
+    std::vector<std::pair<std::string, std::string>>
+    get_inplace_aliases() const override {
+        return {{kExternalAliasIntermediate, "OUTPUT"}};
+    }
+
+    void execute(termin::ExecuteContext& context) override {
+        const auto input = context.tex2_reads.find(
+            kExternalAliasIntermediate);
+        const auto output = context.tex2_writes.find("OUTPUT");
+        REQUIRE(input != context.tex2_reads.end());
+        REQUIRE(output != context.tex2_writes.end());
+        CHECK_EQ(input->second.id, 777u);
+        CHECK_EQ(output->second.id, 777u);
+        g_external_alias_consumer_executed = true;
+    }
+};
 
 class TestFrameGraphResource final : public termin::FrameGraphResource {
 public:
@@ -378,6 +433,39 @@ TEST_CASE("generic pipeline executes empty and populated non-scene sources") {
     tc_pass_registry_unregister(kProbeType);
     g_expected_snapshot = nullptr;
     g_expected_item_count = 0;
+}
+
+TEST_CASE("inplace aliases preserve caller-owned external outputs") {
+    termin::RenderPipeline pipeline("external-output-alias-test");
+    REQUIRE(pipeline.is_valid());
+    auto* producer = new ExternalAliasProducer();
+    auto* consumer = new ExternalAliasConsumer();
+    pipeline.add_pass(producer->tc_pass_ptr());
+    pipeline.add_pass(consumer->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "ExternalAliasTarget";
+    target.render_rect = {0, 0, 1, 1};
+    target.output_color_tex = tgfx::TextureHandle{777};
+
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name, termin::RenderExecutionTarget{
+        .context = &target,
+        .render_items = &snapshot,
+    });
+
+    g_external_alias_producer_executed = false;
+    g_external_alias_consumer_executed = false;
+    termin::RenderEngine engine;
+    engine.execute_pipeline(execution);
+    CHECK(g_external_alias_producer_executed);
+    CHECK(g_external_alias_consumer_executed);
+
+    pipeline.destroy();
 }
 
 TEST_CASE("generic execution allocates and binds registered non-texture resources once") {

@@ -68,6 +68,8 @@ set(TCPLOT_SOURCES
     src/retained_multi_chart2d.cpp
     src/retained_scene_renderer2d.cpp
     src/retained_chart3d.cpp
+    src/plot_scene3d_chart_chrome.cpp
+    src/plot_scene3d_render_pipeline.cpp
     src/plot_scene3d_render_item_encoder.cpp
     src/engine3d.cpp
     src/engine2d.cpp

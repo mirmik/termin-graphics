@@ -15,15 +15,13 @@
 #include <tcbase/tc_log.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
-#include <tgfx2/font_atlas.hpp>
 #include <tgfx2/i_render_device.hpp>
-#include <tgfx2/render_context.hpp>
-#include <termin/render/render_item_submission.hpp>
-#include <termin/render/render_task.hpp>
 
-#include "tcplot/engine3d.hpp"
 #include "tcplot/gpu_host.hpp"
+#include "tcplot/orbit_camera.hpp"
+#include "tcplot/styles.hpp"
 #include "plot_scene3d_render_item_encoder.hpp"
+#include "plot_scene3d_render_pipeline.hpp"
 
 namespace {
 
@@ -76,6 +74,10 @@ tc_scatter_item3d_style default_scatter_style() {
     return {1.0f, 0.35f, 0.15f, 1.0f, 4.0f};
 }
 
+tc_line_item3d_style default_line_style() {
+    return {0.12f, 0.47f, 0.71f, 1.0f, 1.5f};
+}
+
 tc_grid_item3d_style default_grid_style() {
     return {
         0.42f, 0.45f, 0.52f, 1.0f,
@@ -108,6 +110,14 @@ void validate(const tc_scatter_item3d_style& style) {
             style.color_r, style.color_g, style.color_b, style.color_a) ||
         !std::isfinite(style.size) || style.size <= 0) {
         throw std::invalid_argument("invalid retained scatter style");
+    }
+}
+
+void validate(const tc_line_item3d_style& style) {
+    if (!finite_color(
+            style.color_r, style.color_g, style.color_b, style.color_a) ||
+        !std::isfinite(style.thickness) || style.thickness <= 0) {
+        throw std::invalid_argument("invalid retained line style");
     }
 }
 
@@ -155,6 +165,16 @@ bool same_style(
 }
 
 bool same_style(
+    const tc_line_item3d_style& left,
+    const tc_line_item3d_style& right) {
+    return left.color_r == right.color_r &&
+           left.color_g == right.color_g &&
+           left.color_b == right.color_b &&
+           left.color_a == right.color_a &&
+           left.thickness == right.thickness;
+}
+
+bool same_style(
     const tc_grid_item3d_style& left,
     const tc_grid_item3d_style& right) {
     return left.grid_r == right.grid_r &&
@@ -188,10 +208,13 @@ std::vector<double> copy_values(const double* values, std::size_t count) {
 
 class RetainedChart3D {
 public:
-    explicit RetainedChart3D(tcplot::GpuHost& host)
-        : host_(&host),
-          scene_id_(g_next_plot_scene3d_id.fetch_add(1)) {
+    RetainedChart3D()
+        : scene_id_(g_next_plot_scene3d_id.fetch_add(1)) {
         grid_part_ = add_grid(default_grid_style());
+    }
+
+    explicit RetainedChart3D(tcplot::GpuHost& host) : RetainedChart3D() {
+        attach(host);
     }
 
     ~RetainedChart3D() {
@@ -199,6 +222,15 @@ public:
     }
 
     std::uint64_t scene_id() const { return scene_id_; }
+
+    void attach(tcplot::GpuHost& host) {
+        if (host_ == &host) return;
+        release_gpu();
+        render_pipeline_.reset();
+        host_ = &host;
+        render_pipeline_ =
+            std::make_unique<tcplot::PlotScene3DRenderPipeline>(host);
+    }
 
     std::size_t item_count() const {
         return static_cast<std::size_t>(std::count_if(
@@ -246,8 +278,8 @@ public:
         slot.rows = rows;
         slot.columns = columns;
         slot.surface_style = style;
-        rebuild(slot);
-        bounds_dirty_ = true;
+        invalidate_render(slot);
+        invalidate_grid_geometry();
         fit_camera();
         return handle(slot);
     }
@@ -267,8 +299,33 @@ public:
         slot.y = std::move(copied_y);
         slot.z = std::move(copied_z);
         slot.scatter_style = style;
-        rebuild(slot);
-        bounds_dirty_ = true;
+        invalidate_render(slot);
+        invalidate_grid_geometry();
+        fit_camera();
+        return handle(slot);
+    }
+
+    tc_plot_item3d_handle add_line(
+        const double* x,
+        const double* y,
+        const double* z,
+        std::size_t count,
+        const tc_line_item3d_style& style) {
+        if (count < 2) {
+            throw std::invalid_argument(
+                "retained line requires at least two points");
+        }
+        validate(style);
+        std::vector<double> copied_x = copy_values(x, count);
+        std::vector<double> copied_y = copy_values(y, count);
+        std::vector<double> copied_z = copy_values(z, count);
+        Slot& slot = allocate(TC_PLOT_ITEM3D_LINE);
+        slot.x = std::move(copied_x);
+        slot.y = std::move(copied_y);
+        slot.z = std::move(copied_z);
+        slot.line_style = style;
+        invalidate_render(slot);
+        invalidate_grid_geometry();
         fit_camera();
         return handle(slot);
     }
@@ -300,7 +357,7 @@ public:
         ++slot->geometry_revision;
         ++slot->render_revision;
         slot->gpu_revision = 0;
-        bounds_dirty_ = true;
+        invalidate_grid_geometry();
         return true;
     }
 
@@ -315,21 +372,35 @@ public:
         std::vector<double> copied_x = copy_values(x, count);
         std::vector<double> copied_y = copy_values(y, count);
         std::vector<double> copied_z = copy_values(z, count);
-        if (!slot->engine || !slot->engine->set_scatter_data(
-                0,
-                copied_x,
-                copied_y,
-                copied_z)) {
-            throw std::runtime_error(
-                "failed to update retained scatter renderer data");
-        }
         slot->x = std::move(copied_x);
         slot->y = std::move(copied_y);
         slot->z = std::move(copied_z);
         ++slot->geometry_revision;
         ++slot->render_revision;
         slot->gpu_revision = 0;
-        bounds_dirty_ = true;
+        invalidate_grid_geometry();
+        return true;
+    }
+
+    bool set_line_data(
+        tc_plot_item3d_handle handle,
+        const double* x,
+        const double* y,
+        const double* z,
+        std::size_t count) {
+        Slot* slot = resolve(handle, TC_PLOT_ITEM3D_LINE);
+        if (!slot) return false;
+        if (count < 2) {
+            throw std::invalid_argument(
+                "retained line requires at least two points");
+        }
+        slot->x = copy_values(x, count);
+        slot->y = copy_values(y, count);
+        slot->z = copy_values(z, count);
+        ++slot->geometry_revision;
+        ++slot->render_revision;
+        slot->gpu_revision = 0;
+        invalidate_grid_geometry();
         return true;
     }
 
@@ -337,7 +408,7 @@ public:
         validate(style);
         Slot& slot = allocate(TC_PLOT_ITEM3D_GRID);
         slot.grid_style = style;
-        rebuild(slot);
+        invalidate_render(slot);
         return handle(slot);
     }
 
@@ -351,7 +422,7 @@ public:
         slot->surface_style = style;
         ++slot->style_revision;
         ++slot->render_revision;
-        apply_style(*slot);
+        slot->gpu_revision = 0;
         return true;
     }
 
@@ -365,7 +436,21 @@ public:
         slot->scatter_style = style;
         ++slot->style_revision;
         ++slot->render_revision;
-        apply_style(*slot);
+        slot->gpu_revision = 0;
+        return true;
+    }
+
+    bool set_line_style(
+        tc_plot_item3d_handle handle,
+        const tc_line_item3d_style& style) {
+        Slot* slot = resolve(handle, TC_PLOT_ITEM3D_LINE);
+        if (!slot) return false;
+        validate(style);
+        if (same_style(slot->line_style, style)) return true;
+        slot->line_style = style;
+        ++slot->style_revision;
+        ++slot->render_revision;
+        slot->gpu_revision = 0;
         return true;
     }
 
@@ -379,7 +464,7 @@ public:
         slot->grid_style = style;
         ++slot->style_revision;
         ++slot->render_revision;
-        apply_style(*slot);
+        slot->gpu_revision = 0;
         return true;
     }
 
@@ -401,6 +486,15 @@ public:
         return true;
     }
 
+    bool line_style(
+        tc_plot_item3d_handle handle,
+        tc_line_item3d_style& style) const {
+        const Slot* slot = resolve(handle, TC_PLOT_ITEM3D_LINE);
+        if (!slot) return false;
+        style = slot->line_style;
+        return true;
+    }
+
     bool grid_style(
         tc_plot_item3d_handle handle,
         tc_grid_item3d_style& style) const {
@@ -415,9 +509,9 @@ public:
         if (!slot) return false;
         const bool affected_bounds =
             slot->kind == TC_PLOT_ITEM3D_SURFACE ||
-            slot->kind == TC_PLOT_ITEM3D_SCATTER;
+            slot->kind == TC_PLOT_ITEM3D_SCATTER ||
+            slot->kind == TC_PLOT_ITEM3D_LINE;
         if (same(grid_part_, item)) grid_part_ = invalid_item();
-        slot->engine.reset();
         slot->x.clear();
         slot->y.clear();
         slot->z.clear();
@@ -426,7 +520,7 @@ public:
         if (slot->generation == 0) ++slot->generation;
         free_.push_back(item.index);
         if (affected_bounds) {
-            bounds_dirty_ = true;
+            invalidate_grid_geometry();
             fit_camera();
         }
         return true;
@@ -593,96 +687,49 @@ public:
         if (width <= 0 || height <= 0) {
             throw std::invalid_argument("invalid retained Chart3D target size");
         }
+        if (!host_ || !render_pipeline_) {
+            throw std::runtime_error(
+                "retained Chart3D has no attached GpuHost");
+        }
         ensure_offscreen(width, height);
-        synchronize_grids();
-
-        PlotScene3DRenderItemSource surface_source(*this);
-        termin::RenderItemSnapshot surface_snapshot;
-        if (!surface_source.publish(
-                surface_snapshot,
-                {.debug_name = "RetainedChart3D surface render"})) {
+        PlotScene3DRenderItemSource item_source(*this);
+        termin::RenderItemSnapshot item_snapshot;
+        if (!item_source.publish(
+                item_snapshot,
+                {.debug_name = "RetainedChart3D render"})) {
             throw std::runtime_error(
                 "failed to publish retained Chart3D render items");
         }
 
-        termin::RenderItemTaskPlanningContract surface_contract{};
-        surface_contract.phase = TC_PHASE_OPAQUE;
-        surface_contract.material_phase_policy =
-            termin::RenderItemMaterialPhasePolicy::Forbidden;
-        surface_contract.provided_input_mask = termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
-        surface_contract.required_input_mask = termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
-        surface_contract.debug_pass_name = "RetainedChart3D/Surface";
-
-        termin::RenderContext surface_draw_context;
-        surface_draw_context.phase = TC_PHASE_OPAQUE;
-        surface_draw_context.viewport_width = width;
-        surface_draw_context.viewport_height = height;
-        termin::RenderTaskList surface_tasks;
-        surface_tasks.reserve(surface_snapshot.item_count());
-        bool success = true;
-        for (size_t item_index = 0;
-             item_index < surface_snapshot.item_count();
-             ++item_index) {
-            const tc_render_item* item = surface_snapshot.item(item_index);
-            if (!item || item->kind != tcplot::PLOT_RENDER_ITEM_KIND_SURFACE) {
+        const tcplot::PlotScene3DRenderResult render_result =
+            render_pipeline_->execute(
+                item_snapshot,
+                scene_id_,
+                grid_part_.index,
+                grid_part_.generation,
+                color_,
+                depth_,
+                width,
+                height);
+        for (const tcplot::PlotScene3DRenderedItem& rendered_item :
+             render_result.rendered_items) {
+            if (rendered_item.object_id >= slots_.size()) {
                 continue;
             }
-            termin::RenderItemTaskPlanningRequest planning{};
-            planning.item = item;
-            planning.item_index = item_index;
-            planning.source_draw_index = item_index;
-            planning.contract = &surface_contract;
-            const termin::RenderItemTaskPlanningResult result =
-                termin::plan_render_item_task(planning, surface_tasks);
-            if (!result.accepted()) {
-                tc::Log::error(
-                    "[RetainedChart3D] surface task planning failed for slot %llu: %s",
-                    static_cast<unsigned long long>(item->source.object_id),
-                    termin::render_item_task_rejection_name(result.rejection));
-                success = false;
-                continue;
+            Slot& slot = slots_[static_cast<std::size_t>(
+                rendered_item.object_id)];
+            if (slot.alive && slot.generation == rendered_item.generation) {
+                slot.gpu_revision = slot.render_revision;
             }
-            termin::RenderTask& task = surface_tasks.at(result.task_index);
-            task.draw_context = surface_draw_context;
-            task.debug_name = "PlotScene3D surface";
         }
-
-        tgfx::RenderContext2& context = host_->ctx();
-        const float clear[4] = {0.08f, 0.09f, 0.11f, 1.0f};
-        context.begin_frame();
-        context.begin_pass(
-            color_, depth_, clear, 1.0f, true);
-
-        for (termin::RenderTask& task : surface_tasks) {
-            Slot* slot = task.item ? resolve_render_item(*task.item) : nullptr;
-            if (!slot || !submit_surface_task(task)) {
-                success = false;
-                continue;
-            }
-            slot->gpu_revision = slot->render_revision;
-        }
-        if (Slot* grid = resolve(grid_part_, TC_PLOT_ITEM3D_GRID)) {
-            render_slot(*grid, width, height, &host_->font());
-        }
-        for (Slot& slot : slots_) {
-            if (!slot.alive || slot.kind != TC_PLOT_ITEM3D_SCATTER) continue;
-            render_slot(slot, width, height, nullptr);
-        }
-
-        context.end_pass();
-        context.end_frame();
-        return success ? color_.id : 0;
+        return render_result.success ? color_.id : 0;
     }
 
     void release_gpu() {
         for (Slot& slot : slots_) {
-            if (slot.engine) {
-                slot.engine->release_gpu_resources();
-            }
             slot.gpu_revision = 0;
         }
+        if (render_pipeline_) render_pipeline_->release_gpu();
         release_targets();
     }
 
@@ -705,8 +752,8 @@ private:
         std::uint32_t columns = 0;
         tc_surface_item3d_style surface_style{};
         tc_scatter_item3d_style scatter_style{};
+        tc_line_item3d_style line_style{};
         tc_grid_item3d_style grid_style{};
-        std::unique_ptr<tcplot::PlotEngine3D> engine;
         mutable std::shared_ptr<const tcplot::PlotScene3DItemRenderData>
             published_render_data;
         mutable std::uint64_t published_geometry_revision = 0;
@@ -776,91 +823,20 @@ private:
                left.generation == right.generation;
     }
 
-    void rebuild(Slot& slot) {
-        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
-            slot.engine.reset();
-            ++slot.render_revision;
-            slot.gpu_revision = 0;
-            return;
-        }
-        auto engine = std::make_unique<tcplot::PlotEngine3D>();
-        engine->show_grid = slot.kind == TC_PLOT_ITEM3D_GRID;
-        engine->show_series = slot.kind != TC_PLOT_ITEM3D_GRID;
-        engine->show_labels =
-            slot.kind == TC_PLOT_ITEM3D_GRID &&
-            slot.grid_style.labels_visible != 0;
-
-        if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
-            const auto& style = slot.scatter_style;
-            tcplot::ScatterPlotOptions options;
-            options.color = tcplot::Color4{
-                style.color_r, style.color_g, style.color_b, style.color_a};
-            options.size = style.size;
-            engine->scatter(slot.x, slot.y, slot.z, options);
-        } else if (slot.kind == TC_PLOT_ITEM3D_GRID) {
-            double lo[3], hi[3];
-            bounds(lo, hi);
-            tcplot::LinePlotOptions options;
-            options.color = tcplot::Color4{0, 0, 0, 0};
-            engine->plot(
-                {lo[0], hi[0]},
-                {lo[1], hi[1]},
-                {lo[2], hi[2]},
-                options);
-            const auto& style = slot.grid_style;
-            engine->grid_color = {
-                style.grid_r, style.grid_g, style.grid_b, style.grid_a};
-            engine->axis_colors = {
-                tcplot::Color4{
-                    style.x_axis_r, style.x_axis_g, style.x_axis_b, 1},
-                tcplot::Color4{
-                    style.y_axis_r, style.y_axis_g, style.y_axis_b, 1},
-                tcplot::Color4{
-                    style.z_axis_r, style.z_axis_g, style.z_axis_b, 1},
-            };
-        }
-        slot.engine = std::move(engine);
+    void invalidate_render(Slot& slot) {
         ++slot.render_revision;
         slot.gpu_revision = 0;
     }
 
-    void apply_style(Slot& slot) {
-        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
-            slot.gpu_revision = 0;
-            return;
-        }
-        if (!slot.engine) {
-            rebuild(slot);
-            return;
-        }
-
-        tcplot::PlotEngine3D& engine = *slot.engine;
-        if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
-            const auto& style = slot.scatter_style;
-            if (!engine.set_scatter_style(
-                    0,
-                    {style.color_r, style.color_g,
-                     style.color_b, style.color_a},
-                    style.size)) {
-                throw std::runtime_error(
-                    "failed to apply retained scatter style");
+    void invalidate_grid_geometry() {
+        for (Slot& slot : slots_) {
+            if (!slot.alive || slot.kind != TC_PLOT_ITEM3D_GRID) {
+                continue;
             }
-        } else if (slot.kind == TC_PLOT_ITEM3D_GRID) {
-            const auto& style = slot.grid_style;
-            engine.show_labels = style.labels_visible != 0;
-            engine.set_grid_style(
-                {style.grid_r, style.grid_g,
-                 style.grid_b, style.grid_a},
-                {
-                    tcplot::Color4{
-                        style.x_axis_r, style.x_axis_g, style.x_axis_b, 1},
-                    tcplot::Color4{
-                        style.y_axis_r, style.y_axis_g, style.y_axis_b, 1},
-                    tcplot::Color4{
-                        style.z_axis_r, style.z_axis_g, style.z_axis_b, 1},
-                });
+            ++slot.geometry_revision;
+            ++slot.render_revision;
+            slot.gpu_revision = 0;
         }
-        slot.gpu_revision = 0;
     }
 
     void bounds(double lo[3], double hi[3]) const {
@@ -872,7 +848,8 @@ private:
         for (const Slot& slot : slots_) {
             if (!slot.alive ||
                 (slot.kind != TC_PLOT_ITEM3D_SURFACE &&
-                 slot.kind != TC_PLOT_ITEM3D_SCATTER)) {
+                 slot.kind != TC_PLOT_ITEM3D_SCATTER &&
+                 slot.kind != TC_PLOT_ITEM3D_LINE)) {
                 continue;
             }
             for (std::size_t index = 0; index < slot.x.size(); ++index) {
@@ -897,6 +874,24 @@ private:
         }
     }
 
+    tcplot::PlotScene3DFrameRenderState frame_render_state() const {
+        tcplot::PlotScene3DFrameRenderState frame;
+        frame.camera = camera_state();
+        frame.axis_scale = {
+            axis_scale_[0],
+            axis_scale_[1],
+            axis_scale_[2],
+        };
+        frame.surface_shading = shading_;
+        frame.surface_shading_strength = shading_strength_;
+        frame.surface_light_direction = {light_.x, light_.y, light_.z};
+        bounds(frame.bounds_min.data(), frame.bounds_max.data());
+        frame.x_label = x_label_;
+        frame.y_label = y_label_;
+        frame.z_label = z_label_;
+        return frame;
+    }
+
     Slot* resolve_render_item(const tc_render_item& item) {
         if (item.source.domain_id != tcplot::PLOT_RENDER_ITEM_SOURCE_DOMAIN ||
             item.source.namespace_id != scene_id_ ||
@@ -906,64 +901,6 @@ private:
         Slot& slot = slots_[static_cast<size_t>(item.source.object_id)];
         return slot.alive && slot.generation == item.source.generation
             ? &slot : nullptr;
-    }
-
-    bool submit_surface_task(const termin::RenderTask& task) {
-        if (!task.item) {
-            tc::Log::error(
-                "[RetainedChart3D] cannot submit a surface task without an item");
-            return false;
-        }
-        termin::RenderItemDrawSubmitRequest submission{};
-        submission.shader_handle = task.final_shader;
-        submission.device = &host_->device();
-        submission.draw_context = &task.draw_context;
-        submission.phase = task.phase;
-        submission.debug_pass_name = "RetainedChart3D/Surface";
-        submission.debug_entity_name = task.debug_name.c_str();
-        if (!termin::submit_render_item_draw(
-                host_->ctx(), *task.item, submission)) {
-            tc::Log::error(
-                "[RetainedChart3D] surface submission failed for slot %llu",
-                static_cast<unsigned long long>(task.item->source.object_id));
-            return false;
-        }
-        return true;
-    }
-
-    void synchronize_grids() {
-        if (!bounds_dirty_) return;
-        for (Slot& slot : slots_) {
-            if (!slot.alive || slot.kind != TC_PLOT_ITEM3D_GRID) continue;
-            rebuild(slot);
-        }
-        bounds_dirty_ = false;
-    }
-
-    void render_slot(
-        Slot& slot,
-        int width,
-        int height,
-        tgfx::FontAtlas* font) {
-        if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
-            throw std::logic_error(
-                "migrated surface item reached legacy PlotEngine3D renderer");
-        }
-        if (!slot.engine) rebuild(slot);
-        tcplot::PlotEngine3D& engine = *slot.engine;
-        engine.camera = camera_;
-        engine.x_scale = axis_scale_[0];
-        engine.y_scale = axis_scale_[1];
-        engine.z_scale = axis_scale_[2];
-        engine.surface_shading = shading_;
-        engine.surface_shading_strength = shading_strength_;
-        engine.surface_light_dir = light_;
-        engine.data.x_label = x_label_;
-        engine.data.y_label = y_label_;
-        engine.data.z_label = z_label_;
-        engine.set_viewport(0, 0, static_cast<float>(width), static_cast<float>(height));
-        engine.render(&host_->ctx(), font);
-        slot.gpu_revision = slot.render_revision;
     }
 
     void ensure_offscreen(int width, int height) {
@@ -1012,7 +949,8 @@ private:
         height_ = 0;
     }
 
-    tcplot::GpuHost* host_;
+    tcplot::GpuHost* host_ = nullptr;
+    std::unique_ptr<tcplot::PlotScene3DRenderPipeline> render_pipeline_;
     std::uint64_t scene_id_;
     std::vector<Slot> slots_;
     std::vector<std::uint32_t> free_;
@@ -1025,7 +963,6 @@ private:
     std::string x_label_ = "x";
     std::string y_label_ = "y";
     std::string z_label_ = "z";
-    bool bounds_dirty_ = true;
     bool dragging_ = false;
     int drag_button_ = 0;
     float drag_x_ = 0;
@@ -1050,26 +987,10 @@ bool PlotScene3DRenderItemSource::collect_items(
             "[PlotScene3DRenderItemSource] retained chart scene is unavailable");
         return false;
     }
-    tcplot::ensure_plot_scene3d_surface_encoder_registered();
+    tcplot::ensure_plot_scene3d_render_item_encoders_registered();
 
-    tcplot::PlotScene3DFrameRenderState frame;
-    frame.camera = scene_->camera_state();
-    frame.axis_scale = {
-        scene_->axis_scale_[0],
-        scene_->axis_scale_[1],
-        scene_->axis_scale_[2],
-    };
-    frame.surface_shading = scene_->shading_;
-    frame.surface_shading_strength = scene_->shading_strength_;
-    frame.surface_light_direction = {
-        scene_->light_.x,
-        scene_->light_.y,
-        scene_->light_.z,
-    };
-    scene_->bounds(frame.bounds_min.data(), frame.bounds_max.data());
-    frame.x_label = scene_->x_label_;
-    frame.y_label = scene_->y_label_;
-    frame.z_label = scene_->z_label_;
+    const tcplot::PlotScene3DFrameRenderState frame =
+        scene_->frame_render_state();
 
     counters.source_traversals = 1;
     for (const RetainedChart3D::Slot& slot : scene_->slots_) {
@@ -1087,6 +1008,9 @@ bool PlotScene3DRenderItemSource::collect_items(
                 break;
             case TC_PLOT_ITEM3D_GRID:
                 render_kind = tcplot::PLOT_RENDER_ITEM_KIND_GRID;
+                break;
+            case TC_PLOT_ITEM3D_LINE:
+                render_kind = tcplot::PLOT_RENDER_ITEM_KIND_LINE;
                 break;
             default:
                 tc::Log::error(
@@ -1115,12 +1039,37 @@ bool PlotScene3DRenderItemSource::collect_items(
             data->columns = slot.columns;
             data->surface_style = slot.surface_style;
             data->scatter_style = slot.scatter_style;
+            data->line_style = slot.line_style;
             data->grid_style = slot.grid_style;
             if (slot.kind == TC_PLOT_ITEM3D_SURFACE) {
                 tcplot::build_plot_scene3d_surface_draw_stream(*data);
-                if (data->surface_draw_vertex_count == 0) {
+                if (data->draw_vertex_count == 0) {
                     tc::Log::error(
                         "[PlotScene3DRenderItemSource] failed to build surface draw stream for slot %u",
+                        slot.index);
+                    return false;
+                }
+            } else if (slot.kind == TC_PLOT_ITEM3D_SCATTER) {
+                tcplot::build_plot_scene3d_scatter_draw_stream(*data);
+                if (data->draw_vertex_count == 0) {
+                    tc::Log::error(
+                        "[PlotScene3DRenderItemSource] failed to build scatter draw stream for slot %u",
+                        slot.index);
+                    return false;
+                }
+            } else if (slot.kind == TC_PLOT_ITEM3D_GRID) {
+                tcplot::build_plot_scene3d_grid_draw_stream(*data, frame);
+                if (data->draw_vertex_count == 0) {
+                    tc::Log::error(
+                        "[PlotScene3DRenderItemSource] failed to build grid draw stream for slot %u",
+                        slot.index);
+                    return false;
+                }
+            } else if (slot.kind == TC_PLOT_ITEM3D_LINE) {
+                tcplot::build_plot_scene3d_line_draw_stream(*data);
+                if (data->draw_vertex_count == 0) {
+                    tc::Log::error(
+                        "[PlotScene3DRenderItemSource] failed to build line draw stream for slot %u",
                         slot.index);
                     return false;
                 }
@@ -1170,6 +1119,8 @@ Result logged(const char* operation, Result failure, Function&& function) {
 }  // namespace
 
 struct tc_retained_chart3d {
+    tc_retained_chart3d()
+        : value(), render_item_source(value) {}
     explicit tc_retained_chart3d(tcplot::GpuHost& host)
         : value(host), render_item_source(value) {}
     RetainedChart3D value;
@@ -1189,7 +1140,8 @@ const PlotScene3DRenderItemPayload* plot_scene3d_render_item_payload(
         item.source.adapter_data == 0 ||
         (item.kind != PLOT_RENDER_ITEM_KIND_SURFACE &&
          item.kind != PLOT_RENDER_ITEM_KIND_SCATTER &&
-         item.kind != PLOT_RENDER_ITEM_KIND_GRID)) {
+         item.kind != PLOT_RENDER_ITEM_KIND_GRID &&
+         item.kind != PLOT_RENDER_ITEM_KIND_LINE)) {
         return nullptr;
     }
     const auto* payload = reinterpret_cast<const PlotScene3DRenderItemPayload*>(
@@ -1203,7 +1155,9 @@ const PlotScene3DRenderItemPayload* plot_scene3d_render_item_payload(
         (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
          payload->item->kind == TC_PLOT_ITEM3D_SCATTER) ||
         (item.kind == PLOT_RENDER_ITEM_KIND_GRID &&
-         payload->item->kind == TC_PLOT_ITEM3D_GRID);
+         payload->item->kind == TC_PLOT_ITEM3D_GRID) ||
+        (item.kind == PLOT_RENDER_ITEM_KIND_LINE &&
+         payload->item->kind == TC_PLOT_ITEM3D_LINE);
     return kind_matches ? payload : nullptr;
 }
 
@@ -1212,17 +1166,29 @@ const PlotScene3DRenderItemPayload* plot_scene3d_render_item_payload(
 extern "C" {
 
 tc_retained_chart3d* tc_retained_chart3d_create(void* gpu_host) {
-    if (!gpu_host) {
-        tc::Log::error("RetainedChart3D: create requires a live GpuHost");
-        return nullptr;
-    }
     return logged(
         "create",
         static_cast<tc_retained_chart3d*>(nullptr),
         [&] {
-            return new tc_retained_chart3d(
-                *static_cast<tcplot::GpuHost*>(gpu_host));
+            return gpu_host
+                ? new tc_retained_chart3d(
+                      *static_cast<tcplot::GpuHost*>(gpu_host))
+                : new tc_retained_chart3d();
         });
+}
+
+int tc_retained_chart3d_attach_gpu_host(
+    tc_retained_chart3d* chart,
+    void* gpu_host) {
+    if (!chart || !gpu_host) {
+        tc::Log::error(
+            "RetainedChart3D: attach_gpu_host requires chart and GpuHost");
+        return 0;
+    }
+    return logged("attach_gpu_host", 0, [&] {
+        chart->value.attach(*static_cast<tcplot::GpuHost*>(gpu_host));
+        return 1;
+    });
 }
 
 void tc_retained_chart3d_destroy(tc_retained_chart3d* chart) {
@@ -1347,6 +1313,50 @@ int tc_retained_chart3d_scatter_get_style(
     tc_plot_item3d_handle scatter,
     tc_scatter_item3d_style* style) {
     return chart && style && chart->value.scatter_style(scatter, *style) ? 1 : 0;
+}
+
+tc_plot_item3d_handle tc_retained_chart3d_add_line(
+    tc_retained_chart3d* chart,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count,
+    const tc_line_item3d_style* style) {
+    if (!chart) return invalid_item();
+    const auto resolved = style ? *style : default_line_style();
+    return logged("add_line", invalid_item(), [&] {
+        return chart->value.add_line(x, y, z, count, resolved);
+    });
+}
+
+int tc_retained_chart3d_line_set_data(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    const double* x,
+    const double* y,
+    const double* z,
+    size_t count) {
+    if (!chart) return 0;
+    return logged("line_set_data", 0, [&] {
+        return chart->value.set_line_data(line, x, y, z, count) ? 1 : 0;
+    });
+}
+
+int tc_retained_chart3d_line_set_style(
+    tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    const tc_line_item3d_style* style) {
+    if (!chart || !style) return 0;
+    return logged("line_set_style", 0, [&] {
+        return chart->value.set_line_style(line, *style) ? 1 : 0;
+    });
+}
+
+int tc_retained_chart3d_line_get_style(
+    const tc_retained_chart3d* chart,
+    tc_plot_item3d_handle line,
+    tc_line_item3d_style* style) {
+    return chart && style && chart->value.line_style(line, *style) ? 1 : 0;
 }
 
 tc_plot_item3d_handle tc_retained_chart3d_add_grid(
