@@ -15,6 +15,16 @@ $TerminRoot = Split-Path -Parent $PSScriptRoot
 $IsQuest = $Product -eq "quest-openxr"
 $PlatformDir = Join-Path $TerminRoot $(if ($IsQuest) { "termin-openxr\platform" } else { "termin-android\platform" })
 $GradleBuildRoot = Join-Path $TerminRoot $(if ($IsQuest) { "build\android-gradle-openxr" } else { "build\android-gradle" })
+$HostPython = if ($env:TERMIN_HOST_PYTHON) {
+    $env:TERMIN_HOST_PYTHON
+} else {
+    Join-Path $TerminRoot "sdk\bin\termin_python.exe"
+}
+$ShaderCompiler = if ($env:TERMIN_SHADER_COMPILER) {
+    $env:TERMIN_SHADER_COMPILER
+} else {
+    Join-Path $TerminRoot "sdk\bin\termin_shaderc.exe"
+}
 
 $Abi = if ($env:ANDROID_ABI) { $env:ANDROID_ABI } else { "arm64-v8a" }
 $Platform = if ($env:ANDROID_PLATFORM) { $env:ANDROID_PLATFORM } else { "android-26" }
@@ -322,6 +332,24 @@ if (-not $env:GRADLE_USER_HOME) {
 $projectCacheDir = Join-Path $GradleBuildRoot "project-cache"
 $apkOutputDir = Join-Path $GradleBuildRoot "app\outputs\apk\$Variant"
 
+if (-not $IsQuest) {
+    if (-not (Test-Path -LiteralPath $HostPython -PathType Leaf)) {
+        throw "Termin host Python was not found: $HostPython. Run build-sdk.ps1 first or set TERMIN_HOST_PYTHON."
+    }
+    $stagedAssetsDir = Join-Path $GradleBuildRoot "runtime-assets"
+    & $HostPython -m termin.project_build.android_runtime_assets `
+        --source $AssetsDir `
+        --output $stagedAssetsDir `
+        --shader-compiler $ShaderCompiler
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android runtime asset preparation failed with exit code $LASTEXITCODE."
+    }
+    if (-not (Test-Path -LiteralPath $stagedAssetsDir -PathType Container)) {
+        throw "Android runtime asset preparation did not create: $stagedAssetsDir"
+    }
+    $AssetsDir = $stagedAssetsDir
+}
+
 Write-Output ""
 Write-Output "========================================"
 Write-Output $(if ($IsQuest) { "  Building Termin Quest/OpenXR smoke APK" } else { "  Building Termin Android APK" })
@@ -337,7 +365,7 @@ Write-Output "Termin SDK root: $AndroidSdkRoot"
 Write-Output "ABI:             $Abi"
 Write-Output "Platform:        $Platform"
 Write-Output "NDK version:     $NdkVersion"
-Write-Output "Assets dir:      $AssetsDir"
+Write-Output $(if ($IsQuest) { "Assets dir:      $AssetsDir" } else { "Prepared assets: $AssetsDir" })
 Write-Output "Application ID:  $ApplicationId"
 Write-Output "App label:       $AppLabel"
 Write-Output "Version:         $VersionName ($VersionCode)"
