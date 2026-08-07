@@ -109,7 +109,9 @@ def configure_default_shader_runtime(label: str = "python") -> bool:
 
     slangc = _resolve_tool("slangc", "TERMIN_SLANGC", "Shader/slangCompiler")
     if slangc is None:
-        log.error(f"[ShaderRuntime] slangc not found; {label} Slang shaders cannot compile")
+        from termin.shader_runtime import slangc_unavailable_message
+
+        log.warning(f"[ShaderRuntime] {slangc_unavailable_message(label)}")
         return False
 
     root = _cache_root(label)

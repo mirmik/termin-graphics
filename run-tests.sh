@@ -73,6 +73,8 @@ elif ! TEST_SHADERC="$(
         --platform linux
 )"; then
     failures+=("termin_shaderc provenance")
+elif ! bash "$SCRIPT_DIR/setup-sdk-python-env.sh"; then
+    failures+=("Python environment")
 elif ! TERMIN_SHADERC="$TEST_SHADERC" \
     bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")

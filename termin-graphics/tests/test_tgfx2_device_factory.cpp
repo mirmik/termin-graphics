@@ -192,7 +192,16 @@ TEST_CASE("tgfx2 backend names and compiled availability are queryable") {
     CHECK(tgfx::backend_from_name("WGPU") == tgfx::BackendType::WebGPU);
     CHECK(tgfx::backend_from_name("definitely-not-a-backend") == tgfx::BackendType::Null);
 
-    CHECK(tgfx::backend_is_compiled(tgfx::compiled_default_backend()));
+    const bool any_backend_compiled =
+        tgfx::backend_is_compiled(tgfx::BackendType::OpenGL) ||
+        tgfx::backend_is_compiled(tgfx::BackendType::Vulkan) ||
+        tgfx::backend_is_compiled(tgfx::BackendType::D3D11) ||
+        tgfx::backend_is_compiled(tgfx::BackendType::WebGPU);
+    const auto compiled_default = tgfx::compiled_default_backend();
+    CHECK((compiled_default == tgfx::BackendType::Null) == !any_backend_compiled);
+    if (compiled_default != tgfx::BackendType::Null) {
+        CHECK(tgfx::backend_is_compiled(compiled_default));
+    }
     CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::Null));
 #ifndef __EMSCRIPTEN__
     CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::WebGPU));

@@ -1517,28 +1517,39 @@ static bool write_resource_layout_sidecar(
 }
 
 static bool compile_glsl_to_vulkan(const CompileOptions& options) {
-#ifndef TERMIN_SHADERC_HAS_SHADERC
-    (void)options;
-    std::cerr
-        << "termin_shaderc: GLSL to Vulkan compilation requires shaderc support, "
-        << "but this termin_shaderc was built without shaderc\n";
-    return false;
-#else
     if (options.target != "vulkan") {
         std::cerr << "termin_shaderc: GLSL input currently supports only --target vulkan\n";
         return false;
     }
 
+#ifdef TERMIN_SHADERC_HAS_SHADERC
     shaderc_shader_kind kind = shader_kind_for_stage(options.stage);
     if (kind == shaderc_glsl_infer_from_source) {
         std::cerr << "termin_shaderc: unsupported stage: " << options.stage << "\n";
         return false;
     }
+#else
+    if (stage_mask_for_stage(options.stage) == 0u) {
+        std::cerr << "termin_shaderc: unsupported stage: " << options.stage << "\n";
+        return false;
+    }
+#endif
 
     std::string source;
     if (!read_file(options.input, source)) {
         return false;
     }
+    std::vector<ShaderResourceBinding> resources;
+    if (!collect_resource_bindings(options, source, std::nullopt, resources)) {
+        return false;
+    }
+
+#ifndef TERMIN_SHADERC_HAS_SHADERC
+    std::cerr
+        << "termin_shaderc: GLSL to Vulkan compilation requires shaderc support, "
+        << "but this termin_shaderc was built without shaderc\n";
+    return false;
+#else
 
     shaderc::Compiler compiler;
     shaderc::CompileOptions shader_options;
@@ -1570,7 +1581,7 @@ static bool compile_glsl_to_vulkan(const CompileOptions& options) {
         return false;
     }
 
-    return write_resource_layout_sidecar(options, source);
+    return write_resource_layout_sidecar(options, resources);
 #endif
 }
 
