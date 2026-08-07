@@ -37,6 +37,13 @@ struct PlotScene3DItemRenderData {
     tc_surface_item3d_style surface_style{};
     tc_scatter_item3d_style scatter_style{};
     tc_grid_item3d_style grid_style{};
+
+    // Encoder-ready immutable surface stream. The layout is the builtin
+    // tcplot3d vertex ABI (19 floats per vertex); vertices are already
+    // expanded in draw order so submission can use the shared transient
+    // vertex ring without owning device-lifetime buffers in a snapshot.
+    std::vector<float> surface_draw_vertices;
+    uint32_t surface_draw_vertex_count = 0;
 };
 
 // Chart-wide values captured independently for every publication. They are
