@@ -147,18 +147,13 @@ Production path должен прийти к `ClipToNearPlane`, иначе orbit
 
 ## 9. Подключение LineRenderer
 
-`termin::LineRenderer` должен стать тонким adapter-ом:
-
-- хранит points/style/material-ish настройки
-- выбирает `WorldMesh` или `ScreenSpace`
-- делегирует математику и draw path в `termin-graphics`
-
-Публичный API должен быть явным:
-
-```cpp
-renderer.width_mode = LineWidthMode::ScreenPixels;
-renderer.width = 3.0f;
-```
+Scene-level `termin::LineRenderer` использует один production contract:
+view-independent world-space tube. Он делегирует geometry streams в
+`termin-graphics`, но shader/material/pass composition принадлежит общему
+material pipeline. `ScreenSpaceLineRenderer` и `WorldSpaceLineRenderer`
+остаются low-level unlit debug/overlay utilities и не становятся режимами
+scene component. Решение зафиксировано в
+[`Canonical LineRenderer Contract`](../../docs/architecture-council/2026-08-07-line-renderer-contract.md).
 
 ## 10. Cleanup
 

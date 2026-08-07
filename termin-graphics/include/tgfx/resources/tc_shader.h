@@ -33,9 +33,7 @@ typedef enum tc_shader_variant_op {
     TC_SHADER_VARIANT_MORPHING = 3,
     TC_SHADER_VARIANT_FOLIAGE = 4,
     TC_SHADER_VARIANT_FOLIAGE_SHADOW = 5,
-    TC_SHADER_VARIANT_LINE_MATERIAL_FRAGMENT = 6,
-    TC_SHADER_VARIANT_LINE_TUBE_BODY = 7,
-    TC_SHADER_VARIANT_LINE_TUBE_CAP = 8,
+    TC_SHADER_VARIANT_LINE_TUBE = 7,
 } tc_shader_variant_op;
 
 // ============================================================================

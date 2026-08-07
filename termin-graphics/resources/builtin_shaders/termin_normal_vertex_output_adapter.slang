@@ -11,6 +11,9 @@ struct PerFrame {
 [[TerminScope("frame")]]
 ConstantBuffer<PerFrame> per_frame;
 
+// Mesh transform providers consume normal_draw.u_model. The declaration is
+// shared here with the pass adapter, while the provider owns the resource
+// contract; world-space providers therefore do not require this buffer.
 struct NormalPushData {
     column_major float4x4 u_model;
 };

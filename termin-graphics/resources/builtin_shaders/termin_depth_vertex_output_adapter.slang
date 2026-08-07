@@ -13,6 +13,10 @@ struct PerFrame {
 [[TerminScope("frame")]]
 ConstantBuffer<PerFrame> per_frame;
 
+// Declared in the imported pass module so mesh transform providers can use
+// depth_draw.u_model. Resource ownership is attached to those providers; a
+// world-space provider such as WorldTube does not require this buffer and
+// backend reflection removes the unused declaration from that variant.
 struct DepthPushData {
     column_major float4x4 u_model;
 };

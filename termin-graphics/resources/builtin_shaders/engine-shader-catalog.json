@@ -372,56 +372,20 @@
       }
     },
     {
-      "uuid": "termin-engine-world-tube-line",
-      "name": "WorldTubeLineVSFS",
-      "language": "slang",
-      "runtime_sources": [
-        "termin-engine-world-tube-line.slang"
-      ],
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-world-tube-line.slang",
-          "entry": "vs_main"
-        },
-        "fragment": {
-          "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-world-tube-line-cap",
-      "name": "WorldTubeLineCapVSFS",
-      "language": "slang",
-      "runtime_sources": [
-        "termin-engine-world-tube-line.slang"
-      ],
-      "stages": {
-        "vertex": {
-          "path": "termin-engine-world-tube-line.slang",
-          "entry": "vs_cap_main"
-        },
-        "fragment": {
-          "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_main"
-        }
-      }
-    },
-    {
-      "uuid": "termin-engine-world-tube-line-lit",
-      "name": "WorldTubeLineLitFS",
-      "language": "slang",
-      "stages": {
-        "fragment": {
-          "path": "termin-engine-world-tube-line.slang",
-          "entry": "fs_lit_main"
-        }
-      }
-    },
-    {
       "uuid": "termin-engine-line-default",
       "name": "DefaultLineShader",
       "language": "slang",
+      "runtime_sources": [
+        "termin-engine-line-default.slang",
+        "termin_world_tube_line_transform.slang",
+        "termin_vertex_transform.slang",
+        "termin_material_vertex_output_adapter.slang",
+        "termin_multiview_material_vertex_output_adapter.slang",
+        "termin_id_vertex_output_adapter.slang",
+        "termin_depth_vertex_output_adapter.slang",
+        "termin_shadow_vertex_output_adapter.slang",
+        "termin_prelude.slang"
+      ],
       "stages": {
         "vertex": {
           "path": "termin-engine-line-default.slang",
