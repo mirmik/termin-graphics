@@ -296,6 +296,7 @@ add_subdirectory(termin-navmesh)
 add_subdirectory(termin-components/termin-components-foliage)
 add_subdirectory(termin-render-passes)
 add_subdirectory(termin-engine)
+add_subdirectory(termin-framegraph-remote-target)
 
 if(NOT TERMIN_PLATFORM_ANDROID)
     add_subdirectory(termin-animation)
