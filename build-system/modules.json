@@ -80,6 +80,11 @@
       "kinds": ["cmake", "documentation"]
     },
     {
+      "id": "termin-framegraph-remote-client",
+      "path": "termin-framegraph-remote-client",
+      "kinds": ["cmake", "documentation"]
+    },
+    {
       "id": "termin-profiler-remote",
       "path": "termin-profiler-remote",
       "kinds": ["cmake", "documentation"]
