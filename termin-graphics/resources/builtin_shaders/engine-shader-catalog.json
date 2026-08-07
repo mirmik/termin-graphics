@@ -375,6 +375,9 @@
       "uuid": "termin-engine-world-tube-line",
       "name": "WorldTubeLineVSFS",
       "language": "slang",
+      "runtime_sources": [
+        "termin-engine-world-tube-line.slang"
+      ],
       "stages": {
         "vertex": {
           "path": "termin-engine-world-tube-line.slang",
@@ -390,6 +393,9 @@
       "uuid": "termin-engine-world-tube-line-cap",
       "name": "WorldTubeLineCapVSFS",
       "language": "slang",
+      "runtime_sources": [
+        "termin-engine-world-tube-line.slang"
+      ],
       "stages": {
         "vertex": {
           "path": "termin-engine-world-tube-line.slang",
