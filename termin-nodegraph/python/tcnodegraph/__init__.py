@@ -14,15 +14,8 @@ from tcnodegraph.schema import (
 )
 
 try:
-    from tcnodegraph.view import NodeGraphSceneAdapter, NodeGraphView
-except ModuleNotFoundError as e:
-    logging.getLogger(__name__).debug("Optional import tcnodegraph.view failed: %s — GUI features unavailable", e)
-    NodeGraphSceneAdapter = None
-    NodeGraphView = None
-
-try:
     from tcnodegraph.native_view import NativeNodeGraphView, build_native_node_graph_view
-except ModuleNotFoundError as e:
+except ImportError as e:
     logging.getLogger(__name__).debug(
         "Optional import tcnodegraph.native_view failed: %s — native GUI features unavailable",
         e,
@@ -47,8 +40,6 @@ __all__ = [
     "graph_from_dict",
     "save_graph_json",
     "load_graph_json",
-    "NodeGraphSceneAdapter",
-    "NodeGraphView",
     "NativeNodeGraphView",
     "build_native_node_graph_view",
 ]

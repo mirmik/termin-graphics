@@ -181,6 +181,38 @@ void RenderContext2::begin_pass(
 }
 
 bool RenderContext2::begin_pass(const RenderPassDesc& pass) {
+    return begin_pass_impl(
+        pass, 1, false, MultiviewColorFinalState::ShaderRead);
+}
+
+bool RenderContext2::begin_multiview_pass(const MultiviewRenderPassDesc& pass) {
+    const BackendCapabilities caps = device_.capabilities();
+    if (!caps.supports_multiview) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2::begin_multiview_pass: backend does not support multiview");
+        return false;
+    }
+    if (pass.view_count < 2 || pass.view_count > caps.max_multiview_views ||
+        pass.view_count >= 32) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2::begin_multiview_pass: invalid view_count=%u (backend max=%u)",
+               pass.view_count, caps.max_multiview_views);
+        return false;
+    }
+    RenderPassDesc base;
+    base.colors = pass.colors;
+    base.depth = pass.depth;
+    base.has_depth = pass.has_depth;
+    return begin_pass_impl(
+        base, pass.view_count, true, pass.color_final_state);
+}
+
+bool RenderContext2::begin_pass_impl(
+    const RenderPassDesc& pass,
+    uint32_t view_count,
+    bool multiview,
+    MultiviewColorFinalState color_final_state)
+{
     if (in_pass_) {
         end_pass();
     }
@@ -264,6 +296,12 @@ bool RenderContext2::begin_pass(const RenderPassDesc& pass) {
             }
         }
         const TextureDesc desc = device_.texture_desc(color.texture);
+        if ((!multiview && desc.array_layers != 1) ||
+            (multiview && desc.array_layers < view_count)) {
+            tc_log(TC_LOG_ERROR,
+                   "RenderContext2::begin_pass: color attachment layer count is incompatible with pass mode");
+            return false;
+        }
         if (!has_flag(desc.usage, TextureUsage::ColorAttachment)) {
             tc_log(
                 TC_LOG_ERROR,
@@ -295,6 +333,12 @@ bool RenderContext2::begin_pass(const RenderPassDesc& pass) {
             }
         }
         const TextureDesc desc = device_.texture_desc(pass.depth.texture);
+        if ((!multiview && desc.array_layers != 1) ||
+            (multiview && desc.array_layers < view_count)) {
+            tc_log(TC_LOG_ERROR,
+                   "RenderContext2::begin_pass: depth attachment layer count is incompatible with pass mode");
+            return false;
+        }
         if (!has_flag(desc.usage, TextureUsage::DepthStencilAttachment)) {
             tc_log(
                 TC_LOG_ERROR,
@@ -334,11 +378,25 @@ bool RenderContext2::begin_pass(const RenderPassDesc& pass) {
         sample_count_ = expected_samples;
         pipeline_dirty_ = true;
     }
+    if (view_count_ != view_count) {
+        view_count_ = view_count;
+        pipeline_dirty_ = true;
+    }
 
     viewport_w_ = std::max(1, static_cast<int>(expected_width));
     viewport_h_ = std::max(1, static_cast<int>(expected_height));
 
-    cmd_->begin_render_pass(pass);
+    if (multiview) {
+        MultiviewRenderPassDesc multiview_pass;
+        multiview_pass.colors = pass.colors;
+        multiview_pass.depth = pass.depth;
+        multiview_pass.has_depth = pass.has_depth;
+        multiview_pass.view_count = view_count;
+        multiview_pass.color_final_state = color_final_state;
+        cmd_->begin_multiview_render_pass(multiview_pass);
+    } else {
+        cmd_->begin_render_pass(pass);
+    }
     in_pass_ = true;
     // Descriptor/resource bindings are render-pass local in practice:
     // a later pass may use the same binding numbers for completely
@@ -362,6 +420,15 @@ void RenderContext2::end_pass() {
     if (!in_pass_) return;
     cmd_->end_render_pass();
     in_pass_ = false;
+}
+
+void RenderContext2::framebuffer_local_barrier() {
+    if (!in_pass_ || !cmd_) {
+        tc_log(TC_LOG_ERROR,
+               "RenderContext2::framebuffer_local_barrier requires an active render pass");
+        return;
+    }
+    cmd_->framebuffer_local_barrier();
 }
 
 // ============================================================================
@@ -1136,6 +1203,7 @@ bool RenderContext2::flush_pipeline() {
     key.color_format_count = color_format_count_;
     key.depth_format = depth_format_;
     key.sample_count = sample_count_;
+    key.view_count = view_count_;
 
     auto pipeline = cache_.get(key);
     if (!pipeline) {

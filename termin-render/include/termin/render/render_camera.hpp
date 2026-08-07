@@ -21,4 +21,9 @@ public:
     Vec3 get_position() const { return position; }
 };
 
+struct StereoRenderViews {
+    RenderCamera left;
+    RenderCamera right;
+};
+
 } // namespace termin

@@ -1,12 +1,12 @@
 # termin-nodegraph
 
-`termin-nodegraph` содержит abstract node graph engine и tcgui adapter.
+`termin-nodegraph` содержит toolkit-neutral graph engine и native UI projection.
 
 Связанные документы:
 
 - [Module Map](../../docs/modules.md#termin-nodegraph)
 - [README](../README.md)
-- [termin-gui](../../termin-gui/docs/index.md)
+- [termin-gui-native](../../termin-gui-native/README.md)
 
 ## Основные области
 

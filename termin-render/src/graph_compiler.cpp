@@ -98,7 +98,9 @@ static bool is_external_resource_name(const std::string& name) {
 }
 
 static bool is_attachment_texture_type(const std::string& type) {
-    return type == "color_texture" || type == "depth_texture";
+    return type == "color_texture" || type == "depth_texture" ||
+           type == "multiview_color_texture" ||
+           type == "multiview_depth_texture";
 }
 
 static bool is_direct_target_resource_type(const std::string& type) {
@@ -109,6 +111,9 @@ static bool is_graph_alias_node(const NodeData& node) {
     return node.node_type == "render_target_input" ||
            node.node_type == "fbo_split" ||
            node.node_type == "fbo_join" ||
+           node.node_type == "multiview_fbo_split" ||
+           node.node_type == "multiview_fbo_join" ||
+           node.node_type == "external_xr_multiview_fbo" ||
            node.node_type == "pipeline_output";
 }
 
@@ -129,6 +134,9 @@ static std::string graph_compiler_resource_type_for_node(const NodeData& node) {
     if (node.pass_class == "Shadow Maps") {
         return "shadow_map_array";
     }
+    if (node.pass_class == "Multiview Color Texture") return "multiview_color_texture";
+    if (node.pass_class == "Multiview Depth Texture") return "multiview_depth_texture";
+    if (node.pass_class == "Multiview FBO") return "multiview_fbo";
     return "fbo";
 }
 
@@ -446,6 +454,16 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                 result.external_resources[name] = "external_texture";
             }
         }
+        if (node.node_type == "external_xr_multiview_fbo") {
+            std::string name = "XR_MULTIVIEW_TARGET";
+            if (node.params.contains("slot") && node.params["slot"].is_string() &&
+                !node.params["slot"].as_string().empty()) {
+                name = node.params["slot"].as_string();
+            }
+            result.socket_names[node.id]["fbo"] = name;
+            result.resource_types[name] = "external_xr_multiview_fbo";
+            result.external_resources[name] = "external_xr_multiview_fbo";
+        }
         if (node.node_type == "render_target_input") {
             for (const auto& output : node.outputs) {
                 if (output.name == "color") {
@@ -490,12 +508,14 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         auto& sockets = result.socket_names[node.id];
         int idx = node_index[node.id];
 
-        if (node.node_type == "fbo_split") {
+        if (node.node_type == "fbo_split" ||
+            node.node_type == "multiview_fbo_split") {
+            const bool multiview = node.node_type == "multiview_fbo_split";
             auto input_it = sockets.find("fbo");
             if (input_it == sockets.end()) {
                 std::string name = generated_input_name(node, idx, "fbo");
                 sockets["fbo"] = name;
-                result.resource_types[name] = "fbo";
+                result.resource_types[name] = multiview ? "multiview_fbo" : "fbo";
                 input_it = sockets.find("fbo");
             }
 
@@ -505,8 +525,10 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
 
             sockets["color"] = color_name;
             sockets["depth"] = depth_name;
-            result.resource_types[color_name] = "color_texture";
-            result.resource_types[depth_name] = "depth_texture";
+            result.resource_types[color_name] = multiview
+                ? "multiview_color_texture" : "color_texture";
+            result.resource_types[depth_name] = multiview
+                ? "multiview_depth_texture" : "depth_texture";
             result.resource_views[color_name] = termin::ResourceView{
                 parent,
                 termin::AttachmentKind::Color,
@@ -529,12 +551,15 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
         auto& sockets = result.socket_names[node.id];
         int idx = node_index[node.id];
 
-        if (node.node_type == "fbo_join") {
+        if (node.node_type == "fbo_join" ||
+            node.node_type == "multiview_fbo_join") {
+            const bool multiview = node.node_type == "multiview_fbo_join";
             auto color_it = sockets.find("color");
             if (color_it == sockets.end()) {
                 std::string name = generated_input_name(node, idx, "color");
                 sockets["color"] = name;
-                result.resource_types[name] = "color_texture";
+                result.resource_types[name] = multiview
+                    ? "multiview_color_texture" : "color_texture";
                 color_it = sockets.find("color");
             }
 
@@ -542,7 +567,8 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
             if (depth_it == sockets.end()) {
                 std::string name = generated_input_name(node, idx, "depth");
                 sockets["depth"] = name;
-                result.resource_types[name] = "depth_texture";
+                result.resource_types[name] = multiview
+                    ? "multiview_depth_texture" : "depth_texture";
                 depth_it = sockets.find("depth");
             }
 
@@ -550,7 +576,7 @@ ResourceNaming assign_resource_names(const GraphData& graph) {
                 ? "fbo_join_" + std::to_string(idx)
                 : node.name;
             sockets["fbo"] = output_name;
-            result.resource_types[output_name] = "fbo";
+            result.resource_types[output_name] = multiview ? "multiview_fbo" : "fbo";
             result.fbo_compositions[output_name] = termin::FboComposition{
                 color_it->second,
                 depth_it->second,
@@ -648,9 +674,15 @@ static void add_graph_alias_pass(
     std::vector<std::string> writes;
     std::vector<std::string> aliases;
 
-    if (node.node_type == "render_target_input") {
+    if (node.node_type == "render_target_input" ||
+        node.node_type == "external_xr_multiview_fbo") {
+        if (node.node_type == "external_xr_multiview_fbo") {
+            push_resource_if_present(writes, sockets, "fbo");
+        } else {
         push_resource_if_present(writes, sockets, "color");
-    } else if (node.node_type == "fbo_split") {
+        }
+    } else if (node.node_type == "fbo_split" ||
+               node.node_type == "multiview_fbo_split") {
         push_resource_if_present(reads, sockets, "fbo");
         push_resource_if_present(writes, sockets, "color");
         push_resource_if_present(writes, sockets, "depth");
@@ -665,7 +697,8 @@ static void add_graph_alias_pass(
                 push_alias_pair(aliases, fbo_it->second, depth_it->second);
             }
         }
-    } else if (node.node_type == "fbo_join") {
+    } else if (node.node_type == "fbo_join" ||
+               node.node_type == "multiview_fbo_join") {
         push_resource_if_present(reads, sockets, "color");
         push_resource_if_present(reads, sockets, "depth");
         push_resource_if_present(writes, sockets, "fbo");
@@ -884,9 +917,14 @@ static ResourceSpec infer_resource_spec(
     ResourceSpec spec;
     spec.resource = resource_name;
     spec.resource_type = resource_type;
-    if (resource_type == "color_texture") {
+    if (resource_type.starts_with("multiview_")) {
+        spec.array_layers = 2;
+    }
+    if (resource_type == "color_texture" ||
+        resource_type == "multiview_color_texture") {
         spec.format = "rgba8";
-    } else if (resource_type == "depth_texture") {
+    } else if (resource_type == "depth_texture" ||
+               resource_type == "multiview_depth_texture") {
         spec.format = "depth32f";
     }
 
@@ -912,6 +950,15 @@ static ResourceSpec infer_resource_spec(
             }
         }
 
+        if (params.contains("array_layers")) {
+            if (auto layers = trent_int_value(params["array_layers"]); layers && *layers > 0) {
+                spec.array_layers = *layers;
+            } else {
+                tc::Log::warn(
+                    "compile_graph: resource '%s' has invalid array_layers value",
+                    resource_name.c_str());
+            }
+        }
         // Filter
         if (params.contains("filter") && params["filter"].is_string()) {
             std::string filter_mode = params["filter"].as_string();
@@ -1049,7 +1096,8 @@ bool publish_pipeline_template(
     RenderPipeline& instance,
     const TcPipelineTemplate& pipeline_template,
     const std::vector<std::string>& pass_parameters,
-    const std::vector<PipelineTemplateTarget>& targets
+    const std::vector<PipelineTemplateTarget>& targets,
+    tc_pipeline_execution_model execution_model
 ) {
     std::vector<CompiledPassStorage> pass_storage;
     std::vector<tc_pipeline_template_pass_desc> pass_descs;
@@ -1124,6 +1172,7 @@ bool publish_pipeline_template(
             spec && spec->size ? spec->size->second : 0,
             spec ? spec->scale : 1.0f,
             spec ? static_cast<uint32_t>(spec->samples) : 1u,
+            spec ? static_cast<uint32_t>(spec->array_layers) : 1u,
             0,
         });
     }
@@ -1193,6 +1242,7 @@ bool publish_pipeline_template(
     const std::string pipeline_name = instance.name();
     const tc_pipeline_template_payload_desc payload = {
         TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION,
+        execution_model,
         pipeline_name.c_str(),
         pass_descs.data(), static_cast<uint32_t>(pass_descs.size()),
         resource_descs.data(), static_cast<uint32_t>(resource_descs.size()),
@@ -1212,6 +1262,10 @@ static RenderPipeline* compile_graph_impl(
     GraphData& graph,
     const TcPipelineTemplate* pipeline_template
 ) {
+    if (graph.execution_model != "single_view" &&
+        graph.execution_model != "xr_multiview") {
+        throw GraphCompileError("invalid or missing pipeline execution_model");
+    }
     validate_connection_types(graph);
 
     // 1. Topological sort
@@ -1368,6 +1422,9 @@ static RenderPipeline* compile_graph_impl(
             spec.resource_type = resource_type.starts_with("external")
                 ? resource_type
                 : "external";
+            if (resource_type == "external_xr_multiview_fbo") {
+                spec.array_layers = 2;
+            }
             pipeline->add_spec(spec);
             continue;
         }
@@ -1401,8 +1458,13 @@ static RenderPipeline* compile_graph_impl(
         for (const ViewportFrameData& frame : graph.viewport_frames) {
             targets.push_back({frame.viewport_name, "", 0, 0});
         }
+        const tc_pipeline_execution_model execution_model =
+            graph.execution_model == "xr_multiview"
+                ? TC_PIPELINE_EXECUTION_XR_MULTIVIEW
+                : TC_PIPELINE_EXECUTION_SINGLE_VIEW;
         if (!publish_pipeline_template(
-                *pipeline, *pipeline_template, pass_parameters, targets)) {
+                *pipeline, *pipeline_template, pass_parameters, targets,
+                execution_model)) {
             pipeline->destroy();
             delete pipeline;
             throw GraphCompileError("failed to publish canonical pipeline template");

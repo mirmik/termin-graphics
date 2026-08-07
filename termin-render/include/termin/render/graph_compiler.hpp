@@ -40,7 +40,8 @@ RENDER_API bool publish_pipeline_template(
     termin::RenderPipeline& instance,
     const termin::TcPipelineTemplate& pipeline_template,
     const std::vector<std::string>& pass_parameters = {},
-    const std::vector<PipelineTemplateTarget>& targets = {}
+    const std::vector<PipelineTemplateTarget>& targets = {},
+    tc_pipeline_execution_model execution_model = TC_PIPELINE_EXECUTION_SINGLE_VIEW
 );
 
 RENDER_API std::vector<NodeData*> topological_sort(GraphData& graph);

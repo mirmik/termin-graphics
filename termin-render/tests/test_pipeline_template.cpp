@@ -22,8 +22,8 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
         {"ForwardPass", "forward", "{\"phase\":\"opaque\"}", "main"},
     };
     const tc_pipeline_template_resource_desc resources[] = {
-        {"scene-depth", "depth_texture", "D32_FLOAT", "main", 1920, 1080, 1.0f, 4, 7},
-        {"scene-color", "color_texture", "RGBA16_FLOAT", "main", 0, 0, 0.5f, 1, 0},
+        {"scene-depth", "depth_texture", "D32_FLOAT", "main", 1920, 1080, 1.0f, 4, 2, 7},
+        {"scene-color", "color_texture", "RGBA16_FLOAT", "main", 0, 0, 0.5f, 1, 1, 0},
     };
     const tc_pipeline_template_dependency_desc dependencies[] = {
         {0, "scene-depth", TC_PIPELINE_RESOURCE_WRITE},
@@ -42,6 +42,7 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     };
     const tc_pipeline_template_payload_desc payload = {
         TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION,
+        TC_PIPELINE_EXECUTION_XR_MULTIVIEW,
         "main pipeline",
         passes, 2,
         resources, 2,
@@ -91,11 +92,13 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     tc_pipeline_template* decoded = tc_pipeline_template_get(decoded_handle);
     REQUIRE(decoded != nullptr);
     CHECK(std::strcmp(decoded->header.name, "main pipeline") == 0);
+    CHECK(decoded->execution_model == TC_PIPELINE_EXECUTION_XR_MULTIVIEW);
     REQUIRE(decoded->pass_count == 2);
     CHECK(std::strcmp(decoded->passes[0].name, "depth") == 0);
     CHECK(std::strcmp(decoded->passes[1].parameters, "{\"phase\":\"opaque\"}") == 0);
     REQUIRE(decoded->resource_count == 2);
     CHECK(decoded->resources[0].samples == 4);
+    CHECK(decoded->resources[0].array_layers == 2);
     CHECK_EQ(decoded->resources[1].scale, 0.5f);
     REQUIRE(decoded->dependency_count == 3);
     CHECK(decoded->dependencies[1].access == TC_PIPELINE_RESOURCE_READ);
@@ -180,7 +183,7 @@ TEST_CASE("runtime instance restores resource views and FBO compositions from te
     tc_pipeline_pool_init();
 
     const tc_pipeline_template_resource_desc resources[] = {
-        {"scene-fbo", "external", nullptr, nullptr, 0, 0, 1.0f, 1, 0},
+        {"scene-fbo", "external", nullptr, nullptr, 0, 0, 1.0f, 1, 1, 0},
     };
     const tc_pipeline_template_resource_view_desc resource_views[] = {
         {"scene-color", "scene-fbo", TC_PIPELINE_ATTACHMENT_COLOR},
@@ -191,6 +194,7 @@ TEST_CASE("runtime instance restores resource views and FBO compositions from te
     };
     const tc_pipeline_template_payload_desc payload = {
         TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION,
+        TC_PIPELINE_EXECUTION_SINGLE_VIEW,
         "recipe pipeline",
         nullptr, 0,
         resources, 1,

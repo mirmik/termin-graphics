@@ -176,6 +176,9 @@ bool bind_request_resources(
             const tc_shader_resource_binding* rb =
                 tc_shader_find_resource_binding(shader, texture.name);
             if (!rb || rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                if (texture.only_if_shader_has_resource && !rb) {
+                    continue;
+                }
                 tc::Log::error(
                     "[%s] skip extra texture '%s' for '%s': shader does not declare a Texture2D resource with that name",
                     pass_name,

@@ -38,6 +38,47 @@ namespace termin {
 
 static constexpr const char* RESOURCE_FORMAT_RENDER_TARGET = "render_target";
 
+static bool begin_clear_texture_pass(
+    tgfx::RenderContext2& ctx,
+    tgfx::IRenderDevice& device,
+    tgfx::TextureHandle color,
+    tgfx::TextureHandle depth,
+    const float* clear_color,
+    float clear_depth,
+    bool clear_depth_enabled
+) {
+    uint32_t array_layers = 1;
+    if (color) {
+        array_layers = device.texture_desc(color).array_layers;
+    } else if (depth) {
+        array_layers = device.texture_desc(depth).array_layers;
+    }
+    if (array_layers <= 1) {
+        ctx.begin_pass(color, depth, clear_color, clear_depth, clear_depth_enabled);
+        return true;
+    }
+
+    tgfx::MultiviewRenderPassDesc pass;
+    pass.view_count = array_layers;
+    pass.color_final_state = tgfx::MultiviewColorFinalState::ColorAttachment;
+    if (color) {
+        tgfx::ColorAttachmentDesc attachment;
+        attachment.texture = color;
+        attachment.load = clear_color ? tgfx::LoadOp::Clear : tgfx::LoadOp::Load;
+        if (clear_color) {
+            std::copy_n(clear_color, 4, attachment.clear_color);
+        }
+        pass.colors.push_back(attachment);
+    }
+    if (depth) {
+        pass.depth.texture = depth;
+        pass.depth.load = clear_depth_enabled ? tgfx::LoadOp::Clear : tgfx::LoadOp::Load;
+        pass.depth.clear_depth = clear_depth;
+        pass.has_depth = true;
+    }
+    return ctx.begin_multiview_pass(pass);
+}
+
 using PassDependencyCollector = size_t (*)(tc_pass*, const char**, size_t);
 
 static std::vector<const char*> collect_pass_dependencies(
@@ -437,6 +478,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
             if (spec.samples > 1 && existing.samples == 1) {
                 existing.samples = spec.samples;
             }
+            if (spec.array_layers > existing.array_layers) {
+                existing.array_layers = spec.array_layers;
+            }
             if (spec.format && !existing.format) {
                 existing.format = spec.format;
             }
@@ -518,7 +562,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             continue;
         }
 
-        if (resource_type == "color_texture") {
+        if (resource_type == "color_texture" ||
+            resource_type == "multiview_color_texture") {
             int tex_width = default_width;
             int tex_height = default_height;
             std::string format;
@@ -543,6 +588,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
             texture_desc.width = static_cast<uint32_t>(tex_width);
             texture_desc.height = static_cast<uint32_t>(tex_height);
             texture_desc.format = color_format;
+            texture_desc.array_layers = static_cast<uint32_t>(
+                spec && spec->array_layers > 0 ? spec->array_layers : 1);
+            texture_desc.sample_count = static_cast<uint32_t>(
+                spec && spec->samples > 0 ? spec->samples : 1);
             texture_desc.usage = usage;
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
@@ -564,7 +613,8 @@ void RenderEngine::render_scene_pipeline_offscreen(
             continue;
         }
 
-        if (resource_type == "depth_texture") {
+        if (resource_type == "depth_texture" ||
+            resource_type == "multiview_depth_texture") {
             int tex_width = default_width;
             int tex_height = default_height;
             if (spec && spec->size) {
@@ -580,6 +630,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
             texture_desc.width = static_cast<uint32_t>(tex_width);
             texture_desc.height = static_cast<uint32_t>(tex_height);
             texture_desc.format = tgfx::PixelFormat::D32F;
+            texture_desc.array_layers = static_cast<uint32_t>(
+                spec && spec->array_layers > 0 ? spec->array_layers : 1);
+            texture_desc.sample_count = static_cast<uint32_t>(
+                spec && spec->samples > 0 ? spec->samples : 1);
             texture_desc.usage = usage;
             if (!pipeline_cache.texture_pool.ensure(
                     *device, canon, texture_desc)) {
@@ -601,7 +655,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
             continue;
         }
 
-        if (resource_type != "fbo") {
+        if (resource_type != "fbo" && resource_type != "multiview_fbo") {
             std::vector<const char*> aliases = collect_alias_group(fg, canon);
             size_t alias_count = aliases.size();
             for (size_t j = 0; j < alias_count; j++) {
@@ -616,6 +670,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         int fbo_width = default_width;
         int fbo_height = default_height;
         int samples = 1;
+        int array_layers = 1;
         std::string format;
         TextureFilter filter = TextureFilter::LINEAR;
 
@@ -625,6 +680,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
                 fbo_height = spec->size->second;
             }
             samples = spec->samples > 0 ? spec->samples : 1;
+            array_layers = spec->array_layers > 0 ? spec->array_layers : 1;
             if (spec->format) format = *spec->format;
             filter = spec->filter;
         }
@@ -636,6 +692,7 @@ void RenderEngine::render_scene_pipeline_offscreen(
         target_desc.width = fbo_width;
         target_desc.height = fbo_height;
         target_desc.samples = samples;
+        target_desc.array_layers = array_layers;
         target_desc.color_format = color_fmt;
         target_desc.has_depth = true;
         target_desc.depth_format = tgfx::PixelFormat::D32F;
@@ -684,12 +741,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
 
             const float* clear_color_ptr =
                 rt_ctx.clear_color_enabled ? rt_ctx.clear_color : nullptr;
-            ctx2->begin_pass(
-                rt_ctx.output_color_tex,
-                rt_ctx.output_depth_tex,
-                clear_color_ptr,
-                rt_ctx.clear_depth,
-                rt_ctx.clear_depth_enabled);
+            if (!begin_clear_texture_pass(
+                    *ctx2,
+                    *device,
+                    rt_ctx.output_color_tex,
+                    rt_ctx.output_depth_tex,
+                    clear_color_ptr,
+                    rt_ctx.clear_depth,
+                    rt_ctx.clear_depth_enabled)) {
+                continue;
+            }
             ctx2->set_viewport(
                 0, 0,
                 std::max(1, rt_ctx.render_rect.width),
@@ -767,6 +828,10 @@ void RenderEngine::render_scene_pipeline_offscreen(
         for (const auto& [fbo_name, composition] : pipeline_cache.fbo_compositions) {
             auto composition_input_is_external = [&](const std::string& name) {
                 if (is_external_output_resource(name.c_str())) {
+                    return true;
+                }
+                if (is_external_graph_input_resource(
+                        name.c_str(), render_target_contexts)) {
                     return true;
                 }
                 auto view_it = pipeline_cache.resource_views.find(name);
@@ -850,10 +915,16 @@ void RenderEngine::render_scene_pipeline_offscreen(
             int fb_w = spec.size ? spec.size->first : default_width;
             int fb_h = spec.size ? spec.size->second : default_height;
 
-            ctx2->begin_pass(
-                color_tex, depth_tex,
-                clear_color_ptr, clear_depth_val, clear_depth_enabled
-            );
+            if (!begin_clear_texture_pass(
+                    *ctx2,
+                    *device,
+                    color_tex,
+                    depth_tex,
+                    clear_color_ptr,
+                    clear_depth_val,
+                    clear_depth_enabled)) {
+                continue;
+            }
             ctx2->set_viewport(0, 0, fb_w, fb_h);
             ctx2->end_pass();
         }
@@ -1201,6 +1272,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         ctx.render_target_name = rt_ctx.name;
         ctx.internal_entities = rt_ctx.internal_entities;
         ctx.camera = const_cast<RenderCamera*>(&rt_ctx.camera);
+        ctx.stereo_views = rt_ctx.stereo_views
+            ? &*rt_ctx.stereo_views
+            : nullptr;
         ctx.lights = lights;
         ctx.layer_mask = rt_ctx.layer_mask;
         ctx.render_category_mask = rt_ctx.render_category_mask;

@@ -20,10 +20,12 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 CCACHE_MODE="on"
 UNITY_MODE="off"
 PCH_MODE="on"
+SDK_PROFILE="full"
 CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 
 for arg in "$@"; do
     case "$arg" in
+        --profile=*)   SDK_PROFILE="${arg#--profile=}" ;;
         --debug|-d)    BUILD_TYPE="Debug" ;;
         --clean|-c)    CLEAN=1 ;;
         --no-parallel) NO_PARALLEL=1 ;;
@@ -60,6 +62,7 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
             echo "  --opengl          Enable desktop OpenGL targets (default)"
+            echo "  --profile=NAME    SDK graph profile: full (default) or graphics"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -76,6 +79,12 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+case "$SDK_PROFILE" in
+    full|graphics) ;;
+    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full or graphics)"; exit 1 ;;
+esac
+export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
 if [[ $NO_PARALLEL -eq 1 ]]; then
     BUILD_JOBS=1
@@ -147,6 +156,7 @@ echo "OpenGL:      $TERMIN_ENABLE_OPENGL"
 echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"
+echo "SDK profile: $SDK_PROFILE"
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
@@ -156,9 +166,13 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
+DOCTOR_PROFILE="sdk-bindings"
+if [[ "$SDK_PROFILE" == "graphics" ]]; then
+    DOCTOR_PROFILE="sdk-bindings-graphics"
+fi
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
-    --profile sdk-bindings \
+    --profile "$DOCTOR_PROFILE" \
     --vulkan "$TERMIN_ENABLE_VULKAN" \
     --init-submodules
 
@@ -180,13 +194,14 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
     -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
+    -DTERMIN_SDK_PROFILE="$SDK_PROFILE" \
     -DTERMIN_BUILD_PYTHON=ON \
     -DTERMIN_BUILD_TESTS=OFF \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
     -DTERMIN_ENABLE_SDL="$TERMIN_ENABLE_SDL" \
     -DTERMIN_ENABLE_OPENGL="$TERMIN_ENABLE_OPENGL" \
-    -DTERMIN_BUILD_EDITOR_MINIMAL=ON \
-    -DTERMIN_BUILD_LAUNCHER=ON \
+    -DTERMIN_BUILD_EDITOR_MINIMAL="$([[ "$SDK_PROFILE" == "full" ]] && echo ON || echo OFF)" \
+    -DTERMIN_BUILD_LAUNCHER="$([[ "$SDK_PROFILE" == "full" ]] && echo ON || echo OFF)" \
     -DPython_EXECUTABLE="$PY_EXEC"
 
 cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"

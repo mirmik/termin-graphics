@@ -2,6 +2,7 @@
 
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"
+#include "tgfx2/vulkan/internal/image_transition_sync.hpp"
 #include "vulkan_stats.hpp"
 
 #include <algorithm>
@@ -11,6 +12,34 @@
 #include <tcbase/tc_log.hpp>
 
 namespace tgfx {
+
+void VulkanCommandList::framebuffer_local_barrier() {
+    if (!in_render_pass_) {
+        tc::Log::error(
+            "VulkanCommandList::framebuffer_local_barrier requires an active render pass");
+        return;
+    }
+    const VkPipelineStageFlags stages =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        vulkan_detail::depth_stencil_attachment_stages();
+    VkMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask =
+        vulkan_detail::color_attachment_accesses() |
+        vulkan_detail::depth_stencil_attachment_accesses();
+    barrier.dstAccessMask = barrier.srcAccessMask;
+    vkCmdPipelineBarrier(
+        cmd_,
+        stages,
+        stages,
+        VK_DEPENDENCY_BY_REGION_BIT,
+        1,
+        &barrier,
+        0,
+        nullptr,
+        0,
+        nullptr);
+}
 
 VulkanCommandList::VulkanCommandList(VulkanRenderDevice& device)
     : device_(device)
@@ -61,6 +90,24 @@ void VulkanCommandList::end() {
 // --- Render pass ---
 
 void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
+    begin_render_pass_impl(pass, 1, MultiviewColorFinalState::ShaderRead);
+}
+
+void VulkanCommandList::begin_multiview_render_pass(
+    const MultiviewRenderPassDesc& pass)
+{
+    RenderPassDesc base;
+    base.colors = pass.colors;
+    base.depth = pass.depth;
+    base.has_depth = pass.has_depth;
+    begin_render_pass_impl(base, pass.view_count, pass.color_final_state);
+}
+
+void VulkanCommandList::begin_render_pass_impl(
+    const RenderPassDesc& pass,
+    uint32_t view_count,
+    MultiviewColorFinalState color_final_state)
+{
     if (pass.colors.size() > TGFX2_MAX_COLOR_ATTACHMENTS ||
         pass.colors.size() > device_.capabilities().max_color_attachments) {
         tc::Log::error(
@@ -71,6 +118,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
     uint32_t expected_width = 0;
     uint32_t expected_height = 0;
     uint32_t expected_samples = 0;
+    uint32_t expected_layers = 0;
     auto validate_extent = [&](
         const TextureDesc& desc,
         const char* attachment_kind
@@ -79,12 +127,13 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
             expected_width = desc.width;
             expected_height = desc.height;
             expected_samples = desc.sample_count == 0 ? 1 : desc.sample_count;
+            expected_layers = desc.array_layers;
             return true;
         }
         const uint32_t samples = desc.sample_count == 0 ? 1 : desc.sample_count;
         if (desc.width != expected_width ||
             desc.height != expected_height ||
-            samples != expected_samples) {
+            samples != expected_samples || desc.array_layers != expected_layers) {
             tc::Log::error(
                 "VulkanCommandList::begin_render_pass: %s attachment extent/sample mismatch",
                 attachment_kind);
@@ -140,6 +189,12 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
             "VulkanCommandList::begin_render_pass: pass has no attachments");
         return;
     }
+    if ((view_count == 1 && expected_layers != 1) ||
+        (view_count > 1 && expected_layers < view_count)) {
+        tc::Log::error(
+            "VulkanCommandList::begin_render_pass: attachment layers are incompatible with view count");
+        return;
+    }
 
     // Determine formats and get render pass
     std::vector<PixelFormat> color_fmts;
@@ -150,6 +205,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
 
     uint32_t sample_count = 1;
     current_pass_color_attachments_.clear();
+    current_pass_color_final_state_ = color_final_state;
     // The ordered color list is authoritative: entry N maps to fragment
     // output location N. Validation above deliberately rejects missing
     // entries instead of compacting and silently renumbering later outputs.
@@ -168,7 +224,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
         if (tex->current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
             device_.transition_image_layout(cmd_, tex->image,
                 tex->current_layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
+                VK_IMAGE_ASPECT_COLOR_BIT, tex->desc.array_layers);
             tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
         current_pass_color_attachments_.push_back(c.texture);
@@ -197,7 +253,7 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
             device_.transition_image_layout(cmd_, tex->image,
                 tex->current_layout,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                dep_aspect);
+                dep_aspect, tex->desc.array_layers);
             tex->current_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         }
         current_pass_depth_attachment_ = pass.depth.texture;
@@ -212,7 +268,8 @@ void VulkanCommandList::begin_render_pass(const RenderPassDesc& pass) {
         pass.has_depth,
         sample_count,
         depth_load,
-        pass.depth.store);
+        pass.depth.store,
+        view_count > 1 ? ((1u << view_count) - 1u) : 0u);
     if (rp == VK_NULL_HANDLE) {
         tc::Log::error(
             "VulkanCommandList::begin_render_pass: failed to resolve render-pass contract");
@@ -289,14 +346,17 @@ void VulkanCommandList::end_render_pass() {
     for (auto h : current_pass_color_attachments_) {
         auto* tex = device_.get_texture(h);
         if (!tex || tex->image == VK_NULL_HANDLE) continue;
+        if (current_pass_color_final_state_ ==
+            MultiviewColorFinalState::ColorAttachment) continue;
         if (!has_flag(tex->desc.usage, TextureUsage::Sampled)) continue;
         if (tex->current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) continue;
         device_.transition_image_layout(cmd_, tex->image,
             tex->current_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT, tex->desc.array_layers);
         tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
     current_pass_color_attachments_.clear();
+    current_pass_color_final_state_ = MultiviewColorFinalState::ShaderRead;
 
     // Do the same for the depth attachment so shadow-depth textures are
     // directly samplable afterwards (ShadowPass → any pass that binds the
@@ -309,7 +369,8 @@ void VulkanCommandList::end_render_pass() {
             device_.transition_image_layout(cmd_, tex->image,
                 tex->current_layout,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                vk::format_aspect_flags(tex->desc.format));
+                vk::format_aspect_flags(tex->desc.format),
+                tex->desc.array_layers);
             tex->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
         current_pass_depth_attachment_ = {};
@@ -438,6 +499,11 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     // overlapping regions, and there's no meaningful work to do. Skip
     // quietly instead of emitting conflicting TRANSFER_SRC/DST barriers.
     if (s == d) return;
+    if (s->desc.array_layers != d->desc.array_layers) {
+        tc::Log::error(
+            "VulkanCommandList::copy_texture: source and destination layer counts differ");
+        return;
+    }
 
     // Transfer commands must be recorded outside of a render pass. Callers
     // using ctx2.blit() between begin_frame/end_frame are fine as long as
@@ -455,9 +521,11 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     VkImageLayout prev_dst = d->current_layout;
 
     device_.transition_image_layout(cmd_, s->image,
-        prev_src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, src_aspect);
+        prev_src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, src_aspect,
+        s->desc.array_layers);
     device_.transition_image_layout(cmd_, d->image,
-        prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dst_aspect);
+        prev_dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dst_aspect,
+        d->desc.array_layers);
 
     uint32_t w = std::min(s->desc.width, d->desc.width);
     uint32_t h = std::min(s->desc.height, d->desc.height);
@@ -482,8 +550,8 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
 
     if (msaa_to_single && same_format) {
         VkImageResolve resolve{};
-        resolve.srcSubresource = {src_aspect, 0, 0, 1};
-        resolve.dstSubresource = {dst_aspect, 0, 0, 1};
+        resolve.srcSubresource = {src_aspect, 0, 0, s->desc.array_layers};
+        resolve.dstSubresource = {dst_aspect, 0, 0, d->desc.array_layers};
         resolve.extent = {w, h, 1};
         vkCmdResolveImage(cmd_,
             s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -491,8 +559,8 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
             1, &resolve);
     } else if (same_samples && same_format && same_extent) {
         VkImageCopy region{};
-        region.srcSubresource = {src_aspect, 0, 0, 1};
-        region.dstSubresource = {dst_aspect, 0, 0, 1};
+        region.srcSubresource = {src_aspect, 0, 0, s->desc.array_layers};
+        region.dstSubresource = {dst_aspect, 0, 0, d->desc.array_layers};
         region.extent = {w, h, 1};
         vkCmdCopyImage(cmd_,
             s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -500,10 +568,10 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
             1, &region);
     } else if (same_samples) {
         VkImageBlit blit{};
-        blit.srcSubresource = {src_aspect, 0, 0, 1};
+        blit.srcSubresource = {src_aspect, 0, 0, s->desc.array_layers};
         blit.srcOffsets[0] = {0, 0, 0};
         blit.srcOffsets[1] = {int32_t(s->desc.width), int32_t(s->desc.height), 1};
-        blit.dstSubresource = {dst_aspect, 0, 0, 1};
+        blit.dstSubresource = {dst_aspect, 0, 0, d->desc.array_layers};
         blit.dstOffsets[0] = {0, 0, 0};
         blit.dstOffsets[1] = {int32_t(d->desc.width), int32_t(d->desc.height), 1};
         // Linear for color (LDR/HDR filtering ok), nearest for depth — depth
@@ -522,10 +590,12 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
                 d->desc.sample_count, (int)d->desc.format);
         device_.transition_image_layout(cmd_, s->image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect);
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect,
+            s->desc.array_layers);
         device_.transition_image_layout(cmd_, d->image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect);
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect,
+            d->desc.array_layers);
         s->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         d->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         return;
@@ -537,10 +607,12 @@ void VulkanCommandList::copy_texture(TextureHandle src, TextureHandle dst) {
     // callers of copy_texture intend to sample the dst next.
     device_.transition_image_layout(cmd_, s->image,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect);
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, src_aspect,
+        s->desc.array_layers);
     device_.transition_image_layout(cmd_, d->image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect);
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dst_aspect,
+        d->desc.array_layers);
 
     s->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     d->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

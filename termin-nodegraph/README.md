@@ -7,7 +7,7 @@ Abstract node graph library for Termin ecosystem.
 1. Core model: `tcnodegraph.model`
 2. Editing operations: `tcnodegraph.controller`
 3. Serialization: `tcnodegraph.io`
-4. Optional tcgui adapter: `tcnodegraph.view`
+4. Native UI projection: `tcnodegraph.native_view`
 
 Core modules do not require UI runtime.
 
@@ -34,19 +34,3 @@ from tcnodegraph import save_graph_json, load_graph_json
 save_graph_json(graph, "graph.json")
 graph2 = load_graph_json("graph.json")
 ```
-
-## Demo
-
-Interactive tcgui demo:
-
-```bash
-PYTHONPATH=python:../termin-gui/python python3 examples/sdl_nodegraph_demo.py
-```
-
-Controls:
-
-1. Left drag on node body: move node
-2. Left drag from output socket to input socket: create edge
-3. Middle drag: pan
-4. Mouse wheel: zoom
-5. Delete: remove selected item

@@ -31,9 +31,25 @@ struct TextureDesc {
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t mip_levels = 1;
+    // Number of 2D array layers. A value greater than one is an explicit
+    // layered resource; backends which do not advertise texture-array
+    // support must reject it instead of silently creating a 2D texture.
+    uint32_t array_layers = 1;
     uint32_t sample_count = 1;
     PixelFormat format = PixelFormat::RGBA8_UNorm;
     TextureUsage usage{};
+};
+
+enum class ExternalTextureState : uint8_t {
+    Undefined,
+    ColorAttachment,
+    ShaderRead,
+};
+
+struct ExternalTextureAccessDesc {
+    ExternalTextureState state_after_wait = ExternalTextureState::Undefined;
+    ExternalTextureState required_before_release =
+        ExternalTextureState::ColorAttachment;
 };
 
 struct SamplerDesc {
@@ -77,6 +93,10 @@ struct PipelineDesc {
     std::vector<PixelFormat> color_formats;
     PixelFormat depth_format = PixelFormat::D32F;
     uint32_t sample_count = 1;
+    // Graphics pipelines are created against a compatible render pass.
+    // Vulkan render-pass compatibility includes the multiview view mask, so
+    // mono and multiview pipelines must remain distinct cache identities.
+    uint32_t view_count = 1;
 };
 
 // --- Render pass ---
@@ -100,6 +120,23 @@ struct RenderPassDesc {
     std::vector<ColorAttachmentDesc> colors;
     DepthAttachmentDesc depth;
     bool has_depth = false;
+};
+
+enum class MultiviewColorFinalState : uint8_t {
+    ShaderRead,
+    ColorAttachment,
+};
+
+// Explicit multiview contract. It deliberately is not a flag on
+// RenderPassDesc: callers choosing this descriptor promise one invocation
+// which broadcasts every draw to view_count attachment layers.
+struct MultiviewRenderPassDesc {
+    std::vector<ColorAttachmentDesc> colors;
+    DepthAttachmentDesc depth;
+    bool has_depth = false;
+    uint32_t view_count = 2;
+    MultiviewColorFinalState color_final_state =
+        MultiviewColorFinalState::ShaderRead;
 };
 
 } // namespace tgfx

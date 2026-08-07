@@ -22,6 +22,9 @@ public:
         last_render_pass = pass;
     }
     void end_render_pass() override { ++end_render_pass_count; }
+    void framebuffer_local_barrier() override {
+        ++framebuffer_local_barrier_count;
+    }
     void bind_pipeline(tgfx::PipelineHandle) override {}
     void bind_resource_set(
         tgfx::ResourceSetHandle,
@@ -58,6 +61,7 @@ public:
     uint32_t end_count = 0;
     uint32_t begin_render_pass_count = 0;
     uint32_t end_render_pass_count = 0;
+    uint32_t framebuffer_local_barrier_count = 0;
     tgfx::RenderPassDesc last_render_pass;
 };
 
@@ -373,6 +377,30 @@ TEST_CASE("PipelineCache identity preserves ordered MRT color formats") {
     CHECK(device.create_pipeline_count == 3u);
 }
 
+TEST_CASE("PipelineCache keeps mono and multiview render-pass identities distinct") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+
+    const tgfx::PipelineHandle mono = cache.get(key);
+    REQUIRE(mono);
+    REQUIRE(device.created_pipeline_descs.size() == 1u);
+    CHECK(device.created_pipeline_descs[0].view_count == 1u);
+
+    key.view_count = 2;
+    const tgfx::PipelineHandle stereo = cache.get(key);
+    REQUIRE(stereo);
+    CHECK(stereo != mono);
+    REQUIRE(device.created_pipeline_descs.size() == 2u);
+    CHECK(device.created_pipeline_descs[1].view_count == 2u);
+
+    CHECK(cache.get(key) == stereo);
+    CHECK(device.create_pipeline_count == 2u);
+}
+
 TEST_CASE("PipelineCache rejects invalid MRT color format identity") {
     PipelineCacheStatsDevice device;
     tgfx::PipelineCache cache(device);
@@ -470,6 +498,31 @@ TEST_CASE("RenderContext2 rejects incompatible MRT attachments before backend re
     }
     CHECK_FALSE(context.begin_pass(pass));
     CHECK(device.last_command_list->begin_render_pass_count == 0u);
+    context.end_frame();
+}
+
+TEST_CASE("RenderContext2 forwards framebuffer-local barriers inside an active pass") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+    tgfx::RenderContext2 context(device, cache);
+
+    tgfx::TextureDesc desc;
+    desc.width = 64;
+    desc.height = 32;
+    desc.format = tgfx::PixelFormat::RGBA16F;
+    desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const tgfx::TextureHandle color = device.create_texture(desc);
+
+    tgfx::RenderPassDesc pass;
+    pass.colors.resize(1);
+    pass.colors[0].texture = color;
+
+    context.begin_frame();
+    REQUIRE(device.last_command_list != nullptr);
+    REQUIRE(context.begin_pass(pass));
+    context.framebuffer_local_barrier();
+    CHECK(device.last_command_list->framebuffer_local_barrier_count == 1u);
+    context.end_pass();
     context.end_frame();
 }
 

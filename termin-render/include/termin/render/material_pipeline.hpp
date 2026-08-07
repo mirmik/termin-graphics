@@ -54,7 +54,8 @@ struct MaterialPipelineTextureUpload {
 };
 
 struct MaterialPipelineResourceView {
-    const EnginePerFrameStd140* per_frame = nullptr;
+    const void* per_frame = nullptr;
+    uint32_t per_frame_size = 0;
 
     const MaterialPipelineUniformUpload* uniforms = nullptr;
     uint32_t uniform_count = 0;
@@ -82,7 +83,8 @@ static_assert(std::is_trivially_copyable_v<MaterialPipelineResourceView>);
 // Transitional C++ convenience wrapper. New render-task/submission paths should
 // pass MaterialPipelineResourceView with resolved shader resource bindings.
 struct MaterialPipelineResourceContext {
-    const EnginePerFrameStd140* per_frame = nullptr;
+    const void* per_frame = nullptr;
+    uint32_t per_frame_size = 0;
     std::span<const MaterialPipelineUniformData> uniforms;
     const void* shadow_block = nullptr;
     uint32_t shadow_block_size = 0;

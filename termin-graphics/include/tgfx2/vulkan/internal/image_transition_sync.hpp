@@ -13,4 +13,14 @@ inline constexpr VkPipelineStageFlags depth_stencil_attachment_stages() {
            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 }
 
+inline constexpr VkAccessFlags color_attachment_accesses() {
+    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+}
+
+inline constexpr VkAccessFlags depth_stencil_attachment_accesses() {
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+}
+
 } // namespace tgfx::vulkan_detail
