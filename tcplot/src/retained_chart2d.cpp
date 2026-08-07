@@ -292,6 +292,19 @@ namespace
             apply_layout();
         }
 
+        void set_frame(tc_plot_rect2d viewport,
+                       float pixel_scale,
+                       tc_plot_range2d range)
+        {
+            if (!valid_rect(viewport) || !std::isfinite(pixel_scale) ||
+                pixel_scale <= 0.0f || !valid_range(range))
+                throw std::invalid_argument("chart frame is invalid");
+            viewport_ = viewport;
+            pixel_scale_ = pixel_scale;
+            range_ = range;
+            apply_layout();
+        }
+
         void fit(double padding_fraction, bool fit_x, bool fit_y)
         {
             if (!std::isfinite(padding_fraction) || padding_fraction < 0.0)
@@ -1671,6 +1684,21 @@ extern "C"
                                [&]
                                {
                                    chart->value.set_range(range);
+                                   return true;
+                               });
+    }
+
+    bool tc_retained_chart2d_set_frame(tc_retained_chart2d* chart,
+                                       tc_plot_rect2d viewport,
+                                       float pixel_scale,
+                                       tc_plot_range2d range)
+    {
+        return chart && logged("set_frame",
+                               false,
+                               [&]
+                               {
+                                   chart->value.set_frame(
+                                       viewport, pixel_scale, range);
                                    return true;
                                });
     }

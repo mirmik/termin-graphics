@@ -133,6 +133,12 @@ extern "C"
                                                      float pixel_scale);
     TCPLOT_API bool tc_retained_chart2d_set_range(tc_retained_chart2d* chart,
                                                   tc_plot_range2d range);
+    // Atomic viewport/range mutation used by multi-panel coordinators to avoid
+    // two layout/tick rebuilds when a virtualized panel becomes visible.
+    TCPLOT_API bool tc_retained_chart2d_set_frame(tc_retained_chart2d* chart,
+                                                  tc_plot_rect2d viewport,
+                                                  float pixel_scale,
+                                                  tc_plot_range2d range);
     TCPLOT_API bool tc_retained_chart2d_fit(tc_retained_chart2d* chart,
                                             double padding_fraction);
     TCPLOT_API bool tc_retained_chart2d_fit_x(tc_retained_chart2d* chart,
