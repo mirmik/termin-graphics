@@ -808,6 +808,7 @@ PlotLineSeriesItem2D::PlotLineSeriesItem2D(PlotProjection2D projection,
       !valid_line_style(style)) {
     throw std::invalid_argument("invalid PlotLineSeriesItem2D state");
   }
+  batch_ = std::make_shared<LineRetainedBatch>(state_);
 }
 
 PlotLineSeriesItem2D::~PlotLineSeriesItem2D() = default;
@@ -916,8 +917,7 @@ bool PlotLineSeriesItem2D::paint(
           {area->x(), area->y(), area->width(), area->height()})) {
     return false;
   }
-  const bool painted =
-      context.retained_batch(std::make_shared<LineRetainedBatch>(state_));
+  const bool painted = context.retained_batch(batch_);
   const bool popped = context.pop_clip();
   return painted && popped;
 }
@@ -938,6 +938,7 @@ PlotScatterSeriesItem2D::PlotScatterSeriesItem2D(PlotProjection2D projection,
       !valid_scatter_style(style)) {
     throw std::invalid_argument("invalid PlotScatterSeriesItem2D state");
   }
+  batch_ = std::make_shared<ScatterRetainedBatch>(state_);
 }
 
 PlotScatterSeriesItem2D::~PlotScatterSeriesItem2D() = default;
@@ -1024,8 +1025,7 @@ bool PlotScatterSeriesItem2D::paint(
           {area->x(), area->y(), area->width(), area->height()})) {
     return false;
   }
-  const bool painted =
-      context.retained_batch(std::make_shared<ScatterRetainedBatch>(state_));
+  const bool painted = context.retained_batch(batch_);
   const bool popped = context.pop_clip();
   return painted && popped;
 }

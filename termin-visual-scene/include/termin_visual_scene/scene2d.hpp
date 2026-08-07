@@ -103,12 +103,19 @@ public:
     }
 
 private:
+    struct OrderedItem {
+        tc_graphic_item* item = nullptr;
+        std::vector<OrderedItem> children;
+    };
+
     bool owns_(const tc_graphic_item& item) const;
     std::vector<tc_graphic_item*> sorted_children_(
         const tc_graphic_item* parent) const;
     std::vector<tc_graphic_item*> sorted_roots_() const;
+    void rebuild_order_cache_() const;
+    OrderedItem build_ordered_item_(tc_graphic_item* item) const;
     bool paint_item_(
-        const tc_graphic_item& item,
+        const OrderedItem& ordered,
         tgfx::DrawList2DBuilder& builder,
         SceneRenderResourceResolver2D& resolver) const;
     std::optional<termin::Bounds2f> subtree_bounds_(
@@ -116,6 +123,8 @@ private:
 
     tc_visual_scene_handle handle_ =
         tc_visual_scene_handle_invalid();
+    mutable std::uint64_t cached_order_revision_ = 0;
+    mutable std::vector<OrderedItem> ordered_roots_;
 
     friend TERMIN_VISUAL_SCENE_API
     std::optional<GraphicItemHandle> hit_test(

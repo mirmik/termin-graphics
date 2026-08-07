@@ -34,6 +34,13 @@ bool visual_less(
     return left->stable_order < right->stable_order;
 }
 
+bool is_identity(const termin::Affine2f& value)
+{
+    return value.m00 == 1.0f && value.m01 == 0.0f &&
+        value.m10 == 0.0f && value.m11 == 1.0f &&
+        value.tx == 0.0f && value.ty == 0.0f;
+}
+
 }  // namespace
 
 std::optional<GraphicItemHandle> TcVisualScene::adopt(
@@ -280,10 +287,11 @@ TcVisualScene::sorted_roots_() const {
 }
 
 bool TcVisualScene::paint_item_(
-    const tc_graphic_item& item,
+    const OrderedItem& ordered,
     tgfx::DrawList2DBuilder& builder,
     SceneRenderResourceResolver2D& resolver) const
 {
+    const tc_graphic_item& item = *ordered.item;
     if (!item.visible || item.opacity <= 0.0f) {
         return true;
     }
@@ -295,11 +303,14 @@ bool TcVisualScene::paint_item_(
         return false;
     }
 
-    if (!builder.push_transform(item.local_transform)) {
+    const bool transform_pushed = !is_identity(item.local_transform);
+    if (transform_pushed &&
+        !builder.push_transform(item.local_transform)) {
         return false;
     }
-    if (!builder.push_opacity(item.opacity)) {
-        builder.pop_transform();
+    const bool opacity_pushed = item.opacity != 1.0f;
+    if (opacity_pushed && !builder.push_opacity(item.opacity)) {
+        if (transform_pushed) builder.pop_transform();
         return false;
     }
     tc_graphic_item_draw_sink sink{
@@ -310,15 +321,15 @@ bool TcVisualScene::paint_item_(
     if (item.vtable->push_clip != nullptr &&
         !item.vtable->push_clip(
             &item, &sink, &clip_pushed)) {
-        builder.pop_opacity();
-        builder.pop_transform();
+        if (opacity_pushed) builder.pop_opacity();
+        if (transform_pushed) builder.pop_transform();
         return false;
     }
 
     bool painted = item.vtable->paint(&item, &sink);
     if (painted) {
-        for (auto* child : sorted_children_(&item)) {
-            if (!paint_item_(*child, builder, resolver)) {
+        for (const OrderedItem& child : ordered.children) {
+            if (!paint_item_(child, builder, resolver)) {
                 painted = false;
                 break;
             }
@@ -326,18 +337,53 @@ bool TcVisualScene::paint_item_(
     }
     const bool clip_popped =
         !clip_pushed || builder.pop_clip();
-    const bool opacity_popped = builder.pop_opacity();
-    const bool transform_popped = builder.pop_transform();
+    const bool opacity_popped =
+        !opacity_pushed || builder.pop_opacity();
+    const bool transform_popped =
+        !transform_pushed || builder.pop_transform();
     return painted && clip_popped
         && opacity_popped && transform_popped;
+}
+
+TcVisualScene::OrderedItem TcVisualScene::build_ordered_item_(
+    tc_graphic_item* item) const
+{
+    OrderedItem result;
+    result.item = item;
+    auto children = sorted_children_(item);
+    result.children.reserve(children.size());
+    for (tc_graphic_item* child : children) {
+        result.children.push_back(build_ordered_item_(child));
+    }
+    return result;
+}
+
+void TcVisualScene::rebuild_order_cache_() const
+{
+    ordered_roots_.clear();
+    auto roots = sorted_roots_();
+    ordered_roots_.reserve(roots.size());
+    for (tc_graphic_item* root : roots) {
+        ordered_roots_.push_back(build_ordered_item_(root));
+    }
 }
 
 bool TcVisualScene::paint(
     tgfx::DrawList2DBuilder& builder,
     SceneRenderResourceResolver2D& resolver) const
 {
-    for (auto* root : sorted_roots_()) {
-        if (!paint_item_(*root, builder, resolver)) {
+    const std::uint64_t revision =
+        tc_visual_scene_order_revision(handle_);
+    if (revision == 0) {
+        tc::Log::error("TcVisualScene::paint rejected stale scene");
+        return false;
+    }
+    if (revision != cached_order_revision_) {
+        rebuild_order_cache_();
+        cached_order_revision_ = revision;
+    }
+    for (const OrderedItem& root : ordered_roots_) {
+        if (!paint_item_(root, builder, resolver)) {
             return false;
         }
     }

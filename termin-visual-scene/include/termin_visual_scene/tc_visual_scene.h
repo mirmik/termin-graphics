@@ -26,6 +26,10 @@ TERMIN_VISUAL_SCENE_API uint64_t tc_visual_scene_id(
     tc_visual_scene_handle scene);
 TERMIN_VISUAL_SCENE_API size_t tc_visual_scene_item_count(
     tc_visual_scene_handle scene);
+// Changes only when adoption order, parentage or z-order can affect traversal.
+// Ordinary content/geometry mutations intentionally leave it unchanged.
+TERMIN_VISUAL_SCENE_API uint64_t tc_visual_scene_order_revision(
+    tc_visual_scene_handle scene);
 
 // Adoption mirrors tc_ui_document_adopt_widget: the item must be unattached
 // and have no pre-existing tree. On success the scene owns it through deleter.

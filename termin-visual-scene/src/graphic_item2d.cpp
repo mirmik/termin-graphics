@@ -3,6 +3,8 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "tc_visual_scene_internal.h"
+
 namespace termin::visual {
 
 GraphicItem2D::GraphicItem2D(
@@ -67,6 +69,12 @@ void GraphicItem2D::set_opacity(float opacity) {
             "graphic item opacity must be in [0, 1]");
     }
     item_.opacity = opacity;
+}
+
+void GraphicItem2D::set_z_order(std::int64_t z_order) noexcept {
+    if (item_.z_order == z_order) return;
+    item_.z_order = z_order;
+    tc_visual_scene_touch_order(item_.scene);
 }
 
 void GraphicItem2D::set_clip(

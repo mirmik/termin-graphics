@@ -1,10 +1,12 @@
 #include "tcplot/retained_scene_renderer2d.h"
 
+#include <chrono>
 #include <exception>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <tcbase/tc_log.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
@@ -20,6 +22,13 @@
 namespace {
 
 constexpr std::string_view kDefaultFontUri = "ui://default-font";
+using RenderClock = std::chrono::steady_clock;
+
+double elapsed_ms(RenderClock::time_point started,
+                  RenderClock::time_point finished) {
+    return std::chrono::duration<double, std::milli>(
+        finished - started).count();
+}
 
 class RetainedSceneResources final
     : public termin::visual::SceneRenderResourceResolver2D,
@@ -104,6 +113,10 @@ public:
 
     int msaa_samples() const { return msaa_samples_; }
 
+    tc_retained_scene_renderer2d_timings timings() const {
+        return timings_;
+    }
+
     uint32_t render(int width, int height) {
         if (width <= 0 || height <= 0) {
             tc::Log::error(
@@ -118,13 +131,20 @@ public:
             return 0;
         }
 
-        tgfx::DrawList2DBuilder builder;
-        if (!scene_.paint(builder, resources_)) {
+        timings_ = {};
+        const auto total_started = RenderClock::now();
+        const auto paint_started = RenderClock::now();
+        const bool painted = scene_.paint(builder_, resources_);
+        timings_.paint_ms = elapsed_ms(paint_started, RenderClock::now());
+        if (!painted) {
+            builder_.clear();
             tc::Log::error(
                 "RetainedSceneRenderer2D: failed to paint visual scene");
             return 0;
         }
-        auto draw_list = builder.freeze();
+        const auto freeze_started = RenderClock::now();
+        auto draw_list = builder_.freeze();
+        timings_.freeze_ms = elapsed_ms(freeze_started, RenderClock::now());
         if (!draw_list) {
             tc::Log::error(
                 "RetainedSceneRenderer2D: failed to freeze visual scene draw list");
@@ -132,6 +152,7 @@ public:
         }
         ensure_offscreen(width, height);
 
+        const auto submit_started = RenderClock::now();
         tgfx::RenderContext2& ctx = host_->ctx();
         ctx.begin_frame();
         ctx.begin_pass(
@@ -145,12 +166,16 @@ public:
         canvas_.end();
         ctx.end_pass();
         ctx.end_frame();
+        timings_.gpu_submit_ms =
+            elapsed_ms(submit_started, RenderClock::now());
 
+        builder_.recycle(std::move(*draw_list));
         if (!executed) {
             tc::Log::error(
                 "RetainedSceneRenderer2D: failed to execute visual scene draw list");
             return 0;
         }
+        timings_.total_ms = elapsed_ms(total_started, RenderClock::now());
         return offscreen_color_.id;
     }
 
@@ -211,6 +236,7 @@ private:
 
     tcplot::GpuHost* host_;
     termin::visual::TcVisualScene scene_;
+    tgfx::DrawList2DBuilder builder_;
     tgfx::Canvas2DRenderer canvas_;
     RetainedSceneResources resources_;
     tgfx::TextureHandle offscreen_color_{};
@@ -218,6 +244,7 @@ private:
     int offscreen_height_ = 0;
     int msaa_samples_ = 4;
     float clear_color_[4] = {0.08f, 0.09f, 0.11f, 1.0f};
+    tc_retained_scene_renderer2d_timings timings_{};
 };
 
 template <typename Function, typename Result>
@@ -325,6 +352,14 @@ uint32_t tc_retained_scene_renderer2d_render(
         "render",
         uint32_t{0},
         [&] { return renderer->value.render(width, height); });
+}
+
+int tc_retained_scene_renderer2d_last_timings(
+    const tc_retained_scene_renderer2d* renderer,
+    tc_retained_scene_renderer2d_timings* out_timings) {
+    if (!renderer || !out_timings) return 0;
+    *out_timings = renderer->value.timings();
+    return 1;
 }
 
 void tc_retained_scene_renderer2d_release_gpu(

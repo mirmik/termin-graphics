@@ -61,9 +61,12 @@ if (!scene.paint(builder, resources)) {
 }
 ```
 
-Traversal sorts roots and siblings by z-order and stable order, pushes each
-item's local transform, opacity and optional geometric clip, then calls the
-item paint vtable. The item emits canonical draw commands through
+Traversal orders roots and siblings by z-order and stable order. That ordered
+tree is cached until adopt/replace/destroy/reparent/z-order changes the scene's
+order revision; content, geometry and data mutations do not rebuild it.
+Identity transforms and unit opacity do not emit redundant state commands.
+Traversal then pushes any effective transform, opacity or geometric clip and
+calls the item paint vtable. The item emits canonical draw commands through
 `GraphicItemPaintContext2D`; the scene renderer never branches on its concrete
 type.
 

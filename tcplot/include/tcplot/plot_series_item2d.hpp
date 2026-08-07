@@ -13,6 +13,7 @@
 
 namespace tgfx {
 class RenderContext2;
+class RetainedDrawBatch2D;
 }
 
 namespace tcplot {
@@ -113,6 +114,7 @@ public:
 
 private:
   std::shared_ptr<State> state_;
+  std::shared_ptr<tgfx::RetainedDrawBatch2D> batch_;
 };
 
 class TCPLOT_API PlotScatterSeriesItem2D final
@@ -142,6 +144,7 @@ public:
 
 private:
   std::shared_ptr<State> state_;
+  std::shared_ptr<tgfx::RetainedDrawBatch2D> batch_;
 };
 
 TCPLOT_API std::optional<termin::visual::GraphicItemHandle>

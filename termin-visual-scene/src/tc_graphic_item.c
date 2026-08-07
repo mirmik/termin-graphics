@@ -5,6 +5,8 @@
 
 #include <tcbase/tc_log.h>
 
+#include "tc_visual_scene_internal.h"
+
 void tc_graphic_item_init_unowned(
     tc_graphic_item* item,
     const tc_graphic_item_vtable* vtable,
@@ -145,6 +147,7 @@ bool tc_graphic_item_insert_child(
     parent->children[index] = child;
     parent->child_count += 1;
     child->parent = parent;
+    tc_visual_scene_touch_order(parent->scene);
     return true;
 }
 
@@ -178,6 +181,7 @@ bool tc_graphic_item_remove_child(
             sizeof(tc_graphic_item*));
     parent->child_count -= 1;
     child->parent = NULL;
+    tc_visual_scene_touch_order(parent->scene);
     return true;
 }
 
