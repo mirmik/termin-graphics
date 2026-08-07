@@ -17,6 +17,9 @@
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tgfx2/shader_artifact_resolver.hpp"
 #include "tgfx/resources/tc_shader_registry.h"
+#ifdef TGFX2_HAS_VULKAN
+#include "tgfx2/vulkan/vulkan_render_device.hpp"
+#endif
 
 static void set_process_env(const char* name, const char* value) {
 #ifdef _WIN32
@@ -195,6 +198,34 @@ TEST_CASE("tgfx2 backend names and compiled availability are queryable") {
     CHECK(!tgfx::backend_is_compiled(tgfx::BackendType::WebGPU));
 #endif
 }
+
+TEST_CASE("tgfx2 adapter classes identify software devices") {
+    tgfx::AdapterInfo cpu;
+    cpu.hardware_class = tgfx::AdapterClass::Cpu;
+    CHECK(cpu.is_software());
+    CHECK(std::string(tgfx::adapter_class_name(cpu.hardware_class)) == "cpu");
+
+    tgfx::AdapterInfo hardware;
+    hardware.hardware_class = tgfx::AdapterClass::IntegratedGpu;
+    CHECK(!hardware.is_software());
+    CHECK(std::string(tgfx::adapter_class_name(hardware.hardware_class)) ==
+          "integrated-gpu");
+}
+
+#ifdef TGFX2_HAS_VULKAN
+TEST_CASE("tgfx2 Vulkan device types map to stable adapter classes") {
+    CHECK(tgfx::classify_vulkan_adapter(VK_PHYSICAL_DEVICE_TYPE_CPU) ==
+          tgfx::AdapterClass::Cpu);
+    CHECK(tgfx::classify_vulkan_adapter(VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) ==
+          tgfx::AdapterClass::DiscreteGpu);
+    CHECK(tgfx::classify_vulkan_adapter(VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) ==
+          tgfx::AdapterClass::IntegratedGpu);
+    CHECK(tgfx::classify_vulkan_adapter(VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU) ==
+          tgfx::AdapterClass::VirtualGpu);
+    CHECK(tgfx::classify_vulkan_adapter(VK_PHYSICAL_DEVICE_TYPE_OTHER) ==
+          tgfx::AdapterClass::Unknown);
+}
+#endif
 
 TEST_CASE("tgfx2 shader artifact paths are backend aware") {
     namespace fs = std::filesystem;

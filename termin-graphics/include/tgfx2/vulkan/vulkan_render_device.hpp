@@ -30,6 +30,8 @@ namespace tgfx {
 
 class VulkanSwapchain;
 
+TGFX2_API AdapterClass classify_vulkan_adapter(VkPhysicalDeviceType device_type);
+
 // Internal Vulkan resource types
 
 struct VkBufferResource {
@@ -458,12 +460,14 @@ private:
     std::vector<PendingPixelReadback> pixel_readbacks_current_;
     std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
     std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
+    AdapterInfo adapter_info_;
 
 public:
     explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
     ~VulkanRenderDevice() override;
 
     BackendType backend_type() const override { return BackendType::Vulkan; }
+    AdapterInfo adapter_info() const override { return adapter_info_; }
     BackendCapabilities capabilities() const override;
     void wait_idle() override;
     void invalidate_render_target_cache() override;

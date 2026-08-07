@@ -277,6 +277,18 @@ void bind_tgfx2(nb::module_& m) {
     // BackendWindow). Python code only passes the pointer around.
     nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device")
         .def("wait_idle", &tgfx::IRenderDevice::wait_idle, nb::call_guard<nb::gil_scoped_release>())
+        .def_prop_ro("adapter_name", [](const tgfx::IRenderDevice& self) {
+            return self.adapter_info().adapter_name;
+        })
+        .def_prop_ro("adapter_driver", [](const tgfx::IRenderDevice& self) {
+            return self.adapter_info().driver_name;
+        })
+        .def_prop_ro("adapter_class", [](const tgfx::IRenderDevice& self) {
+            return std::string(tgfx::adapter_class_name(self.adapter_info().hardware_class));
+        })
+        .def_prop_ro("software_adapter", [](const tgfx::IRenderDevice& self) {
+            return self.adapter_info().is_software();
+        })
         // Backend-neutral shader compile. GLSL input; internally
         // glCompileShader on OpenGL, shaderc GLSL→SPIR-V on Vulkan
         // (both paths run the same preprocessor first, see V.3).

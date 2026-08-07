@@ -1,9 +1,38 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include "tgfx2/enums.hpp"
 
 namespace tgfx {
+
+enum class AdapterClass : uint8_t {
+    Unknown,
+    DiscreteGpu,
+    IntegratedGpu,
+    VirtualGpu,
+    Cpu,
+};
+
+inline const char* adapter_class_name(AdapterClass adapter_class) {
+    switch (adapter_class) {
+        case AdapterClass::DiscreteGpu: return "discrete-gpu";
+        case AdapterClass::IntegratedGpu: return "integrated-gpu";
+        case AdapterClass::VirtualGpu: return "virtual-gpu";
+        case AdapterClass::Cpu: return "cpu";
+        case AdapterClass::Unknown: return "unknown";
+    }
+    return "unknown";
+}
+
+struct AdapterInfo {
+    BackendType backend = BackendType::Null;
+    AdapterClass hardware_class = AdapterClass::Unknown;
+    std::string adapter_name;
+    std::string driver_name;
+
+    bool is_software() const { return hardware_class == AdapterClass::Cpu; }
+};
 
 struct BackendCapabilities {
     BackendType backend = BackendType::Null;
