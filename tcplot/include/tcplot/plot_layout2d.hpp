@@ -32,6 +32,14 @@ struct PlotTextMetrics2D {
   float line_height = 0.0f;
 };
 
+// Builds ticks for one axis without formatting or allocating the unchanged
+// peer axis. Extent and spacing use the same physical/logical convention as
+// make_plot_ticks2d().
+TCPLOT_API std::optional<PlotAxisTicks2D>
+make_plot_axis_ticks2d(double minimum, double maximum, float extent_px,
+                       float spacing_logical_px, float pixel_scale = 1.0f,
+                       int minimum_ticks = 3);
+
 // Expands finite data bounds by padding_fraction. Degenerate axes receive a
 // stable unit base extent before padding, matching PlotEngine2D::fit().
 TCPLOT_API std::optional<PlotRange2D>

@@ -292,6 +292,18 @@ namespace
             apply_layout();
         }
 
+        void set_x_range(double x_min, double x_max)
+        {
+            if (!std::isfinite(x_min) || !std::isfinite(x_max) ||
+                x_max <= x_min)
+                throw std::invalid_argument("chart X range is invalid");
+            if (range_.x_min == x_min && range_.x_max == x_max)
+                return;
+            range_.x_min = x_min;
+            range_.x_max = x_max;
+            apply_x_range();
+        }
+
         void set_frame(tc_plot_rect2d viewport,
                        float pixel_scale,
                        tc_plot_range2d range)
@@ -1039,6 +1051,7 @@ namespace
                 host_->font(), "Mg", theme_.font_size_logical_px, scale);
             if (!ticks || !tick_metrics)
                 throw std::runtime_error("failed to measure chart layout");
+            tick_metrics_ = *tick_metrics;
 
             float widest_y = 0.0f;
             for (const std::string& label : ticks->y.labels)
@@ -1121,6 +1134,7 @@ namespace
             if (!exact_ticks)
                 throw std::runtime_error(
                     "failed to generate exact chart ticks");
+            y_ticks_ = exact_ticks->y;
             if (!tc_graphic_item_handle_is_invalid(grid_))
             {
                 if (!tc_plot_grid_item2d_set_projection(
@@ -1137,8 +1151,7 @@ namespace
                     throw std::runtime_error("failed to update chart grid");
             }
             set_axes(*exact_ticks, tick_length, exact_frame);
-            update_tick_labels(
-                *exact_ticks, tick_font_px, *tick_metrics, exact_frame);
+            update_tick_labels(*exact_ticks, *tick_metrics, exact_frame);
             set_text(title_item_,
                      title_,
                      {viewport_.x + viewport_.width * 0.5f,
@@ -1158,6 +1171,59 @@ namespace
                      tick_font_px,
                      TC_VISUAL_TEXT_ANCHOR_LEFT);
             update_legend();
+            ++layout_revision_;
+        }
+
+        void apply_x_range()
+        {
+            if (!tc_visual_scene_is_valid(scene_))
+                throw std::runtime_error("chart scene is stale");
+
+            const tc_plot_projection_desc2d projection_desc = {
+                viewport_, plot_area_, range_, plot_area_, pixel_scale_};
+            if (!tc_plot_projection2d_update(projection_, &projection_desc))
+                throw std::runtime_error(
+                    "failed to update chart X projection");
+
+            const tcplot::PlotFrame2D frame(
+                {viewport_.x, viewport_.y, viewport_.width, viewport_.height},
+                {plot_area_.x,
+                 plot_area_.y,
+                 plot_area_.width,
+                 plot_area_.height},
+                {range_.x_min, range_.x_max, range_.y_min, range_.y_max},
+                {plot_area_.x,
+                 plot_area_.y,
+                 plot_area_.width,
+                 plot_area_.height},
+                pixel_scale_);
+            const auto x_ticks = tcplot::make_plot_axis_ticks2d(
+                range_.x_min,
+                range_.x_max,
+                plot_area_.width,
+                theme_.x_tick_spacing_logical_px,
+                pixel_scale_);
+            if (!x_ticks)
+                throw std::runtime_error(
+                    "failed to generate chart X ticks");
+
+            if (!tc_graphic_item_handle_is_invalid(grid_) &&
+                (!tc_plot_grid_item2d_set_projection(
+                     scene_, grid_, projection_) ||
+                 !tc_plot_grid_item2d_set_ticks(
+                     scene_,
+                     grid_,
+                     x_ticks->values.data(),
+                     x_ticks->values.size(),
+                     y_ticks_.values.data(),
+                     y_ticks_.values.size())))
+                throw std::runtime_error("failed to update chart X grid");
+
+            const float tick_length =
+                theme_.tick_length_logical_px * pixel_scale_;
+            set_x_axis(*x_ticks, tick_length, frame);
+            update_x_tick_labels(
+                *x_ticks, tick_metrics_.ascent, frame);
             ++layout_revision_;
         }
 
@@ -1197,6 +1263,14 @@ namespace
                       float tick_length,
                       const tcplot::PlotFrame2D& frame)
         {
+            set_x_axis(ticks.x, tick_length, frame);
+            set_y_axis(ticks.y, tick_length, frame);
+        }
+
+        void set_x_axis(const tcplot::PlotAxisTicks2D& ticks,
+                        float tick_length,
+                        const tcplot::PlotFrame2D& frame)
+        {
             tc_visual_stroke_paint2d paint = stroke(
                 theme_.axis_color, theme_.axis_width_logical_px * pixel_scale_);
             if (!tc_graphic_item_handle_is_invalid(x_axis_))
@@ -1209,7 +1283,7 @@ namespace
                                  plot_area_.y + plot_area_.height,
                                  plot_area_.x + plot_area_.width,
                                  plot_area_.y + plot_area_.height);
-                for (double value : ticks.x.values)
+                for (double value : ticks.values)
                 {
                     const auto p = frame.data_to_pixel(value, range_.y_min);
                     append_path_line(verbs,
@@ -1227,6 +1301,14 @@ namespace
                                                &paint))
                     throw std::runtime_error("failed to update X axis");
             }
+        }
+
+        void set_y_axis(const tcplot::PlotAxisTicks2D& ticks,
+                        float tick_length,
+                        const tcplot::PlotFrame2D& frame)
+        {
+            tc_visual_stroke_paint2d paint = stroke(
+                theme_.axis_color, theme_.axis_width_logical_px * pixel_scale_);
             if (!tc_graphic_item_handle_is_invalid(y_axis_))
             {
                 std::vector<tc_visual_path_verb2d> verbs;
@@ -1237,7 +1319,7 @@ namespace
                                  plot_area_.y,
                                  plot_area_.x,
                                  plot_area_.y + plot_area_.height);
-                for (double value : ticks.y.values)
+                for (double value : ticks.values)
                 {
                     const auto p = frame.data_to_pixel(range_.x_min, value);
                     append_path_line(verbs,
@@ -1269,41 +1351,61 @@ namespace
         }
 
         void update_tick_labels(const tcplot::PlotTicks2D& ticks,
-                                float font_size,
                                 const tcplot::PlotTextMetrics2D& metrics,
                                 const tcplot::PlotFrame2D& frame)
         {
+            update_x_tick_labels(ticks.x, metrics.ascent, frame);
+            update_y_tick_labels(ticks.y, metrics.ascent, frame);
+        }
+
+        void update_x_tick_labels(const tcplot::PlotAxisTicks2D& ticks,
+                                  float text_ascent,
+                                  const tcplot::PlotFrame2D& frame)
+        {
             ensure_tick_pool(x_tick_labels_,
-                             ticks.x.values.size(),
+                             ticks.values.size(),
                              x_tick_labels_root_,
                              TC_VISUAL_TEXT_ANCHOR_CENTER);
+            const float gap = theme_.gap_logical_px * pixel_scale_;
+            const float tick_length =
+                theme_.tick_length_logical_px * pixel_scale_;
+            const float font_size =
+                theme_.font_size_logical_px * pixel_scale_;
+            for (size_t index = 0; index < ticks.values.size(); ++index)
+            {
+                const auto p =
+                    frame.data_to_pixel(ticks.values[index], range_.y_min);
+                set_text(x_tick_labels_[index],
+                         ticks.labels[index],
+                         {p.x,
+                          plot_area_.y + plot_area_.height + tick_length + gap +
+                              text_ascent},
+                         font_size,
+                         TC_VISUAL_TEXT_ANCHOR_CENTER);
+            }
+        }
+
+        void update_y_tick_labels(const tcplot::PlotAxisTicks2D& ticks,
+                                  float text_ascent,
+                                  const tcplot::PlotFrame2D& frame)
+        {
             ensure_tick_pool(y_tick_labels_,
-                             ticks.y.values.size(),
+                             ticks.values.size(),
                              y_tick_labels_root_,
                              TC_VISUAL_TEXT_ANCHOR_RIGHT);
             const float gap = theme_.gap_logical_px * pixel_scale_;
             const float tick_length =
                 theme_.tick_length_logical_px * pixel_scale_;
-            for (size_t index = 0; index < ticks.x.values.size(); ++index)
+            const float font_size =
+                theme_.font_size_logical_px * pixel_scale_;
+            for (size_t index = 0; index < ticks.values.size(); ++index)
             {
                 const auto p =
-                    frame.data_to_pixel(ticks.x.values[index], range_.y_min);
-                set_text(x_tick_labels_[index],
-                         ticks.x.labels[index],
-                         {p.x,
-                          plot_area_.y + plot_area_.height + tick_length + gap +
-                              metrics.ascent},
-                         font_size,
-                         TC_VISUAL_TEXT_ANCHOR_CENTER);
-            }
-            for (size_t index = 0; index < ticks.y.values.size(); ++index)
-            {
-                const auto p =
-                    frame.data_to_pixel(range_.x_min, ticks.y.values[index]);
+                    frame.data_to_pixel(range_.x_min, ticks.values[index]);
                 set_text(y_tick_labels_[index],
-                         ticks.y.labels[index],
+                         ticks.labels[index],
                          {plot_area_.x - tick_length - gap,
-                          p.y + metrics.ascent * 0.5f},
+                          p.y + text_ascent * 0.5f},
                          font_size,
                          TC_VISUAL_TEXT_ANCHOR_RIGHT);
             }
@@ -1446,6 +1548,8 @@ namespace
         std::string font_uri_;
         float pixel_scale_ = 1.0f;
         tc_chart2d_theme theme_{};
+        tcplot::PlotTextMetrics2D tick_metrics_{};
+        tcplot::PlotAxisTicks2D y_ticks_{};
         std::string title_;
         std::string x_label_;
         std::string y_label_;
@@ -1684,6 +1788,19 @@ extern "C"
                                [&]
                                {
                                    chart->value.set_range(range);
+                                   return true;
+                               });
+    }
+
+    bool tc_retained_chart2d_set_x_range(tc_retained_chart2d* chart,
+                                         double x_min,
+                                         double x_max)
+    {
+        return chart && logged("set_x_range",
+                               false,
+                               [&]
+                               {
+                                   chart->value.set_x_range(x_min, x_max);
                                    return true;
                                });
     }

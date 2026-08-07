@@ -126,13 +126,18 @@ extern "C"
     TCPLOT_API bool tc_retained_chart2d_theme(const tc_retained_chart2d* chart,
                                               tc_chart2d_theme* out_theme);
 
-    // Mutations validate their complete input and perform one native layout
-    // pass.
+    // General frame mutations validate their complete input and perform one
+    // native layout pass.
     TCPLOT_API bool tc_retained_chart2d_set_viewport(tc_retained_chart2d* chart,
                                                      tc_plot_rect2d viewport,
                                                      float pixel_scale);
     TCPLOT_API bool tc_retained_chart2d_set_range(tc_retained_chart2d* chart,
                                                   tc_plot_range2d range);
+    // Updates only the horizontal projection, grid and X-axis chrome. The
+    // plot rectangle and Y-axis layout remain valid, so moving-window charts
+    // avoid a full text-measure/layout pass.
+    TCPLOT_API bool tc_retained_chart2d_set_x_range(
+        tc_retained_chart2d* chart, double x_min, double x_max);
     // Atomic viewport/range mutation used by multi-panel coordinators to avoid
     // two layout/tick rebuilds when a virtualized panel becomes visible.
     TCPLOT_API bool tc_retained_chart2d_set_frame(tc_retained_chart2d* chart,
