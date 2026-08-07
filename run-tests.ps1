@@ -124,6 +124,11 @@ if (-not $ProcessSmokeOnly) {
             throw "Artifact resolver returned an empty termin_shaderc path."
         }
 
+        & (Join-Path $ScriptDir "setup-sdk-python-env.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            throw "Python test environment refresh failed."
+        }
+
         & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
         if ($LASTEXITCODE -ne 0) {
             $Failures.Add("Python")

@@ -60,3 +60,37 @@ def test_invalid_common_slang_setting_is_authoritative(monkeypatch, tmp_path: Pa
     )
 
     assert shader_runtime.resolve_slangc(Path(__file__)) is None
+
+
+def test_missing_slangc_message_is_actionable_for_editor(monkeypatch, tmp_path: Path) -> None:
+    config_home = tmp_path / "config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("APPDATA", str(config_home))
+    monkeypatch.delenv("TERMIN_SLANGC", raising=False)
+
+    message = shader_runtime.slangc_unavailable_message(
+        "Editor project",
+        editor=True,
+    )
+
+    assert "slangc was not found" in message
+    assert "Edit > Settings... > Slang Compiler" in message
+    assert "Shader/slangCompiler" in message
+    assert "TERMIN_SLANGC" in message
+
+
+def test_invalid_slangc_setting_message_names_configured_path(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_home = tmp_path / "config"
+    missing = tmp_path / "missing-slangc"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("APPDATA", str(config_home))
+    monkeypatch.delenv("TERMIN_SLANGC", raising=False)
+    Settings("termin").set("Shader/slangCompiler", str(missing))
+
+    message = shader_runtime.slangc_unavailable_message("Source player")
+
+    assert "Shader/slangCompiler points to a missing or non-executable slangc" in message
+    assert str(missing) in message

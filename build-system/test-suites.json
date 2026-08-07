@@ -42,6 +42,36 @@
         "reason": "Requires the Windows D3D11 presentation path."
       },
       {
+        "path": "termin-window/tests/test_multiwindow_event_routing.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Compiled only when SDL window integration is available."
+      },
+      {
+        "path": "termin-window/tests/test_sdl_window_system_lifecycle.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Compiled only when SDL window integration is available."
+      },
+      {
+        "path": "termin-window/tests/test_window_manager_live.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window", "opengl"],
+        "reason": "Requires SDL window integration and an OpenGL presentation path."
+      },
+      {
+        "path": "termin-gui-native/tests/test_window_adapter.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Compiled only when the native GUI window adapter is enabled."
+      },
+      {
+        "path": "termin-gui-native/tests/test_window_input.cpp",
+        "profiles": ["linux-full", "windows-d3d11"],
+        "capabilities": ["window"],
+        "reason": "Compiled only when the native GUI window input adapter is enabled."
+      },
+      {
         "path": "termin-graphics/tests/test_render_context2.cpp",
         "profiles": ["linux-full", "windows-d3d11"],
         "capabilities": ["window", "glfw"],
@@ -72,6 +102,48 @@
         "reason": "Requires an SDL Vulkan window."
       },
       {
+        "path": "termin-graphics/tests/test_draw_list2d_pixel_smoke.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_per_pipeline_layout.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_dirty_range.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_image_transition_sync.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_presentation_transform.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_smoke.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_stats.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
         "path": "termin-graphics/tests/test_tgfx2_d3d11_smoke.cpp",
         "profiles": ["windows-d3d11"],
         "capabilities": ["d3d11"],
@@ -88,6 +160,24 @@
         "profiles": ["pr", "linux-full", "windows-d3d11"],
         "capabilities": ["python-bindings"],
         "reason": "CTest registration is conditional on the native Python binding build."
+      },
+      {
+        "path": "tcplot/tests/test_plot_marker_offscreen.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "The offscreen rendering smoke is enabled only with the Vulkan shader test path."
+      },
+      {
+        "path": "tcplot/tests/test_plot_series_performance.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "The rendering performance smoke is enabled only with the Vulkan shader test path."
+      },
+      {
+        "path": "tcplot/tests/test_retained_chart3d.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "The retained Chart3D smoke is enabled only with the Vulkan shader test path."
       }
     ]
   },

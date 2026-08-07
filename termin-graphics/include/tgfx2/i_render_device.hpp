@@ -57,6 +57,12 @@ public:
     // without a dynamic_cast to the concrete device class.
     virtual BackendType backend_type() const = 0;
 
+    virtual AdapterInfo adapter_info() const {
+        AdapterInfo info;
+        info.backend = backend_type();
+        return info;
+    }
+
     virtual BackendCapabilities capabilities() const = 0;
     virtual void wait_idle() = 0;
 

@@ -23,6 +23,7 @@
 #include <cstring>
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <iterator>
 #include <set>
 #include <sstream>
@@ -62,6 +63,22 @@ static void vulkan_invalidate_tc_shader_trampoline(uint32_t pool_index, void* us
 }
 
 namespace tgfx {
+
+AdapterClass classify_vulkan_adapter(VkPhysicalDeviceType device_type) {
+    switch (device_type) {
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            return AdapterClass::DiscreteGpu;
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            return AdapterClass::IntegratedGpu;
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            return AdapterClass::VirtualGpu;
+        case VK_PHYSICAL_DEVICE_TYPE_CPU:
+            return AdapterClass::Cpu;
+        case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+        default:
+            return AdapterClass::Unknown;
+    }
+}
 
 // --- Debug callback ---
 
@@ -220,6 +237,28 @@ VulkanRenderDevice::VulkanRenderDevice(const VulkanDeviceCreateInfo& info) {
     vkGetPhysicalDeviceProperties(physical_device_, &props);
     VkPhysicalDeviceFeatures features;
     vkGetPhysicalDeviceFeatures(physical_device_, &features);
+
+    char driver_label[96]{};
+    std::snprintf(
+        driver_label,
+        sizeof(driver_label),
+        "vendor=0x%04x device=0x%04x version=0x%08x",
+        props.vendorID,
+        props.deviceID,
+        props.driverVersion);
+    adapter_info_.backend = BackendType::Vulkan;
+    adapter_info_.hardware_class = classify_vulkan_adapter(props.deviceType);
+    adapter_info_.adapter_name = props.deviceName;
+    adapter_info_.driver_name = driver_label;
+
+    if (adapter_info_.is_software()) {
+        tc_log_warn(
+            "[tgfx2/vulkan] CPU renderer active: device='%s', driver='%s'. "
+            "Graphics performance may be severely reduced; backend remains Vulkan. "
+            "Select another backend explicitly with TERMIN_BACKEND and restart.",
+            adapter_info_.adapter_name.c_str(),
+            adapter_info_.driver_name.c_str());
+    }
 
     caps_.backend = BackendType::Vulkan;
     caps_.texture_origin_top_left = true;

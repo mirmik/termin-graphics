@@ -81,6 +81,37 @@ def resolve_slangc(anchor_file: Path | None = None) -> Path | None:
     return resolve_path_tool("slangc")
 
 
+def slangc_unavailable_message(label: str, *, editor: bool = False) -> str:
+    """Describe the actionable reason why ``resolve_slangc`` returned ``None``."""
+
+    configured_environment = os.environ.get("TERMIN_SLANGC")
+    if configured_environment:
+        detail = (
+            "TERMIN_SLANGC points to a missing or non-executable slangc: "
+            f"'{configured_environment}'. Correct or unset TERMIN_SLANGC."
+        )
+    else:
+        configured_setting = Settings("termin").get("Shader/slangCompiler", "")
+        if isinstance(configured_setting, str) and configured_setting.strip():
+            detail = (
+                "Shader/slangCompiler points to a missing or non-executable slangc: "
+                f"'{configured_setting.strip()}'. Correct the configured path."
+            )
+        else:
+            detail = (
+                "slangc was not found. Configure Shader/slangCompiler, set "
+                "TERMIN_SLANGC, add slangc to PATH, or install it under TERMIN_SDK/bin."
+            )
+
+    guidance = " Slang source shaders cannot be compiled."
+    if editor:
+        guidance += (
+            " Open Edit > Settings... > Slang Compiler "
+            "(Shader/slangCompiler) to configure it."
+        )
+    return f"{label}: {detail}{guidance}"
+
+
 def configure_project_shader_runtime(project_root: Path, *, label: str, render_engine) -> bool:
     """Configure dev shader compilation for source project rendering."""
 
@@ -96,7 +127,7 @@ def configure_project_shader_runtime(project_root: Path, *, label: str, render_e
 
     slangc = resolve_slangc(Path(__file__))
     if slangc is None:
-        log.error(f"[ShaderRuntime] slangc not found; {label} Slang shaders cannot compile")
+        log.warning(f"[ShaderRuntime] {slangc_unavailable_message(label)}")
         return False
 
     try:

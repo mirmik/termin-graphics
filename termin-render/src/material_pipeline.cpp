@@ -590,6 +590,19 @@ MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
     const bool has_tangent = contract_has_vertex_input(contract, "tangent");
     const bool has_joints = contract_has_vertex_input(contract, "joints");
     const bool has_weights = contract_has_vertex_input(contract, "weights");
+    bool has_authored_attributes = false;
+    for (uint32_t i = 0; i < contract.vertex_input_count; ++i) {
+        const char* semantic = contract.vertex_inputs[i].semantic;
+        if (std::strcmp(semantic, "position") != 0
+            && std::strcmp(semantic, "normal") != 0
+            && std::strcmp(semantic, "uv") != 0
+            && std::strcmp(semantic, "tangent") != 0
+            && std::strcmp(semantic, "joints") != 0
+            && std::strcmp(semantic, "weights") != 0) {
+            has_authored_attributes = true;
+            break;
+        }
+    }
 
     if (!has_position) {
         return static_input;
@@ -603,6 +616,14 @@ MaterialMeshVertexInput material_mesh_vertex_input_for_shader(
             return MaterialMeshVertexInput::SkinnedPositionNormalJointsWeights;
         }
         return MaterialMeshVertexInput::SkinnedPositionJointsWeights;
+    }
+
+    // Compact predefined views are valid only for the standard material
+    // semantics they enumerate. Authored inputs such as vertex color must
+    // preserve the mesh's complete layout; otherwise the planner accepts the
+    // draw and the backend rejects the missing attribute later.
+    if (has_authored_attributes) {
+        return MaterialMeshVertexInput::FullMaterial;
     }
 
     if (has_uv || has_tangent) {

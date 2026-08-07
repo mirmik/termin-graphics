@@ -402,7 +402,11 @@ if(COMMAND termin_enable_pch_for)
 endif()
 termin_set_rpath_lib(termin_graphics2)
 
-if((TGFX2_ENABLE_D3D11 OR (TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)) AND NOT ANDROID)
+# termin_shaderc is a desktop host tool, not a runtime-backend component.  Test
+# and source-project workflows need a graph-owned compiler even in a headless
+# configuration with every graphics backend disabled.  Only the optional
+# GLSL-to-SPIR-V implementation below depends on Vulkan/shaderc.
+if(NOT ANDROID AND NOT EMSCRIPTEN)
     add_executable(termin_shaderc
         tools/termin_shaderc.cpp
         tools/termin_shaderc/compiler_support.cpp
@@ -453,7 +457,7 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
     if(NOT TARGET termin_shaderc)
         message(FATAL_ERROR
             "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON requires the termin_shaderc target. "
-            "Enable D3D11 or Vulkan+shaderc, or disable TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS.")
+            "Use a desktop host build or disable TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS.")
     endif()
     if(NOT Python_EXECUTABLE)
         termin_require_canonical_python(Interpreter)
