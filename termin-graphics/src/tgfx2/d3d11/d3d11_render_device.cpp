@@ -12,8 +12,8 @@
 #include <array>
 #include <cctype>
 #include <chrono>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -21,8 +21,8 @@
 #include <thread>
 #include <vector>
 
-#include <d3dcompiler.h>
 #include <d3d11_1.h>
+#include <d3dcompiler.h>
 #include <tcbase/tc_log.hpp>
 
 extern "C" {
@@ -36,392 +36,372 @@ extern "C" {
 
 namespace {
 
-void d3d11_invalidate_tc_shader_trampoline(uint32_t pool_index, void* user) {
-    static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
-}
+    void d3d11_invalidate_tc_shader_trampoline(uint32_t pool_index, void* user) {
+        static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_shader_cache(pool_index);
+    }
 
-void d3d11_invalidate_tc_texture_trampoline(uint32_t pool_index, void* user) {
-    static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
-}
+    void d3d11_invalidate_tc_texture_trampoline(uint32_t pool_index, void* user) {
+        static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_texture_cache(pool_index);
+    }
 
-void d3d11_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
-    static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
-}
+    void d3d11_invalidate_tc_mesh_trampoline(uint32_t pool_index, void* user) {
+        static_cast<tgfx::D3D11RenderDevice*>(user)->invalidate_tc_mesh_cache(pool_index);
+    }
 
 } // namespace
 
 namespace tgfx {
-using d3d11_internal::D3D11InputSemantic;
-using d3d11_internal::D3D11SignatureParam;
-using d3d11_internal::log_d3d11_input_layout_failure;
-using d3d11_internal::log_d3d11_shader_signatures;
-using d3d11_internal::reflect_d3d11_signature;
-using d3d11_internal::reflect_d3d11_vertex_inputs;
-using d3d11_internal::semantic_for_attribute;
-using d3d11_internal::signatures_have_link_mismatch;
-namespace {
+    using d3d11_internal::D3D11InputSemantic;
+    using d3d11_internal::D3D11SignatureParam;
+    using d3d11_internal::log_d3d11_input_layout_failure;
+    using d3d11_internal::log_d3d11_shader_signatures;
+    using d3d11_internal::reflect_d3d11_signature;
+    using d3d11_internal::reflect_d3d11_vertex_inputs;
+    using d3d11_internal::semantic_for_attribute;
+    using d3d11_internal::signatures_have_link_mismatch;
+    namespace {
 
-void throw_if_failed(HRESULT hr, const char* what) {
-    if (FAILED(hr)) {
-        char buffer[160];
-        std::snprintf(buffer, sizeof(buffer), "%s failed: HRESULT=0x%08X", what, static_cast<unsigned>(hr));
-        throw std::runtime_error(buffer);
-    }
-}
+        void throw_if_failed(HRESULT hr, const char* what) {
+            if (FAILED(hr)) {
+                char buffer[160];
+                std::snprintf(buffer, sizeof(buffer), "%s failed: HRESULT=0x%08X", what, static_cast<unsigned>(hr));
+                throw std::runtime_error(buffer);
+            }
+        }
 
-bool env_enabled(const char* name) {
-    const char* value = std::getenv(name);
-    return value != nullptr && value[0] != '\0' && value[0] != '0';
-}
+        bool env_enabled(const char* name) {
+            const char* value = std::getenv(name);
+            return value != nullptr && value[0] != '\0' && value[0] != '0';
+        }
 
-const char* d3d11_message_severity_name(D3D11_MESSAGE_SEVERITY severity) {
-    switch (severity) {
-        case D3D11_MESSAGE_SEVERITY_CORRUPTION: return "corruption";
-        case D3D11_MESSAGE_SEVERITY_ERROR: return "error";
-        case D3D11_MESSAGE_SEVERITY_WARNING: return "warning";
-        case D3D11_MESSAGE_SEVERITY_INFO: return "info";
-        case D3D11_MESSAGE_SEVERITY_MESSAGE: return "message";
-        default: return "unknown";
-    }
-}
+        const char* d3d11_message_severity_name(D3D11_MESSAGE_SEVERITY severity) {
+            switch (severity) {
+            case D3D11_MESSAGE_SEVERITY_CORRUPTION:
+                return "corruption";
+            case D3D11_MESSAGE_SEVERITY_ERROR:
+                return "error";
+            case D3D11_MESSAGE_SEVERITY_WARNING:
+                return "warning";
+            case D3D11_MESSAGE_SEVERITY_INFO:
+                return "info";
+            case D3D11_MESSAGE_SEVERITY_MESSAGE:
+                return "message";
+            default:
+                return "unknown";
+            }
+        }
 
-void log_d3d11_message(
-    const char* origin,
-    D3D11_MESSAGE_SEVERITY severity,
-    D3D11_MESSAGE_ID id,
-    const char* description
-) {
-    const char* text = description ? description : "";
-    switch (severity) {
-        case D3D11_MESSAGE_SEVERITY_CORRUPTION:
-        case D3D11_MESSAGE_SEVERITY_ERROR:
-            tc::Log::error(
-                "[D3D11Debug:%s] severity=%s id=%u %s",
-                origin,
-                d3d11_message_severity_name(severity),
-                static_cast<unsigned>(id),
-                text);
-            break;
-        case D3D11_MESSAGE_SEVERITY_WARNING:
-            tc::Log::warn(
-                "[D3D11Debug:%s] severity=%s id=%u %s",
-                origin,
-                d3d11_message_severity_name(severity),
-                static_cast<unsigned>(id),
-                text);
-            break;
-        default:
-            tc::Log::info(
-                "[D3D11Debug:%s] severity=%s id=%u %s",
-                origin,
-                d3d11_message_severity_name(severity),
-                static_cast<unsigned>(id),
-                text);
-            break;
-    }
-}
+        void log_d3d11_message(const char* origin,
+                               D3D11_MESSAGE_SEVERITY severity,
+                               D3D11_MESSAGE_ID id,
+                               const char* description) {
+            const char* text = description ? description : "";
+            switch (severity) {
+            case D3D11_MESSAGE_SEVERITY_CORRUPTION:
+            case D3D11_MESSAGE_SEVERITY_ERROR:
+                tc::Log::error("[D3D11Debug:%s] severity=%s id=%u %s",
+                               origin,
+                               d3d11_message_severity_name(severity),
+                               static_cast<unsigned>(id),
+                               text);
+                break;
+            case D3D11_MESSAGE_SEVERITY_WARNING:
+                tc::Log::warn("[D3D11Debug:%s] severity=%s id=%u %s",
+                              origin,
+                              d3d11_message_severity_name(severity),
+                              static_cast<unsigned>(id),
+                              text);
+                break;
+            default:
+                tc::Log::info("[D3D11Debug:%s] severity=%s id=%u %s",
+                              origin,
+                              d3d11_message_severity_name(severity),
+                              static_cast<unsigned>(id),
+                              text);
+                break;
+            }
+        }
 
-UINT buffer_bind_flags(BufferUsage usage) {
-    UINT flags = 0;
-    if (has_flag(usage, BufferUsage::Vertex)) flags |= D3D11_BIND_VERTEX_BUFFER;
-    if (has_flag(usage, BufferUsage::Index)) flags |= D3D11_BIND_INDEX_BUFFER;
-    if (has_flag(usage, BufferUsage::Uniform)) flags |= D3D11_BIND_CONSTANT_BUFFER;
-    if (has_flag(usage, BufferUsage::Storage)) flags |= D3D11_BIND_SHADER_RESOURCE;
-    return flags ? flags : D3D11_BIND_VERTEX_BUFFER;
-}
+        UINT buffer_bind_flags(BufferUsage usage) {
+            UINT flags = 0;
+            if (has_flag(usage, BufferUsage::Vertex))
+                flags |= D3D11_BIND_VERTEX_BUFFER;
+            if (has_flag(usage, BufferUsage::Index))
+                flags |= D3D11_BIND_INDEX_BUFFER;
+            if (has_flag(usage, BufferUsage::Uniform))
+                flags |= D3D11_BIND_CONSTANT_BUFFER;
+            if (has_flag(usage, BufferUsage::Storage))
+                flags |= D3D11_BIND_SHADER_RESOURCE;
+            return flags ? flags : D3D11_BIND_VERTEX_BUFFER;
+        }
 
-UINT texture_bind_flags(TextureUsage usage, PixelFormat format) {
-    UINT flags = 0;
-    if (has_flag(usage, TextureUsage::Sampled)) flags |= D3D11_BIND_SHADER_RESOURCE;
-    if (has_flag(usage, TextureUsage::ColorAttachment)) flags |= D3D11_BIND_RENDER_TARGET;
-    if (has_flag(usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(format)) {
-        flags |= D3D11_BIND_DEPTH_STENCIL;
-    }
-    return flags ? flags : D3D11_BIND_SHADER_RESOURCE;
-}
+        UINT texture_bind_flags(TextureUsage usage, PixelFormat format) {
+            UINT flags = 0;
+            if (has_flag(usage, TextureUsage::Sampled))
+                flags |= D3D11_BIND_SHADER_RESOURCE;
+            if (has_flag(usage, TextureUsage::ColorAttachment))
+                flags |= D3D11_BIND_RENDER_TARGET;
+            if (has_flag(usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(format)) {
+                flags |= D3D11_BIND_DEPTH_STENCIL;
+            }
+            return flags ? flags : D3D11_BIND_SHADER_RESOURCE;
+        }
 
-D3D11_USAGE buffer_usage(const BufferDesc& desc) {
-    return desc.cpu_visible ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
-}
+        D3D11_USAGE buffer_usage(const BufferDesc& desc) {
+            return desc.cpu_visible ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
+        }
 
-UINT buffer_cpu_access(const BufferDesc& desc) {
-    return desc.cpu_visible ? D3D11_CPU_ACCESS_WRITE : 0;
-}
+        UINT buffer_cpu_access(const BufferDesc& desc) {
+            return desc.cpu_visible ? D3D11_CPU_ACCESS_WRITE : 0;
+        }
 
+        bool validate_d3d11_texture_desc(const TextureDesc& desc, const char* origin) {
+            if (desc.width == 0 || desc.height == 0) {
+                tc::Log::error("%s: zero-sized texture", origin);
+                return false;
+            }
+            if (desc.format == PixelFormat::RGB8_UNorm) {
+                tc::Log::error("%s: PixelFormat::RGB8_UNorm is not supported on D3D11; "
+                               "use RGBA8_UNorm or normalize RGB data before upload",
+                               origin);
+                return false;
+            }
+            if (has_flag(desc.usage, TextureUsage::Storage)) {
+                tc::Log::error("%s: TextureUsage::Storage is not supported on D3D11 because "
+                               "the backend does not create or bind texture UAVs",
+                               origin);
+                return false;
+            }
+            if (d3d11::to_dxgi_format(desc.format) == DXGI_FORMAT_UNKNOWN) {
+                tc::Log::error("%s: unsupported texture format", origin);
+                return false;
+            }
+            return true;
+        }
 
-bool validate_d3d11_texture_desc(
-    const TextureDesc& desc,
-    const char* origin
-) {
-    if (desc.width == 0 || desc.height == 0) {
-        tc::Log::error("%s: zero-sized texture", origin);
-        return false;
-    }
-    if (desc.format == PixelFormat::RGB8_UNorm) {
-        tc::Log::error(
-            "%s: PixelFormat::RGB8_UNorm is not supported on D3D11; "
-            "use RGBA8_UNorm or normalize RGB data before upload",
-            origin);
-        return false;
-    }
-    if (has_flag(desc.usage, TextureUsage::Storage)) {
-        tc::Log::error(
-            "%s: TextureUsage::Storage is not supported on D3D11 because "
-            "the backend does not create or bind texture UAVs",
-            origin);
-        return false;
-    }
-    if (d3d11::to_dxgi_format(desc.format) == DXGI_FORMAT_UNKNOWN) {
-        tc::Log::error("%s: unsupported texture format", origin);
-        return false;
-    }
-    return true;
-}
+        bool validate_d3d11_texture_upload(const D3D11Texture& tex,
+                                           uint32_t x,
+                                           uint32_t y,
+                                           uint32_t w,
+                                           uint32_t h,
+                                           std::span<const uint8_t> data,
+                                           uint32_t mip,
+                                           const char* origin) {
+            const uint32_t mip_levels = std::max(1u, tex.desc.mip_levels);
+            if (mip >= mip_levels) {
+                tc::Log::error("%s: mip %u out of range for texture (mips=%u)", origin, mip, mip_levels);
+                return false;
+            }
+            if (w == 0 || h == 0) {
+                tc::Log::error("%s: empty upload region", origin);
+                return false;
+            }
 
-bool validate_d3d11_texture_upload(
-    const D3D11Texture& tex,
-    uint32_t x,
-    uint32_t y,
-    uint32_t w,
-    uint32_t h,
-    std::span<const uint8_t> data,
-    uint32_t mip,
-    const char* origin
-) {
-    const uint32_t mip_levels = std::max(1u, tex.desc.mip_levels);
-    if (mip >= mip_levels) {
-        tc::Log::error(
-            "%s: mip %u out of range for texture (mips=%u)",
-            origin,
-            mip,
-            mip_levels);
-        return false;
-    }
-    if (w == 0 || h == 0) {
-        tc::Log::error("%s: empty upload region", origin);
-        return false;
-    }
+            const uint32_t mip_w = std::max(1u, tex.desc.width >> mip);
+            const uint32_t mip_h = std::max(1u, tex.desc.height >> mip);
+            if (x > mip_w || y > mip_h || w > mip_w - x || h > mip_h - y) {
+                tc::Log::error(
+                    "%s: region (%u,%u %ux%u) outside mip %u bounds (%ux%u)", origin, x, y, w, h, mip, mip_w, mip_h);
+                return false;
+            }
 
-    const uint32_t mip_w = std::max(1u, tex.desc.width >> mip);
-    const uint32_t mip_h = std::max(1u, tex.desc.height >> mip);
-    if (x > mip_w || y > mip_h || w > mip_w - x || h > mip_h - y) {
-        tc::Log::error(
-            "%s: region (%u,%u %ux%u) outside mip %u bounds (%ux%u)",
-            origin,
-            x,
-            y,
-            w,
-            h,
-            mip,
-            mip_w,
-            mip_h);
-        return false;
-    }
+            const uint32_t bytes_per_pixel = d3d11::pixel_format_bytes(tex.desc.format);
+            if (bytes_per_pixel == 0) {
+                tc::Log::error("%s: unsupported texture format", origin);
+                return false;
+            }
 
-    const uint32_t bytes_per_pixel = d3d11::pixel_format_bytes(tex.desc.format);
-    if (bytes_per_pixel == 0) {
-        tc::Log::error("%s: unsupported texture format", origin);
-        return false;
-    }
+            const uint64_t expected_size =
+                static_cast<uint64_t>(w) * static_cast<uint64_t>(h) * static_cast<uint64_t>(bytes_per_pixel);
+            if (data.size() < expected_size) {
+                tc::Log::error("%s: data too small for upload (%zu bytes, expected at least %llu)",
+                               origin,
+                               data.size(),
+                               static_cast<unsigned long long>(expected_size));
+                return false;
+            }
+            return true;
+        }
 
-    const uint64_t expected_size =
-        static_cast<uint64_t>(w) *
-        static_cast<uint64_t>(h) *
-        static_cast<uint64_t>(bytes_per_pixel);
-    if (data.size() < expected_size) {
-        tc::Log::error(
-            "%s: data too small for upload (%zu bytes, expected at least %llu)",
-            origin,
-            data.size(),
-            static_cast<unsigned long long>(expected_size));
-        return false;
-    }
-    return true;
-}
+    } // namespace
 
-} // namespace
-
-D3D11RenderDevice::D3D11RenderDevice() {
-    create_device();
-    create_default_sampler();
-    query_capabilities();
-    tc_shader_registry_add_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
-    tc_texture_registry_add_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
-    tc_mesh_registry_add_destroy_hook(&d3d11_invalidate_tc_mesh_trampoline, this);
-}
-
-D3D11RenderDevice::~D3D11RenderDevice() {
-    tc_mesh_registry_remove_destroy_hook(&d3d11_invalidate_tc_mesh_trampoline, this);
-    tc_texture_registry_remove_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
-    tc_shader_registry_remove_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
-
-    reset_state();
-    wait_idle();
-
-    if (pixel_readback_depth_target_) {
-        destroy(pixel_readback_depth_target_);
-        pixel_readback_depth_target_ = {};
+    D3D11RenderDevice::D3D11RenderDevice() {
+        create_device();
+        create_default_sampler();
+        query_capabilities();
+        tc_shader_registry_add_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
+        tc_texture_registry_add_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
+        tc_mesh_registry_add_destroy_hook(&d3d11_invalidate_tc_mesh_trampoline, this);
     }
 
-    for (auto& pair : tc_mesh_cache_) {
-        if (pair.second.vbo) destroy(pair.second.vbo);
-        if (pair.second.ebo) destroy(pair.second.ebo);
-    }
-    tc_mesh_cache_.clear();
-    for (auto& pair : tc_texture_cache_) {
-        if (pair.second.handle) destroy(pair.second.handle);
-    }
-    tc_texture_cache_.clear();
-    for (auto& pair : tc_shader_cache_) {
-        if (pair.second.vs) destroy(pair.second.vs);
-        if (pair.second.fs) destroy(pair.second.fs);
-    }
-    tc_shader_cache_.clear();
-    reset_state();
-    wait_idle();
-}
+    D3D11RenderDevice::~D3D11RenderDevice() {
+        tc_mesh_registry_remove_destroy_hook(&d3d11_invalidate_tc_mesh_trampoline, this);
+        tc_texture_registry_remove_destroy_hook(&d3d11_invalidate_tc_texture_trampoline, this);
+        tc_shader_registry_remove_destroy_hook(&d3d11_invalidate_tc_shader_trampoline, this);
 
-void D3D11RenderDevice::create_device() {
-    std::array<D3D_FEATURE_LEVEL, 3> levels{
-        D3D_FEATURE_LEVEL_11_1,
-        D3D_FEATURE_LEVEL_11_0,
-        D3D_FEATURE_LEVEL_10_1,
-    };
+        reset_state();
+        wait_idle();
 
-    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        if (pixel_readback_depth_target_) {
+            destroy(pixel_readback_depth_target_);
+            pixel_readback_depth_target_ = {};
+        }
+
+        for (auto& pair : tc_mesh_cache_) {
+            if (pair.second.vbo)
+                destroy(pair.second.vbo);
+            if (pair.second.ebo)
+                destroy(pair.second.ebo);
+        }
+        tc_mesh_cache_.clear();
+        for (auto& pair : tc_texture_cache_) {
+            if (pair.second.handle)
+                destroy(pair.second.handle);
+        }
+        tc_texture_cache_.clear();
+        for (auto& pair : tc_shader_cache_) {
+            if (pair.second.vs)
+                destroy(pair.second.vs);
+            if (pair.second.fs)
+                destroy(pair.second.fs);
+        }
+        tc_shader_cache_.clear();
+        reset_state();
+        wait_idle();
+    }
+
+    void D3D11RenderDevice::create_device() {
+        std::array<D3D_FEATURE_LEVEL, 3> levels{
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1,
+        };
+
+        UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 #if defined(_DEBUG)
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-    if (env_enabled("TERMIN_D3D11_DEBUG")) {
         flags |= D3D11_CREATE_DEVICE_DEBUG;
-    }
-    const UINT requested_flags = flags;
-
-    HRESULT hr = D3D11CreateDevice(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
-        nullptr,
-        flags,
-        levels.data(),
-        static_cast<UINT>(levels.size()),
-        D3D11_SDK_VERSION,
-        &device_,
-        &feature_level_,
-        &context_);
-
-    bool debug_retry_disabled = false;
-    if (FAILED(hr)) {
-        flags &= ~D3D11_CREATE_DEVICE_DEBUG;
-        debug_retry_disabled = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
-        hr = D3D11CreateDevice(
-            nullptr,
-            D3D_DRIVER_TYPE_HARDWARE,
-            nullptr,
-            flags,
-            levels.data(),
-            static_cast<UINT>(levels.size()),
-            D3D11_SDK_VERSION,
-            &device_,
-            &feature_level_,
-            &context_);
-    }
-
-    throw_if_failed(hr, "D3D11CreateDevice");
-    configure_debug_layer(requested_flags, debug_retry_disabled);
-}
-
-void D3D11RenderDevice::configure_debug_layer(UINT requested_flags, bool debug_retry_disabled) {
-    debug_layer_enabled_ = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0 && !debug_retry_disabled;
-    log_info_queue_ = env_enabled("TERMIN_D3D11_LOG_INFO_QUEUE");
-
-    if (debug_retry_disabled) {
-        tc::Log::warn(
-            "D3D11RenderDevice: debug layer was requested but D3D11CreateDevice "
-            "failed with D3D11_CREATE_DEVICE_DEBUG; continuing without it. "
-            "Install the Windows Graphics Tools optional feature to enable it.");
-        return;
-    }
-
-    if (!debug_layer_enabled_) {
-        if (log_info_queue_) {
-            tc::Log::warn(
-                "D3D11RenderDevice: TERMIN_D3D11_LOG_INFO_QUEUE=1 ignored because "
-                "the D3D11 debug layer is not enabled. Set TERMIN_D3D11_DEBUG=1.");
+#endif
+        if (env_enabled("TERMIN_D3D11_DEBUG")) {
+            flags |= D3D11_CREATE_DEVICE_DEBUG;
         }
-        return;
-    }
+        const UINT requested_flags = flags;
 
-    HRESULT hr = device_.As(&info_queue_);
-    if (FAILED(hr) || !info_queue_) {
-        tc::Log::warn(
-            "D3D11RenderDevice: D3D11 debug layer is enabled, but ID3D11InfoQueue "
-            "is unavailable: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return;
-    }
+        HRESULT hr = D3D11CreateDevice(nullptr,
+                                       D3D_DRIVER_TYPE_HARDWARE,
+                                       nullptr,
+                                       flags,
+                                       levels.data(),
+                                       static_cast<UINT>(levels.size()),
+                                       D3D11_SDK_VERSION,
+                                       &device_,
+                                       &feature_level_,
+                                       &context_);
 
-    tc::Log::info("D3D11RenderDevice: D3D11 debug layer enabled");
-    if (env_enabled("TERMIN_D3D11_BREAK_ON_ERROR")) {
-        info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-        info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
-    }
-}
-
-void D3D11RenderDevice::drain_info_queue(const char* origin) {
-    if (!log_info_queue_ || !info_queue_) {
-        return;
-    }
-
-    const UINT64 count = info_queue_->GetNumStoredMessagesAllowedByRetrievalFilter();
-    for (UINT64 i = 0; i < count; ++i) {
-        SIZE_T message_size = 0;
-        HRESULT hr = info_queue_->GetMessage(i, nullptr, &message_size);
-        if (FAILED(hr) || message_size == 0) {
-            continue;
-        }
-
-        std::vector<uint8_t> storage(message_size);
-        auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
-        hr = info_queue_->GetMessage(i, message, &message_size);
+        bool debug_retry_disabled = false;
         if (FAILED(hr)) {
-            continue;
+            flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+            debug_retry_disabled = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
+            hr = D3D11CreateDevice(nullptr,
+                                   D3D_DRIVER_TYPE_HARDWARE,
+                                   nullptr,
+                                   flags,
+                                   levels.data(),
+                                   static_cast<UINT>(levels.size()),
+                                   D3D11_SDK_VERSION,
+                                   &device_,
+                                   &feature_level_,
+                                   &context_);
         }
 
-        log_d3d11_message(
-            origin ? origin : "unknown",
-            message->Severity,
-            message->ID,
-            message->pDescription);
-    }
-    info_queue_->ClearStoredMessages();
-}
-
-void D3D11RenderDevice::create_default_sampler() {
-    D3D11_SAMPLER_DESC sd{};
-    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.MipLODBias = 0.0f;
-    sd.MaxAnisotropy = 1;
-    sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    sd.BorderColor[0] = 0.0f;
-    sd.BorderColor[1] = 0.0f;
-    sd.BorderColor[2] = 0.0f;
-    sd.BorderColor[3] = 1.0f;
-    sd.MinLOD = 0.0f;
-    sd.MaxLOD = D3D11_FLOAT32_MAX;
-    HRESULT hr = device_->CreateSamplerState(&sd, &default_sampler_);
-    throw_if_failed(hr, "ID3D11Device::CreateSamplerState(default)");
-}
-
-bool D3D11RenderDevice::ensure_blit_resources() {
-    if (blit_vertex_shader_ && blit_pixel_shader_ && blit_constant_buffer_ &&
-        blit_raster_state_ && blit_depth_stencil_state_ && blit_blend_state_) {
-        return true;
+        throw_if_failed(hr, "D3D11CreateDevice");
+        configure_debug_layer(requested_flags, debug_retry_disabled);
     }
 
-    static constexpr const char* kBlitVs = R"(
+    void D3D11RenderDevice::configure_debug_layer(UINT requested_flags, bool debug_retry_disabled) {
+        debug_layer_enabled_ = (requested_flags & D3D11_CREATE_DEVICE_DEBUG) != 0 && !debug_retry_disabled;
+        log_info_queue_ = env_enabled("TERMIN_D3D11_LOG_INFO_QUEUE");
+
+        if (debug_retry_disabled) {
+            tc::Log::warn("D3D11RenderDevice: debug layer was requested but D3D11CreateDevice "
+                          "failed with D3D11_CREATE_DEVICE_DEBUG; continuing without it. "
+                          "Install the Windows Graphics Tools optional feature to enable it.");
+            return;
+        }
+
+        if (!debug_layer_enabled_) {
+            if (log_info_queue_) {
+                tc::Log::warn("D3D11RenderDevice: TERMIN_D3D11_LOG_INFO_QUEUE=1 ignored because "
+                              "the D3D11 debug layer is not enabled. Set TERMIN_D3D11_DEBUG=1.");
+            }
+            return;
+        }
+
+        HRESULT hr = device_.As(&info_queue_);
+        if (FAILED(hr) || !info_queue_) {
+            tc::Log::warn("D3D11RenderDevice: D3D11 debug layer is enabled, but ID3D11InfoQueue "
+                          "is unavailable: HRESULT=0x%08X",
+                          static_cast<unsigned>(hr));
+            return;
+        }
+
+        tc::Log::info("D3D11RenderDevice: D3D11 debug layer enabled");
+        if (env_enabled("TERMIN_D3D11_BREAK_ON_ERROR")) {
+            info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+            info_queue_->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
+        }
+    }
+
+    void D3D11RenderDevice::drain_info_queue(const char* origin) {
+        if (!log_info_queue_ || !info_queue_) {
+            return;
+        }
+
+        const UINT64 count = info_queue_->GetNumStoredMessagesAllowedByRetrievalFilter();
+        for (UINT64 i = 0; i < count; ++i) {
+            SIZE_T message_size = 0;
+            HRESULT hr = info_queue_->GetMessage(i, nullptr, &message_size);
+            if (FAILED(hr) || message_size == 0) {
+                continue;
+            }
+
+            std::vector<uint8_t> storage(message_size);
+            auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+            hr = info_queue_->GetMessage(i, message, &message_size);
+            if (FAILED(hr)) {
+                continue;
+            }
+
+            log_d3d11_message(origin ? origin : "unknown", message->Severity, message->ID, message->pDescription);
+        }
+        info_queue_->ClearStoredMessages();
+    }
+
+    void D3D11RenderDevice::create_default_sampler() {
+        D3D11_SAMPLER_DESC sd{};
+        sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.MipLODBias = 0.0f;
+        sd.MaxAnisotropy = 1;
+        sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        sd.BorderColor[0] = 0.0f;
+        sd.BorderColor[1] = 0.0f;
+        sd.BorderColor[2] = 0.0f;
+        sd.BorderColor[3] = 1.0f;
+        sd.MinLOD = 0.0f;
+        sd.MaxLOD = D3D11_FLOAT32_MAX;
+        HRESULT hr = device_->CreateSamplerState(&sd, &default_sampler_);
+        throw_if_failed(hr, "ID3D11Device::CreateSamplerState(default)");
+    }
+
+    bool D3D11RenderDevice::ensure_blit_resources() {
+        if (blit_vertex_shader_ && blit_pixel_shader_ && blit_constant_buffer_ && blit_raster_state_ &&
+            blit_depth_stencil_state_ && blit_blend_state_) {
+            return true;
+        }
+
+        static constexpr const char* kBlitVs = R"(
 cbuffer BlitConstants : register(b0) {
     float2 src_uv_min;
     float2 src_uv_size;
@@ -441,7 +421,7 @@ VSOut main(uint vertex_id : SV_VertexID) {
 }
 )";
 
-    static constexpr const char* kBlitPs = R"(
+        static constexpr const char* kBlitPs = R"(
 Texture2D src_texture : register(t0);
 SamplerState src_sampler : register(s0);
 
@@ -455,338 +435,321 @@ float4 main(VSOut input) : SV_Target {
 }
 )";
 
-    UINT compile_flags = D3DCOMPILE_ENABLE_STRICTNESS;
+        UINT compile_flags = D3DCOMPILE_ENABLE_STRICTNESS;
 #if defined(_DEBUG)
-    compile_flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        compile_flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #endif
 
-    auto compile_stage = [&](const char* source,
-                             const char* profile,
-                             Microsoft::WRL::ComPtr<ID3DBlob>& out) -> bool {
-        Microsoft::WRL::ComPtr<ID3DBlob> errors;
-        HRESULT hr = D3DCompile(
-            source,
-            std::strlen(source),
-            nullptr,
-            nullptr,
-            nullptr,
-            "main",
-            profile,
-            compile_flags,
-            0,
-            &out,
-            &errors);
-        if (FAILED(hr)) {
-            const char* message = errors
-                ? static_cast<const char*>(errors->GetBufferPointer())
-                : "";
-            tc::Log::error(
-                "D3D11RenderDevice::ensure_blit_resources: D3DCompile(%s) failed: "
-                "HRESULT=0x%08X %s",
-                profile,
-                static_cast<unsigned>(hr),
-                message);
+        auto compile_stage =
+            [&](const char* source, const char* profile, Microsoft::WRL::ComPtr<ID3DBlob>& out) -> bool {
+            Microsoft::WRL::ComPtr<ID3DBlob> errors;
+            HRESULT hr = D3DCompile(source,
+                                    std::strlen(source),
+                                    nullptr,
+                                    nullptr,
+                                    nullptr,
+                                    "main",
+                                    profile,
+                                    compile_flags,
+                                    0,
+                                    &out,
+                                    &errors);
+            if (FAILED(hr)) {
+                const char* message = errors ? static_cast<const char*>(errors->GetBufferPointer()) : "";
+                tc::Log::error("D3D11RenderDevice::ensure_blit_resources: D3DCompile(%s) failed: "
+                               "HRESULT=0x%08X %s",
+                               profile,
+                               static_cast<unsigned>(hr),
+                               message);
+                return false;
+            }
+            return true;
+        };
+
+        const char* vs_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "vs_5_0" : "vs_4_0";
+        const char* ps_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "ps_5_0" : "ps_4_0";
+        Microsoft::WRL::ComPtr<ID3DBlob> vs_blob;
+        Microsoft::WRL::ComPtr<ID3DBlob> ps_blob;
+        if (!compile_stage(kBlitVs, vs_profile, vs_blob) || !compile_stage(kBlitPs, ps_profile, ps_blob)) {
             return false;
         }
+
+        HRESULT hr = device_->CreateVertexShader(
+            vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), nullptr, &blit_vertex_shader_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreateVertexShader failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
+        hr = device_->CreatePixelShader(
+            ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), nullptr, &blit_pixel_shader_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreatePixelShader failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
+        D3D11_BUFFER_DESC cb_desc{};
+        cb_desc.ByteWidth = 16;
+        cb_desc.Usage = D3D11_USAGE_DEFAULT;
+        cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        hr = device_->CreateBuffer(&cb_desc, nullptr, &blit_constant_buffer_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreateBuffer(constants) failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
+        D3D11_RASTERIZER_DESC rs_desc{};
+        rs_desc.FillMode = D3D11_FILL_SOLID;
+        rs_desc.CullMode = D3D11_CULL_NONE;
+        rs_desc.DepthClipEnable = TRUE;
+        hr = device_->CreateRasterizerState(&rs_desc, &blit_raster_state_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreateRasterizerState failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
+        D3D11_DEPTH_STENCIL_DESC ds_desc{};
+        ds_desc.DepthEnable = FALSE;
+        ds_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        ds_desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+        ds_desc.StencilEnable = FALSE;
+        hr = device_->CreateDepthStencilState(&ds_desc, &blit_depth_stencil_state_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreateDepthStencilState failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
+        D3D11_BLEND_DESC blend_desc{};
+        blend_desc.RenderTarget[0].BlendEnable = FALSE;
+        blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        hr = device_->CreateBlendState(&blend_desc, &blit_blend_state_);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::ensure_blit_resources: CreateBlendState failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return false;
+        }
+
         return true;
-    };
-
-    const char* vs_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "vs_5_0" : "vs_4_0";
-    const char* ps_profile = feature_level_ >= D3D_FEATURE_LEVEL_11_0 ? "ps_5_0" : "ps_4_0";
-    Microsoft::WRL::ComPtr<ID3DBlob> vs_blob;
-    Microsoft::WRL::ComPtr<ID3DBlob> ps_blob;
-    if (!compile_stage(kBlitVs, vs_profile, vs_blob) ||
-        !compile_stage(kBlitPs, ps_profile, ps_blob)) {
-        return false;
     }
 
-    HRESULT hr = device_->CreateVertexShader(
-        vs_blob->GetBufferPointer(),
-        vs_blob->GetBufferSize(),
-        nullptr,
-        &blit_vertex_shader_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreateVertexShader failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
+    void D3D11RenderDevice::query_capabilities() {
+        caps_.backend = BackendType::D3D11;
+        caps_.texture_origin_top_left = true;
+        caps_.supports_compute = false;
+        caps_.supports_geometry_shaders = true;
+        caps_.supports_timestamp_queries = true;
+        caps_.supports_multisample_resolve = true;
+        caps_.supports_dynamic_uniform_offsets = false;
+        caps_.supports_storage_textures = false;
+        caps_.max_color_attachments = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
+        caps_.max_texture_dimension_2d = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        caps_.max_texture_units = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
     }
 
-    hr = device_->CreatePixelShader(
-        ps_blob->GetBufferPointer(),
-        ps_blob->GetBufferSize(),
-        nullptr,
-        &blit_pixel_shader_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreatePixelShader failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
-    }
-
-    D3D11_BUFFER_DESC cb_desc{};
-    cb_desc.ByteWidth = 16;
-    cb_desc.Usage = D3D11_USAGE_DEFAULT;
-    cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    hr = device_->CreateBuffer(&cb_desc, nullptr, &blit_constant_buffer_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreateBuffer(constants) failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
-    }
-
-    D3D11_RASTERIZER_DESC rs_desc{};
-    rs_desc.FillMode = D3D11_FILL_SOLID;
-    rs_desc.CullMode = D3D11_CULL_NONE;
-    rs_desc.DepthClipEnable = TRUE;
-    hr = device_->CreateRasterizerState(&rs_desc, &blit_raster_state_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreateRasterizerState failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
-    }
-
-    D3D11_DEPTH_STENCIL_DESC ds_desc{};
-    ds_desc.DepthEnable = FALSE;
-    ds_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-    ds_desc.DepthFunc = D3D11_COMPARISON_ALWAYS;
-    ds_desc.StencilEnable = FALSE;
-    hr = device_->CreateDepthStencilState(&ds_desc, &blit_depth_stencil_state_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreateDepthStencilState failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
-    }
-
-    D3D11_BLEND_DESC blend_desc{};
-    blend_desc.RenderTarget[0].BlendEnable = FALSE;
-    blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    hr = device_->CreateBlendState(&blend_desc, &blit_blend_state_);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::ensure_blit_resources: CreateBlendState failed: HRESULT=0x%08X",
-            static_cast<unsigned>(hr));
-        return false;
-    }
-
-    return true;
-}
-
-void D3D11RenderDevice::query_capabilities() {
-    caps_.backend = BackendType::D3D11;
-    caps_.texture_origin_top_left = true;
-    caps_.supports_compute = false;
-    caps_.supports_geometry_shaders = true;
-    caps_.supports_timestamp_queries = true;
-    caps_.supports_multisample_resolve = true;
-    caps_.supports_dynamic_uniform_offsets = false;
-    caps_.supports_storage_textures = false;
-    caps_.max_color_attachments = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
-    caps_.max_texture_dimension_2d = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
-    caps_.max_texture_units = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
-}
-
-void D3D11RenderDevice::wait_idle() {
-    if (context_) {
-        Microsoft::WRL::ComPtr<ID3D11Query> query;
-        D3D11_QUERY_DESC desc{};
-        desc.Query = D3D11_QUERY_EVENT;
-        HRESULT hr = device_->CreateQuery(&desc, &query);
-        if (SUCCEEDED(hr) && query) {
-            context_->End(query.Get());
-            context_->Flush();
-            for (uint32_t i = 0; i < 10000; ++i) {
-                hr = context_->GetData(query.Get(), nullptr, 0, 0);
-                if (hr == S_OK) {
-                    drain_info_queue("wait_idle");
-                    return;
+    void D3D11RenderDevice::wait_idle() {
+        if (context_) {
+            Microsoft::WRL::ComPtr<ID3D11Query> query;
+            D3D11_QUERY_DESC desc{};
+            desc.Query = D3D11_QUERY_EVENT;
+            HRESULT hr = device_->CreateQuery(&desc, &query);
+            if (SUCCEEDED(hr) && query) {
+                context_->End(query.Get());
+                context_->Flush();
+                for (uint32_t i = 0; i < 10000; ++i) {
+                    hr = context_->GetData(query.Get(), nullptr, 0, 0);
+                    if (hr == S_OK) {
+                        drain_info_queue("wait_idle");
+                        return;
+                    }
+                    if (FAILED(hr)) {
+                        tc::Log::error("D3D11RenderDevice::wait_idle GetData failed: "
+                                       "HRESULT=0x%08X device_removed_reason=0x%08X",
+                                       static_cast<unsigned>(hr),
+                                       static_cast<unsigned>(device_->GetDeviceRemovedReason()));
+                        return;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
-                if (FAILED(hr)) {
-                    tc::Log::error(
-                        "D3D11RenderDevice::wait_idle GetData failed: "
-                        "HRESULT=0x%08X device_removed_reason=0x%08X",
-                        static_cast<unsigned>(hr),
-                        static_cast<unsigned>(device_->GetDeviceRemovedReason()));
-                    return;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                tc::Log::error("D3D11RenderDevice::wait_idle timed out waiting for GPU");
+                drain_info_queue("wait_idle");
+                return;
             }
-            tc::Log::error("D3D11RenderDevice::wait_idle timed out waiting for GPU");
+            context_->Flush();
             drain_info_queue("wait_idle");
-            return;
         }
-        context_->Flush();
-        drain_info_queue("wait_idle");
-    }
-}
-
-BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
-    if (desc.size == 0) {
-        tc::Log::error("D3D11RenderDevice::create_buffer: zero-sized buffers are not supported");
-        return {};
     }
 
-    D3D11_BUFFER_DESC bd{};
-    bd.ByteWidth = static_cast<UINT>(desc.size);
-    bd.Usage = buffer_usage(desc);
-    bd.BindFlags = buffer_bind_flags(desc.usage);
-    bd.CPUAccessFlags = buffer_cpu_access(desc);
-    bd.MiscFlags = 0;
-    bd.StructureByteStride = 0;
-
-    if (has_flag(desc.usage, BufferUsage::Uniform)) {
-        bd.ByteWidth = (bd.ByteWidth + 15u) & ~15u;
-    }
-
-    if (has_flag(desc.usage, BufferUsage::Storage)) {
-        if (desc.structured_stride == 0) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_buffer: storage buffers require structured_stride");
+    BufferHandle D3D11RenderDevice::create_buffer(const BufferDesc& desc) {
+        if (desc.size == 0) {
+            tc::Log::error("D3D11RenderDevice::create_buffer: zero-sized buffers are not supported");
             return {};
         }
-        if ((desc.size % desc.structured_stride) != 0) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_buffer: storage buffer size=%llu is not a multiple of structured_stride=%u",
-                static_cast<unsigned long long>(desc.size),
-                desc.structured_stride);
-            return {};
+
+        D3D11_BUFFER_DESC bd{};
+        bd.ByteWidth = static_cast<UINT>(desc.size);
+        bd.Usage = buffer_usage(desc);
+        bd.BindFlags = buffer_bind_flags(desc.usage);
+        bd.CPUAccessFlags = buffer_cpu_access(desc);
+        bd.MiscFlags = 0;
+        bd.StructureByteStride = 0;
+
+        if (has_flag(desc.usage, BufferUsage::Uniform)) {
+            bd.ByteWidth = (bd.ByteWidth + 15u) & ~15u;
         }
-        bd.MiscFlags |= D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-        bd.StructureByteStride = desc.structured_stride;
-    }
 
-    D3D11Buffer out;
-    out.desc = desc;
-    HRESULT hr = device_->CreateBuffer(&bd, nullptr, &out.buffer);
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::create_buffer failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return {};
-    }
+        if (has_flag(desc.usage, BufferUsage::Storage)) {
+            if (desc.structured_stride == 0) {
+                tc::Log::error("D3D11RenderDevice::create_buffer: storage buffers require structured_stride");
+                return {};
+            }
+            if ((desc.size % desc.structured_stride) != 0) {
+                tc::Log::error("D3D11RenderDevice::create_buffer: storage buffer size=%llu is not a multiple of "
+                               "structured_stride=%u",
+                               static_cast<unsigned long long>(desc.size),
+                               desc.structured_stride);
+                return {};
+            }
+            bd.MiscFlags |= D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+            bd.StructureByteStride = desc.structured_stride;
+        }
 
-    if (has_flag(desc.usage, BufferUsage::Storage)) {
-        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = DXGI_FORMAT_UNKNOWN;
-        sv.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-        sv.Buffer.FirstElement = 0;
-        sv.Buffer.NumElements = static_cast<UINT>(desc.size / desc.structured_stride);
-        hr = device_->CreateShaderResourceView(out.buffer.Get(), &sv, &out.srv);
+        D3D11Buffer out;
+        out.desc = desc;
+        HRESULT hr = device_->CreateBuffer(&bd, nullptr, &out.buffer);
         if (FAILED(hr)) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_buffer storage SRV failed: HRESULT=0x%08X",
-                static_cast<unsigned>(hr));
+            tc::Log::error("D3D11RenderDevice::create_buffer failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
             return {};
         }
-    }
 
-    return {buffers_.add(std::move(out))};
-}
-
-TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
-    if (desc.array_layers != 1) {
-        tc_log(TC_LOG_ERROR,
-               "D3D11RenderDevice::create_texture: layered textures are not supported");
-        return {};
-    }
-    if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::create_texture")) {
-        return {};
-    }
-
-    D3D11_TEXTURE2D_DESC td{};
-    td.Width = desc.width;
-    td.Height = desc.height;
-    td.MipLevels = std::max(1u, desc.mip_levels);
-    td.ArraySize = 1;
-    td.Format = d3d11::to_dxgi_format(desc.format);
-    td.SampleDesc.Count = std::max(1u, desc.sample_count);
-    td.SampleDesc.Quality = 0;
-    td.Usage = D3D11_USAGE_DEFAULT;
-    td.BindFlags = texture_bind_flags(desc.usage, desc.format);
-
-    D3D11Texture out;
-    out.desc = desc;
-    HRESULT hr = device_->CreateTexture2D(&td, nullptr, &out.texture);
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::create_texture failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return {};
-    }
-
-    if ((td.BindFlags & D3D11_BIND_SHADER_RESOURCE) != 0) {
-        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = d3d11::to_dxgi_srv_format(desc.format);
-        sv.ViewDimension = td.SampleDesc.Count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
-        if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
-            sv.Texture2D.MipLevels = td.MipLevels;
+        if (has_flag(desc.usage, BufferUsage::Storage)) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = DXGI_FORMAT_UNKNOWN;
+            sv.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+            sv.Buffer.FirstElement = 0;
+            sv.Buffer.NumElements = static_cast<UINT>(desc.size / desc.structured_stride);
+            hr = device_->CreateShaderResourceView(out.buffer.Get(), &sv, &out.srv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::create_buffer storage SRV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
         }
-        hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+
+        return {buffers_.add(std::move(out))};
+    }
+
+    TextureHandle D3D11RenderDevice::create_texture(const TextureDesc& desc) {
+        if (desc.array_layers != 1) {
+            tc_log(TC_LOG_ERROR, "D3D11RenderDevice::create_texture: layered textures are not supported");
+            return {};
+        }
+        if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::create_texture")) {
+            return {};
+        }
+
+        D3D11_TEXTURE2D_DESC td{};
+        td.Width = desc.width;
+        td.Height = desc.height;
+        td.MipLevels = std::max(1u, desc.mip_levels);
+        td.ArraySize = 1;
+        td.Format = d3d11::to_dxgi_format(desc.format);
+        td.SampleDesc.Count = std::max(1u, desc.sample_count);
+        td.SampleDesc.Quality = 0;
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags = texture_bind_flags(desc.usage, desc.format);
+
+        D3D11Texture out;
+        out.desc = desc;
+        HRESULT hr = device_->CreateTexture2D(&td, nullptr, &out.texture);
         if (FAILED(hr)) {
-            tc::Log::error("D3D11RenderDevice::create_texture SRV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            tc::Log::error("D3D11RenderDevice::create_texture failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
             return {};
         }
+
+        if ((td.BindFlags & D3D11_BIND_SHADER_RESOURCE) != 0) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = d3d11::to_dxgi_srv_format(desc.format);
+            sv.ViewDimension =
+                td.SampleDesc.Count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
+            if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+                sv.Texture2D.MipLevels = td.MipLevels;
+            }
+            hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::create_texture SRV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
+        }
+
+        if ((td.BindFlags & D3D11_BIND_RENDER_TARGET) != 0) {
+            hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::create_texture RTV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
+        }
+
+        if ((td.BindFlags & D3D11_BIND_DEPTH_STENCIL) != 0) {
+            D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
+            dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
+            dv.ViewDimension =
+                td.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+            hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::create_texture DSV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
+        }
+
+        return {textures_.add(std::move(out))};
     }
 
-    if ((td.BindFlags & D3D11_BIND_RENDER_TARGET) != 0) {
-        hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+    SamplerHandle D3D11RenderDevice::create_sampler(const SamplerDesc& desc) {
+        D3D11_SAMPLER_DESC sd{};
+        sd.Filter = d3d11::to_d3d_filter(desc);
+        sd.AddressU = d3d11::to_d3d_address(desc.address_u);
+        sd.AddressV = d3d11::to_d3d_address(desc.address_v);
+        sd.AddressW = d3d11::to_d3d_address(desc.address_w);
+        sd.MipLODBias = 0.0f;
+        sd.MaxAnisotropy = static_cast<UINT>(std::max(1.0f, desc.max_anisotropy));
+        sd.ComparisonFunc = d3d11::to_d3d_compare(desc.compare_op);
+        sd.BorderColor[0] = sd.BorderColor[1] = sd.BorderColor[2] = 0.0f;
+        sd.BorderColor[3] = 1.0f;
+        sd.MinLOD = 0.0f;
+        sd.MaxLOD = D3D11_FLOAT32_MAX;
+
+        D3D11Sampler out;
+        HRESULT hr = device_->CreateSamplerState(&sd, &out.sampler);
         if (FAILED(hr)) {
-            tc::Log::error("D3D11RenderDevice::create_texture RTV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            tc::Log::error("D3D11RenderDevice::create_sampler failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
             return {};
         }
+        return {samplers_.add(std::move(out))};
     }
 
-    if ((td.BindFlags & D3D11_BIND_DEPTH_STENCIL) != 0) {
-        D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
-        dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
-        dv.ViewDimension = td.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
-        hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
-        if (FAILED(hr)) {
-            tc::Log::error("D3D11RenderDevice::create_texture DSV failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+    ShaderHandle D3D11RenderDevice::create_shader(const ShaderDesc& desc) {
+        if (desc.bytecode.empty()) {
+            tc::Log::error("D3D11RenderDevice::create_shader: D3D11 requires compiled bytecode");
             return {};
         }
-    }
 
-    return {textures_.add(std::move(out))};
-}
+        D3D11ShaderModule out;
+        out.stage = desc.stage;
+        out.debug_name = desc.debug_name.empty() ? "<unnamed>" : desc.debug_name;
+        out.bytecode = desc.bytecode;
+        const void* bytes = out.bytecode.data();
+        const SIZE_T size = out.bytecode.size();
 
-SamplerHandle D3D11RenderDevice::create_sampler(const SamplerDesc& desc) {
-    D3D11_SAMPLER_DESC sd{};
-    sd.Filter = d3d11::to_d3d_filter(desc);
-    sd.AddressU = d3d11::to_d3d_address(desc.address_u);
-    sd.AddressV = d3d11::to_d3d_address(desc.address_v);
-    sd.AddressW = d3d11::to_d3d_address(desc.address_w);
-    sd.MipLODBias = 0.0f;
-    sd.MaxAnisotropy = static_cast<UINT>(std::max(1.0f, desc.max_anisotropy));
-    sd.ComparisonFunc = d3d11::to_d3d_compare(desc.compare_op);
-    sd.BorderColor[0] = sd.BorderColor[1] = sd.BorderColor[2] = 0.0f;
-    sd.BorderColor[3] = 1.0f;
-    sd.MinLOD = 0.0f;
-    sd.MaxLOD = D3D11_FLOAT32_MAX;
-
-    D3D11Sampler out;
-    HRESULT hr = device_->CreateSamplerState(&sd, &out.sampler);
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::create_sampler failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return {};
-    }
-    return {samplers_.add(std::move(out))};
-}
-
-ShaderHandle D3D11RenderDevice::create_shader(const ShaderDesc& desc) {
-    if (desc.bytecode.empty()) {
-        tc::Log::error("D3D11RenderDevice::create_shader: D3D11 requires compiled bytecode");
-        return {};
-    }
-
-    D3D11ShaderModule out;
-    out.stage = desc.stage;
-    out.debug_name = desc.debug_name.empty() ? "<unnamed>" : desc.debug_name;
-    out.bytecode = desc.bytecode;
-    const void* bytes = out.bytecode.data();
-    const SIZE_T size = out.bytecode.size();
-
-    HRESULT hr = S_OK;
-    switch (desc.stage) {
+        HRESULT hr = S_OK;
+        switch (desc.stage) {
         case ShaderStage::Vertex:
             hr = device_->CreateVertexShader(bytes, size, nullptr, &out.vertex_shader);
             break;
@@ -799,797 +762,732 @@ ShaderHandle D3D11RenderDevice::create_shader(const ShaderDesc& desc) {
         case ShaderStage::Compute:
             hr = device_->CreateComputeShader(bytes, size, nullptr, &out.compute_shader);
             break;
-    }
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::create_shader failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return {};
-    }
-    return {shaders_.add(std::move(out))};
-}
-
-PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
-    auto* vs = get_shader(desc.vertex_shader);
-    auto* fs = get_shader(desc.fragment_shader);
-    if (!vs || !vs->vertex_shader || !fs || !fs->pixel_shader) {
-        throw std::runtime_error("D3D11 pipeline requires valid vertex and fragment shader bytecode");
+        }
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::create_shader failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            return {};
+        }
+        return {shaders_.add(std::move(out))};
     }
 
-    D3D11Pipeline out;
-    out.desc = desc;
+    PipelineHandle D3D11RenderDevice::create_pipeline(const PipelineDesc& desc) {
+        auto* vs = get_shader(desc.vertex_shader);
+        auto* fs = get_shader(desc.fragment_shader);
+        if (!vs || !vs->vertex_shader || !fs || !fs->pixel_shader) {
+            throw std::runtime_error("D3D11 pipeline requires valid vertex and fragment shader bytecode");
+        }
 
-    const std::vector<D3D11SignatureParam> vs_outputs =
-        reflect_d3d11_signature(*vs, true);
-    const std::vector<D3D11SignatureParam> ps_inputs =
-        reflect_d3d11_signature(*fs, false);
-    const bool signature_mismatch =
-        signatures_have_link_mismatch(vs_outputs, ps_inputs);
-    if (signature_mismatch || env_enabled("TERMIN_D3D11_LOG_SIGNATURES")) {
-        log_d3d11_shader_signatures(
-            signature_mismatch ? "mismatch" : "requested",
-            *vs,
-            *fs,
-            vs_outputs,
-            ps_inputs);
-    }
+        D3D11Pipeline out;
+        out.desc = desc;
 
-    std::vector<std::string> semantic_names;
-    std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
-    const auto reflected_inputs = reflect_d3d11_vertex_inputs(*vs);
-    size_t input_element_count = 0;
-    for (const auto& layout : desc.vertex_layouts) {
-        input_element_count += std::min(
-            layout.attribute_count,
-            TGFX2_VERTEX_ATTRIBUTE_MAX);
-    }
-    semantic_names.reserve(input_element_count);
-    input_elements.reserve(input_element_count);
-    size_t reflected_input_index = 0;
-    for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
-        const auto& layout = desc.vertex_layouts[slot];
-        const uint32_t attribute_count = std::min(
-            layout.attribute_count,
-            TGFX2_VERTEX_ATTRIBUTE_MAX);
-        for (uint32_t i = 0; i < attribute_count; ++i) {
-            const VertexAttributeDesc& attr = layout.attributes[i];
-            D3D11InputSemantic semantic = semantic_for_attribute(attr);
-            if (layout.use_shader_input_locations) {
-                if (reflected_input_index >= reflected_inputs.size()) {
-                    throw std::runtime_error(
-                        "D3D11RenderDevice::create_pipeline: vertex layout requests shader input "
-                        "reflection but the vertex shader has fewer reflected inputs");
+        const std::vector<D3D11SignatureParam> vs_outputs = reflect_d3d11_signature(*vs, true);
+        const std::vector<D3D11SignatureParam> ps_inputs = reflect_d3d11_signature(*fs, false);
+        const bool signature_mismatch = signatures_have_link_mismatch(vs_outputs, ps_inputs);
+        if (signature_mismatch || env_enabled("TERMIN_D3D11_LOG_SIGNATURES")) {
+            log_d3d11_shader_signatures(signature_mismatch ? "mismatch" : "requested", *vs, *fs, vs_outputs, ps_inputs);
+        }
+
+        std::vector<std::string> semantic_names;
+        std::vector<D3D11_INPUT_ELEMENT_DESC> input_elements;
+        const auto reflected_inputs = reflect_d3d11_vertex_inputs(*vs);
+        size_t input_element_count = 0;
+        for (const auto& layout : desc.vertex_layouts) {
+            input_element_count += std::min(layout.attribute_count, TGFX2_VERTEX_ATTRIBUTE_MAX);
+        }
+        semantic_names.reserve(input_element_count);
+        input_elements.reserve(input_element_count);
+        size_t reflected_input_index = 0;
+        for (uint32_t slot = 0; slot < desc.vertex_layouts.size(); ++slot) {
+            const auto& layout = desc.vertex_layouts[slot];
+            const uint32_t attribute_count = std::min(layout.attribute_count, TGFX2_VERTEX_ATTRIBUTE_MAX);
+            for (uint32_t i = 0; i < attribute_count; ++i) {
+                const VertexAttributeDesc& attr = layout.attributes[i];
+                D3D11InputSemantic semantic = semantic_for_attribute(attr);
+                if (layout.use_shader_input_locations) {
+                    if (reflected_input_index >= reflected_inputs.size()) {
+                        throw std::runtime_error(
+                            "D3D11RenderDevice::create_pipeline: vertex layout requests shader input "
+                            "reflection but the vertex shader has fewer reflected inputs");
+                    }
+                    semantic = reflected_inputs[reflected_input_index++];
                 }
-                semantic = reflected_inputs[reflected_input_index++];
+                semantic_names.push_back(semantic.name);
+                D3D11_INPUT_ELEMENT_DESC element{};
+                element.SemanticName = semantic_names.back().c_str();
+                element.SemanticIndex = semantic.index;
+                element.Format = d3d11::to_dxgi_vertex_format(attr.format);
+                element.InputSlot = slot;
+                element.AlignedByteOffset = attr.offset;
+                element.InputSlotClass =
+                    layout.per_instance ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA;
+                element.InstanceDataStepRate = layout.per_instance ? 1u : 0u;
+                input_elements.push_back(element);
             }
-            semantic_names.push_back(semantic.name);
-            D3D11_INPUT_ELEMENT_DESC element{};
-            element.SemanticName = semantic_names.back().c_str();
-            element.SemanticIndex = semantic.index;
-            element.Format = d3d11::to_dxgi_vertex_format(attr.format);
-            element.InputSlot = slot;
-            element.AlignedByteOffset = attr.offset;
-            element.InputSlotClass = layout.per_instance
-                ? D3D11_INPUT_PER_INSTANCE_DATA
-                : D3D11_INPUT_PER_VERTEX_DATA;
-            element.InstanceDataStepRate = layout.per_instance ? 1u : 0u;
-            input_elements.push_back(element);
         }
-    }
-    if (!input_elements.empty()) {
-        HRESULT hr = device_->CreateInputLayout(
-            input_elements.data(),
-            static_cast<UINT>(input_elements.size()),
-            vs->bytecode.data(),
-            vs->bytecode.size(),
-            &out.input_layout);
-        if (FAILED(hr)) {
-            log_d3d11_input_layout_failure(hr, input_elements, reflected_inputs);
-            throw_if_failed(hr, "ID3D11Device::CreateInputLayout");
+        if (!input_elements.empty()) {
+            HRESULT hr = device_->CreateInputLayout(input_elements.data(),
+                                                    static_cast<UINT>(input_elements.size()),
+                                                    vs->bytecode.data(),
+                                                    vs->bytecode.size(),
+                                                    &out.input_layout);
+            if (FAILED(hr)) {
+                log_d3d11_input_layout_failure(hr, input_elements, reflected_inputs);
+                throw_if_failed(hr, "ID3D11Device::CreateInputLayout");
+            }
         }
+
+        D3D11_RASTERIZER_DESC rd{};
+        rd.FillMode = d3d11::to_d3d_fill(desc.raster.polygon_mode);
+        rd.CullMode = d3d11::to_d3d_cull(desc.raster.cull);
+        // tgfx2::FrontFace is a logical/view-space convention. The D3D11
+        // projection adapter flips Y before the shader value reaches native D3D
+        // clip space, so the native rasterizer winding is opposite to the API enum.
+        rd.FrontCounterClockwise = d3d11::to_d3d_front_counter_clockwise(desc.raster.front_face);
+        rd.DepthBias = static_cast<INT>(desc.raster.depth_bias_constant);
+        rd.DepthBiasClamp = desc.raster.depth_bias_clamp;
+        rd.SlopeScaledDepthBias = desc.raster.depth_bias_slope;
+        rd.DepthClipEnable = TRUE;
+        rd.ScissorEnable = TRUE;
+        rd.MultisampleEnable = desc.sample_count > 1;
+        throw_if_failed(device_->CreateRasterizerState(&rd, &out.raster_state), "ID3D11Device::CreateRasterizerState");
+
+        D3D11_DEPTH_STENCIL_DESC dsd{};
+        dsd.DepthEnable = desc.depth_stencil.depth_test;
+        dsd.DepthWriteMask = desc.depth_stencil.depth_write ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+        dsd.DepthFunc = d3d11::to_d3d_compare(desc.depth_stencil.depth_compare);
+        dsd.StencilEnable = FALSE;
+        throw_if_failed(device_->CreateDepthStencilState(&dsd, &out.depth_stencil_state),
+                        "ID3D11Device::CreateDepthStencilState");
+
+        D3D11_BLEND_DESC bd{};
+        bd.AlphaToCoverageEnable = FALSE;
+        bd.IndependentBlendEnable = FALSE;
+        auto& rt = bd.RenderTarget[0];
+        rt.BlendEnable = desc.blend.enabled;
+        rt.SrcBlend = d3d11::to_d3d_blend_factor(desc.blend.src_color);
+        rt.DestBlend = d3d11::to_d3d_blend_factor(desc.blend.dst_color);
+        rt.BlendOp = d3d11::to_d3d_blend_op(desc.blend.color_op);
+        rt.SrcBlendAlpha = d3d11::to_d3d_blend_factor(desc.blend.src_alpha);
+        rt.DestBlendAlpha = d3d11::to_d3d_blend_factor(desc.blend.dst_alpha);
+        rt.BlendOpAlpha = d3d11::to_d3d_blend_op(desc.blend.alpha_op);
+        rt.RenderTargetWriteMask = (desc.color_mask.r ? D3D11_COLOR_WRITE_ENABLE_RED : 0) |
+                                   (desc.color_mask.g ? D3D11_COLOR_WRITE_ENABLE_GREEN : 0) |
+                                   (desc.color_mask.b ? D3D11_COLOR_WRITE_ENABLE_BLUE : 0) |
+                                   (desc.color_mask.a ? D3D11_COLOR_WRITE_ENABLE_ALPHA : 0);
+        throw_if_failed(device_->CreateBlendState(&bd, &out.blend_state), "ID3D11Device::CreateBlendState");
+
+        return {pipelines_.add(std::move(out))};
     }
 
-    D3D11_RASTERIZER_DESC rd{};
-    rd.FillMode = d3d11::to_d3d_fill(desc.raster.polygon_mode);
-    rd.CullMode = d3d11::to_d3d_cull(desc.raster.cull);
-    // tgfx2::FrontFace is a logical/view-space convention. The D3D11
-    // projection adapter flips Y before the shader value reaches native D3D
-    // clip space, so the native rasterizer winding is opposite to the API enum.
-    rd.FrontCounterClockwise = d3d11::to_d3d_front_counter_clockwise(
-        desc.raster.front_face);
-    rd.DepthBias = static_cast<INT>(desc.raster.depth_bias_constant);
-    rd.DepthBiasClamp = desc.raster.depth_bias_clamp;
-    rd.SlopeScaledDepthBias = desc.raster.depth_bias_slope;
-    rd.DepthClipEnable = TRUE;
-    rd.ScissorEnable = TRUE;
-    rd.MultisampleEnable = desc.sample_count > 1;
-    throw_if_failed(device_->CreateRasterizerState(&rd, &out.raster_state),
-                    "ID3D11Device::CreateRasterizerState");
-
-    D3D11_DEPTH_STENCIL_DESC dsd{};
-    dsd.DepthEnable = desc.depth_stencil.depth_test;
-    dsd.DepthWriteMask = desc.depth_stencil.depth_write ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-    dsd.DepthFunc = d3d11::to_d3d_compare(desc.depth_stencil.depth_compare);
-    dsd.StencilEnable = FALSE;
-    throw_if_failed(device_->CreateDepthStencilState(&dsd, &out.depth_stencil_state),
-                    "ID3D11Device::CreateDepthStencilState");
-
-    D3D11_BLEND_DESC bd{};
-    bd.AlphaToCoverageEnable = FALSE;
-    bd.IndependentBlendEnable = FALSE;
-    auto& rt = bd.RenderTarget[0];
-    rt.BlendEnable = desc.blend.enabled;
-    rt.SrcBlend = d3d11::to_d3d_blend_factor(desc.blend.src_color);
-    rt.DestBlend = d3d11::to_d3d_blend_factor(desc.blend.dst_color);
-    rt.BlendOp = d3d11::to_d3d_blend_op(desc.blend.color_op);
-    rt.SrcBlendAlpha = d3d11::to_d3d_blend_factor(desc.blend.src_alpha);
-    rt.DestBlendAlpha = d3d11::to_d3d_blend_factor(desc.blend.dst_alpha);
-    rt.BlendOpAlpha = d3d11::to_d3d_blend_op(desc.blend.alpha_op);
-    rt.RenderTargetWriteMask =
-        (desc.color_mask.r ? D3D11_COLOR_WRITE_ENABLE_RED : 0) |
-        (desc.color_mask.g ? D3D11_COLOR_WRITE_ENABLE_GREEN : 0) |
-        (desc.color_mask.b ? D3D11_COLOR_WRITE_ENABLE_BLUE : 0) |
-        (desc.color_mask.a ? D3D11_COLOR_WRITE_ENABLE_ALPHA : 0);
-    throw_if_failed(device_->CreateBlendState(&bd, &out.blend_state),
-                    "ID3D11Device::CreateBlendState");
-
-    return {pipelines_.add(std::move(out))};
-}
-
-ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(
-    const BoundResourceSetDesc& desc
-) {
-    bool has_unsupported_uav = false;
-    for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& binding) {
-        if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
-            binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
-            tc::Log::error(
-                "D3D11RenderDevice::create_bound_resource_set: storage texture/UAV resource '%s' "
-                "is not supported by the D3D11 backend",
-                bound_resource_debug_name(binding));
-            has_unsupported_uav = true;
+    ResourceSetHandle D3D11RenderDevice::create_bound_resource_set(const BoundResourceSetDesc& desc) {
+        bool has_unsupported_uav = false;
+        for_each_bound_resource_binding(desc, [&](const BoundResourceBinding& binding) {
+            if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
+                binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
+                tc::Log::error("D3D11RenderDevice::create_bound_resource_set: storage texture/UAV resource '%s' "
+                               "is not supported by the D3D11 backend",
+                               bound_resource_debug_name(binding));
+                has_unsupported_uav = true;
+            }
+        });
+        if (has_unsupported_uav) {
+            return {};
         }
-    });
-    if (has_unsupported_uav) {
-        return {};
+
+        D3D11ResourceSet out;
+        out.bound_resources.assign(desc);
+        return {resource_sets_.add(std::move(out))};
     }
 
-    D3D11ResourceSet out;
-    out.bound_resources.assign(desc);
-    return {resource_sets_.add(std::move(out))};
-}
-
-uintptr_t D3D11RenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
-    return pipelines_.get_const(pipeline.id) ? static_cast<uintptr_t>(pipeline.id) : 0;
-}
-
-uintptr_t D3D11RenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
-    return pipeline_resource_layout_token(pipeline);
-}
-
-void D3D11RenderDevice::destroy(BufferHandle handle) { buffers_.remove(handle.id); }
-void D3D11RenderDevice::destroy(TextureHandle handle) { textures_.remove(handle.id); }
-void D3D11RenderDevice::destroy(SamplerHandle handle) { samplers_.remove(handle.id); }
-void D3D11RenderDevice::destroy(ShaderHandle handle) { shaders_.remove(handle.id); }
-void D3D11RenderDevice::destroy(PipelineHandle handle) { pipelines_.remove(handle.id); }
-void D3D11RenderDevice::destroy(ResourceSetHandle handle) { resource_sets_.remove(handle.id); }
-
-void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset) {
-    auto* buf = get_buffer(dst);
-    if (!buf || !buf->buffer || data.empty()) return;
-
-    D3D11_BUFFER_DESC native_desc{};
-    buf->buffer->GetDesc(&native_desc);
-    if (offset > native_desc.ByteWidth || data.size() > static_cast<size_t>(native_desc.ByteWidth - offset)) {
-        tc::Log::error(
-            "D3D11RenderDevice::upload_buffer: upload range [%llu, %llu) exceeds buffer size %u",
-            static_cast<unsigned long long>(offset),
-            static_cast<unsigned long long>(offset + data.size()),
-            native_desc.ByteWidth);
-        return;
+    uintptr_t D3D11RenderDevice::pipeline_resource_layout_token(PipelineHandle pipeline) const {
+        return pipelines_.get_const(pipeline.id) ? static_cast<uintptr_t>(pipeline.id) : 0;
     }
 
-    if (buf->desc.cpu_visible) {
-        D3D11_MAPPED_SUBRESOURCE mapped{};
-        HRESULT hr = context_->Map(buf->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-        if (FAILED(hr)) {
-            tc::Log::error("D3D11RenderDevice::upload_buffer Map failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+    uintptr_t D3D11RenderDevice::pipeline_descriptor_set_layout(PipelineHandle pipeline) const {
+        return pipeline_resource_layout_token(pipeline);
+    }
+
+    void D3D11RenderDevice::destroy(BufferHandle handle) {
+        buffers_.remove(handle.id);
+    }
+    void D3D11RenderDevice::destroy(TextureHandle handle) {
+        textures_.remove(handle.id);
+    }
+    void D3D11RenderDevice::destroy(SamplerHandle handle) {
+        samplers_.remove(handle.id);
+    }
+    void D3D11RenderDevice::destroy(ShaderHandle handle) {
+        shaders_.remove(handle.id);
+    }
+    void D3D11RenderDevice::destroy(PipelineHandle handle) {
+        pipelines_.remove(handle.id);
+    }
+    void D3D11RenderDevice::destroy(ResourceSetHandle handle) {
+        resource_sets_.remove(handle.id);
+    }
+
+    void D3D11RenderDevice::upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset) {
+        auto* buf = get_buffer(dst);
+        if (!buf || !buf->buffer || data.empty())
+            return;
+
+        D3D11_BUFFER_DESC native_desc{};
+        buf->buffer->GetDesc(&native_desc);
+        if (offset > native_desc.ByteWidth || data.size() > static_cast<size_t>(native_desc.ByteWidth - offset)) {
+            tc::Log::error("D3D11RenderDevice::upload_buffer: upload range [%llu, %llu) exceeds buffer size %u",
+                           static_cast<unsigned long long>(offset),
+                           static_cast<unsigned long long>(offset + data.size()),
+                           native_desc.ByteWidth);
             return;
         }
-        std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data.data(), data.size());
-        context_->Unmap(buf->buffer.Get(), 0);
-        return;
-    }
 
-    if ((native_desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) != 0) {
-        if (offset != 0) {
-            tc::Log::error(
-                "D3D11RenderDevice::upload_buffer: partial constant-buffer uploads are not supported by D3D11 "
-                "(offset=%llu size=%zu)",
-                static_cast<unsigned long long>(offset),
-                data.size());
+        if (buf->desc.cpu_visible) {
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            HRESULT hr = context_->Map(buf->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::upload_buffer Map failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return;
+            }
+            std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data.data(), data.size());
+            context_->Unmap(buf->buffer.Get(), 0);
             return;
         }
-        if (data.size() == native_desc.ByteWidth) {
-            context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, data.data(), 0, 0);
+
+        if ((native_desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) != 0) {
+            if (offset != 0) {
+                tc::Log::error(
+                    "D3D11RenderDevice::upload_buffer: partial constant-buffer uploads are not supported by D3D11 "
+                    "(offset=%llu size=%zu)",
+                    static_cast<unsigned long long>(offset),
+                    data.size());
+                return;
+            }
+            if (data.size() == native_desc.ByteWidth) {
+                context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, data.data(), 0, 0);
+                return;
+            }
+            std::vector<uint8_t> padded(native_desc.ByteWidth, 0u);
+            std::memcpy(padded.data(), data.data(), data.size());
+            context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, padded.data(), 0, 0);
             return;
         }
-        std::vector<uint8_t> padded(native_desc.ByteWidth, 0u);
-        std::memcpy(padded.data(), data.data(), data.size());
-        context_->UpdateSubresource(buf->buffer.Get(), 0, nullptr, padded.data(), 0, 0);
-        return;
+
+        D3D11_BOX box{};
+        box.left = static_cast<UINT>(offset);
+        box.right = static_cast<UINT>(offset + data.size());
+        box.bottom = 1;
+        box.back = 1;
+        context_->UpdateSubresource(buf->buffer.Get(), 0, &box, data.data(), 0, 0);
     }
 
-    D3D11_BOX box{};
-    box.left = static_cast<UINT>(offset);
-    box.right = static_cast<UINT>(offset + data.size());
-    box.bottom = 1;
-    box.back = 1;
-    context_->UpdateSubresource(buf->buffer.Get(), 0, &box, data.data(), 0, 0);
-}
+    BufferHandle D3D11RenderDevice::transient_vertex_buffer() {
+        if (transient_vertex_buffer_) {
+            return transient_vertex_buffer_;
+        }
 
-BufferHandle D3D11RenderDevice::transient_vertex_buffer() {
-    if (transient_vertex_buffer_) {
+        BufferDesc desc;
+        desc.size = kTransientVertexBufferSize;
+        desc.usage = BufferUsage::Vertex;
+        desc.cpu_visible = true;
+        transient_vertex_buffer_ = create_buffer(desc);
+        if (!transient_vertex_buffer_) {
+            tc::Log::error("D3D11RenderDevice::transient_vertex_buffer: failed to create %u-byte streaming buffer",
+                           kTransientVertexBufferSize);
+        }
         return transient_vertex_buffer_;
     }
 
-    BufferDesc desc;
-    desc.size = kTransientVertexBufferSize;
-    desc.usage = BufferUsage::Vertex;
-    desc.cpu_visible = true;
-    transient_vertex_buffer_ = create_buffer(desc);
-    if (!transient_vertex_buffer_) {
-        tc::Log::error(
-            "D3D11RenderDevice::transient_vertex_buffer: failed to create %u-byte streaming buffer",
-            kTransientVertexBufferSize);
-    }
-    return transient_vertex_buffer_;
-}
-
-uint64_t D3D11RenderDevice::transient_vertex_write(
-    const void* data,
-    uint32_t size) {
-    if (!data || size == 0 || size > kTransientVertexBufferSize) {
-        return UINT64_MAX;
-    }
-    const BufferHandle handle = transient_vertex_buffer();
-    D3D11Buffer* buffer = get_buffer(handle);
-    if (!buffer || !buffer->buffer) {
-        return UINT64_MAX;
-    }
-
-    constexpr uint32_t kAlignment = 16;
-    const uint32_t padded_size = (size + kAlignment - 1) & ~(kAlignment - 1);
-    if (transient_vertex_offset_ + padded_size > kTransientVertexBufferSize) {
-        transient_vertex_offset_ = 0;
-        transient_vertex_discard_ = true;
-    }
-
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    const D3D11_MAP map_type = transient_vertex_discard_
-        ? D3D11_MAP_WRITE_DISCARD
-        : D3D11_MAP_WRITE_NO_OVERWRITE;
-    const HRESULT hr = context_->Map(
-        buffer->buffer.Get(), 0, map_type, 0, &mapped);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::transient_vertex_write: Map failed HRESULT=0x%08X size=%u",
-            static_cast<unsigned>(hr),
-            size);
-        return UINT64_MAX;
-    }
-
-    const uint32_t offset = transient_vertex_offset_;
-    std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data, size);
-    context_->Unmap(buffer->buffer.Get(), 0);
-    transient_vertex_offset_ += padded_size;
-    transient_vertex_discard_ = false;
-    return offset;
-}
-
-bool D3D11RenderDevice::transient_uniform_write(
-    const void* data,
-    uint32_t size,
-    BufferHandle& out_buffer,
-    uint32_t& out_offset) {
-    out_buffer = {};
-    out_offset = 0;
-    if (!data || size == 0 || size > D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u) {
-        return false;
-    }
-
-    const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
-    if (transient_uniform_cursor_ == transient_uniform_buffers_.size()) {
-        transient_uniform_buffers_.push_back({});
-    }
-    TransientUniformBuffer& slot =
-        transient_uniform_buffers_[transient_uniform_cursor_++];
-
-    if (!slot.handle || slot.capacity < padded_size) {
-        if (slot.handle) {
-            destroy(slot.handle);
+    uint64_t D3D11RenderDevice::transient_vertex_write(const void* data, uint32_t size) {
+        if (!data || size == 0 || size > kTransientVertexBufferSize) {
+            return UINT64_MAX;
         }
-        uint32_t capacity = 256;
-        while (capacity < padded_size) {
-            capacity *= 2;
+        const BufferHandle handle = transient_vertex_buffer();
+        D3D11Buffer* buffer = get_buffer(handle);
+        if (!buffer || !buffer->buffer) {
+            return UINT64_MAX;
         }
-        BufferDesc desc;
-        desc.size = capacity;
-        desc.usage = BufferUsage::Uniform;
-        desc.cpu_visible = true;
-        slot.handle = create_buffer(desc);
-        slot.capacity = slot.handle ? capacity : 0;
-        if (!slot.handle) {
-            tc::Log::error(
-                "D3D11RenderDevice::transient_uniform_write: failed to create %u-byte pooled buffer",
-                capacity);
+
+        constexpr uint32_t kAlignment = 16;
+        const uint32_t padded_size = (size + kAlignment - 1) & ~(kAlignment - 1);
+        if (transient_vertex_offset_ + padded_size > kTransientVertexBufferSize) {
+            transient_vertex_offset_ = 0;
+            transient_vertex_discard_ = true;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        const D3D11_MAP map_type = transient_vertex_discard_ ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+        const HRESULT hr = context_->Map(buffer->buffer.Get(), 0, map_type, 0, &mapped);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::transient_vertex_write: Map failed HRESULT=0x%08X size=%u",
+                           static_cast<unsigned>(hr),
+                           size);
+            return UINT64_MAX;
+        }
+
+        const uint32_t offset = transient_vertex_offset_;
+        std::memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data, size);
+        context_->Unmap(buffer->buffer.Get(), 0);
+        transient_vertex_offset_ += padded_size;
+        transient_vertex_discard_ = false;
+        return offset;
+    }
+
+    bool D3D11RenderDevice::transient_uniform_write(const void* data,
+                                                    uint32_t size,
+                                                    BufferHandle& out_buffer,
+                                                    uint32_t& out_offset) {
+        out_buffer = {};
+        out_offset = 0;
+        if (!data || size == 0 || size > D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u) {
             return false;
         }
-    }
 
-    D3D11Buffer* buffer = get_buffer(slot.handle);
-    if (!buffer || !buffer->buffer) {
-        tc::Log::error(
-            "D3D11RenderDevice::transient_uniform_write: pooled buffer handle %u is invalid",
-            slot.handle.id);
-        return false;
-    }
-
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    const HRESULT hr = context_->Map(
-        buffer->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11RenderDevice::transient_uniform_write: Map failed HRESULT=0x%08X size=%u",
-            static_cast<unsigned>(hr),
-            size);
-        return false;
-    }
-    std::memcpy(mapped.pData, data, size);
-    if (size < slot.capacity) {
-        std::memset(
-            static_cast<uint8_t*>(mapped.pData) + size,
-            0,
-            slot.capacity - size);
-    }
-    context_->Unmap(buffer->buffer.Get(), 0);
-
-    out_buffer = slot.handle;
-    return true;
-}
-
-void D3D11RenderDevice::reset_transient_uploads() {
-    transient_vertex_offset_ = 0;
-    transient_vertex_discard_ = true;
-    transient_uniform_cursor_ = 0;
-}
-
-void D3D11RenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
-    auto* tex = get_texture(dst);
-    if (!tex || !tex->texture || data.empty()) return;
-    const uint32_t mip_levels = std::max(1u, tex->desc.mip_levels);
-    if (mip >= mip_levels) {
-        tc::Log::error(
-            "D3D11RenderDevice::upload_texture: mip %u out of range for texture (mips=%u)",
-            mip,
-            mip_levels);
-        return;
-    }
-    const uint32_t w = std::max(1u, tex->desc.width >> mip);
-    const uint32_t h = std::max(1u, tex->desc.height >> mip);
-    if (!validate_d3d11_texture_upload(
-            *tex,
-            0,
-            0,
-            w,
-            h,
-            data,
-            mip,
-            "D3D11RenderDevice::upload_texture")) {
-        return;
-    }
-    const uint32_t row_pitch = w * d3d11::pixel_format_bytes(tex->desc.format);
-    context_->UpdateSubresource(tex->texture.Get(), mip, nullptr, data.data(), row_pitch, 0);
-}
-
-void D3D11RenderDevice::upload_texture_region(TextureHandle dst,
-                                              uint32_t x, uint32_t y,
-                                              uint32_t w, uint32_t h,
-                                              std::span<const uint8_t> data,
-                                              uint32_t mip) {
-    auto* tex = get_texture(dst);
-    if (!tex || !tex->texture || data.empty()) return;
-    if (!validate_d3d11_texture_upload(
-            *tex,
-            x,
-            y,
-            w,
-            h,
-            data,
-            mip,
-            "D3D11RenderDevice::upload_texture_region")) {
-        return;
-    }
-    D3D11_BOX box{};
-    box.left = x;
-    box.top = y;
-    box.right = x + w;
-    box.bottom = y + h;
-    box.front = 0;
-    box.back = 1;
-    const uint32_t row_pitch = w * d3d11::pixel_format_bytes(tex->desc.format);
-    context_->UpdateSubresource(tex->texture.Get(), mip, &box, data.data(), row_pitch, 0);
-}
-
-void D3D11RenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset) {
-    auto* buf = get_buffer(src);
-    if (!buf || !buf->buffer || data.empty()) return;
-
-    D3D11_BUFFER_DESC src_desc{};
-    buf->buffer->GetDesc(&src_desc);
-    if (offset > src_desc.ByteWidth || data.size() > static_cast<size_t>(src_desc.ByteWidth - offset)) {
-        tc::Log::error(
-            "D3D11RenderDevice::read_buffer: read range [%llu, %llu) exceeds buffer size %u",
-            static_cast<unsigned long long>(offset),
-            static_cast<unsigned long long>(offset + data.size()),
-            src_desc.ByteWidth);
-        return;
-    }
-
-    D3D11_BUFFER_DESC staging_desc = src_desc;
-    staging_desc.Usage = D3D11_USAGE_STAGING;
-    staging_desc.BindFlags = 0;
-    staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    staging_desc.MiscFlags = 0;
-
-    Microsoft::WRL::ComPtr<ID3D11Buffer> staging;
-    HRESULT hr = device_->CreateBuffer(&staging_desc, nullptr, &staging);
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::read_buffer staging allocation failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return;
-    }
-    context_->CopyResource(staging.Get(), buf->buffer.Get());
-
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
-    if (FAILED(hr)) {
-        tc::Log::error("D3D11RenderDevice::read_buffer Map failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
-        return;
-    }
-    std::memcpy(data.data(), static_cast<const uint8_t*>(mapped.pData) + offset, data.size());
-    context_->Unmap(staging.Get(), 0);
-}
-
-TextureDesc D3D11RenderDevice::texture_desc(TextureHandle handle) const {
-    auto* tex = textures_.get_const(handle.id);
-    return tex ? tex->desc : TextureDesc{};
-}
-
-std::unique_ptr<ICommandList> D3D11RenderDevice::create_command_list(QueueType queue) {
-    if (queue != QueueType::Graphics) {
-        throw std::runtime_error("D3D11RenderDevice: only graphics command lists are implemented");
-    }
-    return std::make_unique<D3D11CommandList>(*this);
-}
-
-void D3D11RenderDevice::submit(ICommandList& /*cmd*/) {
-    context_->Flush();
-    drain_info_queue("submit");
-}
-
-void D3D11RenderDevice::present() {
-    context_->Flush();
-    drain_info_queue("present");
-}
-
-TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_handle, const TextureDesc& desc) {
-    return register_external_texture(reinterpret_cast<ID3D11Texture2D*>(native_handle), desc);
-}
-
-TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc) {
-    if (!texture) {
-        tc::Log::error("D3D11RenderDevice::register_external_texture: null native texture");
-        return {};
-    }
-    if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::register_external_texture")) {
-        return {};
-    }
-
-    D3D11Texture out;
-    out.texture = texture;
-    out.desc = desc;
-
-    if (has_flag(desc.usage, TextureUsage::Sampled)) {
-        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = d3d11::to_dxgi_srv_format(desc.format);
-        sv.ViewDimension = desc.sample_count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
-        if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
-            sv.Texture2D.MipLevels = std::max(1u, desc.mip_levels);
+        const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
+        if (transient_uniform_cursor_ == transient_uniform_buffers_.size()) {
+            transient_uniform_buffers_.push_back({});
         }
-        HRESULT hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+        TransientUniformBuffer& slot = transient_uniform_buffers_[transient_uniform_cursor_++];
+
+        if (!slot.handle || slot.capacity < padded_size) {
+            if (slot.handle) {
+                destroy(slot.handle);
+            }
+            uint32_t capacity = 256;
+            while (capacity < padded_size) {
+                capacity *= 2;
+            }
+            BufferDesc desc;
+            desc.size = capacity;
+            desc.usage = BufferUsage::Uniform;
+            desc.cpu_visible = true;
+            slot.handle = create_buffer(desc);
+            slot.capacity = slot.handle ? capacity : 0;
+            if (!slot.handle) {
+                tc::Log::error("D3D11RenderDevice::transient_uniform_write: failed to create %u-byte pooled buffer",
+                               capacity);
+                return false;
+            }
+        }
+
+        D3D11Buffer* buffer = get_buffer(slot.handle);
+        if (!buffer || !buffer->buffer) {
+            tc::Log::error("D3D11RenderDevice::transient_uniform_write: pooled buffer handle %u is invalid",
+                           slot.handle.id);
+            return false;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        const HRESULT hr = context_->Map(buffer->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::transient_uniform_write: Map failed HRESULT=0x%08X size=%u",
+                           static_cast<unsigned>(hr),
+                           size);
+            return false;
+        }
+        std::memcpy(mapped.pData, data, size);
+        if (size < slot.capacity) {
+            std::memset(static_cast<uint8_t*>(mapped.pData) + size, 0, slot.capacity - size);
+        }
+        context_->Unmap(buffer->buffer.Get(), 0);
+
+        out_buffer = slot.handle;
+        return true;
+    }
+
+    void D3D11RenderDevice::reset_transient_uploads() {
+        transient_vertex_offset_ = 0;
+        transient_vertex_discard_ = true;
+        transient_uniform_cursor_ = 0;
+    }
+
+    void D3D11RenderDevice::upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip) {
+        auto* tex = get_texture(dst);
+        if (!tex || !tex->texture || data.empty())
+            return;
+        const uint32_t mip_levels = std::max(1u, tex->desc.mip_levels);
+        if (mip >= mip_levels) {
             tc::Log::error(
-                "D3D11RenderDevice::register_external_texture SRV failed: HRESULT=0x%08X",
-                static_cast<unsigned>(hr));
+                "D3D11RenderDevice::upload_texture: mip %u out of range for texture (mips=%u)", mip, mip_levels);
+            return;
+        }
+        const uint32_t w = std::max(1u, tex->desc.width >> mip);
+        const uint32_t h = std::max(1u, tex->desc.height >> mip);
+        if (!validate_d3d11_texture_upload(*tex, 0, 0, w, h, data, mip, "D3D11RenderDevice::upload_texture")) {
+            return;
+        }
+        const uint32_t row_pitch = w * d3d11::pixel_format_bytes(tex->desc.format);
+        context_->UpdateSubresource(tex->texture.Get(), mip, nullptr, data.data(), row_pitch, 0);
+    }
+
+    void D3D11RenderDevice::upload_texture_region(TextureHandle dst,
+                                                  uint32_t x,
+                                                  uint32_t y,
+                                                  uint32_t w,
+                                                  uint32_t h,
+                                                  std::span<const uint8_t> data,
+                                                  uint32_t mip) {
+        auto* tex = get_texture(dst);
+        if (!tex || !tex->texture || data.empty())
+            return;
+        if (!validate_d3d11_texture_upload(*tex, x, y, w, h, data, mip, "D3D11RenderDevice::upload_texture_region")) {
+            return;
+        }
+        D3D11_BOX box{};
+        box.left = x;
+        box.top = y;
+        box.right = x + w;
+        box.bottom = y + h;
+        box.front = 0;
+        box.back = 1;
+        const uint32_t row_pitch = w * d3d11::pixel_format_bytes(tex->desc.format);
+        context_->UpdateSubresource(tex->texture.Get(), mip, &box, data.data(), row_pitch, 0);
+    }
+
+    void D3D11RenderDevice::read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset) {
+        auto* buf = get_buffer(src);
+        if (!buf || !buf->buffer || data.empty())
+            return;
+
+        D3D11_BUFFER_DESC src_desc{};
+        buf->buffer->GetDesc(&src_desc);
+        if (offset > src_desc.ByteWidth || data.size() > static_cast<size_t>(src_desc.ByteWidth - offset)) {
+            tc::Log::error("D3D11RenderDevice::read_buffer: read range [%llu, %llu) exceeds buffer size %u",
+                           static_cast<unsigned long long>(offset),
+                           static_cast<unsigned long long>(offset + data.size()),
+                           src_desc.ByteWidth);
+            return;
+        }
+
+        D3D11_BUFFER_DESC staging_desc = src_desc;
+        staging_desc.Usage = D3D11_USAGE_STAGING;
+        staging_desc.BindFlags = 0;
+        staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        staging_desc.MiscFlags = 0;
+
+        Microsoft::WRL::ComPtr<ID3D11Buffer> staging;
+        HRESULT hr = device_->CreateBuffer(&staging_desc, nullptr, &staging);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::read_buffer staging allocation failed: HRESULT=0x%08X",
+                           static_cast<unsigned>(hr));
+            return;
+        }
+        context_->CopyResource(staging.Get(), buf->buffer.Get());
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        hr = context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11RenderDevice::read_buffer Map failed: HRESULT=0x%08X", static_cast<unsigned>(hr));
+            return;
+        }
+        std::memcpy(data.data(), static_cast<const uint8_t*>(mapped.pData) + offset, data.size());
+        context_->Unmap(staging.Get(), 0);
+    }
+
+    TextureDesc D3D11RenderDevice::texture_desc(TextureHandle handle) const {
+        auto* tex = textures_.get_const(handle.id);
+        return tex ? tex->desc : TextureDesc{};
+    }
+
+    std::unique_ptr<ICommandList> D3D11RenderDevice::create_command_list(QueueType queue) {
+        if (queue != QueueType::Graphics) {
+            throw std::runtime_error("D3D11RenderDevice: only graphics command lists are implemented");
+        }
+        return std::make_unique<D3D11CommandList>(*this);
+    }
+
+    void D3D11RenderDevice::submit(ICommandList& /*cmd*/) {
+        context_->Flush();
+        drain_info_queue("submit");
+    }
+
+    void D3D11RenderDevice::present() {
+        context_->Flush();
+        drain_info_queue("present");
+    }
+
+    TextureHandle D3D11RenderDevice::register_external_texture(uintptr_t native_handle, const TextureDesc& desc) {
+        return register_external_texture(reinterpret_cast<ID3D11Texture2D*>(native_handle), desc);
+    }
+
+    TextureHandle D3D11RenderDevice::register_external_texture(ID3D11Texture2D* texture, const TextureDesc& desc) {
+        if (!texture) {
+            tc::Log::error("D3D11RenderDevice::register_external_texture: null native texture");
             return {};
         }
-    }
-
-    if (has_flag(desc.usage, TextureUsage::ColorAttachment)) {
-        HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
-        if (FAILED(hr)) {
-            tc::Log::error(
-                "D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
-                static_cast<unsigned>(hr));
+        if (!validate_d3d11_texture_desc(desc, "D3D11RenderDevice::register_external_texture")) {
             return {};
         }
-    }
 
-    if (has_flag(desc.usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(desc.format)) {
-        D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
-        dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
-        dv.ViewDimension = desc.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
-        HRESULT hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
-        if (FAILED(hr)) {
-            tc::Log::error(
-                "D3D11RenderDevice::register_external_texture DSV failed: HRESULT=0x%08X",
-                static_cast<unsigned>(hr));
-            return {};
+        D3D11Texture out;
+        out.texture = texture;
+        out.desc = desc;
+
+        if (has_flag(desc.usage, TextureUsage::Sampled)) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = d3d11::to_dxgi_srv_format(desc.format);
+            sv.ViewDimension = desc.sample_count > 1 ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
+            if (sv.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+                sv.Texture2D.MipLevels = std::max(1u, desc.mip_levels);
+            }
+            HRESULT hr = device_->CreateShaderResourceView(out.texture.Get(), &sv, &out.srv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::register_external_texture SRV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
         }
+
+        if (has_flag(desc.usage, TextureUsage::ColorAttachment)) {
+            HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
+        }
+
+        if (has_flag(desc.usage, TextureUsage::DepthStencilAttachment) || d3d11::is_depth_format(desc.format)) {
+            D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
+            dv.Format = d3d11::to_dxgi_dsv_format(desc.format);
+            dv.ViewDimension = desc.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+            HRESULT hr = device_->CreateDepthStencilView(out.texture.Get(), &dv, &out.dsv);
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11RenderDevice::register_external_texture DSV failed: HRESULT=0x%08X",
+                               static_cast<unsigned>(hr));
+                return {};
+            }
+        }
+
+        return {textures_.add(std::move(out))};
     }
 
-    return {textures_.add(std::move(out))};
-}
+    void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
+                                            TextureHandle src,
+                                            termin::Bounds2i src_rect,
+                                            termin::Bounds2i dst_rect) {
+        auto* src_tex = get_texture(src);
+        auto* dst_tex = get_texture(dst);
+        if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid texture handle src=%u dst=%u", src.id, dst.id);
+            return;
+        }
 
-void D3D11RenderDevice::blit_to_texture(TextureHandle dst,
-                                        TextureHandle src,
-                                        termin::Bounds2i src_rect,
-                                        termin::Bounds2i dst_rect) {
-    auto* src_tex = get_texture(src);
-    auto* dst_tex = get_texture(dst);
-    if (!src_tex || !src_tex->texture || !dst_tex || !dst_tex->texture) {
-        tc::Log::error(
-            "D3D11RenderDevice::blit_to_texture: invalid texture handle src=%u dst=%u",
-            src.id,
-            dst.id);
-        return;
-    }
+        const int src_x = src_rect.x0;
+        const int src_y = src_rect.y0;
+        const int src_w = src_rect.width();
+        const int src_h = src_rect.height();
+        const int dst_x = dst_rect.x0;
+        const int dst_y = dst_rect.y0;
+        const int dst_w = dst_rect.width();
+        const int dst_h = dst_rect.height();
 
-    const int src_x = src_rect.x0;
-    const int src_y = src_rect.y0;
-    const int src_w = src_rect.width();
-    const int src_h = src_rect.height();
-    const int dst_x = dst_rect.x0;
-    const int dst_y = dst_rect.y0;
-    const int dst_w = dst_rect.width();
-    const int dst_h = dst_rect.height();
+        if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
+            return;
+        }
+        if (src_x < 0 || src_y < 0 || dst_x < 0 || dst_y < 0 || src_x + src_w > static_cast<int>(src_tex->desc.width) ||
+            src_y + src_h > static_cast<int>(src_tex->desc.height) ||
+            dst_x + dst_w > static_cast<int>(dst_tex->desc.width) ||
+            dst_y + dst_h > static_cast<int>(dst_tex->desc.height)) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: region outside texture bounds");
+            return;
+        }
 
-    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
-        tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid empty region");
-        return;
-    }
-    if (src_x < 0 || src_y < 0 || dst_x < 0 || dst_y < 0 ||
-        src_x + src_w > static_cast<int>(src_tex->desc.width) ||
-        src_y + src_h > static_cast<int>(src_tex->desc.height) ||
-        dst_x + dst_w > static_cast<int>(dst_tex->desc.width) ||
-        dst_y + dst_h > static_cast<int>(dst_tex->desc.height)) {
-        tc::Log::error("D3D11RenderDevice::blit_to_texture: region outside texture bounds");
-        return;
-    }
+        if (src.id == dst.id) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: self-blit is not supported");
+            return;
+        }
 
-    if (src.id == dst.id) {
-        tc::Log::error("D3D11RenderDevice::blit_to_texture: self-blit is not supported");
-        return;
-    }
+        const bool can_raw_copy = src_tex->desc.format == dst_tex->desc.format && src_w == dst_w && src_h == dst_h &&
+                                  src_tex->desc.sample_count == dst_tex->desc.sample_count;
+        if (can_raw_copy) {
+            D3D11_BOX src_box{};
+            src_box.left = static_cast<UINT>(src_x);
+            src_box.top = static_cast<UINT>(src_y);
+            src_box.front = 0;
+            src_box.right = static_cast<UINT>(src_x + src_w);
+            src_box.bottom = static_cast<UINT>(src_y + src_h);
+            src_box.back = 1;
+            context_->CopySubresourceRegion(dst_tex->texture.Get(),
+                                            0,
+                                            static_cast<UINT>(dst_x),
+                                            static_cast<UINT>(dst_y),
+                                            0,
+                                            src_tex->texture.Get(),
+                                            0,
+                                            &src_box);
+            return;
+        }
 
-    const bool can_raw_copy = src_tex->desc.format == dst_tex->desc.format &&
-                              src_w == dst_w &&
-                              src_h == dst_h &&
-                              src_tex->desc.sample_count == dst_tex->desc.sample_count;
-    if (can_raw_copy) {
-        D3D11_BOX src_box{};
-        src_box.left = static_cast<UINT>(src_x);
-        src_box.top = static_cast<UINT>(src_y);
-        src_box.front = 0;
-        src_box.right = static_cast<UINT>(src_x + src_w);
-        src_box.bottom = static_cast<UINT>(src_y + src_h);
-        src_box.back = 1;
-        context_->CopySubresourceRegion(
-            dst_tex->texture.Get(),
-            0,
-            static_cast<UINT>(dst_x),
-            static_cast<UINT>(dst_y),
-            0,
-            src_tex->texture.Get(),
-            0,
-            &src_box);
-        return;
-    }
+        const bool msaa_to_single = src_tex->desc.sample_count > 1 && dst_tex->desc.sample_count == 1;
+        if (msaa_to_single && d3d11::is_depth_format(src_tex->desc.format)) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: MSAA depth resolve is not supported");
+            return;
+        }
+        if (msaa_to_single) {
+            const bool same_format = src_tex->desc.format == dst_tex->desc.format;
+            const bool full_extent =
+                src_x == 0 && src_y == 0 && dst_x == 0 && dst_y == 0 && src_w == dst_w && src_h == dst_h &&
+                src_w == static_cast<int>(src_tex->desc.width) && src_h == static_cast<int>(src_tex->desc.height) &&
+                dst_w == static_cast<int>(dst_tex->desc.width) && dst_h == static_cast<int>(dst_tex->desc.height);
+            if (same_format && full_extent) {
+                context_->ResolveSubresource(
+                    dst_tex->texture.Get(), 0, src_tex->texture.Get(), 0, d3d11::to_dxgi_format(src_tex->desc.format));
+                return;
+            }
 
-    const bool msaa_to_single = src_tex->desc.sample_count > 1 && dst_tex->desc.sample_count == 1;
-    if (msaa_to_single && d3d11::is_depth_format(src_tex->desc.format)) {
-        tc::Log::error("D3D11RenderDevice::blit_to_texture: MSAA depth resolve is not supported");
-        return;
-    }
-    if (msaa_to_single) {
-        const bool same_format = src_tex->desc.format == dst_tex->desc.format;
-        const bool full_extent = src_x == 0 && src_y == 0 && dst_x == 0 && dst_y == 0 &&
-                                 src_w == dst_w && src_h == dst_h &&
-                                 src_w == static_cast<int>(src_tex->desc.width) &&
-                                 src_h == static_cast<int>(src_tex->desc.height) &&
-                                 dst_w == static_cast<int>(dst_tex->desc.width) &&
-                                 dst_h == static_cast<int>(dst_tex->desc.height);
-        if (same_format && full_extent) {
+            TextureDesc resolve_desc = src_tex->desc;
+            resolve_desc.sample_count = 1;
+            resolve_desc.mip_levels = 1;
+            resolve_desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
+            TextureHandle resolved = create_texture(resolve_desc);
+            if (!resolved) {
+                tc::Log::error("D3D11RenderDevice::blit_to_texture: failed to create MSAA resolve texture");
+                return;
+            }
+
+            auto* resolved_tex = get_texture(resolved);
+            if (!resolved_tex || !resolved_tex->texture) {
+                tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid MSAA resolve texture");
+                destroy(resolved);
+                return;
+            }
+
             context_->ResolveSubresource(
-                dst_tex->texture.Get(),
-                0,
-                src_tex->texture.Get(),
-                0,
-                d3d11::to_dxgi_format(src_tex->desc.format));
-            return;
-        }
-
-        TextureDesc resolve_desc = src_tex->desc;
-        resolve_desc.sample_count = 1;
-        resolve_desc.mip_levels = 1;
-        resolve_desc.usage = TextureUsage::Sampled | TextureUsage::CopyDst;
-        TextureHandle resolved = create_texture(resolve_desc);
-        if (!resolved) {
-            tc::Log::error("D3D11RenderDevice::blit_to_texture: failed to create MSAA resolve texture");
-            return;
-        }
-
-        auto* resolved_tex = get_texture(resolved);
-        if (!resolved_tex || !resolved_tex->texture) {
-            tc::Log::error("D3D11RenderDevice::blit_to_texture: invalid MSAA resolve texture");
+                resolved_tex->texture.Get(), 0, src_tex->texture.Get(), 0, d3d11::to_dxgi_format(src_tex->desc.format));
+            blit_to_texture(dst, resolved, src_rect, dst_rect);
             destroy(resolved);
             return;
         }
 
-        context_->ResolveSubresource(
-            resolved_tex->texture.Get(),
-            0,
-            src_tex->texture.Get(),
-            0,
-            d3d11::to_dxgi_format(src_tex->desc.format));
-        blit_to_texture(dst, resolved, src_rect, dst_rect);
-        destroy(resolved);
-        return;
+        if (src_tex->desc.sample_count != 1 || dst_tex->desc.sample_count != 1) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: shader blit requires single-sample textures "
+                           "(src_samples=%u dst_samples=%u)",
+                           src_tex->desc.sample_count,
+                           dst_tex->desc.sample_count);
+            return;
+        }
+        if (!src_tex->srv || !dst_tex->rtv) {
+            tc::Log::error("D3D11RenderDevice::blit_to_texture: shader blit requires src SRV and dst RTV "
+                           "(src=%u srv=%d dst=%u rtv=%d)",
+                           src.id,
+                           src_tex->srv ? 1 : 0,
+                           dst.id,
+                           dst_tex->rtv ? 1 : 0);
+            return;
+        }
+        if (!ensure_blit_resources()) {
+            return;
+        }
+
+        struct BlitConstants {
+            float src_uv_min[2];
+            float src_uv_size[2];
+        };
+        const BlitConstants constants{
+            {
+                static_cast<float>(src_x) / static_cast<float>(src_tex->desc.width),
+                static_cast<float>(src_y) / static_cast<float>(src_tex->desc.height),
+            },
+            {
+                static_cast<float>(src_w) / static_cast<float>(src_tex->desc.width),
+                static_cast<float>(src_h) / static_cast<float>(src_tex->desc.height),
+            },
+        };
+        context_->UpdateSubresource(blit_constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+
+        D3D11_VIEWPORT viewport{};
+        viewport.TopLeftX = static_cast<float>(dst_x);
+        viewport.TopLeftY = static_cast<float>(dst_y);
+        viewport.Width = static_cast<float>(dst_w);
+        viewport.Height = static_cast<float>(dst_h);
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+
+        ID3D11RenderTargetView* rtv = dst_tex->rtv.Get();
+        ID3D11ShaderResourceView* srv = src_tex->srv.Get();
+        ID3D11SamplerState* sampler = default_sampler_state();
+        ID3D11Buffer* constant_buffer = blit_constant_buffer_.Get();
+        const float blend_factor[4] = {0, 0, 0, 0};
+
+        context_->OMSetRenderTargets(1, &rtv, nullptr);
+        context_->RSSetViewports(1, &viewport);
+        context_->RSSetState(blit_raster_state_.Get());
+        context_->OMSetDepthStencilState(blit_depth_stencil_state_.Get(), 0);
+        context_->OMSetBlendState(blit_blend_state_.Get(), blend_factor, 0xffffffffu);
+        context_->IASetInputLayout(nullptr);
+        context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context_->VSSetShader(blit_vertex_shader_.Get(), nullptr, 0);
+        context_->VSSetConstantBuffers(0, 1, &constant_buffer);
+        context_->PSSetShader(blit_pixel_shader_.Get(), nullptr, 0);
+        context_->PSSetShaderResources(0, 1, &srv);
+        context_->PSSetSamplers(0, 1, &sampler);
+        context_->GSSetShader(nullptr, nullptr, 0);
+        context_->Draw(3, 0);
+        reset_state();
     }
 
-    if (src_tex->desc.sample_count != 1 || dst_tex->desc.sample_count != 1) {
-        tc::Log::error(
-            "D3D11RenderDevice::blit_to_texture: shader blit requires single-sample textures "
-            "(src_samples=%u dst_samples=%u)",
-            src_tex->desc.sample_count,
-            dst_tex->desc.sample_count);
-        return;
-    }
-    if (!src_tex->srv || !dst_tex->rtv) {
-        tc::Log::error(
-            "D3D11RenderDevice::blit_to_texture: shader blit requires src SRV and dst RTV "
-            "(src=%u srv=%d dst=%u rtv=%d)",
-            src.id,
-            src_tex->srv ? 1 : 0,
-            dst.id,
-            dst_tex->rtv ? 1 : 0);
-        return;
-    }
-    if (!ensure_blit_resources()) {
-        return;
-    }
+    void
+    D3D11RenderDevice::clear_texture(TextureHandle dst_handle, termin::Color4 clear_color, termin::Bounds2i viewport) {
+        auto* dst = get_texture(dst_handle);
+        if (!dst || !dst->texture || !dst->rtv) {
+            tc::Log::error("D3D11RenderDevice::clear_texture: invalid color texture handle=%u", dst_handle.id);
+            return;
+        }
+        if (viewport.width() <= 0 || viewport.height() <= 0) {
+            tc::Log::error("D3D11RenderDevice::clear_texture: invalid empty viewport");
+            return;
+        }
 
-    struct BlitConstants {
-        float src_uv_min[2];
-        float src_uv_size[2];
-    };
-    const BlitConstants constants{
-        {
-            static_cast<float>(src_x) / static_cast<float>(src_tex->desc.width),
-            static_cast<float>(src_y) / static_cast<float>(src_tex->desc.height),
-        },
-        {
-            static_cast<float>(src_w) / static_cast<float>(src_tex->desc.width),
-            static_cast<float>(src_h) / static_cast<float>(src_tex->desc.height),
-        },
-    };
-    context_->UpdateSubresource(blit_constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+        const int tex_w = static_cast<int>(dst->desc.width);
+        const int tex_h = static_cast<int>(dst->desc.height);
+        const int x0 = std::clamp(viewport.x0, 0, tex_w);
+        const int y0 = std::clamp(viewport.y0, 0, tex_h);
+        const int x1 = std::clamp(viewport.x1, 0, tex_w);
+        const int y1 = std::clamp(viewport.y1, 0, tex_h);
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
 
-    D3D11_VIEWPORT viewport{};
-    viewport.TopLeftX = static_cast<float>(dst_x);
-    viewport.TopLeftY = static_cast<float>(dst_y);
-    viewport.Width = static_cast<float>(dst_w);
-    viewport.Height = static_cast<float>(dst_h);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
+        const float color[4] = {clear_color.r, clear_color.g, clear_color.b, clear_color.a};
+        if (x0 == 0 && y0 == 0 && x1 == tex_w && y1 == tex_h) {
+            context_->ClearRenderTargetView(dst->rtv.Get(), color);
+            return;
+        }
 
-    ID3D11RenderTargetView* rtv = dst_tex->rtv.Get();
-    ID3D11ShaderResourceView* srv = src_tex->srv.Get();
-    ID3D11SamplerState* sampler = default_sampler_state();
-    ID3D11Buffer* constant_buffer = blit_constant_buffer_.Get();
-    const float blend_factor[4] = {0, 0, 0, 0};
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext1> context1;
+        HRESULT hr = context_.As(&context1);
+        if (FAILED(hr) || !context1) {
+            tc::Log::error("D3D11RenderDevice::clear_texture: partial rect clear requires "
+                           "ID3D11DeviceContext1 ClearView support");
+            return;
+        }
 
-    context_->OMSetRenderTargets(1, &rtv, nullptr);
-    context_->RSSetViewports(1, &viewport);
-    context_->RSSetState(blit_raster_state_.Get());
-    context_->OMSetDepthStencilState(blit_depth_stencil_state_.Get(), 0);
-    context_->OMSetBlendState(blit_blend_state_.Get(), blend_factor, 0xffffffffu);
-    context_->IASetInputLayout(nullptr);
-    context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    context_->VSSetShader(blit_vertex_shader_.Get(), nullptr, 0);
-    context_->VSSetConstantBuffers(0, 1, &constant_buffer);
-    context_->PSSetShader(blit_pixel_shader_.Get(), nullptr, 0);
-    context_->PSSetShaderResources(0, 1, &srv);
-    context_->PSSetSamplers(0, 1, &sampler);
-    context_->GSSetShader(nullptr, nullptr, 0);
-    context_->Draw(3, 0);
-    reset_state();
-}
-
-void D3D11RenderDevice::clear_texture(
-    TextureHandle dst_handle,
-    termin::Color4 clear_color,
-    termin::Bounds2i viewport)
-{
-    auto* dst = get_texture(dst_handle);
-    if (!dst || !dst->texture || !dst->rtv) {
-        tc::Log::error(
-            "D3D11RenderDevice::clear_texture: invalid color texture handle=%u",
-            dst_handle.id);
-        return;
-    }
-    if (viewport.width() <= 0 || viewport.height() <= 0) {
-        tc::Log::error("D3D11RenderDevice::clear_texture: invalid empty viewport");
-        return;
+        D3D11_RECT rect{};
+        rect.left = static_cast<LONG>(x0);
+        rect.top = static_cast<LONG>(y0);
+        rect.right = static_cast<LONG>(x1);
+        rect.bottom = static_cast<LONG>(y1);
+        context1->ClearView(dst->rtv.Get(), color, &rect, 1);
     }
 
-    const int tex_w = static_cast<int>(dst->desc.width);
-    const int tex_h = static_cast<int>(dst->desc.height);
-    const int x0 = std::clamp(viewport.x0, 0, tex_w);
-    const int y0 = std::clamp(viewport.y0, 0, tex_h);
-    const int x1 = std::clamp(viewport.x1, 0, tex_w);
-    const int y1 = std::clamp(viewport.y1, 0, tex_h);
-    if (x1 <= x0 || y1 <= y0) {
-        return;
+    void D3D11RenderDevice::reset_state() {
+        if (context_) {
+            context_->ClearState();
+        }
     }
 
-    const float color[4] = {clear_color.r, clear_color.g, clear_color.b, clear_color.a};
-    if (x0 == 0 && y0 == 0 && x1 == tex_w && y1 == tex_h) {
-        context_->ClearRenderTargetView(dst->rtv.Get(), color);
-        return;
+    void D3D11RenderDevice::flush() {
+        if (context_) {
+            context_->Flush();
+            drain_info_queue("flush");
+        }
     }
 
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext1> context1;
-    HRESULT hr = context_.As(&context1);
-    if (FAILED(hr) || !context1) {
-        tc::Log::error(
-            "D3D11RenderDevice::clear_texture: partial rect clear requires "
-            "ID3D11DeviceContext1 ClearView support");
-        return;
+    void D3D11RenderDevice::finish() {
+        wait_idle();
+        drain_info_queue("finish");
     }
-
-    D3D11_RECT rect{};
-    rect.left = static_cast<LONG>(x0);
-    rect.top = static_cast<LONG>(y0);
-    rect.right = static_cast<LONG>(x1);
-    rect.bottom = static_cast<LONG>(y1);
-    context1->ClearView(dst->rtv.Get(), color, &rect, 1);
-}
-
-void D3D11RenderDevice::reset_state() {
-    if (context_) {
-        context_->ClearState();
-    }
-}
-
-void D3D11RenderDevice::flush() {
-    if (context_) {
-        context_->Flush();
-        drain_info_queue("flush");
-    }
-}
-
-void D3D11RenderDevice::finish() {
-    wait_idle();
-    drain_info_queue("finish");
-}
 
 } // namespace tgfx

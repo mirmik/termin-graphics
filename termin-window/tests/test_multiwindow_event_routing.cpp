@@ -10,21 +10,19 @@
 
 namespace {
 
-void drain(termin::SDLBackendWindow& window) {
-    termin::WindowEvent event;
-    while (window.poll_event(event)) {
+    void drain(termin::SDLBackendWindow& window) {
+        termin::WindowEvent event;
+        while (window.poll_event(event)) {
+        }
     }
-}
 
 } // namespace
 
 int main() {
     try {
         auto graphics_session = termin::create_native_windowed_graphics();
-        auto primary_owner = graphics_session->create_window(
-            {"event routing primary", 320, 200});
-        auto secondary_owner = graphics_session->create_window(
-            {"event routing secondary", 240, 160});
+        auto primary_owner = graphics_session->create_window({"event routing primary", 320, 200});
+        auto secondary_owner = graphics_session->create_window({"event routing secondary", 240, 160});
         auto& primary = static_cast<termin::SDLBackendWindow&>(*primary_owner);
         auto& secondary = static_cast<termin::SDLBackendWindow&>(*secondary_owner);
         drain(primary);

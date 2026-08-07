@@ -6,8 +6,8 @@
 
 #include <tc_profiler.h>
 
-#include <termin/gui_native/dynamic_texture_lease.hpp>
 #include <termin/gui_native/command_model.hpp>
+#include <termin/gui_native/dynamic_texture_lease.hpp>
 #include <termin/gui_native/menu_bar.hpp>
 #include <termin/gui_native/offscreen_composition.hpp>
 #include <termin/gui_native/text_input.hpp>
@@ -17,27 +17,25 @@
 
 namespace {
 
-int find_section(
-    const tc_frame_profile& frame, const char* name, int parent_index) {
-    for (int index = 0; index < frame.section_count; ++index) {
-        const tc_section_timing& section = frame.sections[index];
-        if (section.parent_index == parent_index &&
-            std::strcmp(section.name, name) == 0) {
-            return index;
+    int find_section(const tc_frame_profile& frame, const char* name, int parent_index) {
+        for (int index = 0; index < frame.section_count; ++index) {
+            const tc_section_timing& section = frame.sections[index];
+            if (section.parent_index == parent_index && std::strcmp(section.name, name) == 0) {
+                return index;
+            }
         }
+        return -1;
     }
-    return -1;
-}
 
-tgfx::BackendType offscreen_backend() {
-    if (tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
-        return tgfx::BackendType::Vulkan;
+    tgfx::BackendType offscreen_backend() {
+        if (tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
+            return tgfx::BackendType::Vulkan;
+        }
+        if (tgfx::backend_is_compiled(tgfx::BackendType::D3D11)) {
+            return tgfx::BackendType::D3D11;
+        }
+        return tgfx::BackendType::Null;
     }
-    if (tgfx::backend_is_compiled(tgfx::BackendType::D3D11)) {
-        return tgfx::BackendType::D3D11;
-    }
-    return tgfx::BackendType::Null;
-}
 
 } // namespace
 
@@ -45,8 +43,7 @@ int main() {
     try {
         const tgfx::BackendType backend = offscreen_backend();
         if (backend == tgfx::BackendType::Null) {
-            std::printf(
-                "offscreen composition test skipped: no Vulkan or D3D11 backend compiled\n");
+            std::printf("offscreen composition test skipped: no Vulkan or D3D11 backend compiled\n");
             return 77;
         }
 
@@ -62,8 +59,7 @@ int main() {
         config.renderer.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
         config.shader_compiler_path = TERMIN_GUI_NATIVE_TEST_SHADERC;
 
-        termin::gui_native::OffscreenGuiComposition composition(
-            std::move(config));
+        termin::gui_native::OffscreenGuiComposition composition(std::move(config));
         if (composition.graphics().owns_application_domain()) {
             std::fprintf(stderr, "offscreen composition claimed application graphics\n");
             return 1;
@@ -83,9 +79,7 @@ int main() {
             return 1;
         }
         const tc_frame_profile* profile = tc_profiler_history_at(0);
-        const int compose = profile
-            ? find_section(*profile, "UI Compose", -1)
-            : -1;
+        const int compose = profile ? find_section(*profile, "UI Compose", -1) : -1;
         const char* stages[] = {
             "UI Presentation Sync",
             "UI Begin Frame",
@@ -95,16 +89,13 @@ int main() {
             "UI Submit",
             "UI Present",
         };
-        if (!profile || compose < 0 ||
-            find_section(*profile, "After Render", -1) < 0) {
+        if (!profile || compose < 0 || find_section(*profile, "After Render", -1) < 0) {
             std::fprintf(stderr, "document renderer profiler stack was unbalanced\n");
             return 1;
         }
         for (const char* stage : stages) {
             if (find_section(*profile, stage, compose) < 0) {
-                std::fprintf(
-                    stderr, "document renderer profiler stage is missing: %s\n",
-                    stage);
+                std::fprintf(stderr, "document renderer profiler stage is missing: %s\n", stage);
                 return 1;
             }
         }
@@ -117,21 +108,16 @@ int main() {
         tc_profiler_begin_frame();
         const bool cadence_rendered = composition.render_frame();
         tc_profiler_end_frame();
-        const tc_frame_profile* cadence_frame =
-            tc_profiler_capture_at(cadence_capture, 0);
-        if (!cadence_rendered || !cadence_frame ||
-            cadence_frame->sections_profiled ||
+        const tc_frame_profile* cadence_frame = tc_profiler_capture_at(cadence_capture, 0);
+        if (!cadence_rendered || !cadence_frame || cadence_frame->sections_profiled ||
             cadence_frame->section_count != 0) {
-            std::fprintf(
-                stderr,
-                "document renderer emitted sections during cadence-only capture\n");
+            std::fprintf(stderr, "document renderer emitted sections during cadence-only capture\n");
             tc_profiler_capture_destroy(cadence_capture);
             return 1;
         }
         tc_profiler_capture_destroy(cadence_capture);
         const std::vector<float> first = composition.read_frame_rgba_float();
-        if (first.size() != 64u * 48u * 4u || first[3] < 0.9f ||
-            std::fabs(first[0] - 0.03f) > 0.03f) {
+        if (first.size() != 64u * 48u * 4u || first[3] < 0.9f || std::fabs(first[0] - 0.03f) > 0.03f) {
             std::fprintf(stderr, "offscreen readback returned invalid pixels\n");
             return 1;
         }
@@ -140,8 +126,7 @@ int main() {
         composition.document().adopt(input);
         composition.document().add_root(*input);
         composition.document().set_focus(*input);
-        composition.push_key(tc_ui_key_event{
-            TC_UI_KEY_DOWN, TC_UI_KEY_A, 0, 0, false});
+        composition.push_key(tc_ui_key_event{TC_UI_KEY_DOWN, TC_UI_KEY_A, 0, 0, false});
         composition.push_text("headless");
         if (composition.pump_input() != 2 || input->text() != "headless") {
             std::fprintf(stderr, "normalized input did not reach the tc_ui_document\n");
@@ -149,42 +134,32 @@ int main() {
         }
 
         auto commands = std::make_shared<termin::gui_native::CommandModel>();
-        const termin::gui_native::CommandId redo = commands->append(
-            termin::gui_native::CommandData{"redo", "Redo", {}, "Ctrl+Y"});
-        commands->append(
-            termin::gui_native::CommandData{"copy-global", "Copy", {}, "Ctrl+C"});
+        const termin::gui_native::CommandId redo =
+            commands->append(termin::gui_native::CommandData{"redo", "Redo", {}, "Ctrl+Y"});
+        commands->append(termin::gui_native::CommandData{"copy-global", "Copy", {}, "Ctrl+C"});
         auto* menu_bar = new termin::gui_native::MenuBar();
         composition.document().adopt(menu_bar);
         composition.document().add_root(*menu_bar);
         menu_bar->set_entries({{"edit", "Edit", commands}});
         std::vector<std::string> activated;
         menu_bar->activated().connect(
-            [&activated](termin::gui_native::MenuBar&, size_t,
+            [&activated](termin::gui_native::MenuBar&,
+                         size_t,
                          termin::gui_native::CommandId,
-                         const termin::gui_native::CommandData& command) {
-                activated.push_back(command.stable_id);
-            });
-        composition.renderer().set_unhandled_key_handler(
-            [menu_bar](const tc_ui_key_event& event) {
-                return menu_bar->dispatch_shortcut(event.key, event.modifiers);
-            });
-        composition.push_key(tc_ui_key_event{
-            TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
-        if (composition.pump_input() != 1 ||
-            activated != std::vector<std::string>{"redo"}) {
-            std::fprintf(stderr,
-                         "offscreen composition did not route an unhandled global shortcut\n");
+                         const termin::gui_native::CommandData& command) { activated.push_back(command.stable_id); });
+        composition.renderer().set_unhandled_key_handler([menu_bar](const tc_ui_key_event& event) {
+            return menu_bar->dispatch_shortcut(event.key, event.modifiers);
+        });
+        composition.push_key(tc_ui_key_event{TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
+        if (composition.pump_input() != 1 || activated != std::vector<std::string>{"redo"}) {
+            std::fprintf(stderr, "offscreen composition did not route an unhandled global shortcut\n");
             return 1;
         }
         commands->set_enabled(redo, false);
-        composition.push_key(tc_ui_key_event{
-            TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
-        composition.push_key(tc_ui_key_event{
-            TC_UI_KEY_DOWN, TC_UI_KEY_C, 0, TC_UI_MOD_CTRL, false});
-        if (composition.pump_input() != 2 ||
-            activated != std::vector<std::string>{"redo"}) {
-            std::fprintf(stderr,
-                         "offscreen composition bypassed disabled or focused-widget shortcuts\n");
+        composition.push_key(tc_ui_key_event{TC_UI_KEY_DOWN, TC_UI_KEY_Y, 0, TC_UI_MOD_CTRL, false});
+        composition.push_key(tc_ui_key_event{TC_UI_KEY_DOWN, TC_UI_KEY_C, 0, TC_UI_MOD_CTRL, false});
+        if (composition.pump_input() != 2 || activated != std::vector<std::string>{"redo"}) {
+            std::fprintf(stderr, "offscreen composition bypassed disabled or focused-widget shortcuts\n");
             return 1;
         }
 
@@ -202,8 +177,7 @@ int main() {
             std::fprintf(stderr, "resize invalidated the last published frame too early\n");
             return 1;
         }
-        if (!composition.render_frame() ||
-            composition.framebuffer_size() != std::pair<int, int>{32, 24} ||
+        if (!composition.render_frame() || composition.framebuffer_size() != std::pair<int, int>{32, 24} ||
             composition.read_frame_rgba_float().size() != 32u * 24u * 4u) {
             std::fprintf(stderr, "resized offscreen frame was not published\n");
             return 1;

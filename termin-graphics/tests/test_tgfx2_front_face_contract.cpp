@@ -1,5 +1,5 @@
-#include "tgfx2/render_state.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
+#include "tgfx2/render_state.hpp"
 
 #ifdef TGFX2_HAS_VULKAN
 #include "tgfx2/vulkan/vulkan_type_conversions.hpp"

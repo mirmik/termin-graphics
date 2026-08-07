@@ -18,21 +18,22 @@ typedef struct tc_widget_factory_result {
     tc_widget_ownership_policy ownership;
 } tc_widget_factory_result;
 
-typedef bool (*tc_widget_factory_create_fn)(tc_ui_document_handle document, void* userdata,
+typedef bool (*tc_widget_factory_create_fn)(tc_ui_document_handle document,
+                                            void* userdata,
                                             tc_widget_factory_result* out_result);
 
-typedef bool (*tc_widget_factory_after_adopt_fn)(tc_ui_document_handle document, tc_widget* widget,
-                                                 tc_widget_handle handle, void* userdata);
+typedef bool (*tc_widget_factory_after_adopt_fn)(tc_ui_document_handle document,
+                                                 tc_widget* widget,
+                                                 tc_widget_handle handle,
+                                                 void* userdata);
 
 typedef void (*tc_widget_factory_userdata_destroy_fn)(void* userdata);
 
 /* out_state is an initialized dict which the hook may populate or replace after freeing. */
-typedef bool (*tc_widget_state_serialize_fn)(const tc_widget* widget, void* userdata,
-                                             tc_value* out_state);
+typedef bool (*tc_widget_state_serialize_fn)(const tc_widget* widget, void* userdata, tc_value* out_state);
 
 /* state is always a dict owned by the caller and is valid only for the callback duration. */
-typedef bool (*tc_widget_state_deserialize_fn)(tc_widget* widget, const tc_value* state,
-                                               void* userdata);
+typedef bool (*tc_widget_state_deserialize_fn)(tc_widget* widget, const tc_value* state, void* userdata);
 
 typedef struct tc_widget_factory_descriptor {
     uint32_t abi_version;
@@ -65,26 +66,25 @@ typedef enum tc_widget_owner_reload_policy {
  * commit, replacement, revoke or shutdown. The call consumes userdata on
  * every outcome.
  */
-TERMIN_GUI_NATIVE_API bool
-tc_widget_registry_register(const char* type_name, const char* owner, const char* parent_type,
-                            const tc_widget_factory_descriptor* descriptor);
+TERMIN_GUI_NATIVE_API bool tc_widget_registry_register(const char* type_name,
+                                                       const char* owner,
+                                                       const char* parent_type,
+                                                       const tc_widget_factory_descriptor* descriptor);
 TERMIN_GUI_NATIVE_API bool tc_widget_registry_initialize(void);
 TERMIN_GUI_NATIVE_API bool tc_widget_registry_unregister(const char* type_name);
-TERMIN_GUI_NATIVE_API size_t
-tc_widget_registry_unregister_owner(const char* owner, tc_widget_owner_reload_policy policy);
+TERMIN_GUI_NATIVE_API size_t tc_widget_registry_unregister_owner(const char* owner,
+                                                                 tc_widget_owner_reload_policy policy);
 TERMIN_GUI_NATIVE_API bool tc_widget_registry_has(const char* type_name);
 TERMIN_GUI_NATIVE_API tc_language tc_widget_registry_language(const char* type_name);
 TERMIN_GUI_NATIVE_API bool tc_widget_registry_has_uiscript(const char* type_name);
 TERMIN_GUI_NATIVE_API size_t tc_widget_registry_type_count(void);
 TERMIN_GUI_NATIVE_API const char* tc_widget_registry_type_at(size_t index);
 
-TERMIN_GUI_NATIVE_API bool tc_widget_registry_serialize_state(const tc_widget* widget,
-                                                              tc_value* out_state);
-TERMIN_GUI_NATIVE_API bool tc_widget_registry_deserialize_state(tc_widget* widget,
-                                                                const tc_value* state);
+TERMIN_GUI_NATIVE_API bool tc_widget_registry_serialize_state(const tc_widget* widget, tc_value* out_state);
+TERMIN_GUI_NATIVE_API bool tc_widget_registry_deserialize_state(tc_widget* widget, const tc_value* state);
 
-TERMIN_GUI_NATIVE_API tc_widget_handle
-tc_ui_document_create_registered_widget(tc_ui_document_handle document, const char* type_name);
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_ui_document_create_registered_widget(tc_ui_document_handle document,
+                                                                               const char* type_name);
 
 /*
  * Consumes a newly constructed factory result and adopts it through the same
@@ -92,9 +92,10 @@ tc_ui_document_create_registered_widget(tc_ui_document_handle document, const ch
  * The result is cleared on return; owned widgets are either owned by the
  * document or destroyed during rollback.
  */
-TERMIN_GUI_NATIVE_API bool tc_ui_document_adopt_registered_widget(
-    tc_ui_document_handle document, const char* type_name,
-    tc_widget_factory_result* result, tc_widget_handle* out_handle);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_adopt_registered_widget(tc_ui_document_handle document,
+                                                                  const char* type_name,
+                                                                  tc_widget_factory_result* result,
+                                                                  tc_widget_handle* out_handle);
 
 #ifdef __cplusplus
 }

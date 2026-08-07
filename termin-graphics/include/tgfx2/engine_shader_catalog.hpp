@@ -5,15 +5,15 @@
 
 namespace tgfx {
 
-struct EngineShaderStageSource {
-    const char* uuid;
-    const char* name;
-    ShaderStage stage;
-    const char* language;
-    const char* source_resource_path;
-    const char* entry_point;
-};
+    struct EngineShaderStageSource {
+        const char* uuid;
+        const char* name;
+        ShaderStage stage;
+        const char* language;
+        const char* source_resource_path;
+        const char* entry_point;
+    };
 
-TGFX2_API const EngineShaderStageSource& engine_fullscreen_quad_vertex_shader();
+    TGFX2_API const EngineShaderStageSource& engine_fullscreen_quad_vertex_shader();
 
 } // namespace tgfx

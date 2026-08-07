@@ -50,195 +50,182 @@ extern "C" {
 
 namespace {
 
-struct RegistryGuard {
-    RegistryGuard() {
-        tc_shader_init();
-        tc_texture_init();
-        tc_mesh_init();
-    }
-    ~RegistryGuard() {
-        tc_mesh_shutdown();
-        tc_texture_shutdown();
-        tc_shader_shutdown();
-    }
-};
-
-bool compile_hlsl_to_file(
-    const char* source,
-    const char* profile,
-    const std::filesystem::path& path)
-{
-    Microsoft::WRL::ComPtr<ID3DBlob> blob;
-    Microsoft::WRL::ComPtr<ID3DBlob> errors;
-    HRESULT hr = D3DCompile(
-        source,
-        std::strlen(source),
-        nullptr,
-        nullptr,
-        nullptr,
-        "main",
-        profile,
-        D3DCOMPILE_OPTIMIZATION_LEVEL3,
-        0,
-        &blob,
-        &errors);
-    if (FAILED(hr)) {
-        std::fprintf(stderr,
-                     "D3D11 smoke: D3DCompile(%s) failed: %s\n",
-                     profile,
-                     errors ? static_cast<const char*>(errors->GetBufferPointer()) : "<no diagnostics>");
-        return false;
-    }
-
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-        std::fprintf(stderr, "D3D11 smoke: failed to open %s\n", path.string().c_str());
-        return false;
-    }
-    out.write(static_cast<const char*>(blob->GetBufferPointer()),
-              static_cast<std::streamsize>(blob->GetBufferSize()));
-    return static_cast<bool>(out);
-}
-
-bool read_binary_file(const std::filesystem::path& path, std::vector<uint8_t>& out) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        std::fprintf(stderr, "D3D11 smoke: failed to open %s\n", path.string().c_str());
-        return false;
-    }
-    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    if (out.empty()) {
-        std::fprintf(stderr, "D3D11 smoke: empty file %s\n", path.string().c_str());
-        return false;
-    }
-    return true;
-}
-
-std::filesystem::path find_termin_shaderc() {
-    if (const char* env = std::getenv("TERMIN_SHADERC")) {
-        std::filesystem::path configured(env);
-        if (std::filesystem::exists(configured)) {
-            return configured;
+    struct RegistryGuard {
+        RegistryGuard() {
+            tc_shader_init();
+            tc_texture_init();
+            tc_mesh_init();
         }
+        ~RegistryGuard() {
+            tc_mesh_shutdown();
+            tc_texture_shutdown();
+            tc_shader_shutdown();
+        }
+    };
+
+    bool compile_hlsl_to_file(const char* source, const char* profile, const std::filesystem::path& path) {
+        Microsoft::WRL::ComPtr<ID3DBlob> blob;
+        Microsoft::WRL::ComPtr<ID3DBlob> errors;
+        HRESULT hr = D3DCompile(source,
+                                std::strlen(source),
+                                nullptr,
+                                nullptr,
+                                nullptr,
+                                "main",
+                                profile,
+                                D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                                0,
+                                &blob,
+                                &errors);
+        if (FAILED(hr)) {
+            std::fprintf(stderr,
+                         "D3D11 smoke: D3DCompile(%s) failed: %s\n",
+                         profile,
+                         errors ? static_cast<const char*>(errors->GetBufferPointer()) : "<no diagnostics>");
+            return false;
+        }
+
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream out(path, std::ios::binary);
+        if (!out) {
+            std::fprintf(stderr, "D3D11 smoke: failed to open %s\n", path.string().c_str());
+            return false;
+        }
+        out.write(static_cast<const char*>(blob->GetBufferPointer()),
+                  static_cast<std::streamsize>(blob->GetBufferSize()));
+        return static_cast<bool>(out);
     }
+
+    bool read_binary_file(const std::filesystem::path& path, std::vector<uint8_t>& out) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            std::fprintf(stderr, "D3D11 smoke: failed to open %s\n", path.string().c_str());
+            return false;
+        }
+        out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        if (out.empty()) {
+            std::fprintf(stderr, "D3D11 smoke: empty file %s\n", path.string().c_str());
+            return false;
+        }
+        return true;
+    }
+
+    std::filesystem::path find_termin_shaderc() {
+        if (const char* env = std::getenv("TERMIN_SHADERC")) {
+            std::filesystem::path configured(env);
+            if (std::filesystem::exists(configured)) {
+                return configured;
+            }
+        }
 
 #ifdef _WIN32
-    constexpr const char* kToolName = "termin_shaderc.exe";
+        constexpr const char* kToolName = "termin_shaderc.exe";
 #else
-    constexpr const char* kToolName = "termin_shaderc";
+        constexpr const char* kToolName = "termin_shaderc";
 #endif
 
-    std::filesystem::path cursor = std::filesystem::current_path();
-    for (int depth = 0; depth < 6; ++depth) {
-        std::filesystem::path candidate = cursor / "sdk" / "bin" / kToolName;
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
+        std::filesystem::path cursor = std::filesystem::current_path();
+        for (int depth = 0; depth < 6; ++depth) {
+            std::filesystem::path candidate = cursor / "sdk" / "bin" / kToolName;
+            if (std::filesystem::exists(candidate)) {
+                return candidate;
+            }
+            if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
+                break;
+            }
+            cursor = cursor.parent_path();
         }
-        if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
-            break;
-        }
-        cursor = cursor.parent_path();
-    }
-    return {};
-}
-
-std::filesystem::path find_on_path(const char* executable_name) {
-    const char* path_env = std::getenv("PATH");
-    if (!path_env || !path_env[0]) {
         return {};
     }
+
+    std::filesystem::path find_on_path(const char* executable_name) {
+        const char* path_env = std::getenv("PATH");
+        if (!path_env || !path_env[0]) {
+            return {};
+        }
 #ifdef _WIN32
-    constexpr char kSeparator = ';';
+        constexpr char kSeparator = ';';
 #else
-    constexpr char kSeparator = ':';
+        constexpr char kSeparator = ':';
 #endif
-    std::stringstream stream(path_env);
-    std::string dir;
-    while (std::getline(stream, dir, kSeparator)) {
-        if (dir.empty()) {
-            continue;
-        }
-        std::filesystem::path candidate = std::filesystem::path(dir) / executable_name;
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
-        }
-    }
-    return {};
-}
-
-std::filesystem::path find_slangc() {
-    if (const char* env = std::getenv("TERMIN_SLANGC")) {
-        std::filesystem::path configured(env);
-        if (std::filesystem::exists(configured)) {
-            return configured;
-        }
-    }
-
-#ifdef _WIN32
-    if (auto from_path = find_on_path("slangc.exe"); !from_path.empty()) {
-        return from_path;
-    }
-    const std::filesystem::path vulkan_root("C:/VulkanSDK");
-    std::error_code ec;
-    if (std::filesystem::exists(vulkan_root, ec)) {
-        for (const auto& entry : std::filesystem::directory_iterator(vulkan_root, ec)) {
-            if (!entry.is_directory()) {
+        std::stringstream stream(path_env);
+        std::string dir;
+        while (std::getline(stream, dir, kSeparator)) {
+            if (dir.empty()) {
                 continue;
             }
-            std::filesystem::path candidate = entry.path() / "Bin" / "slangc.exe";
+            std::filesystem::path candidate = std::filesystem::path(dir) / executable_name;
             if (std::filesystem::exists(candidate)) {
                 return candidate;
             }
         }
+        return {};
     }
-#else
-    if (auto from_path = find_on_path("slangc"); !from_path.empty()) {
-        return from_path;
-    }
-#endif
-    return {};
-}
 
-std::filesystem::path find_text_smoke_font() {
-    const std::filesystem::path recast_font =
-        std::filesystem::current_path() /
-        "termin-thirdparty" / "recastnavigation" / "RecastDemo" /
-        "Bin" / "DroidSans.ttf";
-    if (std::filesystem::exists(recast_font)) {
-        return recast_font;
-    }
+    std::filesystem::path find_slangc() {
+        if (const char* env = std::getenv("TERMIN_SLANGC")) {
+            std::filesystem::path configured(env);
+            if (std::filesystem::exists(configured)) {
+                return configured;
+            }
+        }
 
 #ifdef _WIN32
-    const char* windir_env = std::getenv("WINDIR");
-    const std::filesystem::path fonts_dir =
-        (windir_env != nullptr && windir_env[0] != '\0')
-            ? std::filesystem::path(windir_env) / "Fonts"
-            : std::filesystem::path("C:/Windows/Fonts");
-    for (const char* name : {"segoeui.ttf", "arial.ttf", "tahoma.ttf"}) {
-        std::filesystem::path candidate = fonts_dir / name;
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
+        if (auto from_path = find_on_path("slangc.exe"); !from_path.empty()) {
+            return from_path;
         }
+        const std::filesystem::path vulkan_root("C:/VulkanSDK");
+        std::error_code ec;
+        if (std::filesystem::exists(vulkan_root, ec)) {
+            for (const auto& entry : std::filesystem::directory_iterator(vulkan_root, ec)) {
+                if (!entry.is_directory()) {
+                    continue;
+                }
+                std::filesystem::path candidate = entry.path() / "Bin" / "slangc.exe";
+                if (std::filesystem::exists(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+#else
+        if (auto from_path = find_on_path("slangc"); !from_path.empty()) {
+            return from_path;
+        }
+#endif
+        return {};
     }
+
+    std::filesystem::path find_text_smoke_font() {
+        const std::filesystem::path recast_font = std::filesystem::current_path() / "termin-thirdparty" /
+                                                  "recastnavigation" / "RecastDemo" / "Bin" / "DroidSans.ttf";
+        if (std::filesystem::exists(recast_font)) {
+            return recast_font;
+        }
+
+#ifdef _WIN32
+        const char* windir_env = std::getenv("WINDIR");
+        const std::filesystem::path fonts_dir = (windir_env != nullptr && windir_env[0] != '\0')
+                                                    ? std::filesystem::path(windir_env) / "Fonts"
+                                                    : std::filesystem::path("C:/Windows/Fonts");
+        for (const char* name : {"segoeui.ttf", "arial.ttf", "tahoma.ttf"}) {
+            std::filesystem::path candidate = fonts_dir / name;
+            if (std::filesystem::exists(candidate)) {
+                return candidate;
+            }
+        }
 #endif
 
-    return {};
-}
+        return {};
+    }
 
-bool render_ordered_mrt_smoke(
-    tgfx::IRenderDevice& device,
-    tgfx::ShaderHandle fullscreen_vertex,
-    tgfx::ShaderHandle mrt_fragment)
-{
-    return tgfx::tests::run_ordered_mrt_smoke(
-        device,
-        "D3D11",
-        [&](tgfx::RenderContext2& context) {
+    bool render_ordered_mrt_smoke(tgfx::IRenderDevice& device,
+                                  tgfx::ShaderHandle fullscreen_vertex,
+                                  tgfx::ShaderHandle mrt_fragment) {
+        return tgfx::tests::run_ordered_mrt_smoke(device, "D3D11", [&](tgfx::RenderContext2& context) {
             context.bind_shader(fullscreen_vertex, mrt_fragment);
             context.draw_fullscreen_quad_with_bound_shader();
         });
-}
+    }
 
 } // namespace
 
@@ -260,37 +247,35 @@ int main() {
         }
 
         const std::array<float, 8> transient_vertices = {
-            0.0f, 0.0f, 1.0f, 1.0f,
-            1.0f, 0.0f, 0.0f, 1.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            1.0f,
         };
         auto transient_cmd = device->create_command_list();
         transient_cmd->begin();
         const uint64_t first_vertex_offset = device->transient_vertex_write(
-            transient_vertices.data(),
-            static_cast<uint32_t>(sizeof(transient_vertices)));
+            transient_vertices.data(), static_cast<uint32_t>(sizeof(transient_vertices)));
         const uint64_t second_vertex_offset = device->transient_vertex_write(
-            transient_vertices.data(),
-            static_cast<uint32_t>(sizeof(transient_vertices)));
+            transient_vertices.data(), static_cast<uint32_t>(sizeof(transient_vertices)));
         tgfx::BufferHandle first_uniform;
         tgfx::BufferHandle second_uniform;
         uint32_t first_uniform_offset = UINT32_MAX;
         uint32_t second_uniform_offset = UINT32_MAX;
-        if (first_vertex_offset != 0 ||
-            second_vertex_offset <= first_vertex_offset ||
-            !device->transient_uniform_write(
-                transient_vertices.data(),
-                static_cast<uint32_t>(sizeof(transient_vertices)),
-                first_uniform,
-                first_uniform_offset) ||
-            !device->transient_uniform_write(
-                transient_vertices.data(),
-                static_cast<uint32_t>(sizeof(transient_vertices)),
-                second_uniform,
-                second_uniform_offset) ||
-            !first_uniform ||
-            !second_uniform ||
-            first_uniform == second_uniform ||
-            first_uniform_offset != 0 ||
+        if (first_vertex_offset != 0 || second_vertex_offset <= first_vertex_offset ||
+            !device->transient_uniform_write(transient_vertices.data(),
+                                             static_cast<uint32_t>(sizeof(transient_vertices)),
+                                             first_uniform,
+                                             first_uniform_offset) ||
+            !device->transient_uniform_write(transient_vertices.data(),
+                                             static_cast<uint32_t>(sizeof(transient_vertices)),
+                                             second_uniform,
+                                             second_uniform_offset) ||
+            !first_uniform || !second_uniform || first_uniform == second_uniform || first_uniform_offset != 0 ||
             second_uniform_offset != 0) {
             std::fprintf(stderr, "D3D11 smoke: transient upload pool initialization failed\n");
             return 1;
@@ -301,16 +286,13 @@ int main() {
         transient_cmd->begin();
         tgfx::BufferHandle reused_uniform;
         uint32_t reused_uniform_offset = UINT32_MAX;
-        if (device->transient_vertex_write(
-                transient_vertices.data(),
-                static_cast<uint32_t>(sizeof(transient_vertices))) != 0 ||
-            !device->transient_uniform_write(
-                transient_vertices.data(),
-                static_cast<uint32_t>(sizeof(transient_vertices)),
-                reused_uniform,
-                reused_uniform_offset) ||
-            reused_uniform != first_uniform ||
-            reused_uniform_offset != 0) {
+        if (device->transient_vertex_write(transient_vertices.data(),
+                                           static_cast<uint32_t>(sizeof(transient_vertices))) != 0 ||
+            !device->transient_uniform_write(transient_vertices.data(),
+                                             static_cast<uint32_t>(sizeof(transient_vertices)),
+                                             reused_uniform,
+                                             reused_uniform_offset) ||
+            reused_uniform != first_uniform || reused_uniform_offset != 0) {
             std::fprintf(stderr, "D3D11 smoke: transient upload pool did not reset and reuse\n");
             return 1;
         }
@@ -320,8 +302,7 @@ int main() {
         unsupported_rgb_desc.width = 2;
         unsupported_rgb_desc.height = 2;
         unsupported_rgb_desc.format = tgfx::PixelFormat::RGB8_UNorm;
-        unsupported_rgb_desc.usage = tgfx::TextureUsage::Sampled |
-                                     tgfx::TextureUsage::CopyDst;
+        unsupported_rgb_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
         if (device->create_texture(unsupported_rgb_desc)) {
             std::fprintf(stderr, "D3D11 smoke: RGB8 texture creation should fail explicitly\n");
             return 1;
@@ -331,8 +312,7 @@ int main() {
         unsupported_storage_desc.width = 2;
         unsupported_storage_desc.height = 2;
         unsupported_storage_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-        unsupported_storage_desc.usage = tgfx::TextureUsage::Storage |
-                                         tgfx::TextureUsage::Sampled;
+        unsupported_storage_desc.usage = tgfx::TextureUsage::Storage | tgfx::TextureUsage::Sampled;
         if (device->create_texture(unsupported_storage_desc)) {
             std::fprintf(stderr, "D3D11 smoke: storage texture creation should fail explicitly\n");
             return 1;
@@ -352,12 +332,8 @@ int main() {
             tgfx::bound_resource_slot_from_plan_entry(unsupported_storage_plan), unsupported_storage_value};
         tgfx::BoundResourceSetStorage unsupported_storage_set_storage;
         unsupported_storage_set_storage.append_group(
-            tgfx::ShaderResourceScope::Pass,
-            true,
-            &unsupported_storage_binding,
-            1);
-        const tgfx::BoundResourceSetDesc unsupported_storage_set_desc =
-            unsupported_storage_set_storage.view();
+            tgfx::ShaderResourceScope::Pass, true, &unsupported_storage_binding, 1);
+        const tgfx::BoundResourceSetDesc unsupported_storage_set_desc = unsupported_storage_set_storage.view();
         if (device->create_bound_resource_set(unsupported_storage_set_desc)) {
             std::fprintf(stderr, "D3D11 smoke: storage texture resource set should fail explicitly\n");
             return 1;
@@ -367,9 +343,8 @@ int main() {
         color_desc.width = 4;
         color_desc.height = 4;
         color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-        color_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                           tgfx::TextureUsage::Sampled |
-                           tgfx::TextureUsage::CopySrc;
+        color_desc.usage =
+            tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         auto color = device->create_texture(color_desc);
         if (!color) {
             std::fprintf(stderr, "D3D11 smoke: create_texture returned empty handle\n");
@@ -402,31 +377,26 @@ int main() {
         auto close_enough = [](float a, float b) {
             return std::fabs(a - b) < 0.02f;
         };
-        if (!close_enough(rgba[0], 0.25f) ||
-            !close_enough(rgba[1], 0.50f) ||
-            !close_enough(rgba[2], 0.75f) ||
+        if (!close_enough(rgba[0], 0.25f) || !close_enough(rgba[1], 0.50f) || !close_enough(rgba[2], 0.75f) ||
             !close_enough(rgba[3], 1.00f)) {
-            std::fprintf(stderr,
-                         "D3D11 smoke: unexpected pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+            std::fprintf(
+                stderr, "D3D11 smoke: unexpected pixel %.3f %.3f %.3f %.3f\n", rgba[0], rgba[1], rgba[2], rgba[3]);
             return 1;
         }
 
-        device->clear_texture(
-            color,
-            termin::Color4{0.10f, 0.20f, 0.30f, 1.0f},
-            termin::Bounds2i::from_size(4, 4));
+        device->clear_texture(color, termin::Color4{0.10f, 0.20f, 0.30f, 1.0f}, termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: clear_texture readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.10f) ||
-            !close_enough(rgba[1], 0.20f) ||
-            !close_enough(rgba[2], 0.30f) ||
+        if (!close_enough(rgba[0], 0.10f) || !close_enough(rgba[1], 0.20f) || !close_enough(rgba[2], 0.30f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected clear_texture pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
@@ -434,28 +404,22 @@ int main() {
         hdr_desc.width = 4;
         hdr_desc.height = 4;
         hdr_desc.format = tgfx::PixelFormat::RGBA16F;
-        hdr_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                         tgfx::TextureUsage::Sampled |
-                         tgfx::TextureUsage::CopySrc;
+        hdr_desc.usage =
+            tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         auto hdr_color = device->create_texture(hdr_desc);
         if (!hdr_color) {
             std::fprintf(stderr, "D3D11 smoke: RGBA16F target creation failed\n");
             return 1;
         }
-        device->clear_texture(
-            hdr_color,
-            termin::Color4{1.25f, 0.50f, 0.125f, 1.0f},
-            termin::Bounds2i::from_size(4, 4));
+        device->clear_texture(hdr_color, termin::Color4{1.25f, 0.50f, 0.125f, 1.0f}, termin::Bounds2i::from_size(4, 4));
         std::vector<float> hdr_readback(4 * 4 * 4, 0.0f);
         if (!device->read_texture_rgba_float(hdr_color, hdr_readback.data())) {
             std::fprintf(stderr, "D3D11 smoke: RGBA16F read_texture_rgba_float failed\n");
             device->destroy(hdr_color);
             return 1;
         }
-        if (!close_enough(hdr_readback[0], 1.25f) ||
-            !close_enough(hdr_readback[1], 0.50f) ||
-            !close_enough(hdr_readback[2], 0.125f) ||
-            !close_enough(hdr_readback[3], 1.00f)) {
+        if (!close_enough(hdr_readback[0], 1.25f) || !close_enough(hdr_readback[1], 0.50f) ||
+            !close_enough(hdr_readback[2], 0.125f) || !close_enough(hdr_readback[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected RGBA16F readback %.3f %.3f %.3f %.3f\n",
                          hdr_readback[0],
@@ -471,9 +435,8 @@ int main() {
         depth_desc.width = 4;
         depth_desc.height = 4;
         depth_desc.format = tgfx::PixelFormat::D32F;
-        depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                           tgfx::TextureUsage::Sampled |
-                           tgfx::TextureUsage::CopySrc;
+        depth_desc.usage =
+            tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         auto depth_tex = device->create_texture(depth_desc);
         if (!depth_tex) {
             std::fprintf(stderr, "D3D11 smoke: D32F target creation failed\n");
@@ -498,9 +461,7 @@ int main() {
             return 1;
         }
         if (!close_enough(depth_readback[0], 0.42f)) {
-            std::fprintf(stderr,
-                         "D3D11 smoke: unexpected D32F readback %.3f\n",
-                         depth_readback[0]);
+            std::fprintf(stderr, "D3D11 smoke: unexpected D32F readback %.3f\n", depth_readback[0]);
             device->destroy(depth_tex);
             return 1;
         }
@@ -511,25 +472,21 @@ int main() {
             return 1;
         }
         if (!close_enough(depth_pixel, 0.42f)) {
-            std::fprintf(stderr,
-                         "D3D11 smoke: unexpected D32F single-pixel readback %.3f\n",
-                         depth_pixel);
+            std::fprintf(stderr, "D3D11 smoke: unexpected D32F single-pixel readback %.3f\n", depth_pixel);
             device->destroy(depth_tex);
             return 1;
         }
 
         std::array<uint64_t, 4> color_requests{};
         for (size_t i = 0; i < color_requests.size(); ++i) {
-            color_requests[i] = device->request_pixel_rgba8(
-                color, static_cast<int>(i), static_cast<int>(i));
+            color_requests[i] = device->request_pixel_rgba8(color, static_cast<int>(i), static_cast<int>(i));
             if (color_requests[i] == 0) {
                 std::fprintf(stderr, "D3D11 smoke: async color request %zu failed\n", i);
                 device->destroy(depth_tex);
                 return 1;
             }
         }
-        const uint64_t depth_request =
-            device->request_pixel_depth_float(depth_tex, 1, 1);
+        const uint64_t depth_request = device->request_pixel_depth_float(depth_tex, 1, 1);
         if (depth_request == 0) {
             std::fprintf(stderr, "D3D11 smoke: async depth request failed\n");
             device->destroy(depth_tex);
@@ -541,50 +498,36 @@ int main() {
         bool depth_ready = false;
         float async_depth = 0.0f;
         std::array<std::array<float, 4>, 4> async_colors{};
-        const auto readback_deadline =
-            std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        const auto readback_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         while (std::chrono::steady_clock::now() < readback_deadline) {
             for (size_t i = 0; i < color_requests.size(); ++i) {
                 if (!color_ready[i]) {
-                    color_ready[i] = device->poll_pixel_rgba8(
-                        color_requests[i], async_colors[i].data());
+                    color_ready[i] = device->poll_pixel_rgba8(color_requests[i], async_colors[i].data());
                 }
             }
             if (!depth_ready) {
-                depth_ready = device->poll_pixel_depth_float(
-                    depth_request, &async_depth);
+                depth_ready = device->poll_pixel_depth_float(depth_request, &async_depth);
             }
-            if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
-                    return ready;
-                }) &&
-                depth_ready) {
+            if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) { return ready; }) && depth_ready) {
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        if (!std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
-                return ready;
-            }) ||
-            !depth_ready) {
+        if (!std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) { return ready; }) || !depth_ready) {
             std::fprintf(stderr, "D3D11 smoke: async readback requests did not complete\n");
             device->destroy(depth_tex);
             return 1;
         }
         for (const auto& async_color : async_colors) {
-            if (!close_enough(async_color[0], 0.10f) ||
-                !close_enough(async_color[1], 0.20f) ||
-                !close_enough(async_color[2], 0.30f) ||
-                !close_enough(async_color[3], 1.00f)) {
+            if (!close_enough(async_color[0], 0.10f) || !close_enough(async_color[1], 0.20f) ||
+                !close_enough(async_color[2], 0.30f) || !close_enough(async_color[3], 1.00f)) {
                 std::fprintf(stderr, "D3D11 smoke: async color readback mismatch\n");
                 device->destroy(depth_tex);
                 return 1;
             }
         }
         if (!close_enough(async_depth, 0.42f)) {
-            std::fprintf(
-                stderr,
-                "D3D11 smoke: async depth readback mismatch %.3f\n",
-                async_depth);
+            std::fprintf(stderr, "D3D11 smoke: async depth readback mismatch %.3f\n", async_depth);
             device->destroy(depth_tex);
             return 1;
         }
@@ -594,31 +537,28 @@ int main() {
         bgra_desc.width = 4;
         bgra_desc.height = 4;
         bgra_desc.format = tgfx::PixelFormat::BGRA8_UNorm;
-        bgra_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                          tgfx::TextureUsage::CopySrc |
-                          tgfx::TextureUsage::CopyDst;
+        bgra_desc.usage =
+            tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
         auto bgra_target = device->create_texture(bgra_desc);
         if (!bgra_target) {
             std::fprintf(stderr, "D3D11 smoke: BGRA blit target creation failed\n");
             return 1;
         }
         device->blit_to_texture(
-            bgra_target,
-            color,
-            termin::Bounds2i::from_size(4, 4),
-            termin::Bounds2i::from_size(4, 4));
+            bgra_target, color, termin::Bounds2i::from_size(4, 4), termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(bgra_target, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: RGBA->BGRA blit readback failed\n");
             device->destroy(bgra_target);
             return 1;
         }
-        if (!close_enough(rgba[0], 0.10f) ||
-            !close_enough(rgba[1], 0.20f) ||
-            !close_enough(rgba[2], 0.30f) ||
+        if (!close_enough(rgba[0], 0.10f) || !close_enough(rgba[1], 0.20f) || !close_enough(rgba[2], 0.30f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             device->destroy(bgra_target);
             return 1;
         }
@@ -629,9 +569,8 @@ int main() {
         msaa_blit_src_desc.height = 4;
         msaa_blit_src_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
         msaa_blit_src_desc.sample_count = 4;
-        msaa_blit_src_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                                   tgfx::TextureUsage::Sampled |
-                                   tgfx::TextureUsage::CopySrc;
+        msaa_blit_src_desc.usage =
+            tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         auto msaa_blit_src = device->create_texture(msaa_blit_src_desc);
         if (!msaa_blit_src) {
             std::fprintf(stderr, "D3D11 smoke: MSAA blit source creation failed\n");
@@ -662,23 +601,21 @@ int main() {
             return 1;
         }
         device->blit_to_texture(
-            msaa_bgra_target,
-            msaa_blit_src,
-            termin::Bounds2i::from_size(4, 4),
-            termin::Bounds2i::from_size(4, 4));
+            msaa_bgra_target, msaa_blit_src, termin::Bounds2i::from_size(4, 4), termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(msaa_bgra_target, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: MSAA RGBA->BGRA blit readback failed\n");
             device->destroy(msaa_bgra_target);
             device->destroy(msaa_blit_src);
             return 1;
         }
-        if (!close_enough(rgba[0], 0.70f) ||
-            !close_enough(rgba[1], 0.10f) ||
-            !close_enough(rgba[2], 0.20f) ||
+        if (!close_enough(rgba[0], 0.70f) || !close_enough(rgba[1], 0.10f) || !close_enough(rgba[2], 0.20f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected MSAA RGBA->BGRA blit pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             device->destroy(msaa_bgra_target);
             device->destroy(msaa_blit_src);
             return 1;
@@ -687,24 +624,21 @@ int main() {
         device->destroy(msaa_blit_src);
 
         const char* shader_uuid = "d3d11-smoke-artifact";
-        const auto artifact_root =
-            std::filesystem::temp_directory_path() / "termin-tgfx2-d3d11-smoke-artifacts";
+        const auto artifact_root = std::filesystem::temp_directory_path() / "termin-tgfx2-d3d11-smoke-artifacts";
         const auto shader_dir = artifact_root / "shaders" / "d3d11";
         const auto vs_path = shader_dir / (std::string(shader_uuid) + ".vs.cso");
         const auto ps_path = shader_dir / (std::string(shader_uuid) + ".ps.cso");
 
-        const char* vs_source =
-            "struct VSOut { float4 pos : SV_Position; };\n"
-            "VSOut main(uint vertex_id : SV_VertexID) {\n"
-            "    float2 p[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };\n"
-            "    VSOut o;\n"
-            "    o.pos = float4(p[vertex_id], 0.0, 1.0);\n"
-            "    return o;\n"
-            "}\n";
-        const char* ps_source =
-            "float4 main() : SV_Target0 {\n"
-            "    return float4(0.90, 0.10, 0.20, 1.0);\n"
-            "}\n";
+        const char* vs_source = "struct VSOut { float4 pos : SV_Position; };\n"
+                                "VSOut main(uint vertex_id : SV_VertexID) {\n"
+                                "    float2 p[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };\n"
+                                "    VSOut o;\n"
+                                "    o.pos = float4(p[vertex_id], 0.0, 1.0);\n"
+                                "    return o;\n"
+                                "}\n";
+        const char* ps_source = "float4 main() : SV_Target0 {\n"
+                                "    return float4(0.90, 0.10, 0.20, 1.0);\n"
+                                "}\n";
         if (!compile_hlsl_to_file(vs_source, "vs_5_0", vs_path) ||
             !compile_hlsl_to_file(ps_source, "ps_5_0", ps_path)) {
             return 1;
@@ -715,20 +649,10 @@ int main() {
 
         RegistryGuard registries;
         const tc_shader_create_desc shader_desc = {
-            {
-                vs_source,
-                ps_source,
-                nullptr,
-                "D3D11 smoke artifact shader",
-                nullptr,
-                "main",
-                "main",
-                nullptr
-            },
+            {vs_source, ps_source, nullptr, "D3D11 smoke artifact shader", nullptr, "main", "main", nullptr},
             shader_uuid,
             TC_SHADER_LANGUAGE_HLSL,
-            TC_SHADER_ARTIFACT_REQUIRED
-        };
+            TC_SHADER_ARTIFACT_REQUIRED};
         tc_shader_handle shader_handle = tc_shader_from_sources_desc(&shader_desc);
         tc_shader* shader = tc_shader_get(shader_handle);
         if (!shader) {
@@ -776,27 +700,27 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: draw read_pixel_rgba8 failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.90f) ||
-            !close_enough(rgba[1], 0.10f) ||
-            !close_enough(rgba[2], 0.20f) ||
+        if (!close_enough(rgba[0], 0.90f) || !close_enough(rgba[1], 0.10f) || !close_enough(rgba[2], 0.20f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected drawn pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
         const char* textured_shader_uuid = "d3d11-smoke-tc-resources";
         const auto textured_vs_path = shader_dir / (std::string(textured_shader_uuid) + ".vs.cso");
         const auto textured_ps_path = shader_dir / (std::string(textured_shader_uuid) + ".ps.cso");
-        const char* textured_vs_source =
-            "struct VSIn { float3 position : POSITION; };\n"
-            "struct VSOut { float4 pos : SV_Position; };\n"
-            "VSOut main(VSIn input) {\n"
-            "    VSOut o;\n"
-            "    o.pos = float4(input.position, 1.0);\n"
-            "    return o;\n"
-            "}\n";
+        const char* textured_vs_source = "struct VSIn { float3 position : POSITION; };\n"
+                                         "struct VSOut { float4 pos : SV_Position; };\n"
+                                         "VSOut main(VSIn input) {\n"
+                                         "    VSOut o;\n"
+                                         "    o.pos = float4(input.position, 1.0);\n"
+                                         "    return o;\n"
+                                         "}\n";
         const char* textured_ps_source =
             "Texture2D albedo_texture : register(t0);\n"
             "SamplerState albedo_sampler : register(s0);\n"
@@ -808,21 +732,17 @@ int main() {
             return 1;
         }
 
-        const tc_shader_create_desc textured_shader_desc = {
-            {
-                textured_vs_source,
-                textured_ps_source,
-                nullptr,
-                "D3D11 smoke tc resource shader",
-                nullptr,
-                "main",
-                "main",
-                nullptr
-            },
-            textured_shader_uuid,
-            TC_SHADER_LANGUAGE_HLSL,
-            TC_SHADER_ARTIFACT_REQUIRED
-        };
+        const tc_shader_create_desc textured_shader_desc = {{textured_vs_source,
+                                                             textured_ps_source,
+                                                             nullptr,
+                                                             "D3D11 smoke tc resource shader",
+                                                             nullptr,
+                                                             "main",
+                                                             "main",
+                                                             nullptr},
+                                                            textured_shader_uuid,
+                                                            TC_SHADER_LANGUAGE_HLSL,
+                                                            TC_SHADER_ARTIFACT_REQUIRED};
         tc_shader_handle textured_shader_handle = tc_shader_from_sources_desc(&textured_shader_desc);
         tc_shader* textured_shader = tc_shader_get(textured_shader_handle);
         if (!textured_shader) {
@@ -832,11 +752,7 @@ int main() {
 
         tgfx::ShaderHandle textured_vs;
         tgfx::ShaderHandle textured_fs;
-        if (!termin::tc_shader_ensure_tgfx2(
-                textured_shader,
-                device.get(),
-                &textured_vs,
-                &textured_fs) ||
+        if (!termin::tc_shader_ensure_tgfx2(textured_shader, device.get(), &textured_vs, &textured_fs) ||
             !textured_vs || !textured_fs) {
             std::fprintf(stderr, "D3D11 smoke: textured tc_shader_ensure_tgfx2 failed\n");
             return 1;
@@ -845,19 +761,25 @@ int main() {
         tc_texture_handle texture_handle = tc_texture_create("d3d11-smoke-texture");
         tc_texture* texture = tc_texture_get(texture_handle);
         const uint8_t texture_pixels[] = {
-            128, 128, 128, 128, 128, 128, 128, 128,
-            128, 128, 128, 128, 128, 128, 128, 128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
+            128,
         };
-        if (!texture ||
-            !tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB) ||
-            !tc_texture_set_data(
-                texture,
-                texture_pixels,
-                2,
-                2,
-                4,
-                "D3D11 smoke texture",
-                nullptr)) {
+        if (!texture || !tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB) ||
+            !tc_texture_set_data(texture, texture_pixels, 2, 2, 4, "D3D11 smoke texture", nullptr)) {
             std::fprintf(stderr, "D3D11 smoke: failed to create tc_texture\n");
             return 1;
         }
@@ -868,32 +790,17 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: ensure_tc_texture failed or did not cache\n");
             return 1;
         }
-        tc_texture_handle linear_texture_handle =
-            tc_texture_create("d3d11-smoke-linear-texture");
+        tc_texture_handle linear_texture_handle = tc_texture_create("d3d11-smoke-linear-texture");
         tc_texture* linear_texture = tc_texture_get(linear_texture_handle);
-        if (!linear_texture ||
-            !tc_texture_set_encoding(
-                linear_texture,
-                TC_TEXTURE_ENCODING_LINEAR) ||
-            !tc_texture_set_data(
-                linear_texture,
-                texture_pixels,
-                2,
-                2,
-                4,
-                "D3D11 smoke linear texture",
-                nullptr)) {
-            std::fprintf(
-                stderr,
-                "D3D11 smoke: failed to create Linear tc_texture\n");
+        if (!linear_texture || !tc_texture_set_encoding(linear_texture, TC_TEXTURE_ENCODING_LINEAR) ||
+            !tc_texture_set_data(linear_texture, texture_pixels, 2, 2, 4, "D3D11 smoke linear texture", nullptr)) {
+            std::fprintf(stderr, "D3D11 smoke: failed to create Linear tc_texture\n");
             return 1;
         }
         linear_texture->mipmap = 1;
         auto linear_texture_gpu = device->ensure_tc_texture(linear_texture);
         if (!linear_texture_gpu) {
-            std::fprintf(
-                stderr,
-                "D3D11 smoke: ensure_tc_texture failed for Linear texture\n");
+            std::fprintf(stderr, "D3D11 smoke: ensure_tc_texture failed for Linear texture\n");
             return 1;
         }
 
@@ -902,8 +809,8 @@ int main() {
         };
         const SmokeVertex vertices[] = {
             {{-1.0f, -1.0f, 0.0f}},
-            {{-1.0f,  3.0f, 0.0f}},
-            {{ 3.0f, -1.0f, 0.0f}},
+            {{-1.0f, 3.0f, 0.0f}},
+            {{3.0f, -1.0f, 0.0f}},
         };
         const uint32_t indices[] = {0, 1, 2};
         tc_vertex_layout tc_layout;
@@ -915,22 +822,13 @@ int main() {
 
         tc_mesh_handle mesh_handle = tc_mesh_create("d3d11-smoke-mesh");
         tc_mesh* mesh = tc_mesh_get(mesh_handle);
-        if (!mesh ||
-            !tc_mesh_set_data(
-                mesh,
-                vertices,
-                3,
-                &tc_layout,
-                indices,
-                3,
-                "D3D11 smoke mesh")) {
+        if (!mesh || !tc_mesh_set_data(mesh, vertices, 3, &tc_layout, indices, 3, "D3D11 smoke mesh")) {
             std::fprintf(stderr, "D3D11 smoke: failed to create tc_mesh\n");
             return 1;
         }
         auto mesh_gpu = device->ensure_tc_mesh(mesh);
         auto mesh_gpu_again = device->ensure_tc_mesh(mesh);
-        if (!mesh_gpu.first || !mesh_gpu.second ||
-            mesh_gpu.first != mesh_gpu_again.first ||
+        if (!mesh_gpu.first || !mesh_gpu.second || mesh_gpu.first != mesh_gpu_again.first ||
             mesh_gpu.second != mesh_gpu_again.second) {
             std::fprintf(stderr, "D3D11 smoke: ensure_tc_mesh failed or did not cache\n");
             return 1;
@@ -946,11 +844,7 @@ int main() {
         textured_pipeline_desc.raster.cull = tgfx::CullMode::None;
         tgfx::VertexBufferLayout vertex_layout;
         vertex_layout.stride = sizeof(SmokeVertex);
-        vertex_layout.attributes.emplace_back(
-            0,
-            tgfx::VertexFormat::Float3,
-            0,
-            "POSITION");
+        vertex_layout.attributes.emplace_back(0, tgfx::VertexFormat::Float3, 0, "POSITION");
         textured_pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(vertex_layout));
         auto textured_pipeline = device->create_pipeline(textured_pipeline_desc);
         if (!textured_pipeline) {
@@ -962,10 +856,7 @@ int main() {
         standard_location_desc.vertex_layouts.clear();
         tgfx::VertexBufferLayout standard_location_layout;
         standard_location_layout.stride = sizeof(SmokeVertex);
-        standard_location_layout.attributes.emplace_back(
-            0,
-            tgfx::VertexFormat::Float3,
-            0);
+        standard_location_layout.attributes.emplace_back(0, tgfx::VertexFormat::Float3, 0);
         standard_location_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(standard_location_layout));
         if (!device->create_pipeline(standard_location_desc)) {
             std::fprintf(stderr, "D3D11 smoke: standard location input layout failed\n");
@@ -984,23 +875,16 @@ int main() {
         sampled_texture.value.kind = tgfx::BoundResourceKind::SampledTexture;
         sampled_texture.value.texture = texture_gpu;
         sampled_texture.value.sampler = sampler;
-        const auto create_texture_resource_set =
-            [&](tgfx::TextureHandle texture_handle) {
-                tgfx::BoundResourceBinding binding = sampled_texture;
-                binding.value.texture = texture_handle;
-                tgfx::BoundResourceSetStorage storage;
-                storage.set_resource_layout_token(
-                    device->pipeline_resource_layout_token(textured_pipeline));
-                storage.append_group(
-                    tgfx::ShaderResourceScope::Material,
-                    true,
-                    &binding,
-                    1);
-                return device->create_bound_resource_set(storage.view());
-            };
+        const auto create_texture_resource_set = [&](tgfx::TextureHandle texture_handle) {
+            tgfx::BoundResourceBinding binding = sampled_texture;
+            binding.value.texture = texture_handle;
+            tgfx::BoundResourceSetStorage storage;
+            storage.set_resource_layout_token(device->pipeline_resource_layout_token(textured_pipeline));
+            storage.append_group(tgfx::ShaderResourceScope::Material, true, &binding, 1);
+            return device->create_bound_resource_set(storage.view());
+        };
         auto resource_set = create_texture_resource_set(texture_gpu);
-        auto linear_resource_set =
-            create_texture_resource_set(linear_texture_gpu);
+        auto linear_resource_set = create_texture_resource_set(linear_texture_gpu);
         if (!sampler || !resource_set || !linear_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: failed to create sampler/resource set\n");
             return 1;
@@ -1011,44 +895,33 @@ int main() {
         attachment.clear_color[2] = 0.0f;
         attachment.clear_color[3] = 1.0f;
         pass.colors[0] = attachment;
-        const auto sample_texture =
-            [&](tgfx::ResourceSetHandle set, float out_rgba[4]) {
-                auto draw_cmd = device->create_command_list();
-                draw_cmd->begin();
-                draw_cmd->begin_render_pass(pass);
-                draw_cmd->bind_pipeline(textured_pipeline);
-                draw_cmd->bind_resource_set(set);
-                draw_cmd->bind_vertex_buffer(0, mesh_gpu.first);
-                draw_cmd->bind_index_buffer(
-                    mesh_gpu.second,
-                    tgfx::IndexType::Uint32);
-                draw_cmd->draw_indexed(3);
-                draw_cmd->end_render_pass();
-                draw_cmd->end();
-                device->submit(*draw_cmd);
-                return device->read_pixel_rgba8(color, 2, 2, out_rgba);
-            };
+        const auto sample_texture = [&](tgfx::ResourceSetHandle set, float out_rgba[4]) {
+            auto draw_cmd = device->create_command_list();
+            draw_cmd->begin();
+            draw_cmd->begin_render_pass(pass);
+            draw_cmd->bind_pipeline(textured_pipeline);
+            draw_cmd->bind_resource_set(set);
+            draw_cmd->bind_vertex_buffer(0, mesh_gpu.first);
+            draw_cmd->bind_index_buffer(mesh_gpu.second, tgfx::IndexType::Uint32);
+            draw_cmd->draw_indexed(3);
+            draw_cmd->end_render_pass();
+            draw_cmd->end();
+            device->submit(*draw_cmd);
+            return device->read_pixel_rgba8(color, 2, 2, out_rgba);
+        };
         float srgb_rgba[4] = {};
         float linear_rgba[4] = {};
         const bool srgb_read_ok = sample_texture(resource_set, srgb_rgba);
-        const bool linear_read_ok =
-            sample_texture(linear_resource_set, linear_rgba);
+        const bool linear_read_ok = sample_texture(linear_resource_set, linear_rgba);
         if (!srgb_read_ok || !linear_read_ok) {
-            std::fprintf(
-                stderr,
-                "D3D11 smoke: texture encoding draw readback failed\n");
+            std::fprintf(stderr, "D3D11 smoke: texture encoding draw readback failed\n");
             return 1;
         }
-        const bool srgb_ok =
-            close_enough(srgb_rgba[0], 0.21586f) &&
-            close_enough(srgb_rgba[1], 0.21586f) &&
-            close_enough(srgb_rgba[2], 0.21586f) &&
-            close_enough(srgb_rgba[3], 128.0f / 255.0f);
+        const bool srgb_ok = close_enough(srgb_rgba[0], 0.21586f) && close_enough(srgb_rgba[1], 0.21586f) &&
+                             close_enough(srgb_rgba[2], 0.21586f) && close_enough(srgb_rgba[3], 128.0f / 255.0f);
         const bool linear_ok =
-            close_enough(linear_rgba[0], 128.0f / 255.0f) &&
-            close_enough(linear_rgba[1], 128.0f / 255.0f) &&
-            close_enough(linear_rgba[2], 128.0f / 255.0f) &&
-            close_enough(linear_rgba[3], 128.0f / 255.0f);
+            close_enough(linear_rgba[0], 128.0f / 255.0f) && close_enough(linear_rgba[1], 128.0f / 255.0f) &&
+            close_enough(linear_rgba[2], 128.0f / 255.0f) && close_enough(linear_rgba[3], 128.0f / 255.0f);
         if (!srgb_ok || !linear_ok) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected mipmapped encoding samples "
@@ -1067,24 +940,22 @@ int main() {
 
         const auto normal_vs_path = shader_dir / "d3d11-smoke-normal-material.vs.cso";
         const auto normal_ps_path = shader_dir / "d3d11-smoke-normal-material.ps.cso";
-        const char* normal_vs_source =
-            "cbuffer PerFrame : register(b0) { float4x4 view_proj; };\n"
-            "cbuffer DrawData : register(b1) { float4x4 model; };\n"
-            "struct VSIn { float3 position : POSITION; float3 normal : NORMAL; };\n"
-            "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
-            "VSOut main(VSIn input) {\n"
-            "    VSOut o;\n"
-            "    float4 world = mul(model, float4(input.position, 1.0));\n"
-            "    o.pos = mul(view_proj, world);\n"
-            "    o.normal_world = input.normal;\n"
-            "    return o;\n"
-            "}\n";
-        const char* normal_ps_source =
-            "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
-            "float4 main(VSOut input) : SV_Target0 {\n"
-            "    float3 n = normalize(input.normal_world);\n"
-            "    return float4(n * 0.5 + 0.5, 1.0);\n"
-            "}\n";
+        const char* normal_vs_source = "cbuffer PerFrame : register(b0) { float4x4 view_proj; };\n"
+                                       "cbuffer DrawData : register(b1) { float4x4 model; };\n"
+                                       "struct VSIn { float3 position : POSITION; float3 normal : NORMAL; };\n"
+                                       "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
+                                       "VSOut main(VSIn input) {\n"
+                                       "    VSOut o;\n"
+                                       "    float4 world = mul(model, float4(input.position, 1.0));\n"
+                                       "    o.pos = mul(view_proj, world);\n"
+                                       "    o.normal_world = input.normal;\n"
+                                       "    return o;\n"
+                                       "}\n";
+        const char* normal_ps_source = "struct VSOut { float4 pos : SV_Position; float3 normal_world : NORMAL; };\n"
+                                       "float4 main(VSOut input) : SV_Target0 {\n"
+                                       "    float3 n = normalize(input.normal_world);\n"
+                                       "    return float4(n * 0.5 + 0.5, 1.0);\n"
+                                       "}\n";
         if (!compile_hlsl_to_file(normal_vs_source, "vs_5_0", normal_vs_path) ||
             !compile_hlsl_to_file(normal_ps_source, "ps_5_0", normal_ps_path)) {
             return 1;
@@ -1117,8 +988,8 @@ int main() {
         };
         const NormalVertex normal_vertices[] = {
             {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-            {{-1.0f,  3.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-            {{ 3.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+            {{-1.0f, 3.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+            {{3.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
         };
         tgfx::BufferDesc normal_vbo_desc;
         normal_vbo_desc.size = sizeof(normal_vertices);
@@ -1126,27 +997,35 @@ int main() {
         auto normal_vbo = device->create_buffer(normal_vbo_desc);
         device->upload_buffer(
             normal_vbo,
-            std::span<const uint8_t>(
-                reinterpret_cast<const uint8_t*>(normal_vertices),
-                sizeof(normal_vertices)));
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(normal_vertices), sizeof(normal_vertices)));
 
         float identity[16] = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
         };
         tgfx::BufferDesc normal_cb_desc;
         normal_cb_desc.size = sizeof(identity);
         normal_cb_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
         auto per_frame_cb = device->create_buffer(normal_cb_desc);
         auto draw_data_cb = device->create_buffer(normal_cb_desc);
-        device->upload_buffer(
-            per_frame_cb,
-            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
-        device->upload_buffer(
-            draw_data_cb,
-            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
+        device->upload_buffer(per_frame_cb,
+                              std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
+        device->upload_buffer(draw_data_cb,
+                              std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity), sizeof(identity)));
 
         tgfx::PipelineDesc normal_pipeline_desc;
         normal_pipeline_desc.vertex_shader = normal_vs;
@@ -1159,15 +1038,9 @@ int main() {
         tgfx::VertexBufferLayout normal_layout;
         normal_layout.stride = sizeof(NormalVertex);
         normal_layout.attributes.emplace_back(
-            0,
-            tgfx::VertexFormat::Float3,
-            static_cast<uint32_t>(offsetof(NormalVertex, position)),
-            "position");
+            0, tgfx::VertexFormat::Float3, static_cast<uint32_t>(offsetof(NormalVertex, position)), "position");
         normal_layout.attributes.emplace_back(
-            1,
-            tgfx::VertexFormat::Float3,
-            static_cast<uint32_t>(offsetof(NormalVertex, normal)),
-            "normal");
+            1, tgfx::VertexFormat::Float3, static_cast<uint32_t>(offsetof(NormalVertex, normal)), "normal");
         normal_pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(normal_layout));
         auto normal_pipeline = device->create_pipeline(normal_pipeline_desc);
         if (!normal_pipeline) {
@@ -1205,17 +1078,15 @@ int main() {
         draw_data_value.buffer = draw_data_cb;
         draw_data_value.range = sizeof(identity);
 
-        const tgfx::BoundResourceBinding frame_binding = {tgfx::bound_resource_slot_from_plan_entry(per_frame_plan), per_frame_value};
-        const tgfx::BoundResourceBinding draw_binding = {tgfx::bound_resource_slot_from_plan_entry(draw_data_plan), draw_data_value};
+        const tgfx::BoundResourceBinding frame_binding = {tgfx::bound_resource_slot_from_plan_entry(per_frame_plan),
+                                                          per_frame_value};
+        const tgfx::BoundResourceBinding draw_binding = {tgfx::bound_resource_slot_from_plan_entry(draw_data_plan),
+                                                         draw_data_value};
         tgfx::BoundResourceSetStorage normal_resource_set_storage;
-        normal_resource_set_storage.set_resource_layout_token(
-            device->pipeline_resource_layout_token(normal_pipeline));
-        normal_resource_set_storage.append_group(
-            tgfx::ShaderResourceScope::Frame, true, &frame_binding, 1);
-        normal_resource_set_storage.append_group(
-            tgfx::ShaderResourceScope::Draw, true, &draw_binding, 1);
-        const tgfx::BoundResourceSetDesc normal_resource_set_desc =
-            normal_resource_set_storage.view();
+        normal_resource_set_storage.set_resource_layout_token(device->pipeline_resource_layout_token(normal_pipeline));
+        normal_resource_set_storage.append_group(tgfx::ShaderResourceScope::Frame, true, &frame_binding, 1);
+        normal_resource_set_storage.append_group(tgfx::ShaderResourceScope::Draw, true, &draw_binding, 1);
+        const tgfx::BoundResourceSetDesc normal_resource_set_desc = normal_resource_set_storage.view();
         auto normal_resource_set = device->create_bound_resource_set(normal_resource_set_desc);
         if (!normal_vbo || !per_frame_cb || !draw_data_cb || !normal_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: normal material resources failed\n");
@@ -1237,13 +1108,14 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: normal material readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.5f) ||
-            !close_enough(rgba[1], 1.0f) ||
-            !close_enough(rgba[2], 0.5f) ||
+        if (!close_enough(rgba[0], 0.5f) || !close_enough(rgba[1], 1.0f) || !close_enough(rgba[2], 0.5f) ||
             !close_enough(rgba[3], 1.0f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected normal material pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
@@ -1268,12 +1140,9 @@ int main() {
         tgfx::BoundResourceSetStorage shadow_maps_resource_set_storage;
         shadow_maps_resource_set_storage.set_resource_layout_token(
             device->pipeline_resource_layout_token(normal_pipeline));
-        shadow_maps_resource_set_storage.append_group(
-            tgfx::ShaderResourceScope::Pass, true, &shadow_maps_binding, 1);
-        const tgfx::BoundResourceSetDesc shadow_maps_resource_set_desc =
-            shadow_maps_resource_set_storage.view();
-        auto shadow_maps_resource_set =
-            device->create_bound_resource_set(shadow_maps_resource_set_desc);
+        shadow_maps_resource_set_storage.append_group(tgfx::ShaderResourceScope::Pass, true, &shadow_maps_binding, 1);
+        const tgfx::BoundResourceSetDesc shadow_maps_resource_set_desc = shadow_maps_resource_set_storage.view();
+        auto shadow_maps_resource_set = device->create_bound_resource_set(shadow_maps_resource_set_desc);
         if (!shadow_maps_resource_set) {
             std::fprintf(stderr, "D3D11 smoke: shadow_maps resource set failed\n");
             return 1;
@@ -1293,9 +1162,8 @@ int main() {
         normal_msaa_desc.height = 4;
         normal_msaa_desc.format = tgfx::PixelFormat::RGBA16F;
         normal_msaa_desc.sample_count = 4;
-        normal_msaa_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                                 tgfx::TextureUsage::Sampled |
-                                 tgfx::TextureUsage::CopySrc;
+        normal_msaa_desc.usage =
+            tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         auto normal_msaa_color = device->create_texture(normal_msaa_desc);
         if (!normal_msaa_color) {
             std::fprintf(stderr, "D3D11 smoke: normal material MSAA target creation failed\n");
@@ -1334,16 +1202,12 @@ int main() {
         device->submit(*normal_msaa_cmd);
 
         std::vector<float> normal_msaa_readback(4 * 4 * 4, 0.0f);
-        if (!device->read_texture_rgba_float(
-                normal_msaa_color,
-                normal_msaa_readback.data())) {
+        if (!device->read_texture_rgba_float(normal_msaa_color, normal_msaa_readback.data())) {
             std::fprintf(stderr, "D3D11 smoke: normal material MSAA readback failed\n");
             return 1;
         }
-        if (!close_enough(normal_msaa_readback[0], 0.5f) ||
-            !close_enough(normal_msaa_readback[1], 1.0f) ||
-            !close_enough(normal_msaa_readback[2], 0.5f) ||
-            !close_enough(normal_msaa_readback[3], 1.0f)) {
+        if (!close_enough(normal_msaa_readback[0], 0.5f) || !close_enough(normal_msaa_readback[1], 1.0f) ||
+            !close_enough(normal_msaa_readback[2], 0.5f) || !close_enough(normal_msaa_readback[3], 1.0f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected normal material MSAA pixel %.3f %.3f %.3f %.3f\n",
                          normal_msaa_readback[0],
@@ -1357,33 +1221,30 @@ int main() {
         const auto fsq_vs_path = shader_dir / (std::string(fsq_shader.uuid) + ".vs.cso");
         const auto render_context_ps_path = shader_dir / "d3d11-smoke-render-context.ps.cso";
         const auto mrt_ps_path = shader_dir / "d3d11-smoke-ordered-mrt.ps.cso";
-        const char* fsq_vs_source =
-            "struct VSIn { float2 position : POSITION; float2 uv : TEXCOORD0; };\n"
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "VSOut main(VSIn input) {\n"
-            "    VSOut o;\n"
-            "    o.pos = float4(input.position.x, -input.position.y, 0.0, 1.0);\n"
-            "    o.uv = input.uv;\n"
-            "    return o;\n"
-            "}\n";
-        const char* render_context_ps_source =
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "float4 main(VSOut input) : SV_Target0 {\n"
-            "    return float4(0.20, 0.70, 0.35, 1.0);\n"
-            "}\n";
-        const char* mrt_ps_source =
-            "struct MRTOutput {\n"
-            "    float4 target0 : SV_Target0;\n"
-            "    float4 target1 : SV_Target1;\n"
-            "    float4 target2 : SV_Target2;\n"
-            "};\n"
-            "MRTOutput main() {\n"
-            "    MRTOutput output;\n"
-            "    output.target0 = float4(0.0, 1.0, 1.0, 1.0);\n"
-            "    output.target1 = float4(1.0, 0.0, 1.0, 1.0);\n"
-            "    output.target2 = float4(1.0, 1.0, 0.0, 1.0);\n"
-            "    return output;\n"
-            "}\n";
+        const char* fsq_vs_source = "struct VSIn { float2 position : POSITION; float2 uv : TEXCOORD0; };\n"
+                                    "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                    "VSOut main(VSIn input) {\n"
+                                    "    VSOut o;\n"
+                                    "    o.pos = float4(input.position.x, -input.position.y, 0.0, 1.0);\n"
+                                    "    o.uv = input.uv;\n"
+                                    "    return o;\n"
+                                    "}\n";
+        const char* render_context_ps_source = "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                               "float4 main(VSOut input) : SV_Target0 {\n"
+                                               "    return float4(0.20, 0.70, 0.35, 1.0);\n"
+                                               "}\n";
+        const char* mrt_ps_source = "struct MRTOutput {\n"
+                                    "    float4 target0 : SV_Target0;\n"
+                                    "    float4 target1 : SV_Target1;\n"
+                                    "    float4 target2 : SV_Target2;\n"
+                                    "};\n"
+                                    "MRTOutput main() {\n"
+                                    "    MRTOutput output;\n"
+                                    "    output.target0 = float4(0.0, 1.0, 1.0, 1.0);\n"
+                                    "    output.target1 = float4(1.0, 0.0, 1.0, 1.0);\n"
+                                    "    output.target2 = float4(1.0, 1.0, 0.0, 1.0);\n"
+                                    "    return output;\n"
+                                    "}\n";
         if (!compile_hlsl_to_file(fsq_vs_source, "vs_5_0", fsq_vs_path) ||
             !compile_hlsl_to_file(render_context_ps_source, "ps_5_0", render_context_ps_path) ||
             !compile_hlsl_to_file(mrt_ps_source, "ps_5_0", mrt_ps_path)) {
@@ -1445,13 +1306,14 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: RenderContext2 draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.20f) ||
-            !close_enough(rgba[1], 0.70f) ||
-            !close_enough(rgba[2], 0.35f) ||
+        if (!close_enough(rgba[0], 0.20f) || !close_enough(rgba[1], 0.70f) || !close_enough(rgba[2], 0.35f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected RenderContext2 pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
@@ -1470,22 +1332,22 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: RenderContext2 color-only depth-state readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.20f) ||
-            !close_enough(rgba[1], 0.70f) ||
-            !close_enough(rgba[2], 0.35f) ||
+        if (!close_enough(rgba[0], 0.20f) || !close_enough(rgba[1], 0.70f) || !close_enough(rgba[2], 0.35f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: color-only pass with stale depth state did not draw %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
         const auto fsq_uv_ps_path = shader_dir / "d3d11-smoke-fsq-uv.ps.cso";
-        const char* fsq_uv_ps_source =
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "float4 main(VSOut input) : SV_Target0 {\n"
-            "    return float4(input.uv.x, input.uv.y, 0.0, 1.0);\n"
-            "}\n";
+        const char* fsq_uv_ps_source = "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                       "float4 main(VSOut input) : SV_Target0 {\n"
+                                       "    return float4(input.uv.x, input.uv.y, 0.0, 1.0);\n"
+                                       "}\n";
         if (!compile_hlsl_to_file(fsq_uv_ps_source, "ps_5_0", fsq_uv_ps_path)) {
             return 1;
         }
@@ -1516,8 +1378,7 @@ int main() {
 
         float top_rgba[4] = {};
         float bottom_rgba[4] = {};
-        if (!device->read_pixel_rgba8(color, 2, 0, top_rgba) ||
-            !device->read_pixel_rgba8(color, 2, 3, bottom_rgba)) {
+        if (!device->read_pixel_rgba8(color, 2, 0, top_rgba) || !device->read_pixel_rgba8(color, 2, 3, bottom_rgba)) {
             std::fprintf(stderr, "D3D11 smoke: FSQ UV readback failed\n");
             return 1;
         }
@@ -1531,14 +1392,13 @@ int main() {
         }
 
         const auto push_constants_ps_path = shader_dir / "d3d11-smoke-push-constants.ps.cso";
-        const char* push_constants_ps_source =
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "cbuffer PushConstants : register(b13) {\n"
-            "    float4 u_color;\n"
-            "};\n"
-            "float4 main(VSOut input) : SV_Target0 {\n"
-            "    return u_color;\n"
-            "}\n";
+        const char* push_constants_ps_source = "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                               "cbuffer PushConstants : register(b13) {\n"
+                                               "    float4 u_color;\n"
+                                               "};\n"
+                                               "float4 main(VSOut input) : SV_Target0 {\n"
+                                               "    return u_color;\n"
+                                               "}\n";
         if (!compile_hlsl_to_file(push_constants_ps_source, "ps_5_0", push_constants_ps_path)) {
             return 1;
         }
@@ -1573,32 +1433,31 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: push constants draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], push_color[0]) ||
-            !close_enough(rgba[1], push_color[1]) ||
-            !close_enough(rgba[2], push_color[2]) ||
-            !close_enough(rgba[3], push_color[3])) {
+        if (!close_enough(rgba[0], push_color[0]) || !close_enough(rgba[1], push_color[1]) ||
+            !close_enough(rgba[2], push_color[2]) || !close_enough(rgba[3], push_color[3])) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected push constants pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
         const auto reflected_input_vs_path = shader_dir / "d3d11-smoke-reflected-input.vs.cso";
         const auto reflected_input_ps_path = shader_dir / "d3d11-smoke-reflected-input.ps.cso";
-        const char* reflected_input_vs_source =
-            "struct VSIn { float3 pos : POSITION; float4 uv_pad : TEXCOORD0; };\n"
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "VSOut main(VSIn input) {\n"
-            "    VSOut o;\n"
-            "    o.pos = float4(input.pos, 1.0);\n"
-            "    o.uv = input.uv_pad.xy;\n"
-            "    return o;\n"
-            "}\n";
-        const char* reflected_input_ps_source =
-            "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
-            "float4 main(VSOut input) : SV_Target0 {\n"
-            "    return float4(0.31, 0.19, 0.25, 1.0);\n"
-            "}\n";
+        const char* reflected_input_vs_source = "struct VSIn { float3 pos : POSITION; float4 uv_pad : TEXCOORD0; };\n"
+                                                "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                                "VSOut main(VSIn input) {\n"
+                                                "    VSOut o;\n"
+                                                "    o.pos = float4(input.pos, 1.0);\n"
+                                                "    o.uv = input.uv_pad.xy;\n"
+                                                "    return o;\n"
+                                                "}\n";
+        const char* reflected_input_ps_source = "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                                "float4 main(VSOut input) : SV_Target0 {\n"
+                                                "    return float4(0.31, 0.19, 0.25, 1.0);\n"
+                                                "}\n";
         if (!compile_hlsl_to_file(reflected_input_vs_source, "vs_5_0", reflected_input_vs_path) ||
             !compile_hlsl_to_file(reflected_input_ps_source, "ps_5_0", reflected_input_ps_path)) {
             return 1;
@@ -1662,9 +1521,8 @@ int main() {
 
         const float reflected_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
         const float reflected_vertices[] = {
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-             3.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-            -1.0f,  3.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f, 3.0f, -1.0f, 0.0f, 1.0f,
+            0.0f,  0.0f,  0.0f, -1.0f, 3.0f, 0.0f, 0.0f, 1.0f, 0.0f,  0.0f,
         };
         ctx.begin_frame();
         ctx.begin_pass(color, {}, reflected_clear, 1.0f, false);
@@ -1681,13 +1539,14 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: reflected input draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], 0.31f) ||
-            !close_enough(rgba[1], 0.19f) ||
-            !close_enough(rgba[2], 0.25f) ||
+        if (!close_enough(rgba[0], 0.31f) || !close_enough(rgba[1], 0.19f) || !close_enough(rgba[2], 0.25f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected reflected input pixel %.3f %.3f %.3f %.3f\n",
-                         rgba[0], rgba[1], rgba[2], rgba[3]);
+                         rgba[0],
+                         rgba[1],
+                         rgba[2],
+                         rgba[3]);
             return 1;
         }
 
@@ -1707,38 +1566,23 @@ int main() {
             canvas_texture_desc.width = 4;
             canvas_texture_desc.height = 4;
             canvas_texture_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-            canvas_texture_desc.usage = tgfx::TextureUsage::Sampled |
-                                        tgfx::TextureUsage::CopyDst |
-                                        tgfx::TextureUsage::CopySrc;
+            canvas_texture_desc.usage =
+                tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst | tgfx::TextureUsage::CopySrc;
             auto canvas_texture = device->create_texture(canvas_texture_desc);
             if (!canvas_texture) {
                 std::fprintf(stderr, "D3D11 smoke: Canvas2D texture creation failed\n");
                 return 1;
             }
             const uint8_t canvas_pixels[] = {
-                230,  26,  26, 255,
-                230,  26,  26, 255,
-                230,  26,  26, 255,
-                230,  26,  26, 255,
+                230, 26, 26,  255, 230, 26, 26,  255, 230, 26, 26,  255, 230, 26, 26,  255,
 
-                230,  26,  26, 255,
-                230,  26,  26, 255,
-                230,  26,  26, 255,
-                230,  26,  26, 255,
+                230, 26, 26,  255, 230, 26, 26,  255, 230, 26, 26,  255, 230, 26, 26,  255,
 
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
+                26,  77, 230, 255, 26,  77, 230, 255, 26,  77, 230, 255, 26,  77, 230, 255,
 
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
-                 26,  77, 230, 255,
+                26,  77, 230, 255, 26,  77, 230, 255, 26,  77, 230, 255, 26,  77, 230, 255,
             };
-            device->upload_texture(
-                canvas_texture,
-                std::span<const uint8_t>(canvas_pixels, sizeof(canvas_pixels)));
+            device->upload_texture(canvas_texture, std::span<const uint8_t>(canvas_pixels, sizeof(canvas_pixels)));
 
             const float canvas_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
             ctx.begin_frame();
@@ -1767,8 +1611,14 @@ int main() {
                 std::fprintf(stderr,
                              "D3D11 smoke: Canvas2D texture Y orientation is wrong "
                              "(top=%.3f %.3f %.3f %.3f bottom=%.3f %.3f %.3f %.3f)\n",
-                             canvas_top[0], canvas_top[1], canvas_top[2], canvas_top[3],
-                             canvas_bottom[0], canvas_bottom[1], canvas_bottom[2], canvas_bottom[3]);
+                             canvas_top[0],
+                             canvas_top[1],
+                             canvas_top[2],
+                             canvas_top[3],
+                             canvas_bottom[0],
+                             canvas_bottom[1],
+                             canvas_bottom[2],
+                             canvas_bottom[3]);
                 return 1;
             }
             device->destroy(canvas_texture);
@@ -1777,10 +1627,8 @@ int main() {
             ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
             tgfx::Canvas2DRenderer solid_canvas;
             solid_canvas.begin(ctx, 4, 4);
-            solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f,
-                                   tgfx::CanvasColor{0.90f, 0.10f, 0.10f, 1.0f});
-            solid_canvas.draw_rect(2.0f, 2.0f, 2.0f, 2.0f,
-                                   tgfx::CanvasColor{0.10f, 0.20f, 0.90f, 1.0f});
+            solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f, tgfx::CanvasColor{0.90f, 0.10f, 0.10f, 1.0f});
+            solid_canvas.draw_rect(2.0f, 2.0f, 2.0f, 2.0f, tgfx::CanvasColor{0.10f, 0.20f, 0.90f, 1.0f});
             solid_canvas.end();
             ctx.end_pass();
             ctx.end_frame();
@@ -1796,9 +1644,14 @@ int main() {
                 std::fprintf(stderr,
                              "D3D11 smoke: Canvas2D solid Y orientation is wrong "
                              "(top-left=%.3f %.3f %.3f %.3f bottom-right=%.3f %.3f %.3f %.3f)\n",
-                             solid_top_left[0], solid_top_left[1], solid_top_left[2], solid_top_left[3],
-                             solid_bottom_right[0], solid_bottom_right[1],
-                             solid_bottom_right[2], solid_bottom_right[3]);
+                             solid_top_left[0],
+                             solid_top_left[1],
+                             solid_top_left[2],
+                             solid_top_left[3],
+                             solid_bottom_right[0],
+                             solid_bottom_right[1],
+                             solid_bottom_right[2],
+                             solid_bottom_right[3]);
                 return 1;
             }
 
@@ -1808,10 +1661,8 @@ int main() {
                 text_desc.width = 128;
                 text_desc.height = 64;
                 text_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-                text_desc.usage = tgfx::TextureUsage::Sampled |
-                                  tgfx::TextureUsage::ColorAttachment |
-                                  tgfx::TextureUsage::CopySrc |
-                                  tgfx::TextureUsage::CopyDst;
+                text_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment |
+                                  tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
                 auto text_target = device->create_texture(text_desc);
                 if (!text_target) {
                     std::fprintf(stderr, "D3D11 smoke: Text2D target creation failed\n");
@@ -1827,17 +1678,13 @@ int main() {
                     }
                     uint32_t lit_pixels = 0;
                     for (size_t i = 0; i + 3 < pixels.size(); i += 4) {
-                        if (pixels[i] > 0.05f ||
-                            pixels[i + 1] > 0.05f ||
-                            pixels[i + 2] > 0.05f) {
+                        if (pixels[i] > 0.05f || pixels[i + 1] > 0.05f || pixels[i + 2] > 0.05f) {
                             ++lit_pixels;
                         }
                     }
                     if (lit_pixels < 8) {
-                        std::fprintf(stderr,
-                                     "D3D11 smoke: %s text produced too few lit pixels (%u)\n",
-                                     label,
-                                     lit_pixels);
+                        std::fprintf(
+                            stderr, "D3D11 smoke: %s text produced too few lit pixels (%u)\n", label, lit_pixels);
                         return false;
                     }
                     return true;
@@ -1849,14 +1696,13 @@ int main() {
                 ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer bitmap_canvas(&bitmap_font);
                 bitmap_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
-                bitmap_canvas.draw_text(
-                    "Text",
-                    8.0f,
-                    8.0f,
-                    18.0f,
-                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
-                    &bitmap_font,
-                    tgfx::Text2DRenderer::Anchor::Left);
+                bitmap_canvas.draw_text("Text",
+                                        8.0f,
+                                        8.0f,
+                                        18.0f,
+                                        tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                        &bitmap_font,
+                                        tgfx::Text2DRenderer::Anchor::Left);
                 bitmap_canvas.end();
                 ctx.end_pass();
                 ctx.end_frame();
@@ -1870,14 +1716,13 @@ int main() {
                 ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer sdf_canvas(&sdf_font);
                 sdf_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
-                sdf_canvas.draw_text(
-                    "Text",
-                    8.0f,
-                    8.0f,
-                    28.0f,
-                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
-                    &sdf_font,
-                    tgfx::Text2DRenderer::Anchor::Left);
+                sdf_canvas.draw_text("Text",
+                                     8.0f,
+                                     8.0f,
+                                     28.0f,
+                                     tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                     &sdf_font,
+                                     tgfx::Text2DRenderer::Anchor::Left);
                 sdf_canvas.end();
                 ctx.end_pass();
                 ctx.end_frame();
@@ -1890,9 +1735,8 @@ int main() {
                 mixed_texture_desc.width = 2;
                 mixed_texture_desc.height = 2;
                 mixed_texture_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-                mixed_texture_desc.usage = tgfx::TextureUsage::Sampled |
-                                           tgfx::TextureUsage::CopyDst |
-                                           tgfx::TextureUsage::CopySrc;
+                mixed_texture_desc.usage =
+                    tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst | tgfx::TextureUsage::CopySrc;
                 auto mixed_texture = device->create_texture(mixed_texture_desc);
                 if (!mixed_texture) {
                     std::fprintf(stderr, "D3D11 smoke: mixed Canvas2D texture creation failed\n");
@@ -1900,38 +1744,49 @@ int main() {
                     return 1;
                 }
                 const uint8_t mixed_pixels[] = {
-                    51, 153, 204, 255, 51, 153, 204, 255,
-                    51, 153, 204, 255, 51, 153, 204, 255,
+                    51,
+                    153,
+                    204,
+                    255,
+                    51,
+                    153,
+                    204,
+                    255,
+                    51,
+                    153,
+                    204,
+                    255,
+                    51,
+                    153,
+                    204,
+                    255,
                 };
-                device->upload_texture(
-                    mixed_texture,
-                    std::span<const uint8_t>(mixed_pixels, sizeof(mixed_pixels)));
+                device->upload_texture(mixed_texture, std::span<const uint8_t>(mixed_pixels, sizeof(mixed_pixels)));
 
                 ctx.begin_frame();
                 ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer mixed_canvas(&bitmap_font);
                 mixed_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
-                mixed_canvas.draw_rect(
-                    0.0f, 0.0f, static_cast<float>(text_desc.width), static_cast<float>(text_desc.height),
-                    tgfx::CanvasColor{0.02f, 0.02f, 0.03f, 1.0f});
+                mixed_canvas.draw_rect(0.0f,
+                                       0.0f,
+                                       static_cast<float>(text_desc.width),
+                                       static_cast<float>(text_desc.height),
+                                       tgfx::CanvasColor{0.02f, 0.02f, 0.03f, 1.0f});
                 mixed_canvas.draw_texture(mixed_texture, 4.0f, 4.0f, 24.0f, 24.0f);
-                mixed_canvas.draw_rect(
-                    34.0f, 4.0f, 80.0f, 32.0f,
-                    tgfx::CanvasColor{0.12f, 0.12f, 0.16f, 1.0f});
-                mixed_canvas.draw_text(
-                    "Text",
-                    38.0f,
-                    8.0f,
-                    18.0f,
-                    tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
-                    &bitmap_font,
-                    tgfx::Text2DRenderer::Anchor::Left);
+                mixed_canvas.draw_rect(34.0f, 4.0f, 80.0f, 32.0f, tgfx::CanvasColor{0.12f, 0.12f, 0.16f, 1.0f});
+                mixed_canvas.draw_text("Text",
+                                       38.0f,
+                                       8.0f,
+                                       18.0f,
+                                       tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                       &bitmap_font,
+                                       tgfx::Text2DRenderer::Anchor::Left);
                 mixed_canvas.end();
                 ctx.end_pass();
                 ctx.end_frame();
 
                 std::vector<float> mixed_readback(static_cast<size_t>(text_desc.width) *
-                                                   static_cast<size_t>(text_desc.height) * 4u);
+                                                  static_cast<size_t>(text_desc.height) * 4u);
                 if (!device->read_texture_rgba_float(text_target, mixed_readback.data())) {
                     std::fprintf(stderr, "D3D11 smoke: mixed Canvas2D readback failed\n");
                     device->destroy(mixed_texture);
@@ -1957,8 +1812,7 @@ int main() {
                 for (uint32_t y = 0; y < text_desc.height; ++y) {
                     for (uint32_t x = 34; x < text_desc.width; ++x) {
                         const size_t i = (static_cast<size_t>(y) * text_desc.width + x) * 4u;
-                        if (mixed_readback[i + 0] > 0.2f &&
-                            mixed_readback[i + 1] > 0.2f &&
+                        if (mixed_readback[i + 0] > 0.2f && mixed_readback[i + 1] > 0.2f &&
                             mixed_readback[i + 2] > 0.2f) {
                             ++mixed_text_pixels;
                         }
@@ -1975,16 +1829,13 @@ int main() {
                 device->destroy(mixed_texture);
                 device->destroy(text_target);
             } else {
-                std::printf(
-                    "D3D11 smoke: Text2D smoke skipped (font missing: %s)\n",
-                    font_path.string().c_str());
+                std::printf("D3D11 smoke: Text2D smoke skipped (font missing: %s)\n", font_path.string().c_str());
             }
         } else {
-            std::printf(
-                "D3D11 smoke: Canvas2D builtin shader smoke skipped "
-                "(termin_shaderc=%s slangc=%s)\n",
-                shaderc.empty() ? "missing" : "ok",
-                slangc.empty() ? "missing" : "ok");
+            std::printf("D3D11 smoke: Canvas2D builtin shader smoke skipped "
+                        "(termin_shaderc=%s slangc=%s)\n",
+                        shaderc.empty() ? "missing" : "ok",
+                        slangc.empty() ? "missing" : "ok");
         }
 
         device->destroy(reflected_input_fs);

@@ -4,24 +4,25 @@
 #include <cstring>
 #include <string>
 
+#include <tcbase/tc_log.h>
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_shader_program_handle.hpp>
-#include <tcbase/tc_log.h>
 
 using termin::TcShader;
 using termin::TcShaderProgram;
 
 namespace {
-int stale_log_count = 0;
-std::string stale_log_message;
+    int stale_log_count = 0;
+    std::string stale_log_message;
 
-void capture_stale_log(tc_log_level level, const char* message) {
-    if (level != TC_LOG_ERROR || !message) return;
-    if (std::strstr(message, "stale resource handle dereference")) {
-        ++stale_log_count;
-        stale_log_message = message;
+    void capture_stale_log(tc_log_level level, const char* message) {
+        if (level != TC_LOG_ERROR || !message)
+            return;
+        if (std::strstr(message, "stale resource handle dereference")) {
+            ++stale_log_count;
+            stale_log_message = message;
+        }
     }
-}
 } // namespace
 
 TEST_CASE("shader program registry owns canonical payload and phase shaders") {
@@ -65,20 +66,17 @@ TEST_CASE("shader program registry owns canonical payload and phase shaders") {
         CHECK_EQ(program.get()->phase_count, 2u);
         CHECK_EQ(std::string(program.get()->phases[0].phase_mark), "opaque");
 
-        const tc_shader_program_phase* opaque =
-            tc_shader_program_find_phase(program.get(), "opaque");
+        const tc_shader_program_phase* opaque = tc_shader_program_find_phase(program.get(), "opaque");
         REQUIRE(opaque != nullptr);
         old_shader_handle = opaque->shader;
         TcShader old_shader(old_shader_handle);
         REQUIRE(old_shader.is_valid());
         old_shader_uuid = old_shader.uuid();
         char derived_uuid[TC_UUID_SIZE];
-        tc_shader_program_make_phase_uuid(
-            derived_uuid, sizeof(derived_uuid), program.uuid(), "opaque");
+        tc_shader_program_make_phase_uuid(derived_uuid, sizeof(derived_uuid), program.uuid(), "opaque");
         CHECK_EQ(old_shader_uuid, std::string(derived_uuid));
 
-        const tc_shader_program_phase_desc replacement_phase = {
-            "forward", 9, tc_render_state_transparent()};
+        const tc_shader_program_phase_desc replacement_phase = {"forward", 9, tc_render_state_transparent()};
         const tc_shader_program_payload_desc replacement = {
             "Program Test Reloaded", nullptr, "slang", 8, nullptr, 0, &replacement_phase, 1};
         REQUIRE(tc_shader_program_set_payload(program.get(), &replacement));
@@ -125,11 +123,9 @@ TEST_CASE("shader program texture properties accept optional expected encoding")
     tc_shader_init();
     tc_shader_program_init();
     {
-        TcShaderProgram program =
-            TcShaderProgram::declare("texture-contract-program", "Texture Contract");
+        TcShaderProgram program = TcShaderProgram::declare("texture-contract-program", "Texture Contract");
         REQUIRE(program.is_valid());
-        const tc_shader_program_phase_desc phase = {
-            "opaque", 0, tc_render_state_opaque()};
+        const tc_shader_program_phase_desc phase = {"opaque", 0, tc_render_state_opaque()};
 
         tc_shader_program_property_desc texture{};
         texture.name = "u_albedo";
@@ -142,14 +138,11 @@ TEST_CASE("shader program texture properties accept optional expected encoding")
 
         texture.has_expected_encoding = 1;
         texture.expected_encoding = TC_TEXTURE_ENCODING_SRGB;
-        const tc_shader_program_payload_desc valid = {
-            "Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
+        const tc_shader_program_payload_desc valid = {"Texture Contract", nullptr, "slang", 0, &texture, 1, &phase, 1};
         REQUIRE(tc_shader_program_set_payload(program.get(), &valid));
         REQUIRE_EQ(program.get()->property_count, 1u);
         CHECK(program.get()->properties[0].has_expected_encoding != 0);
-        CHECK(
-            program.get()->properties[0].expected_encoding
-            == TC_TEXTURE_ENCODING_SRGB);
+        CHECK(program.get()->properties[0].expected_encoding == TC_TEXTURE_ENCODING_SRGB);
 
         texture.expected_encoding = (tc_texture_encoding)99;
         const tc_shader_program_payload_desc invalid_encoding = {
@@ -162,8 +155,7 @@ TEST_CASE("shader program texture properties accept optional expected encoding")
 
 TEST_CASE("shader program stale dereference is logged while validity probes stay quiet") {
     tc_shader_program_init();
-    tc_shader_program_handle handle =
-        tc_shader_program_create("stale-program", "Stale Program");
+    tc_shader_program_handle handle = tc_shader_program_create("stale-program", "Stale Program");
     tc_shader_program* program = tc_shader_program_get(handle);
     REQUIRE(program != nullptr);
     tc_shader_program_retain(program);

@@ -1,12 +1,12 @@
 // tc_texture.h - Texture data structures
 #pragma once
 
-#include "tgfx/tgfx_api.h"
 #include "tgfx/tc_handle.h"
 #include "tgfx/texture_encoding.h"
-#include <tcbase/tc_resource.h>
-#include <stdint.h>
+#include "tgfx/tgfx_api.h"
 #include <stdbool.h>
+#include <stdint.h>
+#include <tcbase/tc_resource.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,16 +23,16 @@ TC_DEFINE_HANDLE(tc_texture_handle)
 // ============================================================================
 
 typedef enum tc_texture_format {
-    TC_TEXTURE_RGBA8 = 0,   // 4 channels, 8 bits each
-    TC_TEXTURE_RGB8  = 1,   // 3 channels, 8 bits each
-    TC_TEXTURE_RG8   = 2,   // 2 channels, 8 bits each
-    TC_TEXTURE_R8    = 3,   // 1 channel, 8 bits
-    TC_TEXTURE_RGBA16F = 4, // 4 channels, 16-bit float
-    TC_TEXTURE_RGB16F = 5,  // 3 channels, 16-bit float
-    TC_TEXTURE_DEPTH24 = 6, // depth texture, 24 bits (for shadow maps)
-    TC_TEXTURE_DEPTH32F = 7,// depth texture, 32-bit float
-    TC_TEXTURE_R16F = 8,    // 1 channel, 16-bit float
-    TC_TEXTURE_R32F = 9,    // 1 channel, 32-bit float
+    TC_TEXTURE_RGBA8 = 0,    // 4 channels, 8 bits each
+    TC_TEXTURE_RGB8 = 1,     // 3 channels, 8 bits each
+    TC_TEXTURE_RG8 = 2,      // 2 channels, 8 bits each
+    TC_TEXTURE_R8 = 3,       // 1 channel, 8 bits
+    TC_TEXTURE_RGBA16F = 4,  // 4 channels, 16-bit float
+    TC_TEXTURE_RGB16F = 5,   // 3 channels, 16-bit float
+    TC_TEXTURE_DEPTH24 = 6,  // depth texture, 24 bits (for shadow maps)
+    TC_TEXTURE_DEPTH32F = 7, // depth texture, 32-bit float
+    TC_TEXTURE_R16F = 8,     // 1 channel, 16-bit float
+    TC_TEXTURE_R32F = 9,     // 1 channel, 32-bit float
 } tc_texture_format;
 
 // ============================================================================
@@ -47,8 +47,8 @@ typedef enum tc_texture_format {
 // requested usage flags. CPU readback is not currently available through
 // tc_texture_sync_to_cpu(); restore it through an IRenderDevice path.
 typedef enum tc_texture_storage_kind {
-    TC_TEXTURE_STORAGE_CPU_FIRST = 0,  // source of truth is tex->data
-    TC_TEXTURE_STORAGE_GPU_FIRST = 1,  // source of truth is GPU image
+    TC_TEXTURE_STORAGE_CPU_FIRST = 0, // source of truth is tex->data
+    TC_TEXTURE_STORAGE_GPU_FIRST = 1, // source of truth is GPU image
 } tc_texture_storage_kind;
 
 // Usage hint that backends translate to native creation flags
@@ -56,11 +56,11 @@ typedef enum tc_texture_storage_kind {
 // path picks attachment / sampled state from the bind site). Bitfield —
 // values OR together.
 typedef enum tc_texture_usage_flags {
-    TC_TEXTURE_USAGE_SAMPLED          = 1u << 0,  // bound as a shader resource (default)
-    TC_TEXTURE_USAGE_COLOR_ATTACHMENT = 1u << 1,  // can be a color render target
-    TC_TEXTURE_USAGE_DEPTH_ATTACHMENT = 1u << 2,  // can be a depth/stencil render target
-    TC_TEXTURE_USAGE_COPY_SRC         = 1u << 3,  // valid source for blit / copy / readback
-    TC_TEXTURE_USAGE_COPY_DST         = 1u << 4,  // valid destination for blit / copy / upload
+    TC_TEXTURE_USAGE_SAMPLED = 1u << 0,          // bound as a shader resource (default)
+    TC_TEXTURE_USAGE_COLOR_ATTACHMENT = 1u << 1, // can be a color render target
+    TC_TEXTURE_USAGE_DEPTH_ATTACHMENT = 1u << 2, // can be a depth/stencil render target
+    TC_TEXTURE_USAGE_COPY_SRC = 1u << 3,         // valid source for blit / copy / readback
+    TC_TEXTURE_USAGE_COPY_DST = 1u << 4,         // valid destination for blit / copy / upload
 } tc_texture_usage_flags;
 
 // ============================================================================
@@ -68,24 +68,23 @@ typedef enum tc_texture_usage_flags {
 // ============================================================================
 
 typedef struct tc_texture {
-    tc_resource_header header;  // common resource fields (uuid, name, version, etc.)
-    void* data;                 // raw pixel data blob (may be NULL for GPU_FIRST)
+    tc_resource_header header; // common resource fields (uuid, name, version, etc.)
+    void* data;                // raw pixel data blob (may be NULL for GPU_FIRST)
     uint32_t width;
     uint32_t height;
-    uint8_t channels;           // 1, 2, 3, or 4
-    uint8_t format;             // tc_texture_format
-    uint8_t encoding;           // tc_texture_encoding
-    uint8_t flip_x;             // transform flag
-    uint8_t flip_y;             // transform flag (default true for OpenGL)
-    uint8_t transpose;          // transform flag
-    uint8_t mipmap;             // generate mipmaps on upload
-    uint8_t clamp;              // use clamp wrapping (vs repeat)
-    uint8_t compare_mode;       // enable depth comparison for sampler2DShadow
-    uint8_t storage_kind;       // tc_texture_storage_kind, default = CPU_FIRST
-    uint32_t usage;             // tc_texture_usage_flags bitset, default = SAMPLED
-    const char* source_path;    // optional source file path (interned string)
+    uint8_t channels;        // 1, 2, 3, or 4
+    uint8_t format;          // tc_texture_format
+    uint8_t encoding;        // tc_texture_encoding
+    uint8_t flip_x;          // transform flag
+    uint8_t flip_y;          // transform flag (default true for OpenGL)
+    uint8_t transpose;       // transform flag
+    uint8_t mipmap;          // generate mipmaps on upload
+    uint8_t clamp;           // use clamp wrapping (vs repeat)
+    uint8_t compare_mode;    // enable depth comparison for sampler2DShadow
+    uint8_t storage_kind;    // tc_texture_storage_kind, default = CPU_FIRST
+    uint32_t usage;          // tc_texture_usage_flags bitset, default = SAMPLED
+    const char* source_path; // optional source file path (interned string)
 } tc_texture;
-
 
 // ============================================================================
 // Helper functions
@@ -101,9 +100,9 @@ TGFX_API uint8_t tc_texture_format_channels(tc_texture_format format);
 // single-layer 2D image; generated mip levels and GPU-only texture storage do
 // not have a CPU payload here.
 static inline size_t tc_texture_data_size(const tc_texture* tex) {
-    if (!tex) return 0;
-    return (size_t)tex->width * (size_t)tex->height *
-           tc_texture_format_bpp((tc_texture_format)tex->format);
+    if (!tex)
+        return 0;
+    return (size_t)tex->width * (size_t)tex->height * tc_texture_format_bpp((tc_texture_format)tex->format);
 }
 
 // ============================================================================
@@ -121,19 +120,12 @@ TGFX_API void tc_texture_set_usage(tc_texture* tex, uint32_t usage);
 // Change the transfer encoding used by sampled RGB channels. Returns false
 // for an unknown enum value. A real change bumps header.version so every
 // per-device native texture cache recreates the image with the new format.
-TGFX_API bool tc_texture_set_encoding(
-    tc_texture* tex,
-    tc_texture_encoding encoding
-);
+TGFX_API bool tc_texture_set_encoding(tc_texture* tex, tc_texture_encoding encoding);
 
 // Set width/height/format in one call. Bumps `header.version` so cached
 // GPU handles get re-created on the next bridge lookup. Used by render
 // targets when they are resized.
-TGFX_API void tc_texture_set_size_format(
-    tc_texture* tex,
-    uint32_t width, uint32_t height,
-    tc_texture_format format
-);
+TGFX_API void tc_texture_set_size_format(tc_texture* tex, uint32_t width, uint32_t height, tc_texture_format format);
 
 static inline bool tc_texture_is_gpu_first(const tc_texture* tex) {
     return tex && tex->storage_kind == TC_TEXTURE_STORAGE_GPU_FIRST;
@@ -159,12 +151,13 @@ TGFX_API bool tc_texture_release(tc_texture* tex);
 // ============================================================================
 
 // Compute UUID from texture data (FNV-1a hash)
-TGFX_API void tc_texture_compute_uuid(
-    const void* data, size_t size,
-    uint32_t width, uint32_t height, uint8_t channels,
-    tc_texture_encoding encoding,
-    char* uuid_out
-);
+TGFX_API void tc_texture_compute_uuid(const void* data,
+                                      size_t size,
+                                      uint32_t width,
+                                      uint32_t height,
+                                      uint8_t channels,
+                                      tc_texture_encoding encoding,
+                                      char* uuid_out);
 
 #ifdef __cplusplus
 }

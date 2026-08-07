@@ -1,10 +1,10 @@
 #include "guard_c.h"
 
-#include "render/tc_render_target.h"
-#include "render/tc_render_target_pool.h"
 #include "core/tc_component.h"
 #include "core/tc_scene.h"
 #include "inspect/tc_runtime_type_registry.h"
+#include "render/tc_render_target.h"
+#include "render/tc_render_target_pool.h"
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/resources/tc_texture_registry.h"
 
@@ -71,15 +71,13 @@ GUARD_C_TEST(test_render_target_pool_grows_and_rejects_stale_handle) {
 
 GUARD_C_TEST(test_render_target_pool_rejects_stale_handle_after_rebootstrap) {
     tc_render_target_pool_shutdown();
-    const tc_render_target_handle stale =
-        tc_render_target_new("before-rebootstrap");
+    const tc_render_target_handle stale = tc_render_target_new("before-rebootstrap");
     GUARD_C_REQUIRE(tc_render_target_alive(stale));
 
     tc_render_target_pool_shutdown();
     GUARD_C_CHECK(!tc_render_target_alive(stale));
 
-    const tc_render_target_handle replacement =
-        tc_render_target_new("after-rebootstrap");
+    const tc_render_target_handle replacement = tc_render_target_new("after-rebootstrap");
     GUARD_C_REQUIRE(tc_render_target_alive(replacement));
     GUARD_C_CHECK_EQ_UINT(stale.index, replacement.index);
     GUARD_C_CHECK(stale.generation != replacement.generation);
@@ -90,25 +88,18 @@ GUARD_C_TEST(test_render_target_pool_rejects_stale_handle_after_rebootstrap) {
 
 static bool init_test_component(tc_component* component, const char* type_name) {
     if (!tc_component_registry_has(type_name)) {
-        tc_runtime_type_descriptor* descriptor = tc_runtime_type_descriptor_create(
-            type_name, "termin-render-test", NULL);
-        if (!descriptor) return false;
+        tc_runtime_type_descriptor* descriptor =
+            tc_runtime_type_descriptor_create(type_name, "termin-render-test", NULL);
+        if (!descriptor)
+            return false;
         tc_runtime_owned_factory no_factory = {0};
         if (!tc_component_type_descriptor_add_facet(
-            descriptor,
-            &no_factory,
-            TC_CXX_COMPONENT,
-            true,
-            NULL,
-            NULL,
-            NULL,
-            0,
-            NULL,
-            0)) {
+                descriptor, &no_factory, TC_CXX_COMPONENT, true, NULL, NULL, NULL, 0, NULL, 0)) {
             tc_runtime_type_descriptor_destroy(descriptor);
             return false;
         }
-        if (!tc_runtime_type_registry_commit_descriptor(descriptor)) return false;
+        if (!tc_runtime_type_registry_commit_descriptor(descriptor))
+            return false;
     }
     tc_component_init(component, NULL);
     tc_component_set_declared_type_name(component, type_name);
@@ -150,10 +141,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_replacement_from_entity_handle) 
     tc_entity_pool_free(pool, entity_id);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
     cleanup_test_component(&replacement_camera);
-    GUARD_C_CHECK_EQ_UINT(
-        0,
-        tc_component_registry_instance_count("CameraComponent")
-    );
+    GUARD_C_CHECK_EQ_UINT(0, tc_component_registry_instance_count("CameraComponent"));
 
     tc_render_target_free(target);
     tc_scene_free(scene);
@@ -184,10 +172,7 @@ GUARD_C_TEST(test_render_target_resolves_camera_from_scene_less_pool) {
     tc_entity_pool_free(pool, entity_id);
     GUARD_C_CHECK(tc_render_target_get_camera(target) == NULL);
     cleanup_test_component(&camera);
-    GUARD_C_CHECK_EQ_UINT(
-        0,
-        tc_component_registry_instance_count("CameraComponent")
-    );
+    GUARD_C_CHECK_EQ_UINT(0, tc_component_registry_instance_count("CameraComponent"));
 
     tc_render_target_free(target);
     tc_entity_pool_registry_destroy(pool_handle);
@@ -218,10 +203,7 @@ GUARD_C_TEST(test_render_target_rejects_camera_from_another_scene) {
     tc_scene_free(camera_scene);
     tc_scene_free(target_scene);
     cleanup_test_component(&camera);
-    GUARD_C_CHECK_EQ_UINT(
-        0,
-        tc_component_registry_instance_count("CameraComponent")
-    );
+    GUARD_C_CHECK_EQ_UINT(0, tc_component_registry_instance_count("CameraComponent"));
     return 0;
 }
 
@@ -247,10 +229,7 @@ GUARD_C_TEST(test_render_target_resolves_xr_origin_and_rejects_stale_scene) {
     tc_scene_free(scene);
     GUARD_C_CHECK(tc_render_target_get_xr_origin(target) == NULL);
     cleanup_test_component(&xr_origin);
-    GUARD_C_CHECK_EQ_UINT(
-        0,
-        tc_component_registry_instance_count("XrOriginComponent")
-    );
+    GUARD_C_CHECK_EQ_UINT(0, tc_component_registry_instance_count("XrOriginComponent"));
 
     tc_render_target_free(target);
     return 0;

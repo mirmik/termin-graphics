@@ -2,8 +2,7 @@
 
 #include "tcplot/gui_native/export.h"
 
-namespace tcplot::gui_native
-{
+namespace tcplot::gui_native {
 
     TCPLOT_GUI_NATIVE_API bool register_plot_widget_types();
 

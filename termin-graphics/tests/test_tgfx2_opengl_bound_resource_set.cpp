@@ -99,13 +99,12 @@ static bool create_context(SDLGLContext& out) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    out.window = SDL_CreateWindow(
-        "tgfx2 OpenGL bound resource set",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
-        kWidth,
-        kHeight,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+    out.window = SDL_CreateWindow("tgfx2 OpenGL bound resource set",
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  kWidth,
+                                  kHeight,
+                                  SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
     if (!out.window) {
         std::fprintf(stderr, "Window creation failed: SDL_CreateWindow: %s\n", SDL_GetError());
         return false;
@@ -125,12 +124,10 @@ static bool create_context(SDLGLContext& out) {
     return true;
 }
 
-static bool render_ordered_mrt_smoke(
-    tgfx::IRenderDevice& device,
-    tgfx::ShaderHandle vertex,
-    const tgfx::VertexBufferLayout& vertex_layout,
-    tgfx::BufferHandle vertex_buffer)
-{
+static bool render_ordered_mrt_smoke(tgfx::IRenderDevice& device,
+                                     tgfx::ShaderHandle vertex,
+                                     const tgfx::VertexBufferLayout& vertex_layout,
+                                     tgfx::BufferHandle vertex_buffer) {
     tgfx::ShaderDesc fragment_desc;
     fragment_desc.stage = tgfx::ShaderStage::Fragment;
     fragment_desc.source = kMrtFragmentSource;
@@ -141,14 +138,11 @@ static bool render_ordered_mrt_smoke(
         return false;
     }
 
-    const bool passed = tgfx::tests::run_ordered_mrt_smoke(
-        device,
-        "OpenGL",
-        [&](tgfx::RenderContext2& context) {
-            context.bind_shader(vertex, fragment);
-            context.set_vertex_layout(vertex_layout);
-            context.draw_arrays(vertex_buffer, 3);
-        });
+    const bool passed = tgfx::tests::run_ordered_mrt_smoke(device, "OpenGL", [&](tgfx::RenderContext2& context) {
+        context.bind_shader(vertex, fragment);
+        context.set_vertex_layout(vertex_layout);
+        context.draw_arrays(vertex_buffer, 3);
+    });
     device.destroy(fragment);
     return passed;
 }
@@ -181,8 +175,7 @@ int main() {
     unsupported_storage_desc.width = 2;
     unsupported_storage_desc.height = 2;
     unsupported_storage_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    unsupported_storage_desc.usage = tgfx::TextureUsage::Storage |
-                                     tgfx::TextureUsage::Sampled;
+    unsupported_storage_desc.usage = tgfx::TextureUsage::Storage | tgfx::TextureUsage::Sampled;
     if (device->create_texture(unsupported_storage_desc)) {
         std::fprintf(stderr, "OpenGL storage texture creation should fail explicitly\n");
         return 1;
@@ -216,39 +209,35 @@ int main() {
     pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(vertex_layout));
 
     tgfx::PipelineHandle pipeline = device->create_pipeline(pipeline_desc);
-    const uintptr_t resource_layout_token =
-        device->pipeline_resource_layout_token(pipeline);
+    const uintptr_t resource_layout_token = device->pipeline_resource_layout_token(pipeline);
     if (resource_layout_token == 0) {
         std::fprintf(stderr, "OpenGL pipeline resource layout token is null\n");
         return 1;
     }
 
     const float vertices[] = {
-        -1.0f, -1.0f,
-         3.0f, -1.0f,
-        -1.0f,  3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
     };
     tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
     vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
     tgfx::BufferHandle vb = device->create_buffer(vb_desc);
-    device->upload_buffer(
-        vb,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+    device->upload_buffer(vb, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
 
-    const bool ordered_mrt_ok =
-        render_ordered_mrt_smoke(*device, vs, vertex_layout, vb);
+    const bool ordered_mrt_ok = render_ordered_mrt_smoke(*device, vs, vertex_layout, vb);
 
     const float color_block[] = {0.20f, 0.70f, 0.10f, 1.0f};
     tgfx::BufferDesc ubo_desc;
     ubo_desc.size = sizeof(color_block);
     ubo_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
     tgfx::BufferHandle ubo = device->create_buffer(ubo_desc);
-    device->upload_buffer(
-        ubo,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(color_block), sizeof(color_block)));
+    device->upload_buffer(ubo,
+                          std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(color_block), sizeof(color_block)));
 
     tgfx::BackendBindingPlanEntry plan_entry;
     plan_entry.resource.name = "ColorBlock";
@@ -271,18 +260,15 @@ int main() {
     };
     tgfx::BoundResourceSetStorage bound_storage;
     bound_storage.set_resource_layout_token(resource_layout_token);
-    bound_storage.append_group(
-        tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
+    bound_storage.append_group(tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
     const tgfx::BoundResourceSetDesc bound_desc = bound_storage.view();
-    tgfx::ResourceSetHandle resource_set =
-        device->create_bound_resource_set(bound_desc);
+    tgfx::ResourceSetHandle resource_set = device->create_bound_resource_set(bound_desc);
 
     tgfx::TextureDesc rt_desc;
     rt_desc.width = kWidth;
     rt_desc.height = kHeight;
     rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage =
-        tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     tgfx::TextureHandle rt = device->create_texture(rt_desc);
 
     std::unique_ptr<tgfx::ICommandList> cmd = device->create_command_list();
@@ -312,8 +298,7 @@ int main() {
     depth_desc.width = kWidth;
     depth_desc.height = kHeight;
     depth_desc.format = tgfx::PixelFormat::D32F;
-    depth_desc.usage =
-        tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc;
     const tgfx::TextureHandle depth = device->create_texture(depth_desc);
     std::unique_ptr<tgfx::ICommandList> depth_cmd = device->create_command_list();
     depth_cmd->begin();
@@ -329,11 +314,9 @@ int main() {
 
     std::array<uint64_t, 4> color_requests{};
     for (size_t i = 0; i < color_requests.size(); ++i) {
-        color_requests[i] = device->request_pixel_rgba8(
-            rt, kWidth / 2 + static_cast<int>(i), kHeight / 2);
+        color_requests[i] = device->request_pixel_rgba8(rt, kWidth / 2 + static_cast<int>(i), kHeight / 2);
     }
-    const uint64_t depth_request =
-        device->request_pixel_depth_float(depth, kWidth / 2, kHeight / 2);
+    const uint64_t depth_request = device->request_pixel_depth_float(depth, kWidth / 2, kHeight / 2);
     device->flush();
 
     std::array<bool, 4> color_ready{};
@@ -343,18 +326,13 @@ int main() {
     for (int attempt = 0; attempt < 1000; ++attempt) {
         for (size_t i = 0; i < color_requests.size(); ++i) {
             if (!color_ready[i] && color_requests[i] != 0) {
-                color_ready[i] = device->poll_pixel_rgba8(
-                    color_requests[i], async_colors[i].data());
+                color_ready[i] = device->poll_pixel_rgba8(color_requests[i], async_colors[i].data());
             }
         }
         if (!depth_ready && depth_request != 0) {
-            depth_ready =
-                device->poll_pixel_depth_float(depth_request, &async_depth);
+            depth_ready = device->poll_pixel_depth_float(depth_request, &async_depth);
         }
-        if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
-                return ready;
-            }) &&
-            depth_ready) {
+        if (std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) { return ready; }) && depth_ready) {
             break;
         }
         std::this_thread::yield();
@@ -362,30 +340,24 @@ int main() {
 
     float pixel[4] = {};
     const bool read_ok = device->read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, pixel);
-    std::printf(
-        "OpenGL bound resource set center pixel: %s (%.2f %.2f %.2f %.2f)\n",
-        read_ok ? "ok" : "failed",
-        pixel[0], pixel[1], pixel[2], pixel[3]);
+    std::printf("OpenGL bound resource set center pixel: %s (%.2f %.2f %.2f %.2f)\n",
+                read_ok ? "ok" : "failed",
+                pixel[0],
+                pixel[1],
+                pixel[2],
+                pixel[3]);
 
-    const bool pass_ok =
-        read_ok &&
-        pixel[0] > 0.12f && pixel[0] < 0.35f &&
-        pixel[1] > 0.55f && pixel[1] < 0.85f &&
-        pixel[2] > 0.04f && pixel[2] < 0.25f &&
-        pixel[3] > 0.90f &&
-        std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) {
-            return ready;
-        }) &&
-        std::all_of(
-            async_colors.begin(), async_colors.end(),
-            [](const std::array<float, 4>& color) {
-                return color[0] > 0.12f && color[0] < 0.35f &&
-                       color[1] > 0.55f && color[1] < 0.85f &&
-                       color[2] > 0.04f && color[2] < 0.25f &&
-                       color[3] > 0.90f;
-            }) &&
-        depth_ready &&
-        async_depth > 0.36f && async_depth < 0.38f;
+    const bool pass_ok = read_ok && pixel[0] > 0.12f && pixel[0] < 0.35f && pixel[1] > 0.55f && pixel[1] < 0.85f &&
+                         pixel[2] > 0.04f && pixel[2] < 0.25f && pixel[3] > 0.90f &&
+                         std::all_of(color_ready.begin(), color_ready.end(), [](bool ready) { return ready; }) &&
+                         std::all_of(async_colors.begin(),
+                                     async_colors.end(),
+                                     [](const std::array<float, 4>& color) {
+                                         return color[0] > 0.12f && color[0] < 0.35f && color[1] > 0.55f &&
+                                                color[1] < 0.85f && color[2] > 0.04f && color[2] < 0.25f &&
+                                                color[3] > 0.90f;
+                                     }) &&
+                         depth_ready && async_depth > 0.36f && async_depth < 0.38f;
 
     tgfx::ShaderDesc srgb_fs_desc;
     srgb_fs_desc.stage = tgfx::ShaderStage::Fragment;
@@ -394,44 +366,41 @@ int main() {
     const tgfx::ShaderHandle srgb_fs = device->create_shader(srgb_fs_desc);
     tgfx::PipelineDesc srgb_pipeline_desc = pipeline_desc;
     srgb_pipeline_desc.fragment_shader = srgb_fs;
-    const tgfx::PipelineHandle srgb_pipeline =
-        device->create_pipeline(srgb_pipeline_desc);
+    const tgfx::PipelineHandle srgb_pipeline = device->create_pipeline(srgb_pipeline_desc);
 
     tgfx::TextureDesc source_desc;
     source_desc.width = 2;
     source_desc.height = 2;
     source_desc.mip_levels = 2;
     source_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
-    source_desc.usage =
-        tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+    source_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
     const tgfx::TextureHandle srgb_source = device->create_texture(source_desc);
     source_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
     const tgfx::TextureHandle linear_source = device->create_texture(source_desc);
     const uint8_t encoded_base[] = {
-        128, 128, 128, 128,
-        128, 128, 128, 128,
-        128, 128, 128, 128,
-        128, 128, 128, 128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
     };
     const uint8_t encoded_mip[] = {128, 128, 128, 128};
-    device->upload_texture(
-        srgb_source,
-        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
-        0);
-    device->upload_texture(
-        srgb_source,
-        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
-        1);
-    device->upload_texture(
-        linear_source,
-        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
-        0);
-    device->upload_texture(
-        linear_source,
-        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
-        1);
-    const tgfx::SamplerHandle sampler =
-        device->create_sampler(tgfx::SamplerDesc{});
+    device->upload_texture(srgb_source, std::span<const uint8_t>(encoded_base, sizeof(encoded_base)), 0);
+    device->upload_texture(srgb_source, std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)), 1);
+    device->upload_texture(linear_source, std::span<const uint8_t>(encoded_base, sizeof(encoded_base)), 0);
+    device->upload_texture(linear_source, std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)), 1);
+    const tgfx::SamplerHandle sampler = device->create_sampler(tgfx::SamplerDesc{});
 
     tgfx::BackendBindingPlanEntry texture_plan;
     texture_plan.resource.name = "source_texture";
@@ -439,73 +408,62 @@ int main() {
     texture_plan.resource.scope = tgfx::ShaderResourceScope::Material;
     texture_plan.stage_mask = TC_SHADER_STAGE_FRAGMENT;
     texture_plan.placement.kind = tgfx::BackendPlacementKind::OpenGLBinding;
-    texture_plan.placement.opengl.binding_class =
-        tgfx::OpenGLBindingClass::TextureUnit;
+    texture_plan.placement.opengl.binding_class = tgfx::OpenGLBindingClass::TextureUnit;
     texture_plan.placement.opengl.texture_unit = 0;
 
-    const auto create_texture_set =
-        [&](tgfx::TextureHandle texture) -> tgfx::ResourceSetHandle {
-            tgfx::BoundResourceValue texture_value;
-            texture_value.kind = tgfx::BoundResourceKind::SampledTexture;
-            texture_value.texture = texture;
-            texture_value.sampler = sampler;
-            const tgfx::BoundResourceBinding texture_binding = {
-                tgfx::bound_resource_slot_from_plan_entry(texture_plan),
-                texture_value,
-            };
-            tgfx::BoundResourceSetStorage texture_storage;
-            texture_storage.set_resource_layout_token(
-                device->pipeline_resource_layout_token(srgb_pipeline));
-            texture_storage.append_group(
-                tgfx::ShaderResourceScope::Material,
-                true,
-                &texture_binding,
-                1);
-            return device->create_bound_resource_set(texture_storage.view());
+    const auto create_texture_set = [&](tgfx::TextureHandle texture) -> tgfx::ResourceSetHandle {
+        tgfx::BoundResourceValue texture_value;
+        texture_value.kind = tgfx::BoundResourceKind::SampledTexture;
+        texture_value.texture = texture;
+        texture_value.sampler = sampler;
+        const tgfx::BoundResourceBinding texture_binding = {
+            tgfx::bound_resource_slot_from_plan_entry(texture_plan),
+            texture_value,
         };
-    const tgfx::ResourceSetHandle srgb_texture_set =
-        create_texture_set(srgb_source);
-    const tgfx::ResourceSetHandle linear_texture_set =
-        create_texture_set(linear_source);
-    const auto sample =
-        [&](tgfx::ResourceSetHandle texture_set, float out_pixel[4]) {
-            auto cmd = device->create_command_list();
-            cmd->begin();
-            cmd->begin_render_pass(pass);
-            cmd->set_viewport(0, 0, kWidth, kHeight);
-            cmd->bind_pipeline(srgb_pipeline);
-            cmd->bind_resource_set(texture_set);
-            cmd->bind_vertex_buffer(0, vb);
-            cmd->draw(3);
-            cmd->end_render_pass();
-            cmd->end();
-            device->submit(*cmd);
-            return device->read_pixel_rgba8(
-                rt, kWidth / 2, kHeight / 2, out_pixel);
-        };
+        tgfx::BoundResourceSetStorage texture_storage;
+        texture_storage.set_resource_layout_token(device->pipeline_resource_layout_token(srgb_pipeline));
+        texture_storage.append_group(tgfx::ShaderResourceScope::Material, true, &texture_binding, 1);
+        return device->create_bound_resource_set(texture_storage.view());
+    };
+    const tgfx::ResourceSetHandle srgb_texture_set = create_texture_set(srgb_source);
+    const tgfx::ResourceSetHandle linear_texture_set = create_texture_set(linear_source);
+    const auto sample = [&](tgfx::ResourceSetHandle texture_set, float out_pixel[4]) {
+        auto cmd = device->create_command_list();
+        cmd->begin();
+        cmd->begin_render_pass(pass);
+        cmd->set_viewport(0, 0, kWidth, kHeight);
+        cmd->bind_pipeline(srgb_pipeline);
+        cmd->bind_resource_set(texture_set);
+        cmd->bind_vertex_buffer(0, vb);
+        cmd->draw(3);
+        cmd->end_render_pass();
+        cmd->end();
+        device->submit(*cmd);
+        return device->read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, out_pixel);
+    };
 
     float srgb_pixel[4] = {};
     float linear_pixel[4] = {};
     const bool srgb_read_ok = sample(srgb_texture_set, srgb_pixel);
     const bool linear_read_ok = sample(linear_texture_set, linear_pixel);
     const bool srgb_sampling_ok =
-        srgb_read_ok &&
-        std::abs(srgb_pixel[0] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[1] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[2] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
-    const bool linear_sampling_ok =
-        linear_read_ok &&
-        std::abs(linear_pixel[0] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[1] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[2] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[3] - 0.50196f) < 0.015f;
-    std::printf(
-        "OpenGL mipmapped texture encoding sampling: %s "
-        "(sRGB %.3f %.3f %.3f %.3f; Linear %.3f %.3f %.3f %.3f)\n",
-        srgb_sampling_ok && linear_sampling_ok ? "ok" : "failed",
-        srgb_pixel[0], srgb_pixel[1], srgb_pixel[2], srgb_pixel[3],
-        linear_pixel[0], linear_pixel[1], linear_pixel[2], linear_pixel[3]);
+        srgb_read_ok && std::abs(srgb_pixel[0] - 0.21586f) < 0.015f && std::abs(srgb_pixel[1] - 0.21586f) < 0.015f &&
+        std::abs(srgb_pixel[2] - 0.21586f) < 0.015f && std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
+    const bool linear_sampling_ok = linear_read_ok && std::abs(linear_pixel[0] - 0.50196f) < 0.015f &&
+                                    std::abs(linear_pixel[1] - 0.50196f) < 0.015f &&
+                                    std::abs(linear_pixel[2] - 0.50196f) < 0.015f &&
+                                    std::abs(linear_pixel[3] - 0.50196f) < 0.015f;
+    std::printf("OpenGL mipmapped texture encoding sampling: %s "
+                "(sRGB %.3f %.3f %.3f %.3f; Linear %.3f %.3f %.3f %.3f)\n",
+                srgb_sampling_ok && linear_sampling_ok ? "ok" : "failed",
+                srgb_pixel[0],
+                srgb_pixel[1],
+                srgb_pixel[2],
+                srgb_pixel[3],
+                linear_pixel[0],
+                linear_pixel[1],
+                linear_pixel[2],
+                linear_pixel[3]);
 
     device->destroy(linear_texture_set);
     device->destroy(srgb_texture_set);

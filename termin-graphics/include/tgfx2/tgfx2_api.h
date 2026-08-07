@@ -16,26 +16,26 @@
 // consumers. No runtime cost — this is purely a symbol visibility
 // change for the compiler/linker.
 #ifdef _WIN32
-    #ifdef TGFX2_EXPORTS
-        #define TGFX2_API __declspec(dllexport)
-        #define TGFX2_TYPE_API __declspec(dllexport)
-    #else
-        #define TGFX2_API __declspec(dllimport)
-        #define TGFX2_TYPE_API __declspec(dllimport)
-    #endif
+#ifdef TGFX2_EXPORTS
+#define TGFX2_API __declspec(dllexport)
+#define TGFX2_TYPE_API __declspec(dllexport)
 #else
-    // type_visibility is clang-only; gcc doesn't need it — its
-    // visibility attribute on the class already covers typeinfo.
-    #if defined(__clang__)
-        #define TGFX2_API __attribute__((visibility("default")))
-        #define TGFX2_TYPE_API __attribute__((visibility("default"), type_visibility("default")))
-    #elif defined(__GNUC__)
-        #define TGFX2_API __attribute__((visibility("default")))
-        #define TGFX2_TYPE_API __attribute__((visibility("default")))
-    #else
-        #define TGFX2_API
-        #define TGFX2_TYPE_API
-    #endif
+#define TGFX2_API __declspec(dllimport)
+#define TGFX2_TYPE_API __declspec(dllimport)
+#endif
+#else
+// type_visibility is clang-only; gcc doesn't need it — its
+// visibility attribute on the class already covers typeinfo.
+#if defined(__clang__)
+#define TGFX2_API __attribute__((visibility("default")))
+#define TGFX2_TYPE_API __attribute__((visibility("default"), type_visibility("default")))
+#elif defined(__GNUC__)
+#define TGFX2_API __attribute__((visibility("default")))
+#define TGFX2_TYPE_API __attribute__((visibility("default")))
+#else
+#define TGFX2_API
+#define TGFX2_TYPE_API
+#endif
 #endif
 
 #endif // TGFX2_API_H

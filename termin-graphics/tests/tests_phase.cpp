@@ -4,8 +4,7 @@
 
 #include <cstring>
 
-TEST_CASE("builtin phases have stable low bits")
-{
+TEST_CASE("builtin phases have stable low bits") {
     CHECK_EQ(tc_phase_find("opaque"), TC_PHASE_OPAQUE);
     CHECK_EQ(tc_phase_find("transparent"), TC_PHASE_TRANSPARENT);
     CHECK_EQ(tc_phase_find("normal"), TC_PHASE_NORMAL);
@@ -15,8 +14,7 @@ TEST_CASE("builtin phases have stable low bits")
     CHECK(tc_phase_find("pick") == TC_PHASE_NONE);
 }
 
-TEST_CASE("project phase registration is stable until reset")
-{
+TEST_CASE("project phase registration is stable until reset") {
     tc_phase_clear_project_registry();
     REQUIRE(tc_phase_set_project_name(0, "gameplay_overlay"));
     const tc_phase_mask first = tc_phase_find("gameplay_overlay");
@@ -28,8 +26,7 @@ TEST_CASE("project phase registration is stable until reset")
     CHECK_EQ(tc_phase_find("gameplay_overlay"), TC_PHASE_NONE);
 }
 
-TEST_CASE("project phase registry rejects ambiguous assignments")
-{
+TEST_CASE("project phase registry rejects ambiguous assignments") {
     tc_phase_clear_project_registry();
     CHECK_FALSE(tc_phase_set_project_name(TC_PHASE_PROJECT_CAPACITY, "outside"));
     CHECK_FALSE(tc_phase_set_project_name(0, "opaque"));

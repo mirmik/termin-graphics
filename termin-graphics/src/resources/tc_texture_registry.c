@@ -1,13 +1,13 @@
 // tc_texture_registry.c - Texture registry with pool + hash table
 #include "tgfx/resources/tc_texture_registry.h"
-#include <tcbase/tc_pool.h>
-#include <tcbase/tc_resource_map.h>
-#include <tcbase/tc_registry_utils.h>
-#include <tcbase/tc_log.h>
-#include <tcbase/tc_string.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+#include <tcbase/tc_log.h>
+#include <tcbase/tc_pool.h>
+#include <tcbase/tc_registry_utils.h>
+#include <tcbase/tc_resource_map.h>
+#include <tcbase/tc_string.h>
 
 // ============================================================================
 // Global state
@@ -25,7 +25,8 @@ static void* g_destroy_hook_user[TC_MAX_TEXTURE_DESTROY_HOOKS];
 static int g_destroy_hook_count = 0;
 
 static void texture_free_data(tc_texture* tex) {
-    if (!tex) return;
+    if (!tex)
+        return;
     if (tex->data) {
         free(tex->data);
         tex->data = NULL;
@@ -39,11 +40,7 @@ static void texture_free_data(tc_texture* tex) {
 void tc_texture_init(void) {
     TC_REGISTRY_INIT_GUARD(g_texture_initialized, "tc_texture");
 
-    if (!tc_pool_init_rebootstrap(
-            &g_texture_pool,
-            sizeof(tc_texture),
-            64,
-            &g_texture_generation_epoch)) {
+    if (!tc_pool_init_rebootstrap(&g_texture_pool, sizeof(tc_texture), 64, &g_texture_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_texture_init: failed to init pool");
         return;
     }
@@ -113,7 +110,7 @@ tc_texture_handle tc_texture_create(const char* uuid) {
     tex->header.ref_count = 0;
     tex->header.pool_index = h.index;
     tex->header.is_loaded = 1;
-    tex->flip_y = 1;  // Default for OpenGL
+    tex->flip_y = 1; // Default for OpenGL
     tex->encoding = TC_TEXTURE_ENCODING_LINEAR;
     tex->storage_kind = TC_TEXTURE_STORAGE_CPU_FIRST;
     tex->usage = TC_TEXTURE_USAGE_SAMPLED;
@@ -186,11 +183,8 @@ tc_texture_handle tc_texture_get_or_create(const char* uuid) {
     return tc_texture_create(uuid);
 }
 
-static tc_texture_handle tc_texture_get_builtin_rgba8(
-    const char* uuid,
-    const uint8_t pixel[4],
-    tc_texture_encoding encoding
-) {
+static tc_texture_handle
+tc_texture_get_builtin_rgba8(const char* uuid, const uint8_t pixel[4], tc_texture_encoding encoding) {
     tc_texture_handle handle = tc_texture_find(uuid);
     if (!tc_texture_handle_is_invalid(handle)) {
         return handle;
@@ -199,21 +193,18 @@ static tc_texture_handle tc_texture_get_builtin_rgba8(
     handle = tc_texture_create(uuid);
     tc_texture* texture = tc_texture_get(handle);
     if (!texture) {
-        tc_log(TC_LOG_ERROR,
-               "tc_texture: failed to create built-in texture '%s'", uuid);
+        tc_log(TC_LOG_ERROR, "tc_texture: failed to create built-in texture '%s'", uuid);
         return tc_texture_handle_invalid();
     }
 
     if (!tc_texture_set_data(texture, pixel, 1, 1, 4, uuid, NULL)) {
-        tc_log(TC_LOG_ERROR,
-               "tc_texture: failed to initialize built-in texture '%s'", uuid);
+        tc_log(TC_LOG_ERROR, "tc_texture: failed to initialize built-in texture '%s'", uuid);
         tc_texture_destroy(handle);
         return tc_texture_handle_invalid();
     }
     tc_texture_set_transforms(texture, false, false, false);
     if (!tc_texture_set_encoding(texture, encoding)) {
-        tc_log(TC_LOG_ERROR,
-               "tc_texture: failed to set built-in texture '%s' encoding", uuid);
+        tc_log(TC_LOG_ERROR, "tc_texture: failed to set built-in texture '%s' encoding", uuid);
         tc_texture_destroy(handle);
         return tc_texture_handle_invalid();
     }
@@ -222,20 +213,17 @@ static tc_texture_handle tc_texture_get_builtin_rgba8(
 
 tc_texture_handle tc_texture_get_white_1x1(void) {
     static const uint8_t pixel[4] = {255, 255, 255, 255};
-    return tc_texture_get_builtin_rgba8(
-        "__white_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
+    return tc_texture_get_builtin_rgba8("__white_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
 }
 
 tc_texture_handle tc_texture_get_white_1x1_srgb(void) {
     static const uint8_t pixel[4] = {255, 255, 255, 255};
-    return tc_texture_get_builtin_rgba8(
-        "__white_srgb_1x1__", pixel, TC_TEXTURE_ENCODING_SRGB);
+    return tc_texture_get_builtin_rgba8("__white_srgb_1x1__", pixel, TC_TEXTURE_ENCODING_SRGB);
 }
 
 tc_texture_handle tc_texture_get_normal_1x1(void) {
     static const uint8_t pixel[4] = {128, 128, 255, 255};
-    return tc_texture_get_builtin_rgba8(
-        "__normal_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
+    return tc_texture_get_builtin_rgba8("__normal_1x1__", pixel, TC_TEXTURE_ENCODING_LINEAR);
 }
 
 // ============================================================================
@@ -289,18 +277,21 @@ tc_texture_handle tc_texture_declare(const char* uuid, const char* name) {
 
 bool tc_texture_is_loaded(tc_texture_handle h) {
     tc_texture* tex = tc_texture_get(h);
-    if (!tex) return false;
+    if (!tex)
+        return false;
     return tex->header.is_loaded != 0;
 }
 
 bool tc_texture_ensure_loaded(tc_texture_handle h) {
     tc_texture* tex = tc_texture_get(h);
-    if (!tex) return false;
+    if (!tex)
+        return false;
     return tc_texture_ensure_loaded_ptr(tex);
 }
 
 bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
-    if (!tex) return false;
+    if (!tex)
+        return false;
     bool success = tc_resource_header_ensure_loaded(&tex->header);
     if (!success) {
         tc_log(TC_LOG_ERROR, "tc_texture_ensure_loaded_ptr: resource loader failed for '%s'", tex->header.uuid);
@@ -309,20 +300,24 @@ bool tc_texture_ensure_loaded_ptr(tc_texture* tex) {
 }
 
 tc_texture* tc_texture_get(tc_texture_handle h) {
-    if (!g_texture_initialized) return NULL;
+    if (!g_texture_initialized)
+        return NULL;
     return (tc_texture*)tc_pool_get_checked(&g_texture_pool, h, "tc_texture");
 }
 
 bool tc_texture_is_valid(tc_texture_handle h) {
-    if (!g_texture_initialized) return false;
+    if (!g_texture_initialized)
+        return false;
     return tc_pool_is_valid(&g_texture_pool, h);
 }
 
 bool tc_texture_destroy(tc_texture_handle h) {
-    if (!g_texture_initialized) return false;
+    if (!g_texture_initialized)
+        return false;
 
     tc_texture* tex = tc_texture_get(h);
-    if (!tex) return false;
+    if (!tex)
+        return false;
 
     // Fire destroy-hooks before releasing CPU data / pool slot. Hooks get
     // the pool_index so GPU-side caches (e.g. VulkanRenderDevice's
@@ -339,14 +334,11 @@ bool tc_texture_destroy(tc_texture_handle h) {
     return tc_pool_free_slot(&g_texture_pool, h);
 }
 
-void tc_texture_registry_add_destroy_hook(
-    tc_texture_destroy_hook_fn cb, void* user_data
-) {
-    if (!cb) return;
+void tc_texture_registry_add_destroy_hook(tc_texture_destroy_hook_fn cb, void* user_data) {
+    if (!cb)
+        return;
     if (g_destroy_hook_count >= TC_MAX_TEXTURE_DESTROY_HOOKS) {
-        tc_log(TC_LOG_ERROR,
-               "tc_texture_registry: destroy-hook table full (%d)",
-               TC_MAX_TEXTURE_DESTROY_HOOKS);
+        tc_log(TC_LOG_ERROR, "tc_texture_registry: destroy-hook table full (%d)", TC_MAX_TEXTURE_DESTROY_HOOKS);
         return;
     }
     g_destroy_hooks[g_destroy_hook_count] = cb;
@@ -354,9 +346,7 @@ void tc_texture_registry_add_destroy_hook(
     g_destroy_hook_count++;
 }
 
-void tc_texture_registry_remove_destroy_hook(
-    tc_texture_destroy_hook_fn cb, void* user_data
-) {
+void tc_texture_registry_remove_destroy_hook(tc_texture_destroy_hook_fn cb, void* user_data) {
     for (int i = 0; i < g_destroy_hook_count; i++) {
         if (g_destroy_hooks[i] == cb && g_destroy_hook_user[i] == user_data) {
             g_destroy_hooks[i] = g_destroy_hooks[g_destroy_hook_count - 1];
@@ -368,12 +358,14 @@ void tc_texture_registry_remove_destroy_hook(
 }
 
 bool tc_texture_contains(const char* uuid) {
-    if (!g_texture_initialized || !uuid) return false;
+    if (!g_texture_initialized || !uuid)
+        return false;
     return tc_resource_map_contains(g_texture_uuid_to_index, uuid);
 }
 
 size_t tc_texture_count(void) {
-    if (!g_texture_initialized) return 0;
+    if (!g_texture_initialized)
+        return 0;
     return tc_pool_count(&g_texture_pool);
 }
 
@@ -383,32 +375,48 @@ size_t tc_texture_count(void) {
 
 size_t tc_texture_format_bpp(tc_texture_format format) {
     switch (format) {
-        case TC_TEXTURE_RGBA8: return 4;
-        case TC_TEXTURE_RGB8: return 3;
-        case TC_TEXTURE_RG8: return 2;
-        case TC_TEXTURE_R8: return 1;
-        case TC_TEXTURE_RGBA16F: return 8;
-        case TC_TEXTURE_RGB16F: return 6;
-        case TC_TEXTURE_DEPTH24: return 4;
-        case TC_TEXTURE_DEPTH32F: return 4;
-        case TC_TEXTURE_R16F: return 2;
-        case TC_TEXTURE_R32F: return 4;
+    case TC_TEXTURE_RGBA8:
+        return 4;
+    case TC_TEXTURE_RGB8:
+        return 3;
+    case TC_TEXTURE_RG8:
+        return 2;
+    case TC_TEXTURE_R8:
+        return 1;
+    case TC_TEXTURE_RGBA16F:
+        return 8;
+    case TC_TEXTURE_RGB16F:
+        return 6;
+    case TC_TEXTURE_DEPTH24:
+        return 4;
+    case TC_TEXTURE_DEPTH32F:
+        return 4;
+    case TC_TEXTURE_R16F:
+        return 2;
+    case TC_TEXTURE_R32F:
+        return 4;
     }
     return 0;
 }
 
 uint8_t tc_texture_format_channels(tc_texture_format format) {
     switch (format) {
-        case TC_TEXTURE_RGBA8:
-        case TC_TEXTURE_RGBA16F: return 4;
-        case TC_TEXTURE_RGB8:
-        case TC_TEXTURE_RGB16F: return 3;
-        case TC_TEXTURE_RG8: return 2;
-        case TC_TEXTURE_R8: return 1;
-        case TC_TEXTURE_R16F:
-        case TC_TEXTURE_R32F: return 1;
-        case TC_TEXTURE_DEPTH24:
-        case TC_TEXTURE_DEPTH32F: return 1;
+    case TC_TEXTURE_RGBA8:
+    case TC_TEXTURE_RGBA16F:
+        return 4;
+    case TC_TEXTURE_RGB8:
+    case TC_TEXTURE_RGB16F:
+        return 3;
+    case TC_TEXTURE_RG8:
+        return 2;
+    case TC_TEXTURE_R8:
+        return 1;
+    case TC_TEXTURE_R16F:
+    case TC_TEXTURE_R32F:
+        return 1;
+    case TC_TEXTURE_DEPTH24:
+    case TC_TEXTURE_DEPTH32F:
+        return 1;
     }
     return 0;
 }
@@ -418,11 +426,13 @@ uint8_t tc_texture_format_channels(tc_texture_format format) {
 // ============================================================================
 
 void tc_texture_add_ref(tc_texture* tex) {
-    if (tex) tex->header.ref_count++;
+    if (tex)
+        tex->header.ref_count++;
 }
 
 bool tc_texture_release(tc_texture* tex) {
-    if (!tex) return false;
+    if (!tex)
+        return false;
     if (tex->header.ref_count > 0) {
         tex->header.ref_count--;
     }
@@ -433,23 +443,23 @@ bool tc_texture_release(tc_texture* tex) {
 // Texture data helpers
 // ============================================================================
 
-bool tc_texture_set_data(
-    tc_texture* tex,
-    const void* data,
-    uint32_t width,
-    uint32_t height,
-    uint8_t channels,
-    const char* name,
-    const char* source_path
-) {
-    if (!tex) return false;
+bool tc_texture_set_data(tc_texture* tex,
+                         const void* data,
+                         uint32_t width,
+                         uint32_t height,
+                         uint8_t channels,
+                         const char* name,
+                         const char* source_path) {
+    if (!tex)
+        return false;
 
     size_t data_size = (size_t)width * height * channels;
 
     void* new_data = NULL;
     if (data_size > 0) {
         new_data = malloc(data_size);
-        if (!new_data) return false;
+        if (!new_data)
+            return false;
         if (data) {
             memcpy(new_data, data, data_size);
         } else {
@@ -457,7 +467,8 @@ bool tc_texture_set_data(
         }
     }
 
-    if (tex->data) free(tex->data);
+    if (tex->data)
+        free(tex->data);
 
     tex->data = new_data;
     tex->width = width;
@@ -477,13 +488,9 @@ bool tc_texture_set_data(
     return true;
 }
 
-void tc_texture_set_transforms(
-    tc_texture* tex,
-    bool flip_x,
-    bool flip_y,
-    bool transpose
-) {
-    if (!tex) return;
+void tc_texture_set_transforms(tc_texture* tex, bool flip_x, bool flip_y, bool transpose) {
+    if (!tex)
+        return;
     tex->flip_x = flip_x ? 1 : 0;
     tex->flip_y = flip_y ? 1 : 0;
     tex->transpose = transpose ? 1 : 0;
@@ -491,8 +498,10 @@ void tc_texture_set_transforms(
 }
 
 void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind) {
-    if (!tex) return;
-    if (tex->storage_kind == (uint8_t)kind) return;
+    if (!tex)
+        return;
+    if (tex->storage_kind == (uint8_t)kind)
+        return;
     tex->storage_kind = (uint8_t)kind;
     // Bump version: tgfx2 device caches key on (pool_index, version),
     // so changing storage kind after creation must force re-allocation
@@ -501,8 +510,10 @@ void tc_texture_set_storage_kind(tc_texture* tex, tc_texture_storage_kind kind) 
 }
 
 void tc_texture_set_usage(tc_texture* tex, uint32_t usage) {
-    if (!tex) return;
-    if (tex->usage == usage) return;
+    if (!tex)
+        return;
+    if (tex->usage == usage)
+        return;
     tex->usage = usage;
     // Bump version — usage drives VkImageUsageFlags on Vulkan and the
     // GL_TEXTURE_2D allocation path on GL; cached handles built with
@@ -510,31 +521,26 @@ void tc_texture_set_usage(tc_texture* tex, uint32_t usage) {
     tex->header.version++;
 }
 
-bool tc_texture_set_encoding(
-    tc_texture* tex,
-    tc_texture_encoding encoding
-) {
-    if (!tex) return false;
-    if (encoding != TC_TEXTURE_ENCODING_LINEAR &&
-        encoding != TC_TEXTURE_ENCODING_SRGB) {
+bool tc_texture_set_encoding(tc_texture* tex, tc_texture_encoding encoding) {
+    if (!tex)
+        return false;
+    if (encoding != TC_TEXTURE_ENCODING_LINEAR && encoding != TC_TEXTURE_ENCODING_SRGB) {
         tc_log(TC_LOG_ERROR,
                "tc_texture_set_encoding: unsupported encoding %u for texture '%s'",
                (unsigned)encoding,
                tex->header.name ? tex->header.name : tex->header.uuid);
         return false;
     }
-    if (tex->encoding == (uint8_t)encoding) return true;
+    if (tex->encoding == (uint8_t)encoding)
+        return true;
     tex->encoding = (uint8_t)encoding;
     tex->header.version++;
     return true;
 }
 
-void tc_texture_set_size_format(
-    tc_texture* tex,
-    uint32_t width, uint32_t height,
-    tc_texture_format format
-) {
-    if (!tex) return;
+void tc_texture_set_size_format(tc_texture* tex, uint32_t width, uint32_t height, tc_texture_format format) {
+    if (!tex)
+        return;
     tex->width = width;
     tex->height = height;
     tex->format = (uint8_t)format;
@@ -547,16 +553,17 @@ void tc_texture_set_size_format(
 // UUID computation
 // ============================================================================
 
-void tc_texture_compute_uuid(
-    const void* data, size_t size,
-    uint32_t width, uint32_t height, uint8_t channels,
-    tc_texture_encoding encoding,
-    char* uuid_out
-) {
+void tc_texture_compute_uuid(const void* data,
+                             size_t size,
+                             uint32_t width,
+                             uint32_t height,
+                             uint8_t channels,
+                             tc_texture_encoding encoding,
+                             char* uuid_out) {
     uint64_t hash = 14695981039346656037ULL;
     const uint8_t* bytes = (const uint8_t*)data;
 
-    const uint32_t dims[3] = { width, height, channels };
+    const uint32_t dims[3] = {width, height, channels};
     for (size_t i = 0; i < 3; i++) {
         uint32_t value = dims[i];
         for (int byte = 0; byte < 4; byte++) {
@@ -603,8 +610,9 @@ static bool texture_iter_adapter(uint32_t index, void* item, void* ctx_ptr) {
 }
 
 void tc_texture_foreach(tc_texture_iter_fn callback, void* user_data) {
-    if (!g_texture_initialized || !callback) return;
-    texture_iter_ctx ctx = { callback, user_data };
+    if (!g_texture_initialized || !callback)
+        return;
+    texture_iter_ctx ctx = {callback, user_data};
     tc_pool_foreach(&g_texture_pool, texture_iter_adapter, &ctx);
 }
 
@@ -644,28 +652,32 @@ static bool collect_texture_info(tc_texture_handle h, tc_texture* tex, void* use
 // ============================================================================
 
 bool tc_texture_sync_to_cpu(tc_texture* tex) {
-    if (!tex) return false;
+    if (!tex)
+        return false;
 
     // CPU-first textures already have data on CPU
-    if (tex->storage_kind == TC_TEXTURE_STORAGE_CPU_FIRST) return true;
+    if (tex->storage_kind == TC_TEXTURE_STORAGE_CPU_FIRST)
+        return true;
 
     static bool warned_gpu_first_readback_removed = false;
     if (!warned_gpu_first_readback_removed) {
-        tc_log(TC_LOG_ERROR,
-               "tc_texture_sync_to_cpu: GPU-first readback requires a tgfx2 device path");
+        tc_log(TC_LOG_ERROR, "tc_texture_sync_to_cpu: GPU-first readback requires a tgfx2 device path");
         warned_gpu_first_readback_removed = true;
     }
     return false;
 }
 
 tc_texture_info* tc_texture_get_all_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
 
-    if (!g_texture_initialized) return NULL;
+    if (!g_texture_initialized)
+        return NULL;
 
     size_t tex_count = tc_pool_count(&g_texture_pool);
-    if (tex_count == 0) return NULL;
+    if (tex_count == 0)
+        return NULL;
 
     tc_texture_info* infos = (tc_texture_info*)malloc(tex_count * sizeof(tc_texture_info));
     if (!infos) {
@@ -673,7 +685,7 @@ tc_texture_info* tc_texture_get_all_info(size_t* count) {
         return NULL;
     }
 
-    info_collector collector = { infos, 0 };
+    info_collector collector = {infos, 0};
     tc_texture_foreach(collect_texture_info, &collector);
 
     *count = collector.count;

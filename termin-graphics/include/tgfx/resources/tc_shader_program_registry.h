@@ -38,21 +38,12 @@ TGFX_API void tc_shader_program_retain(tc_shader_program* program);
 TGFX_API bool tc_shader_program_release(tc_shader_program* program);
 TGFX_API bool tc_shader_program_remove(tc_shader_program_handle handle);
 
-TGFX_API bool tc_shader_program_set_payload(
-    tc_shader_program* program,
-    const tc_shader_program_payload_desc* desc
-);
+TGFX_API bool tc_shader_program_set_payload(tc_shader_program* program, const tc_shader_program_payload_desc* desc);
 TGFX_API uint32_t tc_shader_program_version(const tc_shader_program* program);
-TGFX_API const tc_shader_program_phase* tc_shader_program_find_phase(
-    const tc_shader_program* program,
-    const char* phase_mark
-);
-TGFX_API void tc_shader_program_make_phase_uuid(
-    char* out_uuid,
-    size_t out_size,
-    const char* program_uuid,
-    const char* phase_mark
-);
+TGFX_API const tc_shader_program_phase* tc_shader_program_find_phase(const tc_shader_program* program,
+                                                                     const char* phase_mark);
+TGFX_API void
+tc_shader_program_make_phase_uuid(char* out_uuid, size_t out_size, const char* program_uuid, const char* phase_mark);
 
 #ifdef __cplusplus
 }

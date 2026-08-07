@@ -14,25 +14,27 @@ extern "C" {
 
 namespace termin {
 
-struct RenderContext {
-    Mat44f view;
-    Mat44f projection;
-    tc_phase_mask phase = TC_PHASE_NONE;
-    MaterialPipelinePassContract pass_contract;
-    Mat44f model = Mat44f::identity();
-    TcShader current_tc_shader;
-    uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
-    uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFF;
-    Vec3 camera_position{0.0, 0.0, 0.0};
-    bool has_override_color = false;
-    Vec4 override_color{0.0, 0.0, 0.0, 0.0};
-    int viewport_width = 0;
-    int viewport_height = 0;
-    void set_model(const Mat44f& m) { model = m; }
+    struct RenderContext {
+        Mat44f view;
+        Mat44f projection;
+        tc_phase_mask phase = TC_PHASE_NONE;
+        MaterialPipelinePassContract pass_contract;
+        Mat44f model = Mat44f::identity();
+        TcShader current_tc_shader;
+        uint64_t layer_mask = 0xFFFFFFFFFFFFFFFF;
+        uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFF;
+        Vec3 camera_position{0.0, 0.0, 0.0};
+        bool has_override_color = false;
+        Vec4 override_color{0.0, 0.0, 0.0, 0.0};
+        int viewport_width = 0;
+        int viewport_height = 0;
+        void set_model(const Mat44f& m) {
+            model = m;
+        }
 
-    Mat44f mvp() const {
-        return projection * view * model;
-    }
-};
+        Mat44f mvp() const {
+            return projection * view * model;
+        }
+    };
 
 } // namespace termin

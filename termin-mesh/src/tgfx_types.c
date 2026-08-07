@@ -3,31 +3,37 @@
 
 size_t tgfx_attrib_type_size(tgfx_attrib_type type) {
     switch (type) {
-        case TGFX_ATTRIB_FLOAT32: return 4;
-        case TGFX_ATTRIB_INT32:   return 4;
-        case TGFX_ATTRIB_UINT32:  return 4;
-        case TGFX_ATTRIB_INT16:   return 2;
-        case TGFX_ATTRIB_UINT16:  return 2;
-        case TGFX_ATTRIB_INT8:    return 1;
-        case TGFX_ATTRIB_UINT8:   return 1;
-        default:                   return 0;
+    case TGFX_ATTRIB_FLOAT32:
+        return 4;
+    case TGFX_ATTRIB_INT32:
+        return 4;
+    case TGFX_ATTRIB_UINT32:
+        return 4;
+    case TGFX_ATTRIB_INT16:
+        return 2;
+    case TGFX_ATTRIB_UINT16:
+        return 2;
+    case TGFX_ATTRIB_INT8:
+        return 1;
+    case TGFX_ATTRIB_UINT8:
+        return 1;
+    default:
+        return 0;
     }
 }
 
 void tgfx_vertex_layout_init(tgfx_vertex_layout* layout) {
-    if (!layout) return;
+    if (!layout)
+        return;
     memset(layout, 0, sizeof(tgfx_vertex_layout));
 }
 
 bool tgfx_vertex_layout_add(
-    tgfx_vertex_layout* layout,
-    const char* name,
-    uint8_t size,
-    tgfx_attrib_type type,
-    uint8_t location
-) {
-    if (!layout || !name) return false;
-    if (layout->attrib_count >= TGFX_VERTEX_ATTRIBS_MAX) return false;
+    tgfx_vertex_layout* layout, const char* name, uint8_t size, tgfx_attrib_type type, uint8_t location) {
+    if (!layout || !name)
+        return false;
+    if (layout->attrib_count >= TGFX_VERTEX_ATTRIBS_MAX)
+        return false;
 
     tgfx_vertex_attrib* attr = &layout->attribs[layout->attrib_count];
 
@@ -45,11 +51,9 @@ bool tgfx_vertex_layout_add(
     return true;
 }
 
-const tgfx_vertex_attrib* tgfx_vertex_layout_find(
-    const tgfx_vertex_layout* layout,
-    const char* name
-) {
-    if (!layout || !name) return NULL;
+const tgfx_vertex_attrib* tgfx_vertex_layout_find(const tgfx_vertex_layout* layout, const char* name) {
+    if (!layout || !name)
+        return NULL;
 
     for (uint8_t i = 0; i < layout->attrib_count; i++) {
         if (strcmp(layout->attribs[i].name, name) == 0) {

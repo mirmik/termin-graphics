@@ -5,993 +5,934 @@
 
 namespace termin::gui_native::python_bindings {
 
-namespace {
+    namespace {
 
-std::mutex g_document_states_mutex;
-std::unordered_map<uint64_t, std::shared_ptr<DocumentState>> g_document_states;
+        std::mutex g_document_states_mutex;
+        std::unordered_map<uint64_t, std::shared_ptr<DocumentState>> g_document_states;
 
-uint64_t document_key(tc_ui_document_handle handle) {
-  return (static_cast<uint64_t>(handle.index) << 32) | handle.generation;
-}
+        uint64_t document_key(tc_ui_document_handle handle) {
+            return (static_cast<uint64_t>(handle.index) << 32) | handle.generation;
+        }
 
-} // namespace
+    } // namespace
 
-DrawList::DrawList() : draw_list_(tc_ui_draw_list_create()) {
-  if (!draw_list_) {
-    throw std::runtime_error("failed to create tc_ui_draw_list");
-  }
-}
-
-DrawList::~DrawList() { tc_ui_draw_list_destroy(draw_list_); }
-
-tc_ui_draw_list *DrawList::get() const { return draw_list_; }
-
-DrawCommand::DrawCommand(const tc_ui_draw_command &source)
-    : value(source), text(source.text ? source.text : ""),
-      points(source.points && source.point_count > 0
-                 ? std::vector<tc_ui_point>(source.points,
-                                            source.points + source.point_count)
-                 : std::vector<tc_ui_point>{}) {
-  refresh_pointers();
-}
-
-DrawCommand::DrawCommand(const DrawCommand &other)
-    : value(other.value), text(other.text), points(other.points) {
-  refresh_pointers();
-}
-
-DrawCommand::DrawCommand(DrawCommand &&other) noexcept
-    : value(other.value), text(std::move(other.text)),
-      points(std::move(other.points)) {
-  refresh_pointers();
-}
-
-DrawCommand &DrawCommand::operator=(const DrawCommand &other) {
-  if (this != &other) {
-    value = other.value;
-    text = other.text;
-    points = other.points;
-    refresh_pointers();
-  }
-  return *this;
-}
-
-DrawCommand &DrawCommand::operator=(DrawCommand &&other) noexcept {
-  if (this != &other) {
-    value = other.value;
-    text = std::move(other.text);
-    points = std::move(other.points);
-    refresh_pointers();
-  }
-  return *this;
-}
-
-void DrawCommand::refresh_pointers() {
-  value.text = text.empty() ? nullptr : text.c_str();
-  value.points = points.empty() ? nullptr : points.data();
-  value.point_count = points.size();
-}
-
-PaintContext::PaintContext(DrawList &draw_list)
-    : context_(tc_ui_paint_context_create(draw_list.get())), owns_(true) {
-  if (!context_) {
-    throw std::runtime_error("failed to create tc_ui_paint_context");
-  }
-}
-
-PaintContext::PaintContext(tc_ui_paint_context *context, bool owns)
-    : context_(context), owns_(owns) {
-  if (!context_) {
-    throw std::runtime_error("cannot wrap null tc_ui_paint_context");
-  }
-}
-
-PaintContext::~PaintContext() {
-  if (owns_) {
-    tc_ui_paint_context_destroy(context_);
-  }
-}
-
-PaintContext::PaintContext(PaintContext &&other) noexcept
-    : context_(other.context_), owns_(other.owns_) {
-  other.context_ = nullptr;
-  other.owns_ = false;
-}
-
-PaintContext &PaintContext::operator=(PaintContext &&other) noexcept {
-  if (this != &other) {
-    if (owns_) {
-      tc_ui_paint_context_destroy(context_);
+    DrawList::DrawList()
+        : draw_list_(tc_ui_draw_list_create()) {
+        if (!draw_list_) {
+            throw std::runtime_error("failed to create tc_ui_draw_list");
+        }
     }
-    context_ = other.context_;
-    owns_ = other.owns_;
-    other.context_ = nullptr;
-    other.owns_ = false;
-  }
-  return *this;
-}
 
-tc_ui_paint_context *PaintContext::get() const { return context_; }
-
-Theme::Theme() { tc_ui_theme_init_default(&value); }
-
-Theme::Theme(const tc_ui_theme &source) : value(source) {}
-
-tc_ui_role_style &Theme::role(tc_ui_style_role role_value) {
-  if (role_value < TC_UI_STYLE_GENERIC ||
-      role_value >= TC_UI_STYLE_ROLE_COUNT) {
-    throw std::out_of_range("invalid native UI style role");
-  }
-  return value.roles[role_value];
-}
-
-tc_value python_to_tc_value(nb::object value) {
-  if (value.is_none())
-    return tc_value_nil();
-  if (nb::isinstance<nb::bool_>(value))
-    return tc_value_bool(nb::cast<bool>(value));
-  if (nb::isinstance<nb::int_>(value))
-    return tc_value_int(nb::cast<int64_t>(value));
-  if (nb::isinstance<nb::float_>(value))
-    return tc_value_double(nb::cast<double>(value));
-  if (nb::isinstance<nb::str>(value))
-    return tc_value_string(nb::cast<std::string>(value).c_str());
-  if (nb::isinstance<nb::list>(value) || nb::isinstance<nb::tuple>(value)) {
-    tc_value result = tc_value_list_new();
-    for (nb::handle item : value) {
-      tc_value_list_push(&result,
-                         python_to_tc_value(nb::borrow<nb::object>(item)));
+    DrawList::~DrawList() {
+        tc_ui_draw_list_destroy(draw_list_);
     }
-    return result;
-  }
-  if (nb::isinstance<nb::dict>(value)) {
-    tc_value result = tc_value_dict_new();
-    for (auto item : nb::cast<nb::dict>(value)) {
-      if (!nb::isinstance<nb::str>(item.first)) {
-        tc_value_free(&result);
-        throw std::invalid_argument(
-            "serialized widget state dict keys must be strings");
-      }
-      const std::string key = nb::cast<std::string>(item.first);
-      tc_value_dict_set(
-          &result, key.c_str(),
-          python_to_tc_value(nb::borrow<nb::object>(item.second)));
+
+    tc_ui_draw_list* DrawList::get() const {
+        return draw_list_;
     }
-    return result;
-  }
-  throw std::invalid_argument("serialized widget state must contain only None, "
-                              "bool, int, float, str, list or dict");
-}
 
-nb::object tc_value_to_python(const tc_value *value) {
-  if (!value)
-    return nb::none();
-  switch (value->type) {
-  case TC_VALUE_NIL:
-    return nb::none();
-  case TC_VALUE_BOOL:
-    return nb::bool_(value->data.b);
-  case TC_VALUE_INT:
-    return nb::int_(value->data.i);
-  case TC_VALUE_FLOAT:
-    return nb::float_(value->data.f);
-  case TC_VALUE_DOUBLE:
-    return nb::float_(value->data.d);
-  case TC_VALUE_STRING:
-    return value->data.s ? nb::cast(value->data.s) : nb::none();
-  case TC_VALUE_LIST: {
-    nb::list result;
-    for (size_t index = 0; index < value->data.list.count; ++index)
-      result.append(tc_value_to_python(&value->data.list.items[index]));
-    return result;
-  }
-  case TC_VALUE_DICT: {
-    nb::dict result;
-    for (size_t index = 0; index < value->data.dict.count; ++index) {
-      const tc_value_dict_entry &item = value->data.dict.entries[index];
-      result[item.key] = tc_value_to_python(item.value);
+    DrawCommand::DrawCommand(const tc_ui_draw_command& source)
+        : value(source),
+          text(source.text ? source.text : ""),
+          points(source.points && source.point_count > 0
+                     ? std::vector<tc_ui_point>(source.points, source.points + source.point_count)
+                     : std::vector<tc_ui_point>{}) {
+        refresh_pointers();
     }
-    return result;
-  }
-  }
-  throw std::runtime_error("unknown tc_value type in native UI serialization");
-}
 
-void register_document_state(const std::shared_ptr<DocumentState> &state) {
-  std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  g_document_states[document_key(state->document)] = state;
-}
+    DrawCommand::DrawCommand(const DrawCommand& other)
+        : value(other.value),
+          text(other.text),
+          points(other.points) {
+        refresh_pointers();
+    }
 
-void unregister_document_state(tc_ui_document_handle document) {
-  std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  g_document_states.erase(document_key(document));
-}
+    DrawCommand::DrawCommand(DrawCommand&& other) noexcept
+        : value(other.value),
+          text(std::move(other.text)),
+          points(std::move(other.points)) {
+        refresh_pointers();
+    }
 
-std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document) {
-  std::lock_guard<std::mutex> lock(g_document_states_mutex);
-  const auto found = g_document_states.find(document_key(document));
-  return found == g_document_states.end() ? nullptr : found->second;
-}
+    DrawCommand& DrawCommand::operator=(const DrawCommand& other) {
+        if (this != &other) {
+            value = other.value;
+            text = other.text;
+            points = other.points;
+            refresh_pointers();
+        }
+        return *this;
+    }
 
-tc_ui_document_handle
-checked_document_handle(const termin::gui_native::TcDocument &document) {
-  if (!document.valid()) {
-    throw std::runtime_error("native UI document handle is stale or invalid");
-  }
-  return document.handle();
-}
+    DrawCommand& DrawCommand::operator=(DrawCommand&& other) noexcept {
+        if (this != &other) {
+            value = other.value;
+            text = std::move(other.text);
+            points = std::move(other.points);
+            refresh_pointers();
+        }
+        return *this;
+    }
 
-std::shared_ptr<DocumentState>
-require_document_state(const termin::gui_native::TcDocument &document) {
-  const tc_ui_document_handle handle = checked_document_handle(document);
-  if (auto state = find_document_state(handle)) {
-    return state;
-  }
-  auto state = std::make_shared<DocumentState>();
-  state->document = handle;
-  state->clipboard_getter = nb::none();
-  state->clipboard_setter = nb::none();
-  state->cursor_changed_handler = nb::none();
-  register_document_state(state);
-  return state;
-}
+    void DrawCommand::refresh_pointers() {
+        value.text = text.empty() ? nullptr : text.c_str();
+        value.points = points.empty() ? nullptr : points.data();
+        value.point_count = points.size();
+    }
 
-bool WidgetRef::alive() const {
-  return state && !tc_ui_document_handle_is_invalid(state->document) &&
-         tc_ui_document_is_alive(state->document, handle);
-}
+    PaintContext::PaintContext(DrawList& draw_list)
+        : context_(tc_ui_paint_context_create(draw_list.get())),
+          owns_(true) {
+        if (!context_) {
+            throw std::runtime_error("failed to create tc_ui_paint_context");
+        }
+    }
 
-tc_widget *WidgetRef::resolve() const {
-  return state && !tc_ui_document_handle_is_invalid(state->document)
-             ? tc_ui_document_resolve_widget(state->document, handle)
-             : nullptr;
-}
+    PaintContext::PaintContext(tc_ui_paint_context* context, bool owns)
+        : context_(context),
+          owns_(owns) {
+        if (!context_) {
+            throw std::runtime_error("cannot wrap null tc_ui_paint_context");
+        }
+    }
 
-tc_widget *WidgetRef::resolve_checked() const {
-  tc_widget *widget = resolve();
-  if (!widget) {
-    throw std::runtime_error("widget reference is stale");
-  }
-  return widget;
-}
+    PaintContext::~PaintContext() {
+        if (owns_) {
+            tc_ui_paint_context_destroy(context_);
+        }
+    }
 
-void WidgetRef::throw_pending_exception() const {
-  if (state && state->pending_exception) {
-    std::exception_ptr exception = state->pending_exception;
-    state->pending_exception = nullptr;
-    std::rethrow_exception(exception);
-  }
-}
+    PaintContext::PaintContext(PaintContext&& other) noexcept
+        : context_(other.context_),
+          owns_(other.owns_) {
+        other.context_ = nullptr;
+        other.owns_ = false;
+    }
 
-TextInput &TextInputRef::get() const {
-  return native_widget_checked<TextInput>(widget, "TextInput");
-}
+    PaintContext& PaintContext::operator=(PaintContext&& other) noexcept {
+        if (this != &other) {
+            if (owns_) {
+                tc_ui_paint_context_destroy(context_);
+            }
+            context_ = other.context_;
+            owns_ = other.owns_;
+            other.context_ = nullptr;
+            other.owns_ = false;
+        }
+        return *this;
+    }
 
-TextArea &TextAreaRef::get() const {
-  return native_widget_checked<TextArea>(widget, "TextArea");
-}
+    tc_ui_paint_context* PaintContext::get() const {
+        return context_;
+    }
 
-#define TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(Name, Type)                          \
-  termin::gui_native::Type &Name::get() const {                                \
-    return native_widget_checked<termin::gui_native::Type>(widget, #Type);     \
-  }
+    Theme::Theme() {
+        tc_ui_theme_init_default(&value);
+    }
 
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SpinBoxRef, SpinBox)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SliderEditRef, SliderEdit)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(BoxLayoutRef, BoxLayout)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(HStackRef, HStack)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(VStackRef, VStack)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(GridLayoutRef, GridLayout)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(WrapLayoutRef, WrapLayout)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(PanelRef, Panel)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(LabelRef, Label)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SliderRef, Slider)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SeparatorRef, Separator)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SpacerRef, Spacer)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SwatchRef, Swatch)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ButtonRef, Button)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(CheckboxRef, Checkbox)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(GroupBoxRef, GroupBox)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ScrollAreaRef, ScrollArea)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SplitterRef, Splitter)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TabViewRef, TabView)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(RichTextViewRef, RichTextView)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FrameTimeGraphRef, FrameTimeGraph)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FrameTimelineWidgetRef, FrameTimelineWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(Viewport3DRef, Viewport3D)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(OverlayLayoutRef, OverlayLayout)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SceneViewRef, SceneView)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ListWidgetRef, ListWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FileGridWidgetRef, FileGridWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ToolBarRef, ToolBar)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(StatusBarRef, StatusBar)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MenuRef, Menu)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MenuBarRef, MenuBar)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(DialogRef, Dialog)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MessageBoxRef, MessageBox)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(InputDialogRef, InputDialog)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FileDialogOverlayRef, FileDialogOverlay)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ColorPickerRef, ColorPicker)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ColorDialogRef, ColorDialog)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TreeWidgetRef, TreeWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TreeTableWidgetRef, TreeTableWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TableWidgetRef, TableWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ComboBoxRef, ComboBox)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(IconButtonRef, IconButton)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ProgressBarRef, ProgressBar)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ImageWidgetRef, ImageWidget)
-TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(CanvasRef, Canvas)
+    Theme::Theme(const tc_ui_theme& source)
+        : value(source) {}
+
+    tc_ui_role_style& Theme::role(tc_ui_style_role role_value) {
+        if (role_value < TC_UI_STYLE_GENERIC || role_value >= TC_UI_STYLE_ROLE_COUNT) {
+            throw std::out_of_range("invalid native UI style role");
+        }
+        return value.roles[role_value];
+    }
+
+    tc_value python_to_tc_value(nb::object value) {
+        if (value.is_none())
+            return tc_value_nil();
+        if (nb::isinstance<nb::bool_>(value))
+            return tc_value_bool(nb::cast<bool>(value));
+        if (nb::isinstance<nb::int_>(value))
+            return tc_value_int(nb::cast<int64_t>(value));
+        if (nb::isinstance<nb::float_>(value))
+            return tc_value_double(nb::cast<double>(value));
+        if (nb::isinstance<nb::str>(value))
+            return tc_value_string(nb::cast<std::string>(value).c_str());
+        if (nb::isinstance<nb::list>(value) || nb::isinstance<nb::tuple>(value)) {
+            tc_value result = tc_value_list_new();
+            for (nb::handle item : value) {
+                tc_value_list_push(&result, python_to_tc_value(nb::borrow<nb::object>(item)));
+            }
+            return result;
+        }
+        if (nb::isinstance<nb::dict>(value)) {
+            tc_value result = tc_value_dict_new();
+            for (auto item : nb::cast<nb::dict>(value)) {
+                if (!nb::isinstance<nb::str>(item.first)) {
+                    tc_value_free(&result);
+                    throw std::invalid_argument("serialized widget state dict keys must be strings");
+                }
+                const std::string key = nb::cast<std::string>(item.first);
+                tc_value_dict_set(&result, key.c_str(), python_to_tc_value(nb::borrow<nb::object>(item.second)));
+            }
+            return result;
+        }
+        throw std::invalid_argument("serialized widget state must contain only None, "
+                                    "bool, int, float, str, list or dict");
+    }
+
+    nb::object tc_value_to_python(const tc_value* value) {
+        if (!value)
+            return nb::none();
+        switch (value->type) {
+        case TC_VALUE_NIL:
+            return nb::none();
+        case TC_VALUE_BOOL:
+            return nb::bool_(value->data.b);
+        case TC_VALUE_INT:
+            return nb::int_(value->data.i);
+        case TC_VALUE_FLOAT:
+            return nb::float_(value->data.f);
+        case TC_VALUE_DOUBLE:
+            return nb::float_(value->data.d);
+        case TC_VALUE_STRING:
+            return value->data.s ? nb::cast(value->data.s) : nb::none();
+        case TC_VALUE_LIST: {
+            nb::list result;
+            for (size_t index = 0; index < value->data.list.count; ++index)
+                result.append(tc_value_to_python(&value->data.list.items[index]));
+            return result;
+        }
+        case TC_VALUE_DICT: {
+            nb::dict result;
+            for (size_t index = 0; index < value->data.dict.count; ++index) {
+                const tc_value_dict_entry& item = value->data.dict.entries[index];
+                result[item.key] = tc_value_to_python(item.value);
+            }
+            return result;
+        }
+        }
+        throw std::runtime_error("unknown tc_value type in native UI serialization");
+    }
+
+    void register_document_state(const std::shared_ptr<DocumentState>& state) {
+        std::lock_guard<std::mutex> lock(g_document_states_mutex);
+        g_document_states[document_key(state->document)] = state;
+    }
+
+    void unregister_document_state(tc_ui_document_handle document) {
+        std::lock_guard<std::mutex> lock(g_document_states_mutex);
+        g_document_states.erase(document_key(document));
+    }
+
+    std::shared_ptr<DocumentState> find_document_state(tc_ui_document_handle document) {
+        std::lock_guard<std::mutex> lock(g_document_states_mutex);
+        const auto found = g_document_states.find(document_key(document));
+        return found == g_document_states.end() ? nullptr : found->second;
+    }
+
+    tc_ui_document_handle checked_document_handle(const termin::gui_native::TcDocument& document) {
+        if (!document.valid()) {
+            throw std::runtime_error("native UI document handle is stale or invalid");
+        }
+        return document.handle();
+    }
+
+    std::shared_ptr<DocumentState> require_document_state(const termin::gui_native::TcDocument& document) {
+        const tc_ui_document_handle handle = checked_document_handle(document);
+        if (auto state = find_document_state(handle)) {
+            return state;
+        }
+        auto state = std::make_shared<DocumentState>();
+        state->document = handle;
+        state->clipboard_getter = nb::none();
+        state->clipboard_setter = nb::none();
+        state->cursor_changed_handler = nb::none();
+        register_document_state(state);
+        return state;
+    }
+
+    bool WidgetRef::alive() const {
+        return state && !tc_ui_document_handle_is_invalid(state->document) &&
+               tc_ui_document_is_alive(state->document, handle);
+    }
+
+    tc_widget* WidgetRef::resolve() const {
+        return state && !tc_ui_document_handle_is_invalid(state->document)
+                   ? tc_ui_document_resolve_widget(state->document, handle)
+                   : nullptr;
+    }
+
+    tc_widget* WidgetRef::resolve_checked() const {
+        tc_widget* widget = resolve();
+        if (!widget) {
+            throw std::runtime_error("widget reference is stale");
+        }
+        return widget;
+    }
+
+    void WidgetRef::throw_pending_exception() const {
+        if (state && state->pending_exception) {
+            std::exception_ptr exception = state->pending_exception;
+            state->pending_exception = nullptr;
+            std::rethrow_exception(exception);
+        }
+    }
+
+    TextInput& TextInputRef::get() const {
+        return native_widget_checked<TextInput>(widget, "TextInput");
+    }
+
+    TextArea& TextAreaRef::get() const {
+        return native_widget_checked<TextArea>(widget, "TextArea");
+    }
+
+#define TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(Name, Type)                                                                  \
+    termin::gui_native::Type& Name::get() const {                                                                      \
+        return native_widget_checked<termin::gui_native::Type>(widget, #Type);                                         \
+    }
+
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SpinBoxRef, SpinBox)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SliderEditRef, SliderEdit)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(BoxLayoutRef, BoxLayout)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(HStackRef, HStack)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(VStackRef, VStack)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(GridLayoutRef, GridLayout)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(WrapLayoutRef, WrapLayout)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(PanelRef, Panel)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(LabelRef, Label)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SliderRef, Slider)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SeparatorRef, Separator)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SpacerRef, Spacer)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SwatchRef, Swatch)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ButtonRef, Button)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(CheckboxRef, Checkbox)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(GroupBoxRef, GroupBox)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ScrollAreaRef, ScrollArea)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SplitterRef, Splitter)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TabViewRef, TabView)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(RichTextViewRef, RichTextView)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FrameTimeGraphRef, FrameTimeGraph)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FrameTimelineWidgetRef, FrameTimelineWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(Viewport3DRef, Viewport3D)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(OverlayLayoutRef, OverlayLayout)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(SceneViewRef, SceneView)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ListWidgetRef, ListWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FileGridWidgetRef, FileGridWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ToolBarRef, ToolBar)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(StatusBarRef, StatusBar)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MenuRef, Menu)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MenuBarRef, MenuBar)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(DialogRef, Dialog)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(MessageBoxRef, MessageBox)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(InputDialogRef, InputDialog)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(FileDialogOverlayRef, FileDialogOverlay)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ColorPickerRef, ColorPicker)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ColorDialogRef, ColorDialog)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TreeWidgetRef, TreeWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TreeTableWidgetRef, TreeTableWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(TableWidgetRef, TableWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ComboBoxRef, ComboBox)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(IconButtonRef, IconButton)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ProgressBarRef, ProgressBar)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(ImageWidgetRef, ImageWidget)
+    TERMIN_GUI_NATIVE_WIDGET_REF_IMPL(CanvasRef, Canvas)
 
 #undef TERMIN_GUI_NATIVE_WIDGET_REF_IMPL
 
-PythonViewportSurfaceHost::PythonViewportSurfaceHost(
-    nb::object object, std::shared_ptr<DocumentState> state)
-    : object_(std::move(object)), state_(std::move(state)) {}
+    PythonViewportSurfaceHost::PythonViewportSurfaceHost(nb::object object, std::shared_ptr<DocumentState> state)
+        : object_(std::move(object)),
+          state_(std::move(state)) {}
 
-bool PythonViewportSurfaceHost::is_valid() const {
-  return invoke<bool>(
-      [this] { return nb::cast<bool>(object_.attr("is_valid")()); });
-}
-
-uint32_t PythonViewportSurfaceHost::texture_id() const {
-  return invoke<uint32_t>([this] {
-    return nb::cast<uint32_t>(object_.attr("get_tgfx_color_tex_id")());
-  });
-}
-
-ViewportSurfaceSize PythonViewportSurfaceHost::framebuffer_size() const {
-  return invoke<ViewportSurfaceSize>([this] {
-    nb::tuple size = nb::cast<nb::tuple>(object_.attr("framebuffer_size")());
-    if (size.size() != 2) {
-      throw std::runtime_error(
-          "viewport surface framebuffer_size() must return two values");
+    bool PythonViewportSurfaceHost::is_valid() const {
+        return invoke<bool>([this] { return nb::cast<bool>(object_.attr("is_valid")()); });
     }
-    return ViewportSurfaceSize{nb::cast<int>(size[0]), nb::cast<int>(size[1])};
-  });
-}
 
-bool PythonViewportSurfaceHost::resize(int width, int height) {
-  return invoke<bool>([this, width, height] {
-    return nb::cast<bool>(object_.attr("resize")(width, height));
-  });
-}
-
-bool PythonViewportSurfaceHost::pointer_move(double x, double y) {
-  pointer_x_ = x;
-  pointer_y_ = y;
-  return invoke<bool>([this, x, y] {
-    return nb::cast<bool>(object_.attr("dispatch_pointer_move")(x, y));
-  });
-}
-
-bool PythonViewportSurfaceHost::pointer_button(int button, int action,
-                                               int modifiers,
-                                               uint32_t click_count) {
-  return invoke<bool>([this, button, action, modifiers, click_count] {
-    return nb::cast<bool>(object_.attr("dispatch_pointer_button")(
-        pointer_x_, pointer_y_, button, action, modifiers, click_count));
-  });
-}
-
-bool PythonViewportSurfaceHost::scroll(double x, double y, int modifiers) {
-  return invoke<bool>([this, x, y, modifiers] {
-    return nb::cast<bool>(
-        object_.attr("dispatch_wheel")(pointer_x_, pointer_y_, x, y, modifiers));
-  });
-}
-
-bool PythonViewportSurfaceHost::key(int key, int scancode, int action,
-                                    int modifiers) {
-  return invoke<bool>([this, key, scancode, action, modifiers] {
-    return nb::cast<bool>(
-        object_.attr("dispatch_key")(key, scancode, action, modifiers));
-  });
-}
-
-bool PythonViewportSurfaceHost::text(uint32_t codepoint) {
-  return invoke<bool>([this, codepoint] {
-    return nb::cast<bool>(object_.attr("dispatch_text")(codepoint));
-  });
-}
-
-PythonWidget::PythonWidget(nb::object object_, std::string debug_name_,
-                           std::shared_ptr<DocumentState> state_)
-    : object(std::move(object_)), state(std::move(state_)) {
-  tc_widget_init_unowned(&widget, &VTABLE, TC_LANGUAGE_PYTHON, this);
-  if (!tc_widget_set_debug_name(&widget, debug_name_.c_str())) {
-    throw std::runtime_error("failed to set Python widget debug name");
-  }
-}
-
-PythonWidget *PythonWidget::from_widget(tc_widget *widget) {
-  if (!widget || !widget->body) {
-    return nullptr;
-  }
-  auto *self = static_cast<PythonWidget *>(widget->body);
-  return self->magic == PYTHON_WIDGET_MAGIC ? self : nullptr;
-}
-
-void PythonWidget::delete_widget(tc_widget *widget) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error(
-        "[termin-gui-native/python] cannot delete invalid Python widget shim");
-    return;
-  }
-  self->magic = 0;
-  nb::gil_scoped_acquire gil;
-  delete self;
-}
-
-void PythonWidget::capture_exception(const char *operation) {
-  nb::gil_scoped_acquire gil;
-  if (state && !state->pending_exception) {
-    state->pending_exception = std::current_exception();
-  }
-  tc_log_error("[termin-gui-native/python] Python widget %s failed for '%s'",
-               operation,
-               tc_widget_debug_name(&widget) ? tc_widget_debug_name(&widget)
-                                             : "<unnamed>");
-}
-
-tc_ui_size PythonWidget::measure(tc_widget *widget, tc_ui_document_handle ,
-                                 tc_ui_constraints constraints) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error(
-        "[termin-gui-native/python] cannot measure invalid Python widget shim");
-    return constraints.min_size;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    return nb::cast<tc_ui_size>(self->object.attr("measure")(constraints));
-  } catch (...) {
-    self->capture_exception("measure");
-    return constraints.min_size;
-  }
-}
-
-void PythonWidget::layout(tc_widget *widget, tc_ui_document_handle ,
-                          tc_ui_rect rect) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error(
-        "[termin-gui-native/python] cannot layout invalid Python widget shim");
-    return;
-  }
-  tc_widget_set_bounds(widget, rect);
-  try {
-    nb::gil_scoped_acquire gil;
-    self->object.attr("layout")(rect);
-  } catch (...) {
-    self->capture_exception("layout");
-  }
-}
-
-void PythonWidget::paint(tc_widget *widget, tc_ui_document_handle ,
-                         tc_ui_paint_context *context) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error(
-        "[termin-gui-native/python] cannot paint invalid Python widget shim");
-    return;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    PaintContext borrowed(context, false);
-    self->object.attr("paint")(std::move(borrowed));
-  } catch (...) {
-    self->capture_exception("paint");
-  }
-}
-
-tc_ui_event_result
-PythonWidget::pointer_event(tc_widget *widget, tc_ui_document_handle ,
-                            const tc_ui_pointer_event *event) {
-  PythonWidget *self = from_widget(widget);
-  if (!self || !event) {
-    tc_log_error("[termin-gui-native/python] cannot route pointer event to "
-                 "invalid Python widget shim");
-    return TC_UI_EVENT_IGNORED;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    return nb::cast<tc_ui_event_result>(
-        self->object.attr("pointer_event")(*event));
-  } catch (...) {
-    self->capture_exception("pointer_event");
-    return TC_UI_EVENT_IGNORED;
-  }
-}
-
-tc_widget_handle PythonWidget::hit_test(tc_widget *widget,
-                                        tc_ui_document_handle document, float x,
-                                        float y) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error("[termin-gui-native/python] cannot hit-test invalid Python "
-                 "widget shim");
-    return tc_widget_handle_invalid();
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    nb::object result = self->object.attr("hit_test")(x, y);
-    if (result.is_none()) {
-      return tc_widget_handle_invalid();
+    uint32_t PythonViewportSurfaceHost::texture_id() const {
+        return invoke<uint32_t>([this] { return nb::cast<uint32_t>(object_.attr("get_tgfx_color_tex_id")()); });
     }
-    tc_widget_handle handle = nb::cast<WidgetHandle>(result).handle;
-    return tc_ui_document_is_alive(document, handle)
-               ? handle
-               : tc_widget_handle_invalid();
-  } catch (...) {
-    self->capture_exception("hit_test");
-    return tc_widget_handle_invalid();
-  }
-}
 
-tc_ui_event_result PythonWidget::key_event(tc_widget *widget, tc_ui_document_handle ,
-                                           const tc_ui_key_event *event) {
-  PythonWidget *self = from_widget(widget);
-  if (!self || !event) {
-    tc_log_error("[termin-gui-native/python] cannot route key event to invalid "
-                 "Python widget shim");
-    return TC_UI_EVENT_IGNORED;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    return nb::cast<tc_ui_event_result>(self->object.attr("key_event")(*event));
-  } catch (...) {
-    self->capture_exception("key_event");
-    return TC_UI_EVENT_IGNORED;
-  }
-}
+    ViewportSurfaceSize PythonViewportSurfaceHost::framebuffer_size() const {
+        return invoke<ViewportSurfaceSize>([this] {
+            nb::tuple size = nb::cast<nb::tuple>(object_.attr("framebuffer_size")());
+            if (size.size() != 2) {
+                throw std::runtime_error("viewport surface framebuffer_size() must return two values");
+            }
+            return ViewportSurfaceSize{nb::cast<int>(size[0]), nb::cast<int>(size[1])};
+        });
+    }
 
-tc_ui_event_result PythonWidget::text_event(tc_widget *widget, tc_ui_document_handle ,
-                                            const tc_ui_text_event *event) {
-  PythonWidget *self = from_widget(widget);
-  if (!self || !event) {
-    tc_log_error("[termin-gui-native/python] cannot route text event to "
-                 "invalid Python widget shim");
-    return TC_UI_EVENT_IGNORED;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    return nb::cast<tc_ui_event_result>(
-        self->object.attr("text_event")(event->text ? event->text : ""));
-  } catch (...) {
-    self->capture_exception("text_event");
-    return TC_UI_EVENT_IGNORED;
-  }
-}
+    bool PythonViewportSurfaceHost::resize(int width, int height) {
+        return invoke<bool>([this, width, height] { return nb::cast<bool>(object_.attr("resize")(width, height)); });
+    }
 
-void PythonWidget::focus_event(tc_widget *widget, tc_ui_document_handle ,
-                               bool focused) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error("[termin-gui-native/python] cannot route focus event to "
-                 "invalid Python widget shim");
-    return;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    self->object.attr("focus_event")(focused);
-  } catch (...) {
-    self->capture_exception("focus_event");
-  }
-}
+    bool PythonViewportSurfaceHost::pointer_move(double x, double y) {
+        pointer_x_ = x;
+        pointer_y_ = y;
+        return invoke<bool>([this, x, y] { return nb::cast<bool>(object_.attr("dispatch_pointer_move")(x, y)); });
+    }
 
-void PythonWidget::overlay_dismissed(tc_widget *widget, tc_ui_document_handle ,
-                                     tc_ui_overlay_dismiss_reason reason) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error("[termin-gui-native/python] cannot notify invalid dismissed "
-                 "overlay shim");
-    return;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    self->object.attr("overlay_dismissed")(reason);
-  } catch (...) {
-    self->capture_exception("overlay_dismissed");
-  }
-}
+    bool PythonViewportSurfaceHost::pointer_button(int button, int action, int modifiers, uint32_t click_count) {
+        return invoke<bool>([this, button, action, modifiers, click_count] {
+            return nb::cast<bool>(object_.attr("dispatch_pointer_button")(
+                pointer_x_, pointer_y_, button, action, modifiers, click_count));
+        });
+    }
 
-void PythonWidget::on_destroy(tc_widget *widget, tc_ui_document_handle ) {
-  PythonWidget *self = from_widget(widget);
-  if (!self) {
-    tc_log_error(
-        "[termin-gui-native/python] cannot destroy invalid Python widget shim");
-    return;
-  }
-  if (!self->callbacks_enabled) {
-    return;
-  }
-  try {
-    nb::gil_scoped_acquire gil;
-    self->object.attr("on_destroy")();
-  } catch (...) {
-    self->capture_exception("on_destroy");
-  }
-}
+    bool PythonViewportSurfaceHost::scroll(double x, double y, int modifiers) {
+        return invoke<bool>([this, x, y, modifiers] {
+            return nb::cast<bool>(object_.attr("dispatch_wheel")(pointer_x_, pointer_y_, x, y, modifiers));
+        });
+    }
 
-const tc_widget_vtable PythonWidget::VTABLE{
-    "PythonWidget",
-    &PythonWidget::measure,
-    &PythonWidget::layout,
-    &PythonWidget::paint,
-    &PythonWidget::pointer_event,
-    &PythonWidget::hit_test,
-    &PythonWidget::key_event,
-    &PythonWidget::text_event,
-    &PythonWidget::focus_event,
-    nullptr,
-    &PythonWidget::overlay_dismissed,
-    &PythonWidget::on_destroy,
-};
+    bool PythonViewportSurfaceHost::key(int key, int scancode, int action, int modifiers) {
+        return invoke<bool>([this, key, scancode, action, modifiers] {
+            return nb::cast<bool>(object_.attr("dispatch_key")(key, scancode, action, modifiers));
+        });
+    }
 
-bool create_python_registered_widget(tc_ui_document_handle document, void *userdata,
-                                     tc_widget_factory_result *result) {
-  auto *factory = static_cast<PythonWidgetFactory *>(userdata);
-  std::shared_ptr<DocumentState> state = find_document_state(document);
-  if (!factory || !state || !result) {
-    tc_log_error("[termin-gui-native/python] registered widget factory has no "
-                 "document state");
-    return false;
-  }
-  nb::gil_scoped_acquire gil;
-  try {
-    nb::object object = factory->callable();
-    auto *widget = new PythonWidget(object, factory->debug_name, state);
-    *result = tc_widget_factory_result{
-        &widget->widget,
-        &PythonWidget::delete_widget,
-        TC_WIDGET_OWNED,
+    bool PythonViewportSurfaceHost::text(uint32_t codepoint) {
+        return invoke<bool>([this, codepoint] { return nb::cast<bool>(object_.attr("dispatch_text")(codepoint)); });
+    }
+
+    PythonWidget::PythonWidget(nb::object object_, std::string debug_name_, std::shared_ptr<DocumentState> state_)
+        : object(std::move(object_)),
+          state(std::move(state_)) {
+        tc_widget_init_unowned(&widget, &VTABLE, TC_LANGUAGE_PYTHON, this);
+        if (!tc_widget_set_debug_name(&widget, debug_name_.c_str())) {
+            throw std::runtime_error("failed to set Python widget debug name");
+        }
+    }
+
+    PythonWidget* PythonWidget::from_widget(tc_widget* widget) {
+        if (!widget || !widget->body) {
+            return nullptr;
+        }
+        auto* self = static_cast<PythonWidget*>(widget->body);
+        return self->magic == PYTHON_WIDGET_MAGIC ? self : nullptr;
+    }
+
+    void PythonWidget::delete_widget(tc_widget* widget) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot delete invalid Python widget shim");
+            return;
+        }
+        self->magic = 0;
+        nb::gil_scoped_acquire gil;
+        delete self;
+    }
+
+    void PythonWidget::capture_exception(const char* operation) {
+        nb::gil_scoped_acquire gil;
+        if (state && !state->pending_exception) {
+            state->pending_exception = std::current_exception();
+        }
+        tc_log_error("[termin-gui-native/python] Python widget %s failed for '%s'",
+                     operation,
+                     tc_widget_debug_name(&widget) ? tc_widget_debug_name(&widget) : "<unnamed>");
+    }
+
+    tc_ui_size PythonWidget::measure(tc_widget* widget, tc_ui_document_handle, tc_ui_constraints constraints) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot measure invalid Python widget shim");
+            return constraints.min_size;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            return nb::cast<tc_ui_size>(self->object.attr("measure")(constraints));
+        } catch (...) {
+            self->capture_exception("measure");
+            return constraints.min_size;
+        }
+    }
+
+    void PythonWidget::layout(tc_widget* widget, tc_ui_document_handle, tc_ui_rect rect) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot layout invalid Python widget shim");
+            return;
+        }
+        tc_widget_set_bounds(widget, rect);
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("layout")(rect);
+        } catch (...) {
+            self->capture_exception("layout");
+        }
+    }
+
+    void PythonWidget::paint(tc_widget* widget, tc_ui_document_handle, tc_ui_paint_context* context) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot paint invalid Python widget shim");
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            PaintContext borrowed(context, false);
+            self->object.attr("paint")(std::move(borrowed));
+        } catch (...) {
+            self->capture_exception("paint");
+        }
+    }
+
+    tc_ui_event_result
+    PythonWidget::pointer_event(tc_widget* widget, tc_ui_document_handle, const tc_ui_pointer_event* event) {
+        PythonWidget* self = from_widget(widget);
+        if (!self || !event) {
+            tc_log_error("[termin-gui-native/python] cannot route pointer event to "
+                         "invalid Python widget shim");
+            return TC_UI_EVENT_IGNORED;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            return nb::cast<tc_ui_event_result>(self->object.attr("pointer_event")(*event));
+        } catch (...) {
+            self->capture_exception("pointer_event");
+            return TC_UI_EVENT_IGNORED;
+        }
+    }
+
+    tc_widget_handle PythonWidget::hit_test(tc_widget* widget, tc_ui_document_handle document, float x, float y) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot hit-test invalid Python "
+                         "widget shim");
+            return tc_widget_handle_invalid();
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            nb::object result = self->object.attr("hit_test")(x, y);
+            if (result.is_none()) {
+                return tc_widget_handle_invalid();
+            }
+            tc_widget_handle handle = nb::cast<WidgetHandle>(result).handle;
+            return tc_ui_document_is_alive(document, handle) ? handle : tc_widget_handle_invalid();
+        } catch (...) {
+            self->capture_exception("hit_test");
+            return tc_widget_handle_invalid();
+        }
+    }
+
+    tc_ui_event_result PythonWidget::key_event(tc_widget* widget, tc_ui_document_handle, const tc_ui_key_event* event) {
+        PythonWidget* self = from_widget(widget);
+        if (!self || !event) {
+            tc_log_error("[termin-gui-native/python] cannot route key event to invalid "
+                         "Python widget shim");
+            return TC_UI_EVENT_IGNORED;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            return nb::cast<tc_ui_event_result>(self->object.attr("key_event")(*event));
+        } catch (...) {
+            self->capture_exception("key_event");
+            return TC_UI_EVENT_IGNORED;
+        }
+    }
+
+    tc_ui_event_result
+    PythonWidget::text_event(tc_widget* widget, tc_ui_document_handle, const tc_ui_text_event* event) {
+        PythonWidget* self = from_widget(widget);
+        if (!self || !event) {
+            tc_log_error("[termin-gui-native/python] cannot route text event to "
+                         "invalid Python widget shim");
+            return TC_UI_EVENT_IGNORED;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            return nb::cast<tc_ui_event_result>(self->object.attr("text_event")(event->text ? event->text : ""));
+        } catch (...) {
+            self->capture_exception("text_event");
+            return TC_UI_EVENT_IGNORED;
+        }
+    }
+
+    void PythonWidget::focus_event(tc_widget* widget, tc_ui_document_handle, bool focused) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot route focus event to "
+                         "invalid Python widget shim");
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("focus_event")(focused);
+        } catch (...) {
+            self->capture_exception("focus_event");
+        }
+    }
+
+    void
+    PythonWidget::overlay_dismissed(tc_widget* widget, tc_ui_document_handle, tc_ui_overlay_dismiss_reason reason) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot notify invalid dismissed "
+                         "overlay shim");
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("overlay_dismissed")(reason);
+        } catch (...) {
+            self->capture_exception("overlay_dismissed");
+        }
+    }
+
+    void PythonWidget::on_destroy(tc_widget* widget, tc_ui_document_handle) {
+        PythonWidget* self = from_widget(widget);
+        if (!self) {
+            tc_log_error("[termin-gui-native/python] cannot destroy invalid Python widget shim");
+            return;
+        }
+        if (!self->callbacks_enabled) {
+            return;
+        }
+        try {
+            nb::gil_scoped_acquire gil;
+            self->object.attr("on_destroy")();
+        } catch (...) {
+            self->capture_exception("on_destroy");
+        }
+    }
+
+    const tc_widget_vtable PythonWidget::VTABLE{
+        "PythonWidget",
+        &PythonWidget::measure,
+        &PythonWidget::layout,
+        &PythonWidget::paint,
+        &PythonWidget::pointer_event,
+        &PythonWidget::hit_test,
+        &PythonWidget::key_event,
+        &PythonWidget::text_event,
+        &PythonWidget::focus_event,
+        nullptr,
+        &PythonWidget::overlay_dismissed,
+        &PythonWidget::on_destroy,
     };
-    return true;
-  } catch (...) {
-    if (!state->pending_exception)
-      state->pending_exception = std::current_exception();
-    tc_log_error(
-        "[termin-gui-native/python] registered widget constructor failed");
-    return false;
-  }
-}
 
-bool bind_python_registered_widget(tc_ui_document_handle , tc_widget *widget,
-                                   tc_widget_handle handle, void *) {
-  PythonWidget *python_widget = PythonWidget::from_widget(widget);
-  if (!python_widget || !python_widget->state) {
-    tc_log_error("[termin-gui-native/python] registered widget adoption lost "
-                 "Python body");
-    return false;
-  }
-  nb::gil_scoped_acquire gil;
-  try {
-    python_widget->object.attr("_bind_native")(
-        WidgetRef{python_widget->state, handle});
-    python_widget->callbacks_enabled = true;
-    return true;
-  } catch (...) {
-    if (!python_widget->state->pending_exception)
-      python_widget->state->pending_exception = std::current_exception();
-    tc_log_error("[termin-gui-native/python] registered widget bind failed");
-    return false;
-  }
-}
-
-void destroy_python_widget_factory(void *userdata) {
-  if (!userdata)
-    return;
-  nb::gil_scoped_acquire gil;
-  delete static_cast<PythonWidgetFactory *>(userdata);
-}
-
-bool serialize_python_registered_widget(const tc_widget *widget, void *userdata,
-                                        tc_value *out_state) {
-  auto *factory = static_cast<PythonWidgetFactory *>(userdata);
-  PythonWidget *python_widget =
-      PythonWidget::from_widget(const_cast<tc_widget *>(widget));
-  if (!factory || !python_widget || !out_state) {
-    tc_log_error("[termin-gui-native/python] invalid Python widget state "
-                 "serializer context");
-    return false;
-  }
-  if (factory->serialize_state.is_none())
-    return true;
-  nb::gil_scoped_acquire gil;
-  try {
-    tc_value state =
-        python_to_tc_value(factory->serialize_state(python_widget->object));
-    if (state.type != TC_VALUE_DICT) {
-      tc_value_free(&state);
-      throw std::invalid_argument("widget state serializer must return a dict");
+    bool
+    create_python_registered_widget(tc_ui_document_handle document, void* userdata, tc_widget_factory_result* result) {
+        auto* factory = static_cast<PythonWidgetFactory*>(userdata);
+        std::shared_ptr<DocumentState> state = find_document_state(document);
+        if (!factory || !state || !result) {
+            tc_log_error("[termin-gui-native/python] registered widget factory has no "
+                         "document state");
+            return false;
+        }
+        nb::gil_scoped_acquire gil;
+        try {
+            nb::object object = factory->callable();
+            auto* widget = new PythonWidget(object, factory->debug_name, state);
+            *result = tc_widget_factory_result{
+                &widget->widget,
+                &PythonWidget::delete_widget,
+                TC_WIDGET_OWNED,
+            };
+            return true;
+        } catch (...) {
+            if (!state->pending_exception)
+                state->pending_exception = std::current_exception();
+            tc_log_error("[termin-gui-native/python] registered widget constructor failed");
+            return false;
+        }
     }
-    tc_value_free(out_state);
-    *out_state = state;
-    return true;
-  } catch (...) {
-    if (!python_widget->state->pending_exception)
-      python_widget->state->pending_exception = std::current_exception();
-    tc_log_error("[termin-gui-native/python] registered widget state "
-                 "serialization failed");
-    return false;
-  }
-}
 
-bool deserialize_python_registered_widget(tc_widget *widget,
-                                          const tc_value *state,
-                                          void *userdata) {
-  auto *factory = static_cast<PythonWidgetFactory *>(userdata);
-  PythonWidget *python_widget = PythonWidget::from_widget(widget);
-  if (!factory || !python_widget || !state) {
-    tc_log_error("[termin-gui-native/python] invalid Python widget state "
-                 "deserializer context");
-    return false;
-  }
-  if (factory->deserialize_state.is_none())
-    return tc_value_dict_size(state) == 0;
-  nb::gil_scoped_acquire gil;
-  try {
-    factory->deserialize_state(python_widget->object,
-                               tc_value_to_python(state));
-    return true;
-  } catch (...) {
-    if (!python_widget->state->pending_exception)
-      python_widget->state->pending_exception = std::current_exception();
-    tc_log_error("[termin-gui-native/python] registered widget state "
-                 "deserialization failed");
-    return false;
-  }
-}
-
-WidgetHandle document_adopt(termin::gui_native::TcDocument document,
-                            nb::object object,
-                            const std::string &debug_name) {
-  const auto state = require_document_state(document);
-  const tc_ui_document_handle handle_document =
-      checked_document_handle(document);
-  auto widget = std::make_unique<PythonWidget>(object, debug_name, state);
-  tc_widget_handle handle = tc_ui_document_adopt_widget(
-      handle_document, &widget->widget, &PythonWidget::delete_widget);
-  if (tc_widget_handle_is_invalid(handle)) {
-    throw std::runtime_error("failed to adopt Python widget");
-  }
-  PythonWidget *adopted_widget = widget.release();
-  try {
-    object.attr("_bind_native")(WidgetRef{state, handle});
-    adopted_widget->callbacks_enabled = true;
-  } catch (...) {
-    tc_ui_document_destroy_widget(handle_document, handle);
-    throw;
-  }
-  return WidgetHandle{handle};
-}
-
-WidgetRef document_ref(termin::gui_native::TcDocument document,
-                       WidgetHandle handle) {
-  return WidgetRef{require_document_state(document), handle.handle};
-}
-
-WidgetRef document_create_registered_widget(
-    termin::gui_native::TcDocument document,
-    const std::string &type_name) {
-  const auto state = require_document_state(document);
-  const tc_widget_handle handle =
-      tc_ui_document_create_registered_widget(
-          checked_document_handle(document), type_name.c_str());
-  throw_pending_document_exception(document);
-  if (tc_widget_handle_is_invalid(handle)) {
-    throw std::runtime_error("failed to create registered widget type '" +
-                             type_name + "'");
-  }
-  return WidgetRef{state, handle};
-}
-
-nb::object document_serialize(termin::gui_native::TcDocument document) {
-  tc_value value =
-      tc_ui_document_serialize(checked_document_handle(document));
-  throw_pending_document_exception(document);
-  if (value.type != TC_VALUE_DICT) {
-    throw std::runtime_error("failed to serialize native UI document");
-  }
-  try {
-    nb::object result = tc_value_to_python(&value);
-    tc_value_free(&value);
-    return result;
-  } catch (...) {
-    tc_value_free(&value);
-    throw;
-  }
-}
-
-void document_restore(termin::gui_native::TcDocument document,
-                      nb::object serialized) {
-  tc_value value = python_to_tc_value(std::move(serialized));
-  bool restored =
-      tc_ui_document_restore(checked_document_handle(document), &value);
-  tc_value_free(&value);
-  throw_pending_document_exception(document);
-  if (!restored) {
-    throw std::runtime_error("failed to restore native UI document");
-  }
-}
-
-void throw_pending_document_exception(
-    termin::gui_native::TcDocument document) {
-  const auto state = require_document_state(document);
-  if (state->pending_exception) {
-    std::exception_ptr exception = state->pending_exception;
-    state->pending_exception = nullptr;
-    std::rethrow_exception(exception);
-  }
-}
-
-namespace {
-
-void document_cursor_changed(void *user_data, tc_ui_cursor_intent cursor) {
-  auto *state = static_cast<DocumentState *>(user_data);
-  try {
-    nb::gil_scoped_acquire gil;
-    state->cursor_changed_handler(cursor);
-  } catch (...) {
-    if (!state->pending_exception) {
-      state->pending_exception = std::current_exception();
+    bool bind_python_registered_widget(tc_ui_document_handle, tc_widget* widget, tc_widget_handle handle, void*) {
+        PythonWidget* python_widget = PythonWidget::from_widget(widget);
+        if (!python_widget || !python_widget->state) {
+            tc_log_error("[termin-gui-native/python] registered widget adoption lost "
+                         "Python body");
+            return false;
+        }
+        nb::gil_scoped_acquire gil;
+        try {
+            python_widget->object.attr("_bind_native")(WidgetRef{python_widget->state, handle});
+            python_widget->callbacks_enabled = true;
+            return true;
+        } catch (...) {
+            if (!python_widget->state->pending_exception)
+                python_widget->state->pending_exception = std::current_exception();
+            tc_log_error("[termin-gui-native/python] registered widget bind failed");
+            return false;
+        }
     }
-    tc_log_error("[termin-gui-native/python] cursor changed handler failed");
-  }
-}
 
-const char *document_clipboard_get(void *user_data) {
-  auto *state = static_cast<DocumentState *>(user_data);
-  try {
-    nb::gil_scoped_acquire gil;
-    state->clipboard_buffer =
-        nb::cast<std::string>(state->clipboard_getter());
-    return state->clipboard_buffer.c_str();
-  } catch (...) {
-    if (!state->pending_exception) {
-      state->pending_exception = std::current_exception();
+    void destroy_python_widget_factory(void* userdata) {
+        if (!userdata)
+            return;
+        nb::gil_scoped_acquire gil;
+        delete static_cast<PythonWidgetFactory*>(userdata);
     }
-    tc_log_error("[termin-gui-native/python] clipboard getter failed");
-    return nullptr;
-  }
-}
 
-bool document_clipboard_set(void *user_data, const char *text,
-                            size_t byte_length) {
-  auto *state = static_cast<DocumentState *>(user_data);
-  try {
-    nb::gil_scoped_acquire gil;
-    state->clipboard_setter(
-        std::string(text ? text : "", byte_length));
-    return true;
-  } catch (...) {
-    if (!state->pending_exception) {
-      state->pending_exception = std::current_exception();
+    bool serialize_python_registered_widget(const tc_widget* widget, void* userdata, tc_value* out_state) {
+        auto* factory = static_cast<PythonWidgetFactory*>(userdata);
+        PythonWidget* python_widget = PythonWidget::from_widget(const_cast<tc_widget*>(widget));
+        if (!factory || !python_widget || !out_state) {
+            tc_log_error("[termin-gui-native/python] invalid Python widget state "
+                         "serializer context");
+            return false;
+        }
+        if (factory->serialize_state.is_none())
+            return true;
+        nb::gil_scoped_acquire gil;
+        try {
+            tc_value state = python_to_tc_value(factory->serialize_state(python_widget->object));
+            if (state.type != TC_VALUE_DICT) {
+                tc_value_free(&state);
+                throw std::invalid_argument("widget state serializer must return a dict");
+            }
+            tc_value_free(out_state);
+            *out_state = state;
+            return true;
+        } catch (...) {
+            if (!python_widget->state->pending_exception)
+                python_widget->state->pending_exception = std::current_exception();
+            tc_log_error("[termin-gui-native/python] registered widget state "
+                         "serialization failed");
+            return false;
+        }
     }
-    tc_log_error("[termin-gui-native/python] clipboard setter failed");
-    return false;
-  }
-}
 
-} // namespace
-
-void set_document_clipboard_handlers(
-    termin::gui_native::TcDocument document, nb::object getter,
-    nb::object setter) {
-  const auto state = require_document_state(document);
-  state->clipboard_getter = std::move(getter);
-  state->clipboard_setter = std::move(setter);
-  tc_ui_document_set_clipboard(
-      checked_document_handle(document),
-      state->clipboard_getter.is_none() ? nullptr : &document_clipboard_get,
-      state->clipboard_setter.is_none() ? nullptr : &document_clipboard_set,
-      state.get());
-}
-
-void set_document_cursor_changed_handler(
-    termin::gui_native::TcDocument document, nb::object handler) {
-  const auto state = require_document_state(document);
-  state->cursor_changed_handler = std::move(handler);
-  tc_ui_document_set_cursor_changed_callback(
-      checked_document_handle(document),
-      state->cursor_changed_handler.is_none() ? nullptr
-                                               : &document_cursor_changed,
-      state->cursor_changed_handler.is_none() ? nullptr : state.get());
-}
-
-void release_document_state(termin::gui_native::TcDocument document) {
-  if (tc_ui_document_handle_is_invalid(document.handle())) {
-    return;
-  }
-  if (document.valid()) {
-    tc_ui_document_set_cursor_changed_callback(
-        document.handle(), nullptr, nullptr);
-    tc_ui_document_set_clipboard(document.handle(), nullptr, nullptr, nullptr);
-  }
-  if (const auto state = find_document_state(document.handle())) {
-    state->document = tc_ui_document_handle_invalid();
-    state->pending_exception = nullptr;
-  }
-  unregister_document_state(document.handle());
-}
-
-nb::object snapshot_handle_or_none(tc_widget_handle handle) {
-  return tc_widget_handle_is_invalid(handle) ? nb::none()
-                                             : nb::cast(WidgetHandle{handle});
-}
-
-nb::dict document_snapshot_to_python(
-    const termin::gui_native::TcDocument &document) {
-  DocumentSnapshot snapshot(checked_document_handle(document));
-  nb::dict result;
-  nb::list widgets;
-  for (const tc_ui_widget_snapshot &widget : snapshot.widgets()) {
-    nb::dict item;
-    item["handle"] = WidgetHandle{widget.handle};
-    item["parent"] = snapshot_handle_or_none(widget.parent);
-    item["type_name"] = widget.type_name ? widget.type_name : "";
-    item["stable_id"] =
-        widget.stable_id ? nb::cast(widget.stable_id) : nb::none();
-    item["name"] = widget.name ? nb::cast(widget.name) : nb::none();
-    item["debug_name"] =
-        widget.debug_name ? nb::cast(widget.debug_name) : nb::none();
-    item["native_language"] = widget.native_language;
-    item["ownership"] = widget.ownership;
-    item["bounds"] = widget.bounds;
-    item["min_size"] = widget.min_size;
-    item["preferred_size"] = widget.preferred_size;
-    item["max_size"] = widget.max_size;
-    item["layout_spec"] = widget.layout_spec;
-    item["flags"] = widget.flags;
-    item["dirty_flags"] = widget.dirty_flags;
-    item["cursor_intent"] = widget.cursor_intent;
-    item["style_role"] = widget.style_role;
-    item["style_override"] = widget.style_override;
-    nb::list children;
-    for (size_t index = 0; index < widget.child_count; ++index) {
-      children.append(
-          WidgetHandle{snapshot.children()[widget.child_offset + index]});
+    bool deserialize_python_registered_widget(tc_widget* widget, const tc_value* state, void* userdata) {
+        auto* factory = static_cast<PythonWidgetFactory*>(userdata);
+        PythonWidget* python_widget = PythonWidget::from_widget(widget);
+        if (!factory || !python_widget || !state) {
+            tc_log_error("[termin-gui-native/python] invalid Python widget state "
+                         "deserializer context");
+            return false;
+        }
+        if (factory->deserialize_state.is_none())
+            return tc_value_dict_size(state) == 0;
+        nb::gil_scoped_acquire gil;
+        try {
+            factory->deserialize_state(python_widget->object, tc_value_to_python(state));
+            return true;
+        } catch (...) {
+            if (!python_widget->state->pending_exception)
+                python_widget->state->pending_exception = std::current_exception();
+            tc_log_error("[termin-gui-native/python] registered widget state "
+                         "deserialization failed");
+            return false;
+        }
     }
-    item["children"] = std::move(children);
-    widgets.append(std::move(item));
-  }
-  result["widgets"] = std::move(widgets);
 
-  nb::list roots;
-  for (tc_widget_handle handle : snapshot.roots()) {
-    roots.append(WidgetHandle{handle});
-  }
-  result["roots"] = std::move(roots);
+    WidgetHandle
+    document_adopt(termin::gui_native::TcDocument document, nb::object object, const std::string& debug_name) {
+        const auto state = require_document_state(document);
+        const tc_ui_document_handle handle_document = checked_document_handle(document);
+        auto widget = std::make_unique<PythonWidget>(object, debug_name, state);
+        tc_widget_handle handle =
+            tc_ui_document_adopt_widget(handle_document, &widget->widget, &PythonWidget::delete_widget);
+        if (tc_widget_handle_is_invalid(handle)) {
+            throw std::runtime_error("failed to adopt Python widget");
+        }
+        PythonWidget* adopted_widget = widget.release();
+        try {
+            object.attr("_bind_native")(WidgetRef{state, handle});
+            adopted_widget->callbacks_enabled = true;
+        } catch (...) {
+            tc_ui_document_destroy_widget(handle_document, handle);
+            throw;
+        }
+        return WidgetHandle{handle};
+    }
 
-  nb::list overlays;
-  for (const tc_ui_overlay_snapshot &overlay : snapshot.overlays()) {
-    nb::dict item;
-    item["handle"] = WidgetHandle{overlay.handle};
-    item["flags"] = overlay.flags;
-    overlays.append(std::move(item));
-  }
-  result["overlays"] = std::move(overlays);
+    WidgetRef document_ref(termin::gui_native::TcDocument document, WidgetHandle handle) {
+        return WidgetRef{require_document_state(document), handle.handle};
+    }
 
-  nb::dict interaction;
-  interaction["hovered"] = snapshot_handle_or_none(snapshot.data().hovered);
-  interaction["pressed"] = snapshot_handle_or_none(snapshot.data().pressed);
-  interaction["pointer_capture"] =
-      snapshot_handle_or_none(snapshot.data().pointer_capture);
-  interaction["focused"] = snapshot_handle_or_none(snapshot.data().focused);
-  interaction["cursor_intent"] = snapshot.data().cursor_intent;
-  result["interaction"] = std::move(interaction);
-  result["theme_revision"] = snapshot.data().theme_revision;
-  return result;
-}
+    WidgetRef document_create_registered_widget(termin::gui_native::TcDocument document, const std::string& type_name) {
+        const auto state = require_document_state(document);
+        const tc_widget_handle handle =
+            tc_ui_document_create_registered_widget(checked_document_handle(document), type_name.c_str());
+        throw_pending_document_exception(document);
+        if (tc_widget_handle_is_invalid(handle)) {
+            throw std::runtime_error("failed to create registered widget type '" + type_name + "'");
+        }
+        return WidgetRef{state, handle};
+    }
 
-DrawCommand command_at_checked(const DrawList &draw_list, size_t index) {
-  const tc_ui_draw_command *command =
-      tc_ui_draw_list_command_at(draw_list.get(), index);
-  if (!command) {
-    throw std::out_of_range("draw command index out of range");
-  }
-  return DrawCommand{*command};
-}
+    nb::object document_serialize(termin::gui_native::TcDocument document) {
+        tc_value value = tc_ui_document_serialize(checked_document_handle(document));
+        throw_pending_document_exception(document);
+        if (value.type != TC_VALUE_DICT) {
+            throw std::runtime_error("failed to serialize native UI document");
+        }
+        try {
+            nb::object result = tc_value_to_python(&value);
+            tc_value_free(&value);
+            return result;
+        } catch (...) {
+            tc_value_free(&value);
+            throw;
+        }
+    }
+
+    void document_restore(termin::gui_native::TcDocument document, nb::object serialized) {
+        tc_value value = python_to_tc_value(std::move(serialized));
+        bool restored = tc_ui_document_restore(checked_document_handle(document), &value);
+        tc_value_free(&value);
+        throw_pending_document_exception(document);
+        if (!restored) {
+            throw std::runtime_error("failed to restore native UI document");
+        }
+    }
+
+    void throw_pending_document_exception(termin::gui_native::TcDocument document) {
+        const auto state = require_document_state(document);
+        if (state->pending_exception) {
+            std::exception_ptr exception = state->pending_exception;
+            state->pending_exception = nullptr;
+            std::rethrow_exception(exception);
+        }
+    }
+
+    namespace {
+
+        void document_cursor_changed(void* user_data, tc_ui_cursor_intent cursor) {
+            auto* state = static_cast<DocumentState*>(user_data);
+            try {
+                nb::gil_scoped_acquire gil;
+                state->cursor_changed_handler(cursor);
+            } catch (...) {
+                if (!state->pending_exception) {
+                    state->pending_exception = std::current_exception();
+                }
+                tc_log_error("[termin-gui-native/python] cursor changed handler failed");
+            }
+        }
+
+        const char* document_clipboard_get(void* user_data) {
+            auto* state = static_cast<DocumentState*>(user_data);
+            try {
+                nb::gil_scoped_acquire gil;
+                state->clipboard_buffer = nb::cast<std::string>(state->clipboard_getter());
+                return state->clipboard_buffer.c_str();
+            } catch (...) {
+                if (!state->pending_exception) {
+                    state->pending_exception = std::current_exception();
+                }
+                tc_log_error("[termin-gui-native/python] clipboard getter failed");
+                return nullptr;
+            }
+        }
+
+        bool document_clipboard_set(void* user_data, const char* text, size_t byte_length) {
+            auto* state = static_cast<DocumentState*>(user_data);
+            try {
+                nb::gil_scoped_acquire gil;
+                state->clipboard_setter(std::string(text ? text : "", byte_length));
+                return true;
+            } catch (...) {
+                if (!state->pending_exception) {
+                    state->pending_exception = std::current_exception();
+                }
+                tc_log_error("[termin-gui-native/python] clipboard setter failed");
+                return false;
+            }
+        }
+
+    } // namespace
+
+    void
+    set_document_clipboard_handlers(termin::gui_native::TcDocument document, nb::object getter, nb::object setter) {
+        const auto state = require_document_state(document);
+        state->clipboard_getter = std::move(getter);
+        state->clipboard_setter = std::move(setter);
+        tc_ui_document_set_clipboard(checked_document_handle(document),
+                                     state->clipboard_getter.is_none() ? nullptr : &document_clipboard_get,
+                                     state->clipboard_setter.is_none() ? nullptr : &document_clipboard_set,
+                                     state.get());
+    }
+
+    void set_document_cursor_changed_handler(termin::gui_native::TcDocument document, nb::object handler) {
+        const auto state = require_document_state(document);
+        state->cursor_changed_handler = std::move(handler);
+        tc_ui_document_set_cursor_changed_callback(checked_document_handle(document),
+                                                   state->cursor_changed_handler.is_none() ? nullptr
+                                                                                           : &document_cursor_changed,
+                                                   state->cursor_changed_handler.is_none() ? nullptr : state.get());
+    }
+
+    void release_document_state(termin::gui_native::TcDocument document) {
+        if (tc_ui_document_handle_is_invalid(document.handle())) {
+            return;
+        }
+        if (document.valid()) {
+            tc_ui_document_set_cursor_changed_callback(document.handle(), nullptr, nullptr);
+            tc_ui_document_set_clipboard(document.handle(), nullptr, nullptr, nullptr);
+        }
+        if (const auto state = find_document_state(document.handle())) {
+            state->document = tc_ui_document_handle_invalid();
+            state->pending_exception = nullptr;
+        }
+        unregister_document_state(document.handle());
+    }
+
+    nb::object snapshot_handle_or_none(tc_widget_handle handle) {
+        return tc_widget_handle_is_invalid(handle) ? nb::none() : nb::cast(WidgetHandle{handle});
+    }
+
+    nb::dict document_snapshot_to_python(const termin::gui_native::TcDocument& document) {
+        DocumentSnapshot snapshot(checked_document_handle(document));
+        nb::dict result;
+        nb::list widgets;
+        for (const tc_ui_widget_snapshot& widget : snapshot.widgets()) {
+            nb::dict item;
+            item["handle"] = WidgetHandle{widget.handle};
+            item["parent"] = snapshot_handle_or_none(widget.parent);
+            item["type_name"] = widget.type_name ? widget.type_name : "";
+            item["stable_id"] = widget.stable_id ? nb::cast(widget.stable_id) : nb::none();
+            item["name"] = widget.name ? nb::cast(widget.name) : nb::none();
+            item["debug_name"] = widget.debug_name ? nb::cast(widget.debug_name) : nb::none();
+            item["native_language"] = widget.native_language;
+            item["ownership"] = widget.ownership;
+            item["bounds"] = widget.bounds;
+            item["min_size"] = widget.min_size;
+            item["preferred_size"] = widget.preferred_size;
+            item["max_size"] = widget.max_size;
+            item["layout_spec"] = widget.layout_spec;
+            item["flags"] = widget.flags;
+            item["dirty_flags"] = widget.dirty_flags;
+            item["cursor_intent"] = widget.cursor_intent;
+            item["style_role"] = widget.style_role;
+            item["style_override"] = widget.style_override;
+            nb::list children;
+            for (size_t index = 0; index < widget.child_count; ++index) {
+                children.append(WidgetHandle{snapshot.children()[widget.child_offset + index]});
+            }
+            item["children"] = std::move(children);
+            widgets.append(std::move(item));
+        }
+        result["widgets"] = std::move(widgets);
+
+        nb::list roots;
+        for (tc_widget_handle handle : snapshot.roots()) {
+            roots.append(WidgetHandle{handle});
+        }
+        result["roots"] = std::move(roots);
+
+        nb::list overlays;
+        for (const tc_ui_overlay_snapshot& overlay : snapshot.overlays()) {
+            nb::dict item;
+            item["handle"] = WidgetHandle{overlay.handle};
+            item["flags"] = overlay.flags;
+            overlays.append(std::move(item));
+        }
+        result["overlays"] = std::move(overlays);
+
+        nb::dict interaction;
+        interaction["hovered"] = snapshot_handle_or_none(snapshot.data().hovered);
+        interaction["pressed"] = snapshot_handle_or_none(snapshot.data().pressed);
+        interaction["pointer_capture"] = snapshot_handle_or_none(snapshot.data().pointer_capture);
+        interaction["focused"] = snapshot_handle_or_none(snapshot.data().focused);
+        interaction["cursor_intent"] = snapshot.data().cursor_intent;
+        result["interaction"] = std::move(interaction);
+        result["theme_revision"] = snapshot.data().theme_revision;
+        return result;
+    }
+
+    DrawCommand command_at_checked(const DrawList& draw_list, size_t index) {
+        const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list.get(), index);
+        if (!command) {
+            throw std::out_of_range("draw command index out of range");
+        }
+        return DrawCommand{*command};
+    }
 
 } // namespace termin::gui_native::python_bindings

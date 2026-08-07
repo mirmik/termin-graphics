@@ -7,16 +7,13 @@
 
 namespace termin {
 
-struct PythonRenderItem {
-    tc_render_item item{};
+    struct PythonRenderItem {
+        tc_render_item item{};
 
-    PythonRenderItem() = default;
+        PythonRenderItem() = default;
 
-    static PythonRenderItem mesh(
-        const TcMesh& mesh,
-        tc_material_phase* phase,
-        int geometry_id = 0,
-        size_t submesh_index = 0);
-};
+        static PythonRenderItem
+        mesh(const TcMesh& mesh, tc_material_phase* phase, int geometry_id = 0, size_t submesh_index = 0);
+    };
 
 } // namespace termin

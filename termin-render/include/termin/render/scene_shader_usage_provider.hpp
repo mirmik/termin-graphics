@@ -11,15 +11,14 @@ extern "C" {
 
 namespace termin {
 
-// Scene adapter capability for offline shader export. It intentionally lives
-// outside CxxFramePass so generic pass interfaces do not depend on tc_scene.
-class RENDER_API SceneShaderUsageProvider {
-public:
-    virtual ~SceneShaderUsageProvider() = default;
+    // Scene adapter capability for offline shader export. It intentionally lives
+    // outside CxxFramePass so generic pass interfaces do not depend on tc_scene.
+    class RENDER_API SceneShaderUsageProvider {
+    public:
+        virtual ~SceneShaderUsageProvider() = default;
 
-    virtual void collect_scene_shader_usages(
-        tc_scene_handle scene,
-        const std::function<void(TcShader)>& emit) const = 0;
-};
+        virtual void collect_scene_shader_usages(tc_scene_handle scene,
+                                                 const std::function<void(TcShader)>& emit) const = 0;
+    };
 
 } // namespace termin

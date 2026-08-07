@@ -4,12 +4,11 @@
 
 namespace termin {
 
-void register_builtin_render_pass_types() {
-    auto root = FramePassTypeDescriptorBuilder::abstract_native(
-        "CxxFramePass", "termin-render");
-    (void)root.commit();
-    ensure_unknown_pass_registered();
-    GraphAliasPass::register_type();
-}
+    void register_builtin_render_pass_types() {
+        auto root = FramePassTypeDescriptorBuilder::abstract_native("CxxFramePass", "termin-render");
+        (void)root.commit();
+        ensure_unknown_pass_registered();
+        GraphAliasPass::register_type();
+    }
 
 } // namespace termin

@@ -4,25 +4,32 @@
 
 namespace termin::gui_native {
 
-enum class MessageBoxKind { Information, Warning, Error, Question };
+    enum class MessageBoxKind {
+        Information,
+        Warning,
+        Error,
+        Question
+    };
 
-class MessageBox final : public Dialog {
-private:
-    std::string message_;
-    MessageBoxKind kind_ = MessageBoxKind::Information;
-    tc_widget_handle message_content_handle_ = tc_widget_handle_invalid();
+    class MessageBox final : public Dialog {
+    private:
+        std::string message_;
+        MessageBoxKind kind_ = MessageBoxKind::Information;
+        tc_widget_handle message_content_handle_ = tc_widget_handle_invalid();
 
-  public:
-    MessageBox(std::string title, std::string message,
-               MessageBoxKind kind = MessageBoxKind::Information);
+    public:
+        MessageBox(std::string title, std::string message, MessageBoxKind kind = MessageBoxKind::Information);
 
-    const std::string& message() const { return message_; }
-    MessageBoxKind kind() const { return kind_; }
-    bool show(tc_ui_document_handle document, tc_ui_rect viewport);
+        const std::string& message() const {
+            return message_;
+        }
+        MessageBoxKind kind() const {
+            return kind_;
+        }
+        bool show(tc_ui_document_handle document, tc_ui_rect viewport);
 
-  private:
-    bool ensure_content(tc_ui_document_handle document);
-
-};
+    private:
+        bool ensure_content(tc_ui_document_handle document);
+    };
 
 } // namespace termin::gui_native

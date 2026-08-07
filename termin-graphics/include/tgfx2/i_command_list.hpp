@@ -1,116 +1,115 @@
 #pragma once
 
-#include <cstdint>
-#include <stdexcept>
-#include "tgfx2/handles.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/handles.hpp"
+#include <cstdint>
+#include <stdexcept>
 
 namespace tgfx {
 
-// Reserved UBO binding slot used by the OpenGL backend to emulate
-// push constants. OpenGL shaders that consume push constants must
-// declare the block at this slot:
-//
-//   layout(std140, binding = 14) uniform PushConstants {
-//       mat4 u_model;  // example per-object payload
-//   };
-//
-// On Vulkan this slot is unused; push constants there go through
-// VkPushConstantRange / vkCmdPushConstants and the `binding=14`
-// qualifier is ignored (the glsl source is pre-processed to replace
-// the UBO block with `layout(push_constant)` when the Vulkan backend
-// compiles the shader — not implemented yet, Vulkan backend TBD).
-//
-// Maximum push constant payload is intentionally capped at 128 bytes
-// to stay within the Vulkan minimum guaranteed push constant size
-// (VkPhysicalDeviceLimits::maxPushConstantsSize == 128 on many
-// mobile GPUs). Pass code must not exceed this.
-constexpr uint32_t TGFX2_PUSH_CONSTANTS_BINDING = 14;
-// D3D11 exposes 14 constant-buffer slots per graphics stage, so valid
-// registers are b0..b13. The D3D11 backend uses the last slot for the
-// same API-level push-constant payload.
-constexpr uint32_t TGFX2_D3D11_PUSH_CONSTANTS_BINDING = 13;
-constexpr uint32_t TGFX2_PUSH_CONSTANTS_MAX_BYTES = 128;
-
-class ICommandList {
-public:
-    virtual ~ICommandList() = default;
-
-    virtual void begin() = 0;
-    virtual void end() = 0;
-
-    // Render pass
-    virtual void begin_render_pass(const RenderPassDesc& pass) = 0;
-    virtual void begin_multiview_render_pass(const MultiviewRenderPassDesc&) {
-        throw std::runtime_error(
-            "ICommandList::begin_multiview_render_pass: backend does not support multiview");
-    }
-    virtual void end_render_pass() = 0;
-    // Order framebuffer-local color/depth attachment accesses issued before
-    // and after this point without ending the active render pass. Backends
-    // whose render-pass model already provides the required ordering may use
-    // the default no-op. Vulkan maps this to a by-region subpass barrier.
-    virtual void framebuffer_local_barrier() {}
-
-    // Pipeline & resources
-    virtual void bind_pipeline(PipelineHandle pipeline) = 0;
-    // Bind a descriptor/resource set at the given set index (default 0).
-    // `dynamic_offsets` corresponds to the UNIFORM_BUFFER_DYNAMIC bindings
-    // declared by the pipeline's descriptor set layout for this set, in
-    // ascending-binding order. Callers must check
-    // BackendCapabilities::supports_dynamic_uniform_offsets before passing
-    // offsets. Unsupported backends log an error and leave the set unbound;
-    // they never silently ignore offsets or bind the wrong buffer range.
-    virtual void bind_resource_set(ResourceSetHandle set,
-                                   uint32_t set_index = 0,
-                                   const uint32_t* dynamic_offsets = nullptr,
-                                   uint32_t dynamic_offset_count = 0) = 0;
-
-    // Push constants.
+    // Reserved UBO binding slot used by the OpenGL backend to emulate
+    // push constants. OpenGL shaders that consume push constants must
+    // declare the block at this slot:
     //
-    // Upload a small per-draw byte payload that can be read from
-    // shaders via a push-constant block. On OpenGL this is backed by
-    // a ring UBO at TGFX2_PUSH_CONSTANTS_BINDING, on D3D11 by a
-    // constant buffer at TGFX2_D3D11_PUSH_CONSTANTS_BINDING, and on
-    // Vulkan it maps to vkCmdPushConstants.
+    //   layout(std140, binding = 14) uniform PushConstants {
+    //       mat4 u_model;  // example per-object payload
+    //   };
     //
-    // The payload is consumed by the *next* draw call — each draw
-    // reads the most recently set push constants. Calling
-    // set_push_constants() without a following draw is a no-op.
+    // On Vulkan this slot is unused; push constants there go through
+    // VkPushConstantRange / vkCmdPushConstants and the `binding=14`
+    // qualifier is ignored (the glsl source is pre-processed to replace
+    // the UBO block with `layout(push_constant)` when the Vulkan backend
+    // compiles the shader — not implemented yet, Vulkan backend TBD).
     //
-    // `size` must be <= TGFX2_PUSH_CONSTANTS_MAX_BYTES. Larger payloads
-    // belong in a regular uniform buffer.
-    virtual void set_push_constants(const void* data, uint32_t size) = 0;
+    // Maximum push constant payload is intentionally capped at 128 bytes
+    // to stay within the Vulkan minimum guaranteed push constant size
+    // (VkPhysicalDeviceLimits::maxPushConstantsSize == 128 on many
+    // mobile GPUs). Pass code must not exceed this.
+    constexpr uint32_t TGFX2_PUSH_CONSTANTS_BINDING = 14;
+    // D3D11 exposes 14 constant-buffer slots per graphics stage, so valid
+    // registers are b0..b13. The D3D11 backend uses the last slot for the
+    // same API-level push-constant payload.
+    constexpr uint32_t TGFX2_D3D11_PUSH_CONSTANTS_BINDING = 13;
+    constexpr uint32_t TGFX2_PUSH_CONSTANTS_MAX_BYTES = 128;
 
-    // Vertex / index buffers
-    virtual void bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset = 0) = 0;
-    virtual void bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset = 0) = 0;
+    class ICommandList {
+    public:
+        virtual ~ICommandList() = default;
 
-    // Draw
-    virtual void draw(uint32_t vertex_count, uint32_t first_vertex = 0) = 0;
-    virtual void draw_instanced(uint32_t vertex_count,
-                                uint32_t instance_count,
-                                uint32_t first_vertex = 0,
-                                uint32_t first_instance = 0) = 0;
-    virtual void draw_indexed(uint32_t index_count, uint32_t first_index = 0, int32_t vertex_offset = 0) = 0;
-    virtual void draw_indexed_instanced(uint32_t index_count,
-                                        uint32_t instance_count,
-                                        uint32_t first_index = 0,
-                                        int32_t vertex_offset = 0,
-                                        uint32_t first_instance = 0) = 0;
+        virtual void begin() = 0;
+        virtual void end() = 0;
 
-    // Compute
-    virtual void dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) = 0;
+        // Render pass
+        virtual void begin_render_pass(const RenderPassDesc& pass) = 0;
+        virtual void begin_multiview_render_pass(const MultiviewRenderPassDesc&) {
+            throw std::runtime_error("ICommandList::begin_multiview_render_pass: backend does not support multiview");
+        }
+        virtual void end_render_pass() = 0;
+        // Order framebuffer-local color/depth attachment accesses issued before
+        // and after this point without ending the active render pass. Backends
+        // whose render-pass model already provides the required ordering may use
+        // the default no-op. Vulkan maps this to a by-region subpass barrier.
+        virtual void framebuffer_local_barrier() {}
 
-    // Copy
-    virtual void copy_buffer(BufferHandle src, BufferHandle dst, uint64_t size,
-                             uint64_t src_offset = 0, uint64_t dst_offset = 0) = 0;
-    virtual void copy_texture(TextureHandle src, TextureHandle dst) = 0;
+        // Pipeline & resources
+        virtual void bind_pipeline(PipelineHandle pipeline) = 0;
+        // Bind a descriptor/resource set at the given set index (default 0).
+        // `dynamic_offsets` corresponds to the UNIFORM_BUFFER_DYNAMIC bindings
+        // declared by the pipeline's descriptor set layout for this set, in
+        // ascending-binding order. Callers must check
+        // BackendCapabilities::supports_dynamic_uniform_offsets before passing
+        // offsets. Unsupported backends log an error and leave the set unbound;
+        // they never silently ignore offsets or bind the wrong buffer range.
+        virtual void bind_resource_set(ResourceSetHandle set,
+                                       uint32_t set_index = 0,
+                                       const uint32_t* dynamic_offsets = nullptr,
+                                       uint32_t dynamic_offset_count = 0) = 0;
 
-    // Dynamic state
-    virtual void set_viewport(int x, int y, int width, int height) = 0;
-    virtual void set_scissor(int x, int y, int width, int height) = 0;
-};
+        // Push constants.
+        //
+        // Upload a small per-draw byte payload that can be read from
+        // shaders via a push-constant block. On OpenGL this is backed by
+        // a ring UBO at TGFX2_PUSH_CONSTANTS_BINDING, on D3D11 by a
+        // constant buffer at TGFX2_D3D11_PUSH_CONSTANTS_BINDING, and on
+        // Vulkan it maps to vkCmdPushConstants.
+        //
+        // The payload is consumed by the *next* draw call — each draw
+        // reads the most recently set push constants. Calling
+        // set_push_constants() without a following draw is a no-op.
+        //
+        // `size` must be <= TGFX2_PUSH_CONSTANTS_MAX_BYTES. Larger payloads
+        // belong in a regular uniform buffer.
+        virtual void set_push_constants(const void* data, uint32_t size) = 0;
+
+        // Vertex / index buffers
+        virtual void bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset = 0) = 0;
+        virtual void bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset = 0) = 0;
+
+        // Draw
+        virtual void draw(uint32_t vertex_count, uint32_t first_vertex = 0) = 0;
+        virtual void draw_instanced(uint32_t vertex_count,
+                                    uint32_t instance_count,
+                                    uint32_t first_vertex = 0,
+                                    uint32_t first_instance = 0) = 0;
+        virtual void draw_indexed(uint32_t index_count, uint32_t first_index = 0, int32_t vertex_offset = 0) = 0;
+        virtual void draw_indexed_instanced(uint32_t index_count,
+                                            uint32_t instance_count,
+                                            uint32_t first_index = 0,
+                                            int32_t vertex_offset = 0,
+                                            uint32_t first_instance = 0) = 0;
+
+        // Compute
+        virtual void dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) = 0;
+
+        // Copy
+        virtual void copy_buffer(
+            BufferHandle src, BufferHandle dst, uint64_t size, uint64_t src_offset = 0, uint64_t dst_offset = 0) = 0;
+        virtual void copy_texture(TextureHandle src, TextureHandle dst) = 0;
+
+        // Dynamic state
+        virtual void set_viewport(int x, int y, int width, int height) = 0;
+        virtual void set_scissor(int x, int y, int width, int height) = 0;
+    };
 
 } // namespace tgfx

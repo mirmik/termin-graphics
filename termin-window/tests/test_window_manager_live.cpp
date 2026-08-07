@@ -15,10 +15,8 @@ int main() {
         auto session = termin::create_native_windowed_graphics();
         termin::WindowManager windows(*session);
 
-        const termin::WindowHandle first =
-            windows.create_window({"manager first", 320, 200});
-        const termin::WindowHandle second =
-            windows.create_window({"manager second", 240, 160});
+        const termin::WindowHandle first = windows.create_window({"manager first", 320, 200});
+        const termin::WindowHandle second = windows.create_window({"manager second", 240, 160});
         assert(first && second && first != second);
         assert(windows.size() == 2);
         assert(&windows.window(first).graphics_host() == &session->graphics());
@@ -28,10 +26,8 @@ int main() {
         windows.take_events(first);
         windows.take_events(second);
 
-        auto& first_sdl =
-            static_cast<termin::SDLBackendWindow&>(windows.window(first));
-        auto& second_sdl =
-            static_cast<termin::SDLBackendWindow&>(windows.window(second));
+        auto& first_sdl = static_cast<termin::SDLBackendWindow&>(windows.window(first));
+        auto& second_sdl = static_cast<termin::SDLBackendWindow&>(windows.window(second));
 
         SDL_Event key{};
         key.type = SDL_KEYDOWN;
@@ -73,8 +69,7 @@ int main() {
         assert(stale_rejected);
         assert(&windows.window(second).graphics_host() == &session->graphics());
 
-        const termin::WindowHandle replacement =
-            windows.create_window({"manager replacement", 200, 120});
+        const termin::WindowHandle replacement = windows.create_window({"manager replacement", 200, 120});
         assert(replacement.slot == first.slot);
         assert(replacement.generation != first.generation);
         const auto handles = windows.handles();

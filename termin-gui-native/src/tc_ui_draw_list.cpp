@@ -46,10 +46,7 @@ size_t tc_ui_draw_list_command_count(const tc_ui_draw_list* draw_list) {
     return draw_list ? draw_list->commands.size() : 0;
 }
 
-const tc_ui_draw_command* tc_ui_draw_list_command_at(
-    const tc_ui_draw_list* draw_list,
-    size_t index
-) {
+const tc_ui_draw_command* tc_ui_draw_list_command_at(const tc_ui_draw_list* draw_list, size_t index) {
     if (!draw_list || index >= draw_list->commands.size()) {
         return nullptr;
     }
@@ -87,10 +84,7 @@ static bool append_draw_command(tc_ui_paint_context* context, tc_ui_draw_command
         context->draw_list->commands.push_back(command);
         return true;
     } catch (const std::exception& error) {
-        tc_log_error(
-            "[termin-gui-native] failed to append UI draw command: %s",
-            error.what()
-        );
+        tc_log_error("[termin-gui-native] failed to append UI draw command: %s", error.what());
         return false;
     }
 }
@@ -100,29 +94,23 @@ static bool finite_point(tc_ui_point point) {
 }
 
 static bool finite_rect(tc_ui_rect rect) {
-    return std::isfinite(rect.x) && std::isfinite(rect.y) &&
-        std::isfinite(rect.width) && std::isfinite(rect.height);
+    return std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.width) && std::isfinite(rect.height);
 }
 
 void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_color color) {
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_FILL_RECT;
     command.rect = rect;
     command.color = color;
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_fill_rounded_rect(
-    tc_ui_paint_context* context,
-    tc_ui_rect rect,
-    float radius,
-    tc_ui_color color
-) {
+void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_color color) {
     if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f) {
         tc_log_error("[termin-gui-native] rejected invalid rounded rectangle command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_FILL_ROUNDED_RECT;
     command.rect = rect;
     command.radius = radius;
@@ -130,13 +118,8 @@ void tc_ui_painter_fill_rounded_rect(
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_stroke_rect(
-    tc_ui_paint_context* context,
-    tc_ui_rect rect,
-    tc_ui_color color,
-    float thickness
-) {
-    tc_ui_draw_command command {};
+void tc_ui_painter_stroke_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_color color, float thickness) {
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_STROKE_RECT;
     command.rect = rect;
     command.color = color;
@@ -145,18 +128,13 @@ void tc_ui_painter_stroke_rect(
 }
 
 void tc_ui_painter_stroke_rounded_rect(
-    tc_ui_paint_context* context,
-    tc_ui_rect rect,
-    float radius,
-    tc_ui_color color,
-    float thickness
-) {
-    if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f ||
-        !std::isfinite(thickness) || thickness <= 0.0f) {
+    tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_color color, float thickness) {
+    if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f || !std::isfinite(thickness) ||
+        thickness <= 0.0f) {
         tc_log_error("[termin-gui-native] rejected invalid rounded rectangle stroke command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_STROKE_ROUNDED_RECT;
     command.rect = rect;
     command.radius = radius;
@@ -166,17 +144,12 @@ void tc_ui_painter_stroke_rounded_rect(
 }
 
 void tc_ui_painter_fill_circle(
-    tc_ui_paint_context* context,
-    tc_ui_point center,
-    float radius,
-    tc_ui_color color,
-    int32_t segments
-) {
+    tc_ui_paint_context* context, tc_ui_point center, float radius, tc_ui_color color, int32_t segments) {
     if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f || segments < 0) {
         tc_log_error("[termin-gui-native] rejected invalid circle command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_FILL_CIRCLE;
     command.p0 = center;
     command.radius = radius;
@@ -185,20 +158,18 @@ void tc_ui_painter_fill_circle(
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_stroke_circle(
-    tc_ui_paint_context* context,
-    tc_ui_point center,
-    float radius,
-    tc_ui_color color,
-    float thickness,
-    int32_t segments
-) {
-    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f ||
-        !std::isfinite(thickness) || thickness <= 0.0f || segments < 0) {
+void tc_ui_painter_stroke_circle(tc_ui_paint_context* context,
+                                 tc_ui_point center,
+                                 float radius,
+                                 tc_ui_color color,
+                                 float thickness,
+                                 int32_t segments) {
+    if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f || !std::isfinite(thickness) ||
+        thickness <= 0.0f || segments < 0) {
         tc_log_error("[termin-gui-native] rejected invalid circle stroke command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_STROKE_CIRCLE;
     command.p0 = center;
     command.radius = radius;
@@ -208,17 +179,14 @@ void tc_ui_painter_stroke_circle(
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_draw_arc(
-    tc_ui_paint_context* context,
-    const tc_ui_arc_draw_desc* desc
-) {
+void tc_ui_painter_draw_arc(tc_ui_paint_context* context, const tc_ui_arc_draw_desc* desc) {
     if (!desc || !finite_point(desc->center) || !std::isfinite(desc->radius) || desc->radius <= 0.0f ||
-        !std::isfinite(desc->start_radians) || !std::isfinite(desc->end_radians) ||
-        !std::isfinite(desc->thickness) || desc->thickness <= 0.0f || desc->segments < 0) {
+        !std::isfinite(desc->start_radians) || !std::isfinite(desc->end_radians) || !std::isfinite(desc->thickness) ||
+        desc->thickness <= 0.0f || desc->segments < 0) {
         tc_log_error("[termin-gui-native] rejected invalid arc command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_ARC;
     command.p0 = desc->center;
     command.radius = desc->radius;
@@ -231,13 +199,8 @@ void tc_ui_painter_draw_arc(
 }
 
 void tc_ui_painter_draw_line(
-    tc_ui_paint_context* context,
-    tc_ui_point p0,
-    tc_ui_point p1,
-    tc_ui_color color,
-    float thickness
-) {
-    tc_ui_draw_command command {};
+    tc_ui_paint_context* context, tc_ui_point p0, tc_ui_point p1, tc_ui_color color, float thickness) {
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_LINE;
     command.p0 = p0;
     command.p1 = p1;
@@ -247,12 +210,7 @@ void tc_ui_painter_draw_line(
 }
 
 void tc_ui_painter_draw_polyline(
-    tc_ui_paint_context* context,
-    const tc_ui_point* points,
-    size_t point_count,
-    tc_ui_color color,
-    float thickness
-) {
+    tc_ui_paint_context* context, const tc_ui_point* points, size_t point_count, tc_ui_color color, float thickness) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append polyline without paint context");
         return;
@@ -271,7 +229,7 @@ void tc_ui_painter_draw_polyline(
         auto owned_points = std::make_unique<std::vector<tc_ui_point>>(points, points + point_count);
         const tc_ui_point* stable_points = owned_points->data();
         context->draw_list->point_storage.push_back(std::move(owned_points));
-        tc_ui_draw_command command {};
+        tc_ui_draw_command command{};
         command.type = TC_UI_DRAW_POLYLINE;
         command.points = stable_points;
         command.point_count = point_count;
@@ -283,21 +241,18 @@ void tc_ui_painter_draw_polyline(
     }
 }
 
-void tc_ui_painter_draw_texture(
-    tc_ui_paint_context* context,
-    uint32_t texture_id,
-    tc_ui_rect rect,
-    tc_ui_color tint,
-    tc_ui_texture_sampling sampling,
-    bool flip_v
-) {
+void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
+                                uint32_t texture_id,
+                                tc_ui_rect rect,
+                                tc_ui_color tint,
+                                tc_ui_texture_sampling sampling,
+                                bool flip_v) {
     if (texture_id == 0 || !finite_rect(rect) ||
-        (sampling != TC_UI_TEXTURE_SAMPLING_LINEAR &&
-         sampling != TC_UI_TEXTURE_SAMPLING_NEAREST)) {
+        (sampling != TC_UI_TEXTURE_SAMPLING_LINEAR && sampling != TC_UI_TEXTURE_SAMPLING_NEAREST)) {
         tc_log_error("[termin-gui-native] rejected invalid texture command");
         return;
     }
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_TEXTURE;
     command.texture_id = texture_id;
     command.rect = rect;
@@ -308,12 +263,7 @@ void tc_ui_painter_draw_texture(
 }
 
 void tc_ui_painter_draw_text(
-    tc_ui_paint_context* context,
-    const char* text,
-    tc_ui_point position,
-    float font_size,
-    tc_ui_color color
-) {
+    tc_ui_paint_context* context, const char* text, tc_ui_point position, float font_size, tc_ui_color color) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append UI text command without paint context");
         return;
@@ -327,7 +277,7 @@ void tc_ui_painter_draw_text(
         const char* stable_text = owned_text->c_str();
         context->draw_list->text_storage.push_back(std::move(owned_text));
 
-        tc_ui_draw_command command {};
+        tc_ui_draw_command command{};
         command.type = TC_UI_DRAW_TEXT;
         command.p0 = position;
         command.color = color;
@@ -340,14 +290,14 @@ void tc_ui_painter_draw_text(
 }
 
 void tc_ui_painter_push_clip(tc_ui_paint_context* context, tc_ui_rect rect) {
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_PUSH_CLIP;
     command.rect = rect;
     append_draw_command(context, command);
 }
 
 void tc_ui_painter_pop_clip(tc_ui_paint_context* context) {
-    tc_ui_draw_command command {};
+    tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_POP_CLIP;
     append_draw_command(context, command);
 }
@@ -356,33 +306,27 @@ void tc_ui_painter_pop_clip(tc_ui_paint_context* context) {
 
 namespace termin::gui_native {
 
-bool append_draw_list2d(
-    tc_ui_paint_context* context,
-    tgfx::DrawList2D draw_list) {
-    if (!context || !context->draw_list) {
-        tc_log_error(
-            "[termin-gui-native] cannot append DrawList2D without paint context");
-        return false;
-    }
-    try {
-        auto owned =
-            std::make_unique<tgfx::DrawList2D>(std::move(draw_list));
-        const void* stable = owned.get();
-        context->draw_list->canvas2d_storage.push_back(std::move(owned));
-        tc_ui_draw_command command{};
-        command.type = TC_UI_DRAW_CANVAS2D_LIST;
-        command.canvas2d_list = stable;
-        if (!append_draw_command(context, command)) {
-            context->draw_list->canvas2d_storage.pop_back();
+    bool append_draw_list2d(tc_ui_paint_context* context, tgfx::DrawList2D draw_list) {
+        if (!context || !context->draw_list) {
+            tc_log_error("[termin-gui-native] cannot append DrawList2D without paint context");
             return false;
         }
-        return true;
-    } catch (const std::exception& error) {
-        tc_log_error(
-            "[termin-gui-native] failed to own DrawList2D: %s",
-            error.what());
-        return false;
+        try {
+            auto owned = std::make_unique<tgfx::DrawList2D>(std::move(draw_list));
+            const void* stable = owned.get();
+            context->draw_list->canvas2d_storage.push_back(std::move(owned));
+            tc_ui_draw_command command{};
+            command.type = TC_UI_DRAW_CANVAS2D_LIST;
+            command.canvas2d_list = stable;
+            if (!append_draw_command(context, command)) {
+                context->draw_list->canvas2d_storage.pop_back();
+                return false;
+            }
+            return true;
+        } catch (const std::exception& error) {
+            tc_log_error("[termin-gui-native] failed to own DrawList2D: %s", error.what());
+            return false;
+        }
     }
-}
 
 } // namespace termin::gui_native

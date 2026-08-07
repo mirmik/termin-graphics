@@ -10,1332 +10,1359 @@
 // C++ only.
 
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/array.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
-#include <nanobind/stl/array.h>
-#include <nanobind/stl/optional.h>
-#include <nanobind/ndarray.h>
 
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 
-#include <tgfx2/render_context.hpp>
-#include <tgfx2/graphics_host.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
-#include <tgfx2/i_render_device.hpp>
-#include <tgfx2/device_factory.hpp>
-#include <tgfx2/pipeline_cache.hpp>
-#include <tgfx2/handles.hpp>
-#include <tgfx2/enums.hpp>
 #include <tgfx2/descriptors.hpp>
-#include <tgfx2/tc_mesh_bridge.hpp>
-#include <tgfx2/vertex_layout.hpp>
-#include <tgfx2/tc_shader_bridge.hpp>
+#include <tgfx2/device_factory.hpp>
+#include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
+#include <tgfx2/graphics_host.hpp>
+#include <tgfx2/handles.hpp>
+#include <tgfx2/i_render_device.hpp>
 #include <tgfx2/line_mesh_builder.hpp>
+#include <tgfx2/pipeline_cache.hpp>
+#include <tgfx2/render_context.hpp>
 #include <tgfx2/screen_space_line_renderer.hpp>
-#include <tgfx2/world_space_line_renderer.hpp>
+#include <tgfx2/tc_mesh_bridge.hpp>
+#include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/text2d_renderer.hpp>
 #include <tgfx2/text3d_renderer.hpp>
+#include <tgfx2/vertex_layout.hpp>
+#include <tgfx2/world_space_line_renderer.hpp>
 
-#include <tgfx/tgfx_shader_handle.hpp>
-#include <tgfx/tgfx_mesh_handle.hpp>
-#include <tgfx/tgfx2_interop.h>
 #include <tgfx/resources/tc_shader_registry.h>
+#include <tgfx/tgfx2_interop.h>
+#include <tgfx/tgfx_mesh_handle.hpp>
+#include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_types.h>
 
 namespace nb = nanobind;
 
 namespace tgfx_bindings {
 
-void bind_tgfx2(nb::module_& m) {
-    m.def(
-        "compiled_backend_name",
-        []() -> std::string {
-            return tgfx::backend_name(tgfx::compiled_default_backend());
-        },
-        "Return the platform-preferred compiled tgfx2 backend name.");
-    m.def(
-        "backend_is_compiled",
-        [](const std::string& name) -> bool {
-            return tgfx::backend_is_compiled(tgfx::backend_from_name(name));
-        },
-        nb::arg("name"),
-        "Return whether the named tgfx2 backend is compiled into this SDK.");
+    void bind_tgfx2(nb::module_& m) {
+        m.def(
+            "compiled_backend_name",
+            []() -> std::string { return tgfx::backend_name(tgfx::compiled_default_backend()); },
+            "Return the platform-preferred compiled tgfx2 backend name.");
+        m.def(
+            "backend_is_compiled",
+            [](const std::string& name) -> bool { return tgfx::backend_is_compiled(tgfx::backend_from_name(name)); },
+            nb::arg("name"),
+            "Return whether the named tgfx2 backend is compiled into this SDK.");
 
-    // Canonical application graphics-domain owner. Construction stays with
-    // platform/application composition roots; Python receives a borrowed
-    // reference and builds lightweight renderer contexts from it.
-    nb::class_<tgfx::GraphicsHost>(m, "GraphicsHost");
+        // Canonical application graphics-domain owner. Construction stays with
+        // platform/application composition roots; Python receives a borrowed
+        // reference and builds lightweight renderer contexts from it.
+        nb::class_<tgfx::GraphicsHost>(m, "GraphicsHost");
 
-    // --- Opaque handle wrappers ---
-    //
-    // HandlePool entries in tgfx2 are value-typed (32-bit id). We wrap
-    // them in lightweight Python objects so they have identity and
-    // can be passed between Python calls without copies. The handles
-    // themselves are POD structs with a single uint32_t member.
-
-    nb::class_<tgfx::TextureHandle>(m, "Tgfx2TextureHandle")
-        .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx::TextureHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx::TextureHandle& h) { return static_cast<bool>(h); });
-
-    nb::class_<tgfx::BufferHandle>(m, "Tgfx2BufferHandle")
-        .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx::BufferHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx::BufferHandle& h) { return static_cast<bool>(h); });
-
-    nb::class_<tgfx::ShaderHandle>(m, "Tgfx2ShaderHandle")
-        .def(nb::init<>())
-        .def_prop_ro("id", [](const tgfx::ShaderHandle& h) { return h.id; })
-        .def("__bool__", [](const tgfx::ShaderHandle& h) { return static_cast<bool>(h); });
-
-    // Paired (vs, fs) return type for tc_shader_ensure_tgfx2 — easier
-    // to return one object than two out parameters.
-    struct ShaderPair {
-        tgfx::ShaderHandle vs;
-        tgfx::ShaderHandle fs;
-    };
-    nb::class_<ShaderPair>(m, "Tgfx2ShaderPair")
-        .def_ro("vs", &ShaderPair::vs)
-        .def_ro("fs", &ShaderPair::fs);
-
-    m.def("set_shader_artifact_root",
-          [](const std::string& root) {
-              termin::tgfx2_set_shader_artifact_root(root.c_str());
-          },
-          nb::arg("root"));
-    m.def("get_shader_artifact_root",
-          []() {
-              return std::string(termin::tgfx2_get_shader_artifact_root());
-          });
-    m.def("set_shader_cache_root",
-          [](const std::string& root) {
-              termin::tgfx2_set_shader_cache_root(root.c_str());
-          },
-          nb::arg("root"));
-    m.def("get_shader_cache_root",
-          []() {
-              return std::string(termin::tgfx2_get_shader_cache_root());
-          });
-    m.def("set_shader_compiler_path",
-          [](const std::string& path) {
-              termin::tgfx2_set_shader_compiler_path(path.c_str());
-          },
-          nb::arg("path"));
-    m.def("get_shader_compiler_path",
-          []() {
-              return std::string(termin::tgfx2_get_shader_compiler_path());
-          });
-    m.def("configure_shader_runtime",
-          [](const std::string& artifact_root,
-             const std::string& cache_root,
-             const std::string& shader_compiler,
-             bool dev_compile) {
-              termin::tgfx2_set_shader_artifact_root(artifact_root.c_str());
-              termin::tgfx2_set_shader_cache_root(cache_root.c_str());
-              termin::tgfx2_set_shader_compiler_path(shader_compiler.c_str());
-              termin::tgfx2_set_shader_dev_compile_enabled(dev_compile);
-          },
-          nb::arg("artifact_root") = "",
-          nb::arg("cache_root") = "",
-          nb::arg("shader_compiler") = "",
-          nb::arg("dev_compile") = false);
-    m.def("set_shader_dev_compile_enabled",
-          [](bool enabled) {
-              termin::tgfx2_set_shader_dev_compile_enabled(enabled);
-          },
-          nb::arg("enabled"));
-    m.def("get_shader_dev_compile_enabled",
-          []() {
-              return termin::tgfx2_get_shader_dev_compile_enabled();
-          });
-
-    m.attr("LinePoint3") = nb::module_::import_("tcbase._geom_native").attr("Vec3f");
-
-    nb::enum_<tgfx::LineCapStyle>(m, "LineCapStyle")
-        .value("Butt", tgfx::LineCapStyle::Butt)
-        .value("Square", tgfx::LineCapStyle::Square)
-        .value("Round", tgfx::LineCapStyle::Round);
-
-    nb::enum_<tgfx::LineJoinStyle>(m, "LineJoinStyle")
-        .value("Bevel", tgfx::LineJoinStyle::Bevel)
-        .value("Round", tgfx::LineJoinStyle::Round);
-
-    nb::class_<tgfx::LineStyle>(m, "LineStyle")
-        .def(nb::init<>())
-        .def_rw("width", &tgfx::LineStyle::width)
-        .def_rw("up_hint", &tgfx::LineStyle::up_hint)
-        .def_rw("cap", &tgfx::LineStyle::cap)
-        .def_rw("join", &tgfx::LineStyle::join)
-        .def_rw("round_segments", &tgfx::LineStyle::round_segments)
-        .def_rw("closed", &tgfx::LineStyle::closed);
-
-    nb::class_<tgfx::LineMesh>(m, "LineMesh")
-        .def_prop_ro("vertices", [](const tgfx::LineMesh& mesh) {
-            nb::list out;
-            for (const tgfx::LineVertex& vertex : mesh.vertices) {
-                const tgfx::LinePoint3& p = vertex.position;
-                out.append(nb::make_tuple(p.x, p.y, p.z));
-            }
-            return out;
-        })
-        .def_prop_ro("indices", [](const tgfx::LineMesh& mesh) {
-            nb::list out;
-            for (uint32_t index : mesh.indices) {
-                out.append(index);
-            }
-            return out;
-        })
-        .def_prop_ro("triangle_vertices", [](const tgfx::LineMesh& mesh) {
-            nb::list out;
-            for (uint32_t index : mesh.indices) {
-                const tgfx::LinePoint3& p = mesh.vertices[index].position;
-                out.append(nb::make_tuple(p.x, p.y, p.z));
-            }
-            return out;
-        })
-        .def_prop_ro("empty", &tgfx::LineMesh::empty);
-
-    m.def("build_line_mesh",
-          [](const std::vector<tgfx::LinePoint3>& points,
-             const tgfx::LineStyle& style) {
-              return tgfx::build_line_mesh(
-                  std::span<const tgfx::LinePoint3>(points.data(), points.size()),
-                  style);
-          },
-          nb::arg("points"), nb::arg("style"));
-
-    nb::class_<tgfx::ScreenSpaceLineStyle>(m, "ScreenSpaceLineStyle")
-        .def(nb::init<>())
-        .def_rw("width_px", &tgfx::ScreenSpaceLineStyle::width_px)
-        .def_rw("color", &tgfx::ScreenSpaceLineStyle::color)
-        .def_rw("cap", &tgfx::ScreenSpaceLineStyle::cap)
-        .def_rw("join", &tgfx::ScreenSpaceLineStyle::join)
-        .def_rw("round_segments", &tgfx::ScreenSpaceLineStyle::round_segments);
-
-    nb::class_<tgfx::ScreenSpaceLineParams>(m, "ScreenSpaceLineParams")
-        .def(nb::init<>())
-        .def_rw("view_projection", &tgfx::ScreenSpaceLineParams::view_projection)
-        .def_rw("viewport_width", &tgfx::ScreenSpaceLineParams::viewport_width)
-        .def_rw("viewport_height", &tgfx::ScreenSpaceLineParams::viewport_height);
-
-    nb::class_<tgfx::ScreenSpaceLineRenderer>(m, "ScreenSpaceLineRenderer")
-        .def(nb::init<>())
-        .def("draw_polyline",
-             [](tgfx::ScreenSpaceLineRenderer& self,
-                tgfx::RenderContext2& ctx,
-                const std::vector<tgfx::LinePoint3>& points,
-                const tgfx::ScreenSpaceLineStyle& style,
-                const tgfx::ScreenSpaceLineParams& params) {
-                 self.draw_polyline(ctx, points, style, params);
-             },
-             nb::arg("ctx"),
-             nb::arg("points"),
-             nb::arg("style"),
-             nb::arg("params"))
-        .def("release", &tgfx::ScreenSpaceLineRenderer::release,
-             nb::arg("ctx"));
-
-    nb::class_<tgfx::WorldSpaceLineStyle>(m, "WorldSpaceLineStyle")
-        .def(nb::init<>())
-        .def_rw("width", &tgfx::WorldSpaceLineStyle::width)
-        .def_rw("color", &tgfx::WorldSpaceLineStyle::color)
-        .def_rw("cap", &tgfx::WorldSpaceLineStyle::cap)
-        .def_rw("join", &tgfx::WorldSpaceLineStyle::join)
-        .def_rw("round_segments", &tgfx::WorldSpaceLineStyle::round_segments);
-
-    nb::class_<tgfx::WorldSpaceLineParams>(m, "WorldSpaceLineParams")
-        .def(nb::init<>())
-        .def_rw("view_projection", &tgfx::WorldSpaceLineParams::view_projection)
-        .def_rw("camera_position", &tgfx::WorldSpaceLineParams::camera_position)
-        .def_rw("lighting_enabled", &tgfx::WorldSpaceLineParams::lighting_enabled);
-
-    nb::class_<tgfx::WorldSpaceLineRenderer>(m, "WorldSpaceLineRenderer")
-        .def(nb::init<>())
-        .def("draw_polyline",
-             [](tgfx::WorldSpaceLineRenderer& self,
-                tgfx::RenderContext2& ctx,
-                const std::vector<tgfx::LinePoint3>& points,
-                const tgfx::WorldSpaceLineStyle& style,
-                const tgfx::WorldSpaceLineParams& params) {
-                 self.draw_polyline(ctx, points, style, params);
-             },
-             nb::arg("ctx"),
-             nb::arg("points"),
-             nb::arg("style"),
-             nb::arg("params"))
-        .def("release", &tgfx::WorldSpaceLineRenderer::release,
-             nb::arg("ctx"));
-
-    // IRenderDevice — opaque handle exposed so other native modules
-    // (render_framework) can accept a pointer to it from Python.
-    // The device is owned by the application host (typically
-    // BackendWindow). Python code only passes the pointer around.
-    nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device")
-        .def("wait_idle", &tgfx::IRenderDevice::wait_idle, nb::call_guard<nb::gil_scoped_release>())
-        .def_prop_ro("adapter_name", [](const tgfx::IRenderDevice& self) {
-            return self.adapter_info().adapter_name;
-        })
-        .def_prop_ro("adapter_driver", [](const tgfx::IRenderDevice& self) {
-            return self.adapter_info().driver_name;
-        })
-        .def_prop_ro("adapter_class", [](const tgfx::IRenderDevice& self) {
-            return std::string(tgfx::adapter_class_name(self.adapter_info().hardware_class));
-        })
-        .def_prop_ro("software_adapter", [](const tgfx::IRenderDevice& self) {
-            return self.adapter_info().is_software();
-        })
-        // Backend-neutral shader compile. GLSL input; internally
-        // glCompileShader on OpenGL, shaderc GLSL→SPIR-V on Vulkan
-        // (both paths run the same preprocessor first, see V.3).
-        // `stage` maps to tgfx::ShaderStage: 0=Vertex, 1=Fragment,
-        // 2=Geometry, 3=Compute.
-        .def(
-            "create_shader",
-            [](tgfx::IRenderDevice& self, int stage, const std::string& src) {
-                tgfx::ShaderDesc d;
-                d.stage = static_cast<tgfx::ShaderStage>(stage);
-                d.source = src;
-                return self.create_shader(d);
-            },
-            nb::arg("stage"), nb::arg("source"))
-        .def("destroy_shader",
-             [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); })
-        .def(
-            "texture_sample_count",
-            [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) {
-                return self.texture_desc(h).sample_count;
-            },
-            nb::arg("texture"))
-        // Thin tcgui-only hosts need to read whole
-        // render targets back to the CPU without dragging in the editor
-        // runtime. Delegates to IRenderDevice::read_texture_rgba_float
-        // with backend-normalized top-left row order. Caller supplies a
-        // pre-sized float numpy array of width*height*4 elements.
-        .def(
-            "read_texture_rgba_float",
-            [](tgfx::IRenderDevice& self, tgfx::TextureHandle tex,
-               nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
-                return self.read_texture_rgba_float(tex, buf.data());
-            },
-            nb::arg("texture"), nb::arg("out"));
-
-    nb::enum_<tgfx::ShaderStage>(m, "Tgfx2ShaderStage", nb::is_arithmetic())
-        .value("Vertex",   tgfx::ShaderStage::Vertex)
-        .value("Fragment", tgfx::ShaderStage::Fragment)
-        .value("Compute",  tgfx::ShaderStage::Compute)
-        .value("Geometry", tgfx::ShaderStage::Geometry)
-        .export_values();
-
-    // BlendFactor enum — exposed so Python callers can request
-    // premultiplied / additive / standard blending via set_blend_func.
-    nb::enum_<tgfx::BlendFactor>(m, "Tgfx2BlendFactor", nb::is_arithmetic())
-        .value("Zero",              tgfx::BlendFactor::Zero)
-        .value("One",               tgfx::BlendFactor::One)
-        .value("SrcAlpha",          tgfx::BlendFactor::SrcAlpha)
-        .value("OneMinusSrcAlpha",  tgfx::BlendFactor::OneMinusSrcAlpha)
-        .value("DstAlpha",          tgfx::BlendFactor::DstAlpha)
-        .value("OneMinusDstAlpha",  tgfx::BlendFactor::OneMinusDstAlpha)
-        .value("SrcColor",          tgfx::BlendFactor::SrcColor)
-        .value("OneMinusSrcColor",  tgfx::BlendFactor::OneMinusSrcColor)
-        .value("DstColor",          tgfx::BlendFactor::DstColor)
-        .value("OneMinusDstColor",  tgfx::BlendFactor::OneMinusDstColor)
-        .export_values();
-
-    // Register PixelFormat as an nb::enum_ so other native modules can
-    // bind functions with `tgfx::PixelFormat` parameters and defaults.
-    // The `is_arithmetic` flag lets Python int callers pass values via
-    // the legacy `PIXEL_*` module-level int constants below.
-    // Must be registered BEFORE any binding that uses PixelFormat as
-    // an argument type or default value (otherwise nanobind's
-    // enum_from_cpp() throws std::bad_cast at module init).
-    nb::enum_<tgfx::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
-        .value("R8_UNorm",          tgfx::PixelFormat::R8_UNorm)
-        .value("RG8_UNorm",         tgfx::PixelFormat::RG8_UNorm)
-        .value("RGB8_UNorm",        tgfx::PixelFormat::RGB8_UNorm)
-        .value("RGBA8_UNorm",       tgfx::PixelFormat::RGBA8_UNorm)
-        .value("BGRA8_UNorm",       tgfx::PixelFormat::BGRA8_UNorm)
-        .value("RGBA8_sRGB",        tgfx::PixelFormat::RGBA8_sRGB)
-        .value("BGRA8_sRGB",        tgfx::PixelFormat::BGRA8_sRGB)
-        .value("R16F",              tgfx::PixelFormat::R16F)
-        .value("RG16F",             tgfx::PixelFormat::RG16F)
-        .value("RGBA16F",           tgfx::PixelFormat::RGBA16F)
-        .value("R32F",              tgfx::PixelFormat::R32F)
-        .value("RG32F",             tgfx::PixelFormat::RG32F)
-        .value("RGBA32F",           tgfx::PixelFormat::RGBA32F)
-        .value("D24_UNorm",         tgfx::PixelFormat::D24_UNorm)
-        .value("D24_UNorm_S8_UInt", tgfx::PixelFormat::D24_UNorm_S8_UInt)
-        .value("D32F",              tgfx::PixelFormat::D32F)
-        .export_values();
-
-    // --- RenderContext2 ---
-    //
-    // Only the methods Python passes actually need are exposed. The
-    // rest (bind_uniform_buffer, set_vertex_layout, push constants, ...)
-    // stay C++-only because their Python form would require binding
-    // descriptor structs that Python code doesn't need.
-    nb::class_<tgfx::RenderContext2>(m, "Tgfx2RenderContext")
-        .def("begin_pass",
-             [](tgfx::RenderContext2& self,
-                tgfx::TextureHandle color,
-                std::optional<tgfx::TextureHandle> depth,
-                bool clear_color_enabled,
-                float r, float g, float b, float a,
-                float clear_depth,
-                bool clear_depth_enabled) {
-                 float clear_rgba[4] = {r, g, b, a};
-                 self.begin_pass(color, depth.value_or(tgfx::TextureHandle{}),
-                                 clear_color_enabled ? clear_rgba : nullptr,
-                                 clear_depth,
-                                 clear_depth_enabled);
-             },
-             nb::arg("color"),
-             nb::arg("depth").none() = nb::none(),
-             nb::arg("clear_color_enabled") = false,
-             nb::arg("r") = 0.0f, nb::arg("g") = 0.0f,
-             nb::arg("b") = 0.0f, nb::arg("a") = 1.0f,
-             nb::arg("clear_depth") = 1.0f,
-             nb::arg("clear_depth_enabled") = false)
-        .def("end_pass", &tgfx::RenderContext2::end_pass)
-
-        // Underlying render device — lets Python-side renderers (UIRenderer,
-        // Python render helpers call create_shader / create_buffer
-        // without stashing the owning Tgfx2Context separately.
-        .def_prop_ro("device",
-            [](tgfx::RenderContext2& self) -> tgfx::IRenderDevice& {
-                return self.device();
-            },
-            nb::rv_policy::reference_internal)
-
-        // Frame lifecycle — standalone Python hosts (SDL window, tests)
-        // must call these manually once per frame. Inside the engine
-        // render loop the C++ frame graph handles this already.
-        .def("begin_frame", &tgfx::RenderContext2::begin_frame)
-        .def("end_frame", &tgfx::RenderContext2::end_frame)
-        .def_prop_ro("in_frame", &tgfx::RenderContext2::in_frame)
-
-        // State
-        .def("set_depth_test", &tgfx::RenderContext2::set_depth_test)
-        .def("set_depth_write", &tgfx::RenderContext2::set_depth_write)
-        .def("set_depth_bias", &tgfx::RenderContext2::set_depth_bias,
-             nb::arg("enabled"), nb::arg("constant") = 0.0f,
-             nb::arg("slope") = 0.0f, nb::arg("clamp") = 0.0f)
-        .def("set_blend", &tgfx::RenderContext2::set_blend)
-        .def("set_blend_func", &tgfx::RenderContext2::set_blend_func,
-             nb::arg("src"), nb::arg("dst"))
-        .def("set_cull",
-             [](tgfx::RenderContext2& self, int mode) {
-                 self.set_cull(static_cast<tgfx::CullMode>(mode));
-             })
-        .def("set_color_mask", &tgfx::RenderContext2::set_color_mask)
-        .def("set_viewport", &tgfx::RenderContext2::set_viewport)
-        .def("set_scissor", &tgfx::RenderContext2::set_scissor)
-        .def("clear_scissor", &tgfx::RenderContext2::clear_scissor)
-
-        // Blit (src → dst texture).
-        .def("blit", &tgfx::RenderContext2::blit)
-
-        // Destroy a texture handle on this context's device. For
-        // external wraps this just frees the HandlePool entry; the
-        // GL texture stays owned by the caller.
-        .def("destroy_texture",
-             [](tgfx::RenderContext2& self, tgfx::TextureHandle h) {
-                 if (h) self.device().destroy(h);
-             })
-
-        // Create and upload a sampled RGBA8 texture through the context's
-        // device. This is the canonical helper for Python UI code that owns
-        // a RenderContext2 but intentionally has no direct IRenderDevice
-        // texture-allocation surface.
-        .def("create_texture_rgba8",
-             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
-                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
-             -> tgfx::TextureHandle {
-                 tgfx::TextureDesc desc;
-                 desc.width = w;
-                 desc.height = h;
-                 desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-                 desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
-                 const tgfx::TextureHandle texture = self.device().create_texture(desc);
-                 if (texture && data.size() > 0) {
-                     self.device().upload_texture(
-                         texture,
-                         std::span<const uint8_t>(data.data(), data.size()));
-                 }
-                 return texture;
-             },
-             nb::arg("width"), nb::arg("height"), nb::arg("data"))
-
-        // Create an offscreen color attachment via the context's
-        // device. Mirrors Tgfx2Context.create_color_attachment for
-        // callers that only hold a RenderContext2 (effects running
-        // inside a pipeline pass, etc.).
+        // --- Opaque handle wrappers ---
         //
-        // Usage: Sampled | ColorAttachment | CopySrc | CopyDst. CopySrc
-        // is mandatory on Vulkan — otherwise `BackendWindow::present`
-        // (which blits this texture onto the swapchain image) fails
-        // validation with `VK_IMAGE_USAGE_TRANSFER_SRC_BIT required`.
-        .def("create_color_attachment",
-             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
-                tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
-                 tgfx::TextureDesc desc;
-                 desc.width = w;
-                 desc.height = h;
-                 desc.format = fmt;
-                 desc.sample_count = samples == 0 ? 1 : samples;
-                 desc.usage = tgfx::TextureUsage::Sampled |
-                              tgfx::TextureUsage::ColorAttachment |
-                              tgfx::TextureUsage::CopySrc |
-                              tgfx::TextureUsage::CopyDst;
-                 return self.device().create_texture(desc);
-             },
-             nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
-             nb::arg("samples") = 1)
+        // HandlePool entries in tgfx2 are value-typed (32-bit id). We wrap
+        // them in lightweight Python objects so they have identity and
+        // can be passed between Python calls without copies. The handles
+        // themselves are POD structs with a single uint32_t member.
 
-        // Same convenience for depth targets. Resource creation belongs to
-        // IRenderDevice, but Python passes often only receive RenderContext2.
-        .def("create_depth_attachment",
-             [](tgfx::RenderContext2& self, uint32_t w, uint32_t h,
-                tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
-                 tgfx::TextureDesc desc;
-                 desc.width = w;
-                 desc.height = h;
-                 desc.format = fmt;
-                 desc.sample_count = samples == 0 ? 1 : samples;
-                 desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                              tgfx::TextureUsage::Sampled |
-                              tgfx::TextureUsage::CopySrc |
-                              tgfx::TextureUsage::CopyDst;
-                 return self.device().create_texture(desc);
-             },
-             nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx::PixelFormat::D32F,
-             nb::arg("samples") = 1)
+        nb::class_<tgfx::TextureHandle>(m, "Tgfx2TextureHandle")
+            .def(nb::init<>())
+            .def_prop_ro("id", [](const tgfx::TextureHandle& h) { return h.id; })
+            .def("__bool__", [](const tgfx::TextureHandle& h) { return static_cast<bool>(h); });
 
-        // Shader
-        .def("bind_shader",
-             [](tgfx::RenderContext2& self,
-                tgfx::ShaderHandle vs, tgfx::ShaderHandle fs) {
-                 self.bind_shader(vs, fs, {});
-             })
+        nb::class_<tgfx::BufferHandle>(m, "Tgfx2BufferHandle")
+            .def(nb::init<>())
+            .def_prop_ro("id", [](const tgfx::BufferHandle& h) { return h.id; })
+            .def("__bool__", [](const tgfx::BufferHandle& h) { return static_cast<bool>(h); });
 
-        // Draw
-        .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
-        .def("draw_arrays_instanced",
-             [](tgfx::RenderContext2& self,
-                tgfx::BufferHandle vbo,
-                uint32_t vertex_count,
-                uint32_t instance_count) {
-                 self.draw_arrays_instanced(vbo, vertex_count, instance_count);
-             },
-             nb::arg("vbo"),
-             nb::arg("vertex_count"),
-             nb::arg("instance_count"))
-        .def("draw_arrays_instanced",
-             [](tgfx::RenderContext2& self,
-                tgfx::BufferHandle vertex_vbo,
-                tgfx::BufferHandle instance_vbo,
-                uint32_t vertex_count,
-                uint32_t instance_count) {
-                 self.draw_arrays_instanced(
-                     vertex_vbo, instance_vbo, vertex_count, instance_count);
-             },
-             nb::arg("vertex_vbo"),
-             nb::arg("instance_vbo"),
-             nb::arg("vertex_count"),
-             nb::arg("instance_count"))
+        nb::class_<tgfx::ShaderHandle>(m, "Tgfx2ShaderHandle")
+            .def(nb::init<>())
+            .def_prop_ro("id", [](const tgfx::ShaderHandle& h) { return h.id; })
+            .def("__bool__", [](const tgfx::ShaderHandle& h) { return static_cast<bool>(h); });
 
-        // Immediate drawing — creates a throwaway VBO, draws, destroys.
-        // Vertex format is fixed to 7 floats per vertex:
-        //   [x, y, z,  r, g, b, a]
-        // At the GL level this is loc 0 = vec3 (position) and
-        // loc 1 = vec4 (color). Consumers are free to reinterpret loc 1
-        // inside their shader (e.g. pack offset.xy + uv.xy into a vec4
-        // for billboard text) as long as the stride and attribute sizes
-        // match.
-        // The currently bound shader (via bind_shader) is used.
-        .def("draw_immediate_triangles",
-             [](tgfx::RenderContext2& self,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
-                uint32_t vertex_count) {
-                 self.draw_immediate_triangles(verts.data(), vertex_count);
-             },
-             nb::arg("verts"), nb::arg("vertex_count"))
-        .def("draw_immediate_lines",
-             [](tgfx::RenderContext2& self,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
-                uint32_t vertex_count) {
-                 self.draw_immediate_lines(verts.data(), vertex_count);
-             },
-             nb::arg("verts"), nb::arg("vertex_count"))
+        // Paired (vs, fs) return type for tc_shader_ensure_tgfx2 — easier
+        // to return one object than two out parameters.
+        struct ShaderPair {
+            tgfx::ShaderHandle vs;
+            tgfx::ShaderHandle fs;
+        };
+        nb::class_<ShaderPair>(m, "Tgfx2ShaderPair").def_ro("vs", &ShaderPair::vs).def_ro("fs", &ShaderPair::fs);
 
-        // Set push-constant block. Data layout must match the shader's
-        // `layout(push_constant) uniform ...` declaration (std140 rules
-        // with push-constant tightening). OpenGL receives the same payload
-        // through tgfx2's push-constant emulation UBO. 128 bytes max
-        // (Vulkan 1.0 min guaranteed by maxPushConstantsSize).
-        .def("set_push_constants",
-             [](tgfx::RenderContext2& self,
-                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                 self.set_push_constants(data.data(),
-                                         static_cast<uint32_t>(data.size()));
-             },
-             nb::arg("data"))
-        .def("set_push_constants",
-             [](tgfx::RenderContext2& self, const std::string& data) {
-                 self.set_push_constants(data.data(),
-                                         static_cast<uint32_t>(data.size()));
-             },
-             nb::arg("data"))
-        // Symbolic resource binding API — resolved from shader layout
-        // metadata set via use_shader_resource_layout().
-        .def("use_shader_resource_layout",
-             [](tgfx::RenderContext2& self, const termin::TcShader& shader) {
-                 self.use_shader_resource_layout(shader.get());
-             },
-             nb::arg("shader"))
-        .def("bind_uniform_by_name",
-             [](tgfx::RenderContext2& self,
-                const std::string& name,
-                nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                 self.bind_uniform_data(name, data.data(),
-                                        static_cast<uint32_t>(data.size()));
-             },
-             nb::arg("name"), nb::arg("data"))
-        .def("bind_uniform_by_name",
-             [](tgfx::RenderContext2& self,
-                const std::string& name,
-                nb::bytes data) {
-                 char* raw = nullptr;
-                 Py_ssize_t size = 0;
-                 if (PyBytes_AsStringAndSize(data.ptr(), &raw, &size) != 0 ||
-                     raw == nullptr || size < 0) {
-                     throw std::runtime_error("bind_uniform_by_name() received invalid bytes");
-                 }
-                 if (static_cast<uint64_t>(size) >
-                     static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
-                     throw std::runtime_error("bind_uniform_by_name() bytes payload is too large");
-                 }
-                 self.bind_uniform_data(name, raw, static_cast<uint32_t>(size));
-             },
-             nb::arg("name"), nb::arg("data"))
-        .def("bind_uniform_by_name",
-             [](tgfx::RenderContext2& self,
-                const std::string& name,
-                const std::string& data) {
-                 self.bind_uniform_data(name, data.data(),
-                                        static_cast<uint32_t>(data.size()));
-             },
-             nb::arg("name"), nb::arg("data"))
-        .def("bind_texture_by_name",
-             [](tgfx::RenderContext2& self,
-                const std::string& name,
-                tgfx::TextureHandle tex) {
-                 self.bind_texture(name, tex, {});
-             },
-             nb::arg("name"), nb::arg("texture"));
-
-    // --- Tgfx2Context holder ---
-    //
-    // Holds the active IRenderDevice + RenderContext2 pair. Mirrors what
-    // RenderEngine::ensure_tgfx2 does in C++ without exposing the concrete
-    // backend class.
-    //
-    // Non-owning bundle of the process-wide GPU runtime: `IRenderDevice`
-    // (resource factory), `RenderContext2` (command recorder). Created
-    // exactly once by the top-level application host and handed down to every
-    // renderer that needs to draw.
-    //
-    // Python-side this is exposed as `Tgfx2Context`. Both pointers are
-    // raw — the holder observes, never owns. The lifetime invariant is
-    // the host's responsibility: host outlives every Tgfx2Context
-    // wrapper that points at its device/ctx.
-    //
-    // There is deliberately no default constructor and no owning mode.
-    // Creating a second IRenderDevice silently breaks the process-wide
-    // invariant (HandlePools stop matching; TextureHandles minted on
-    // one device are garbage on another — this was the exact root
-    // cause of the UIComponent-blit crash that led to this rewrite).
-    struct Tgfx2ContextHolder {
-        tgfx::IRenderDevice*  device = nullptr;
-        tgfx::RenderContext2* ctx    = nullptr;
-        tgfx::GraphicsHost* graphics_host = nullptr;
-
-        Tgfx2ContextHolder(tgfx::IRenderDevice* dev, tgfx::RenderContext2* rctx,
-                           tgfx::GraphicsHost* host)
-            : device(dev), ctx(rctx), graphics_host(host) {}
-    };
-
-    // No default constructor exposed. Tgfx2Context is never created
-    // implicitly — the only ways in are the two factories below. See
-    // struct Tgfx2ContextHolder above for the rationale.
-    nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")
-
-        // Factory used by application composition roots. It borrows the
-        // canonical GraphicsHost instead of reconstructing a window-shaped
-        // device/context abstraction in every host.
-        .def_static("from_runtime",
-            [](tgfx::GraphicsHost& runtime) -> Tgfx2ContextHolder* {
-                auto* dev = &runtime.device();
-                auto* rctx = &runtime.context();
-                // The application host must install its device before it
-                // exposes observing wrappers. This factory never mutates the
-                // process-wide graphics domain.
-                if (tgfx2_interop_get_device() != dev) {
-                    throw std::runtime_error(
-                        "Tgfx2Context.from_runtime: runtime device is not the installed "
-                        "application graphics device");
-                }
-                return new Tgfx2ContextHolder(dev, rctx, &runtime);
+        m.def(
+            "set_shader_artifact_root",
+            [](const std::string& root) { termin::tgfx2_set_shader_artifact_root(root.c_str()); },
+            nb::arg("root"));
+        m.def("get_shader_artifact_root", []() { return std::string(termin::tgfx2_get_shader_artifact_root()); });
+        m.def(
+            "set_shader_cache_root",
+            [](const std::string& root) { termin::tgfx2_set_shader_cache_root(root.c_str()); },
+            nb::arg("root"));
+        m.def("get_shader_cache_root", []() { return std::string(termin::tgfx2_get_shader_cache_root()); });
+        m.def(
+            "set_shader_compiler_path",
+            [](const std::string& path) { termin::tgfx2_set_shader_compiler_path(path.c_str()); },
+            nb::arg("path"));
+        m.def("get_shader_compiler_path", []() { return std::string(termin::tgfx2_get_shader_compiler_path()); });
+        m.def(
+            "configure_shader_runtime",
+            [](const std::string& artifact_root,
+               const std::string& cache_root,
+               const std::string& shader_compiler,
+               bool dev_compile) {
+                termin::tgfx2_set_shader_artifact_root(artifact_root.c_str());
+                termin::tgfx2_set_shader_cache_root(cache_root.c_str());
+                termin::tgfx2_set_shader_compiler_path(shader_compiler.c_str());
+                termin::tgfx2_set_shader_dev_compile_enabled(dev_compile);
             },
-            nb::arg("runtime"),
-            nb::rv_policy::take_ownership,
-            nb::keep_alive<0, 1>(),
-            "Build a Tgfx2Context over an existing device+RenderContext2 "
-            "owned by the canonical application GraphicsHost.")
+            nb::arg("artifact_root") = "",
+            nb::arg("cache_root") = "",
+            nb::arg("shader_compiler") = "",
+            nb::arg("dev_compile") = false);
+        m.def(
+            "set_shader_dev_compile_enabled",
+            [](bool enabled) { termin::tgfx2_set_shader_dev_compile_enabled(enabled); },
+            nb::arg("enabled"));
+        m.def("get_shader_dev_compile_enabled", []() { return termin::tgfx2_get_shader_dev_compile_enabled(); });
 
-        // Factory for in-scene helpers (UIComponent, etc.) that
-        // only see a live RenderContext2 at draw time — the framegraph's
-        // `ExecuteContext.ctx2`. The device is inferred from the ctx;
-        // Interop setup is never performed by observing wrappers; the
-        // application host owns the one explicit device claim.
-        .def_static("from_context",
-            [](tgfx::RenderContext2& ctx) -> Tgfx2ContextHolder* {
-                auto* dev = &ctx.device();
-                if (tgfx2_interop_get_device() != dev) {
-                    throw std::runtime_error(
-                        "Tgfx2Context.from_context: context device is not the "
-                        "installed application graphics device");
-                }
-                return new Tgfx2ContextHolder(
-                    dev, &ctx, ctx.graphics_host());
+        m.attr("LinePoint3") = nb::module_::import_("tcbase._geom_native").attr("Vec3f");
+
+        nb::enum_<tgfx::LineCapStyle>(m, "LineCapStyle")
+            .value("Butt", tgfx::LineCapStyle::Butt)
+            .value("Square", tgfx::LineCapStyle::Square)
+            .value("Round", tgfx::LineCapStyle::Round);
+
+        nb::enum_<tgfx::LineJoinStyle>(m, "LineJoinStyle")
+            .value("Bevel", tgfx::LineJoinStyle::Bevel)
+            .value("Round", tgfx::LineJoinStyle::Round);
+
+        nb::class_<tgfx::LineStyle>(m, "LineStyle")
+            .def(nb::init<>())
+            .def_rw("width", &tgfx::LineStyle::width)
+            .def_rw("up_hint", &tgfx::LineStyle::up_hint)
+            .def_rw("cap", &tgfx::LineStyle::cap)
+            .def_rw("join", &tgfx::LineStyle::join)
+            .def_rw("round_segments", &tgfx::LineStyle::round_segments)
+            .def_rw("closed", &tgfx::LineStyle::closed);
+
+        nb::class_<tgfx::LineMesh>(m, "LineMesh")
+            .def_prop_ro("vertices",
+                         [](const tgfx::LineMesh& mesh) {
+                             nb::list out;
+                             for (const tgfx::LineVertex& vertex : mesh.vertices) {
+                                 const tgfx::LinePoint3& p = vertex.position;
+                                 out.append(nb::make_tuple(p.x, p.y, p.z));
+                             }
+                             return out;
+                         })
+            .def_prop_ro("indices",
+                         [](const tgfx::LineMesh& mesh) {
+                             nb::list out;
+                             for (uint32_t index : mesh.indices) {
+                                 out.append(index);
+                             }
+                             return out;
+                         })
+            .def_prop_ro("triangle_vertices",
+                         [](const tgfx::LineMesh& mesh) {
+                             nb::list out;
+                             for (uint32_t index : mesh.indices) {
+                                 const tgfx::LinePoint3& p = mesh.vertices[index].position;
+                                 out.append(nb::make_tuple(p.x, p.y, p.z));
+                             }
+                             return out;
+                         })
+            .def_prop_ro("empty", &tgfx::LineMesh::empty);
+
+        m.def(
+            "build_line_mesh",
+            [](const std::vector<tgfx::LinePoint3>& points, const tgfx::LineStyle& style) {
+                return tgfx::build_line_mesh(std::span<const tgfx::LinePoint3>(points.data(), points.size()), style);
+            },
+            nb::arg("points"),
+            nb::arg("style"));
+
+        nb::class_<tgfx::ScreenSpaceLineStyle>(m, "ScreenSpaceLineStyle")
+            .def(nb::init<>())
+            .def_rw("width_px", &tgfx::ScreenSpaceLineStyle::width_px)
+            .def_rw("color", &tgfx::ScreenSpaceLineStyle::color)
+            .def_rw("cap", &tgfx::ScreenSpaceLineStyle::cap)
+            .def_rw("join", &tgfx::ScreenSpaceLineStyle::join)
+            .def_rw("round_segments", &tgfx::ScreenSpaceLineStyle::round_segments);
+
+        nb::class_<tgfx::ScreenSpaceLineParams>(m, "ScreenSpaceLineParams")
+            .def(nb::init<>())
+            .def_rw("view_projection", &tgfx::ScreenSpaceLineParams::view_projection)
+            .def_rw("viewport_width", &tgfx::ScreenSpaceLineParams::viewport_width)
+            .def_rw("viewport_height", &tgfx::ScreenSpaceLineParams::viewport_height);
+
+        nb::class_<tgfx::ScreenSpaceLineRenderer>(m, "ScreenSpaceLineRenderer")
+            .def(nb::init<>())
+            .def(
+                "draw_polyline",
+                [](tgfx::ScreenSpaceLineRenderer& self,
+                   tgfx::RenderContext2& ctx,
+                   const std::vector<tgfx::LinePoint3>& points,
+                   const tgfx::ScreenSpaceLineStyle& style,
+                   const tgfx::ScreenSpaceLineParams& params) { self.draw_polyline(ctx, points, style, params); },
+                nb::arg("ctx"),
+                nb::arg("points"),
+                nb::arg("style"),
+                nb::arg("params"))
+            .def("release", &tgfx::ScreenSpaceLineRenderer::release, nb::arg("ctx"));
+
+        nb::class_<tgfx::WorldSpaceLineStyle>(m, "WorldSpaceLineStyle")
+            .def(nb::init<>())
+            .def_rw("width", &tgfx::WorldSpaceLineStyle::width)
+            .def_rw("color", &tgfx::WorldSpaceLineStyle::color)
+            .def_rw("cap", &tgfx::WorldSpaceLineStyle::cap)
+            .def_rw("join", &tgfx::WorldSpaceLineStyle::join)
+            .def_rw("round_segments", &tgfx::WorldSpaceLineStyle::round_segments);
+
+        nb::class_<tgfx::WorldSpaceLineParams>(m, "WorldSpaceLineParams")
+            .def(nb::init<>())
+            .def_rw("view_projection", &tgfx::WorldSpaceLineParams::view_projection)
+            .def_rw("camera_position", &tgfx::WorldSpaceLineParams::camera_position)
+            .def_rw("lighting_enabled", &tgfx::WorldSpaceLineParams::lighting_enabled);
+
+        nb::class_<tgfx::WorldSpaceLineRenderer>(m, "WorldSpaceLineRenderer")
+            .def(nb::init<>())
+            .def(
+                "draw_polyline",
+                [](tgfx::WorldSpaceLineRenderer& self,
+                   tgfx::RenderContext2& ctx,
+                   const std::vector<tgfx::LinePoint3>& points,
+                   const tgfx::WorldSpaceLineStyle& style,
+                   const tgfx::WorldSpaceLineParams& params) { self.draw_polyline(ctx, points, style, params); },
+                nb::arg("ctx"),
+                nb::arg("points"),
+                nb::arg("style"),
+                nb::arg("params"))
+            .def("release", &tgfx::WorldSpaceLineRenderer::release, nb::arg("ctx"));
+
+        // IRenderDevice — opaque handle exposed so other native modules
+        // (render_framework) can accept a pointer to it from Python.
+        // The device is owned by the application host (typically
+        // BackendWindow). Python code only passes the pointer around.
+        nb::class_<tgfx::IRenderDevice>(m, "Tgfx2Device")
+            .def("wait_idle", &tgfx::IRenderDevice::wait_idle, nb::call_guard<nb::gil_scoped_release>())
+            .def_prop_ro("adapter_name",
+                         [](const tgfx::IRenderDevice& self) { return self.adapter_info().adapter_name; })
+            .def_prop_ro("adapter_driver",
+                         [](const tgfx::IRenderDevice& self) { return self.adapter_info().driver_name; })
+            .def_prop_ro("adapter_class",
+                         [](const tgfx::IRenderDevice& self) {
+                             return std::string(tgfx::adapter_class_name(self.adapter_info().hardware_class));
+                         })
+            .def_prop_ro("software_adapter",
+                         [](const tgfx::IRenderDevice& self) { return self.adapter_info().is_software(); })
+            // Backend-neutral shader compile. GLSL input; internally
+            // glCompileShader on OpenGL, shaderc GLSL→SPIR-V on Vulkan
+            // (both paths run the same preprocessor first, see V.3).
+            // `stage` maps to tgfx::ShaderStage: 0=Vertex, 1=Fragment,
+            // 2=Geometry, 3=Compute.
+            .def(
+                "create_shader",
+                [](tgfx::IRenderDevice& self, int stage, const std::string& src) {
+                    tgfx::ShaderDesc d;
+                    d.stage = static_cast<tgfx::ShaderStage>(stage);
+                    d.source = src;
+                    return self.create_shader(d);
+                },
+                nb::arg("stage"),
+                nb::arg("source"))
+            .def("destroy_shader", [](tgfx::IRenderDevice& self, tgfx::ShaderHandle h) { self.destroy(h); })
+            .def(
+                "texture_sample_count",
+                [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) { return self.texture_desc(h).sample_count; },
+                nb::arg("texture"))
+            // Thin tcgui-only hosts need to read whole
+            // render targets back to the CPU without dragging in the editor
+            // runtime. Delegates to IRenderDevice::read_texture_rgba_float
+            // with backend-normalized top-left row order. Caller supplies a
+            // pre-sized float numpy array of width*height*4 elements.
+            .def(
+                "read_texture_rgba_float",
+                [](tgfx::IRenderDevice& self,
+                   tgfx::TextureHandle tex,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> buf) {
+                    return self.read_texture_rgba_float(tex, buf.data());
+                },
+                nb::arg("texture"),
+                nb::arg("out"));
+
+        nb::enum_<tgfx::ShaderStage>(m, "Tgfx2ShaderStage", nb::is_arithmetic())
+            .value("Vertex", tgfx::ShaderStage::Vertex)
+            .value("Fragment", tgfx::ShaderStage::Fragment)
+            .value("Compute", tgfx::ShaderStage::Compute)
+            .value("Geometry", tgfx::ShaderStage::Geometry)
+            .export_values();
+
+        // BlendFactor enum — exposed so Python callers can request
+        // premultiplied / additive / standard blending via set_blend_func.
+        nb::enum_<tgfx::BlendFactor>(m, "Tgfx2BlendFactor", nb::is_arithmetic())
+            .value("Zero", tgfx::BlendFactor::Zero)
+            .value("One", tgfx::BlendFactor::One)
+            .value("SrcAlpha", tgfx::BlendFactor::SrcAlpha)
+            .value("OneMinusSrcAlpha", tgfx::BlendFactor::OneMinusSrcAlpha)
+            .value("DstAlpha", tgfx::BlendFactor::DstAlpha)
+            .value("OneMinusDstAlpha", tgfx::BlendFactor::OneMinusDstAlpha)
+            .value("SrcColor", tgfx::BlendFactor::SrcColor)
+            .value("OneMinusSrcColor", tgfx::BlendFactor::OneMinusSrcColor)
+            .value("DstColor", tgfx::BlendFactor::DstColor)
+            .value("OneMinusDstColor", tgfx::BlendFactor::OneMinusDstColor)
+            .export_values();
+
+        // Register PixelFormat as an nb::enum_ so other native modules can
+        // bind functions with `tgfx::PixelFormat` parameters and defaults.
+        // The `is_arithmetic` flag lets Python int callers pass values via
+        // the legacy `PIXEL_*` module-level int constants below.
+        // Must be registered BEFORE any binding that uses PixelFormat as
+        // an argument type or default value (otherwise nanobind's
+        // enum_from_cpp() throws std::bad_cast at module init).
+        nb::enum_<tgfx::PixelFormat>(m, "Tgfx2PixelFormat", nb::is_arithmetic())
+            .value("R8_UNorm", tgfx::PixelFormat::R8_UNorm)
+            .value("RG8_UNorm", tgfx::PixelFormat::RG8_UNorm)
+            .value("RGB8_UNorm", tgfx::PixelFormat::RGB8_UNorm)
+            .value("RGBA8_UNorm", tgfx::PixelFormat::RGBA8_UNorm)
+            .value("BGRA8_UNorm", tgfx::PixelFormat::BGRA8_UNorm)
+            .value("RGBA8_sRGB", tgfx::PixelFormat::RGBA8_sRGB)
+            .value("BGRA8_sRGB", tgfx::PixelFormat::BGRA8_sRGB)
+            .value("R16F", tgfx::PixelFormat::R16F)
+            .value("RG16F", tgfx::PixelFormat::RG16F)
+            .value("RGBA16F", tgfx::PixelFormat::RGBA16F)
+            .value("R32F", tgfx::PixelFormat::R32F)
+            .value("RG32F", tgfx::PixelFormat::RG32F)
+            .value("RGBA32F", tgfx::PixelFormat::RGBA32F)
+            .value("D24_UNorm", tgfx::PixelFormat::D24_UNorm)
+            .value("D24_UNorm_S8_UInt", tgfx::PixelFormat::D24_UNorm_S8_UInt)
+            .value("D32F", tgfx::PixelFormat::D32F)
+            .export_values();
+
+        // --- RenderContext2 ---
+        //
+        // Only the methods Python passes actually need are exposed. The
+        // rest (bind_uniform_buffer, set_vertex_layout, push constants, ...)
+        // stay C++-only because their Python form would require binding
+        // descriptor structs that Python code doesn't need.
+        nb::class_<tgfx::RenderContext2>(m, "Tgfx2RenderContext")
+            .def(
+                "begin_pass",
+                [](tgfx::RenderContext2& self,
+                   tgfx::TextureHandle color,
+                   std::optional<tgfx::TextureHandle> depth,
+                   bool clear_color_enabled,
+                   float r,
+                   float g,
+                   float b,
+                   float a,
+                   float clear_depth,
+                   bool clear_depth_enabled) {
+                    float clear_rgba[4] = {r, g, b, a};
+                    self.begin_pass(color,
+                                    depth.value_or(tgfx::TextureHandle{}),
+                                    clear_color_enabled ? clear_rgba : nullptr,
+                                    clear_depth,
+                                    clear_depth_enabled);
+                },
+                nb::arg("color"),
+                nb::arg("depth").none() = nb::none(),
+                nb::arg("clear_color_enabled") = false,
+                nb::arg("r") = 0.0f,
+                nb::arg("g") = 0.0f,
+                nb::arg("b") = 0.0f,
+                nb::arg("a") = 1.0f,
+                nb::arg("clear_depth") = 1.0f,
+                nb::arg("clear_depth_enabled") = false)
+            .def("end_pass", &tgfx::RenderContext2::end_pass)
+
+            // Underlying render device — lets Python-side renderers (UIRenderer,
+            // Python render helpers call create_shader / create_buffer
+            // without stashing the owning Tgfx2Context separately.
+            .def_prop_ro(
+                "device",
+                [](tgfx::RenderContext2& self) -> tgfx::IRenderDevice& { return self.device(); },
+                nb::rv_policy::reference_internal)
+
+            // Frame lifecycle — standalone Python hosts (SDL window, tests)
+            // must call these manually once per frame. Inside the engine
+            // render loop the C++ frame graph handles this already.
+            .def("begin_frame", &tgfx::RenderContext2::begin_frame)
+            .def("end_frame", &tgfx::RenderContext2::end_frame)
+            .def_prop_ro("in_frame", &tgfx::RenderContext2::in_frame)
+
+            // State
+            .def("set_depth_test", &tgfx::RenderContext2::set_depth_test)
+            .def("set_depth_write", &tgfx::RenderContext2::set_depth_write)
+            .def("set_depth_bias",
+                 &tgfx::RenderContext2::set_depth_bias,
+                 nb::arg("enabled"),
+                 nb::arg("constant") = 0.0f,
+                 nb::arg("slope") = 0.0f,
+                 nb::arg("clamp") = 0.0f)
+            .def("set_blend", &tgfx::RenderContext2::set_blend)
+            .def("set_blend_func", &tgfx::RenderContext2::set_blend_func, nb::arg("src"), nb::arg("dst"))
+            .def("set_cull",
+                 [](tgfx::RenderContext2& self, int mode) { self.set_cull(static_cast<tgfx::CullMode>(mode)); })
+            .def("set_color_mask", &tgfx::RenderContext2::set_color_mask)
+            .def("set_viewport", &tgfx::RenderContext2::set_viewport)
+            .def("set_scissor", &tgfx::RenderContext2::set_scissor)
+            .def("clear_scissor", &tgfx::RenderContext2::clear_scissor)
+
+            // Blit (src → dst texture).
+            .def("blit", &tgfx::RenderContext2::blit)
+
+            // Destroy a texture handle on this context's device. For
+            // external wraps this just frees the HandlePool entry; the
+            // GL texture stays owned by the caller.
+            .def("destroy_texture",
+                 [](tgfx::RenderContext2& self, tgfx::TextureHandle h) {
+                     if (h)
+                         self.device().destroy(h);
+                 })
+
+            // Create and upload a sampled RGBA8 texture through the context's
+            // device. This is the canonical helper for Python UI code that owns
+            // a RenderContext2 but intentionally has no direct IRenderDevice
+            // texture-allocation surface.
+            .def(
+                "create_texture_rgba8",
+                [](tgfx::RenderContext2& self,
+                   uint32_t w,
+                   uint32_t h,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+                    const tgfx::TextureHandle texture = self.device().create_texture(desc);
+                    if (texture && data.size() > 0) {
+                        self.device().upload_texture(texture, std::span<const uint8_t>(data.data(), data.size()));
+                    }
+                    return texture;
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("data"))
+
+            // Create an offscreen color attachment via the context's
+            // device. Mirrors Tgfx2Context.create_color_attachment for
+            // callers that only hold a RenderContext2 (effects running
+            // inside a pipeline pass, etc.).
+            //
+            // Usage: Sampled | ColorAttachment | CopySrc | CopyDst. CopySrc
+            // is mandatory on Vulkan — otherwise `BackendWindow::present`
+            // (which blits this texture onto the swapchain image) fails
+            // validation with `VK_IMAGE_USAGE_TRANSFER_SRC_BIT required`.
+            .def(
+                "create_color_attachment",
+                [](tgfx::RenderContext2& self, uint32_t w, uint32_t h, tgfx::PixelFormat fmt, uint32_t samples)
+                    -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = fmt;
+                    desc.sample_count = samples == 0 ? 1 : samples;
+                    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment |
+                                 tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
+                    return self.device().create_texture(desc);
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
+                nb::arg("samples") = 1)
+
+            // Same convenience for depth targets. Resource creation belongs to
+            // IRenderDevice, but Python passes often only receive RenderContext2.
+            .def(
+                "create_depth_attachment",
+                [](tgfx::RenderContext2& self, uint32_t w, uint32_t h, tgfx::PixelFormat fmt, uint32_t samples)
+                    -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = fmt;
+                    desc.sample_count = samples == 0 ? 1 : samples;
+                    desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::Sampled |
+                                 tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
+                    return self.device().create_texture(desc);
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("format") = tgfx::PixelFormat::D32F,
+                nb::arg("samples") = 1)
+
+            // Shader
+            .def("bind_shader",
+                 [](tgfx::RenderContext2& self, tgfx::ShaderHandle vs, tgfx::ShaderHandle fs) {
+                     self.bind_shader(vs, fs, {});
+                 })
+
+            // Draw
+            .def("draw_fullscreen_quad", &tgfx::RenderContext2::draw_fullscreen_quad)
+            .def(
+                "draw_arrays_instanced",
+                [](tgfx::RenderContext2& self, tgfx::BufferHandle vbo, uint32_t vertex_count, uint32_t instance_count) {
+                    self.draw_arrays_instanced(vbo, vertex_count, instance_count);
+                },
+                nb::arg("vbo"),
+                nb::arg("vertex_count"),
+                nb::arg("instance_count"))
+            .def(
+                "draw_arrays_instanced",
+                [](tgfx::RenderContext2& self,
+                   tgfx::BufferHandle vertex_vbo,
+                   tgfx::BufferHandle instance_vbo,
+                   uint32_t vertex_count,
+                   uint32_t instance_count) {
+                    self.draw_arrays_instanced(vertex_vbo, instance_vbo, vertex_count, instance_count);
+                },
+                nb::arg("vertex_vbo"),
+                nb::arg("instance_vbo"),
+                nb::arg("vertex_count"),
+                nb::arg("instance_count"))
+
+            // Immediate drawing — creates a throwaway VBO, draws, destroys.
+            // Vertex format is fixed to 7 floats per vertex:
+            //   [x, y, z,  r, g, b, a]
+            // At the GL level this is loc 0 = vec3 (position) and
+            // loc 1 = vec4 (color). Consumers are free to reinterpret loc 1
+            // inside their shader (e.g. pack offset.xy + uv.xy into a vec4
+            // for billboard text) as long as the stride and attribute sizes
+            // match.
+            // The currently bound shader (via bind_shader) is used.
+            .def(
+                "draw_immediate_triangles",
+                [](tgfx::RenderContext2& self,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
+                   uint32_t vertex_count) { self.draw_immediate_triangles(verts.data(), vertex_count); },
+                nb::arg("verts"),
+                nb::arg("vertex_count"))
+            .def(
+                "draw_immediate_lines",
+                [](tgfx::RenderContext2& self,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> verts,
+                   uint32_t vertex_count) { self.draw_immediate_lines(verts.data(), vertex_count); },
+                nb::arg("verts"),
+                nb::arg("vertex_count"))
+
+            // Set push-constant block. Data layout must match the shader's
+            // `layout(push_constant) uniform ...` declaration (std140 rules
+            // with push-constant tightening). OpenGL receives the same payload
+            // through tgfx2's push-constant emulation UBO. 128 bytes max
+            // (Vulkan 1.0 min guaranteed by maxPushConstantsSize).
+            .def(
+                "set_push_constants",
+                [](tgfx::RenderContext2& self, nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                    self.set_push_constants(data.data(), static_cast<uint32_t>(data.size()));
+                },
+                nb::arg("data"))
+            .def(
+                "set_push_constants",
+                [](tgfx::RenderContext2& self, const std::string& data) {
+                    self.set_push_constants(data.data(), static_cast<uint32_t>(data.size()));
+                },
+                nb::arg("data"))
+            // Symbolic resource binding API — resolved from shader layout
+            // metadata set via use_shader_resource_layout().
+            .def(
+                "use_shader_resource_layout",
+                [](tgfx::RenderContext2& self, const termin::TcShader& shader) {
+                    self.use_shader_resource_layout(shader.get());
+                },
+                nb::arg("shader"))
+            .def(
+                "bind_uniform_by_name",
+                [](tgfx::RenderContext2& self,
+                   const std::string& name,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                    self.bind_uniform_data(name, data.data(), static_cast<uint32_t>(data.size()));
+                },
+                nb::arg("name"),
+                nb::arg("data"))
+            .def(
+                "bind_uniform_by_name",
+                [](tgfx::RenderContext2& self, const std::string& name, nb::bytes data) {
+                    char* raw = nullptr;
+                    Py_ssize_t size = 0;
+                    if (PyBytes_AsStringAndSize(data.ptr(), &raw, &size) != 0 || raw == nullptr || size < 0) {
+                        throw std::runtime_error("bind_uniform_by_name() received invalid bytes");
+                    }
+                    if (static_cast<uint64_t>(size) > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+                        throw std::runtime_error("bind_uniform_by_name() bytes payload is too large");
+                    }
+                    self.bind_uniform_data(name, raw, static_cast<uint32_t>(size));
+                },
+                nb::arg("name"),
+                nb::arg("data"))
+            .def(
+                "bind_uniform_by_name",
+                [](tgfx::RenderContext2& self, const std::string& name, const std::string& data) {
+                    self.bind_uniform_data(name, data.data(), static_cast<uint32_t>(data.size()));
+                },
+                nb::arg("name"),
+                nb::arg("data"))
+            .def(
+                "bind_texture_by_name",
+                [](tgfx::RenderContext2& self, const std::string& name, tgfx::TextureHandle tex) {
+                    self.bind_texture(name, tex, {});
+                },
+                nb::arg("name"),
+                nb::arg("texture"));
+
+        // --- Tgfx2Context holder ---
+        //
+        // Holds the active IRenderDevice + RenderContext2 pair. Mirrors what
+        // RenderEngine::ensure_tgfx2 does in C++ without exposing the concrete
+        // backend class.
+        //
+        // Non-owning bundle of the process-wide GPU runtime: `IRenderDevice`
+        // (resource factory), `RenderContext2` (command recorder). Created
+        // exactly once by the top-level application host and handed down to every
+        // renderer that needs to draw.
+        //
+        // Python-side this is exposed as `Tgfx2Context`. Both pointers are
+        // raw — the holder observes, never owns. The lifetime invariant is
+        // the host's responsibility: host outlives every Tgfx2Context
+        // wrapper that points at its device/ctx.
+        //
+        // There is deliberately no default constructor and no owning mode.
+        // Creating a second IRenderDevice silently breaks the process-wide
+        // invariant (HandlePools stop matching; TextureHandles minted on
+        // one device are garbage on another — this was the exact root
+        // cause of the UIComponent-blit crash that led to this rewrite).
+        struct Tgfx2ContextHolder {
+            tgfx::IRenderDevice* device = nullptr;
+            tgfx::RenderContext2* ctx = nullptr;
+            tgfx::GraphicsHost* graphics_host = nullptr;
+
+            Tgfx2ContextHolder(tgfx::IRenderDevice* dev, tgfx::RenderContext2* rctx, tgfx::GraphicsHost* host)
+                : device(dev),
+                  ctx(rctx),
+                  graphics_host(host) {}
+        };
+
+        // No default constructor exposed. Tgfx2Context is never created
+        // implicitly — the only ways in are the two factories below. See
+        // struct Tgfx2ContextHolder above for the rationale.
+        nb::class_<Tgfx2ContextHolder>(m, "Tgfx2Context")
+
+            // Factory used by application composition roots. It borrows the
+            // canonical GraphicsHost instead of reconstructing a window-shaped
+            // device/context abstraction in every host.
+            .def_static(
+                "from_runtime",
+                [](tgfx::GraphicsHost& runtime) -> Tgfx2ContextHolder* {
+                    auto* dev = &runtime.device();
+                    auto* rctx = &runtime.context();
+                    // The application host must install its device before it
+                    // exposes observing wrappers. This factory never mutates the
+                    // process-wide graphics domain.
+                    if (tgfx2_interop_get_device() != dev) {
+                        throw std::runtime_error("Tgfx2Context.from_runtime: runtime device is not the installed "
+                                                 "application graphics device");
+                    }
+                    return new Tgfx2ContextHolder(dev, rctx, &runtime);
+                },
+                nb::arg("runtime"),
+                nb::rv_policy::take_ownership,
+                nb::keep_alive<0, 1>(),
+                "Build a Tgfx2Context over an existing device+RenderContext2 "
+                "owned by the canonical application GraphicsHost.")
+
+            // Factory for in-scene helpers (UIComponent, etc.) that
+            // only see a live RenderContext2 at draw time — the framegraph's
+            // `ExecuteContext.ctx2`. The device is inferred from the ctx;
+            // Interop setup is never performed by observing wrappers; the
+            // application host owns the one explicit device claim.
+            .def_static(
+                "from_context",
+                [](tgfx::RenderContext2& ctx) -> Tgfx2ContextHolder* {
+                    auto* dev = &ctx.device();
+                    if (tgfx2_interop_get_device() != dev) {
+                        throw std::runtime_error("Tgfx2Context.from_context: context device is not the "
+                                                 "installed application graphics device");
+                    }
+                    return new Tgfx2ContextHolder(dev, &ctx, ctx.graphics_host());
+                },
+                nb::arg("ctx"),
+                nb::rv_policy::take_ownership,
+                "Build a Tgfx2Context that wraps an existing RenderContext2 "
+                "and its device.")
+
+            // The underlying RenderContext2. Lifetime is the host's.
+            .def_prop_ro(
+                "context",
+                [](Tgfx2ContextHolder& self) -> tgfx::RenderContext2& { return *self.ctx; },
+                nb::rv_policy::reference_internal)
+
+            // The underlying IRenderDevice. Same lifetime story as `context`.
+            // Exposed so Python code that wants to call backend-neutral
+            // device methods (create_shader, create_buffer, ...) can reach
+            // them without digging through BackendWindow.
+            .def_prop_ro(
+                "device",
+                [](Tgfx2ContextHolder& self) -> tgfx::IRenderDevice& { return *self.device; },
+                nb::rv_policy::reference_internal)
+
+            .def_prop_ro(
+                "graphics_host",
+                [](Tgfx2ContextHolder& self) -> tgfx::GraphicsHost& {
+                    if (!self.graphics_host) {
+                        throw std::runtime_error("Tgfx2Context has no owning GraphicsHost");
+                    }
+                    return *self.graphics_host;
+                },
+                nb::rv_policy::reference_internal,
+                "The canonical GraphicsHost owning this context.")
+
+            // Backend-neutral texture coordinate contract. Prefer this over
+            // branching on the concrete backend name when deciding whether a
+            // sampled texture needs Y flipping in UI/compositor code.
+            .def_prop_ro(
+                "texture_origin_top_left",
+                [](Tgfx2ContextHolder& self) -> bool { return self.device->capabilities().texture_origin_top_left; })
+
+            // Diagnostic backend identifier as a lowercase string:
+            // "opengl", "vulkan", "metal", "d3d11", "webgpu", "null". Rendering code
+            // should prefer capability properties above.
+            .def_prop_ro("backend",
+                         [](Tgfx2ContextHolder& self) -> std::string {
+                             switch (self.device->backend_type()) {
+                             case tgfx::BackendType::OpenGL:
+                                 return "opengl";
+                             case tgfx::BackendType::Vulkan:
+                                 return "vulkan";
+                             case tgfx::BackendType::Metal:
+                                 return "metal";
+                             case tgfx::BackendType::D3D11:
+                                 return "d3d11";
+                             case tgfx::BackendType::WebGPU:
+                                 return "webgpu";
+                             case tgfx::BackendType::Null:
+                                 return "null";
+                             }
+                             return "unknown";
+                         })
+
+            // --- Texture helpers (narrow API; the full IRenderDevice is
+            // not exposed to Python) ---
+
+            // Create an R8 texture (typical use: font atlas). `data` is
+            // width*height uint8 bytes; pass None-like empty array to skip
+            // upload. Returned handle is Sampled | CopyDst.
+            .def(
+                "create_texture_r8",
+                [](Tgfx2ContextHolder& self,
+                   uint32_t w,
+                   uint32_t h,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = tgfx::PixelFormat::R8_UNorm;
+                    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+                    auto handle = self.device->create_texture(desc);
+                    if (data.size() > 0) {
+                        self.device->upload_texture(handle, std::span<const uint8_t>(data.data(), data.size()));
+                    }
+                    return handle;
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("data"))
+
+            // Create an RGBA8 texture (typical use: UI images). Layout is
+            // tightly packed 4-bytes-per-pixel row-major.
+            .def(
+                "create_texture_rgba8",
+                [](Tgfx2ContextHolder& self,
+                   uint32_t w,
+                   uint32_t h,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+                    auto handle = self.device->create_texture(desc);
+                    if (data.size() > 0) {
+                        self.device->upload_texture(handle, std::span<const uint8_t>(data.data(), data.size()));
+                    }
+                    return handle;
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("data"))
+
+            // Full-texture re-upload.
+            .def(
+                "upload_texture",
+                [](Tgfx2ContextHolder& self,
+                   tgfx::TextureHandle handle,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                    self.device->upload_texture(handle, std::span<const uint8_t>(data.data(), data.size()));
+                },
+                nb::arg("handle"),
+                nb::arg("data"))
+
+            // Upload a rectangular sub-region of a texture. ``data`` is a
+            // tightly packed ``w * h * bytes_per_pixel`` buffer. Used by
+            // incremental update paths (e.g. Canvas overlay stroke).
+            .def(
+                "upload_texture_region",
+                [](Tgfx2ContextHolder& self,
+                   tgfx::TextureHandle handle,
+                   uint32_t x,
+                   uint32_t y,
+                   uint32_t w,
+                   uint32_t h,
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
+                    self.device->upload_texture_region(
+                        handle, x, y, w, h, std::span<const uint8_t>(data.data(), data.size()));
+                },
+                nb::arg("handle"),
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("w"),
+                nb::arg("h"),
+                nb::arg("data"))
+
+            // Destroy a texture owned by this device.
+            .def(
+                "destroy_texture",
+                [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) { self.device->destroy(handle); },
+                nb::arg("handle"))
+
+            // Create an offscreen color attachment. Usage is
+            // Sampled|ColorAttachment|CopySrc|CopyDst — safe for passes that
+            // read the texture back and for blits in both directions (CopySrc
+            // is mandatory on Vulkan for `BackendWindow::present` to blit
+            // this texture onto the swapchain image).
+            .def(
+                "create_color_attachment",
+                [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h, tgfx::PixelFormat fmt, uint32_t samples)
+                    -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = fmt;
+                    desc.sample_count = samples == 0 ? 1 : samples;
+                    desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment |
+                                 tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
+                    return self.device->create_texture(desc);
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
+                nb::arg("samples") = 1)
+
+            // Create an offscreen depth attachment. Usage is
+            // DepthStencilAttachment|Sampled|CopySrc|CopyDst so passes can write
+            // depth, sample it, and debug/copy it through the framegraph tools.
+            .def(
+                "create_depth_attachment",
+                [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h, tgfx::PixelFormat fmt, uint32_t samples)
+                    -> tgfx::TextureHandle {
+                    tgfx::TextureDesc desc;
+                    desc.width = w;
+                    desc.height = h;
+                    desc.format = fmt;
+                    desc.sample_count = samples == 0 ? 1 : samples;
+                    desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::Sampled |
+                                 tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
+                    return self.device->create_texture(desc);
+                },
+                nb::arg("width"),
+                nb::arg("height"),
+                nb::arg("format") = tgfx::PixelFormat::D24_UNorm,
+                nb::arg("samples") = 1);
+
+        // --- Helpers: bridge Termin C resources to tgfx2 handles ---
+        // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
+        // Uses the same tc_shader_ensure_tgfx2 bridge that C++ passes use,
+        // so the result is cached on the render device and shared across
+        // Python/C++ callers. Returns (vs, fs) as a Tgfx2ShaderPair;
+        // both handles are zero on compile failure.
+        m.def(
+            "tc_shader_ensure_tgfx2",
+            [](tgfx::RenderContext2& ctx, termin::TcShader shader) -> ShaderPair {
+                ShaderPair out;
+                tc_shader* raw = tc_shader_get(shader.handle);
+                if (!raw)
+                    return out;
+                termin::tc_shader_ensure_tgfx2(raw, &ctx.device(), &out.vs, &out.fs);
+                return out;
             },
             nb::arg("ctx"),
-            nb::rv_policy::take_ownership,
-            "Build a Tgfx2Context that wraps an existing RenderContext2 "
-            "and its device.")
+            nb::arg("shader"));
 
-        // The underlying RenderContext2. Lifetime is the host's.
-        .def_prop_ro("context",
-            [](Tgfx2ContextHolder& self) -> tgfx::RenderContext2& {
-                return *self.ctx;
+        // CullMode values exposed as module ints.
+        m.attr("CULL_NONE") = static_cast<int>(tgfx::CullMode::None);
+        m.attr("CULL_BACK") = static_cast<int>(tgfx::CullMode::Back);
+        m.attr("CULL_FRONT") = static_cast<int>(tgfx::CullMode::Front);
+
+        m.attr("PIXEL_R8") = static_cast<int>(tgfx::PixelFormat::R8_UNorm);
+        m.attr("PIXEL_RGBA8") = static_cast<int>(tgfx::PixelFormat::RGBA8_UNorm);
+        m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx::PixelFormat::RGBA16F);
+        m.attr("PIXEL_D32F") = static_cast<int>(tgfx::PixelFormat::D32F);
+
+        // --- Mesh draw helper ---
+        //
+        // Backend-neutral TcMesh draw helper. Uses tgfx2's standard tc_mesh bridge:
+        // OpenGL wraps share-group VBO/EBO, Vulkan goes through
+        // IRenderDevice::ensure_tc_mesh. The currently bound shader/resources/state
+        // are used.
+        m.def(
+            "draw_tc_mesh",
+            [](tgfx::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
+                tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
+                if (!mesh)
+                    return false;
+                return tgfx::draw_tc_mesh(ctx, mesh);
             },
-            nb::rv_policy::reference_internal)
+            nb::arg("ctx"),
+            nb::arg("mesh"));
 
-        // The underlying IRenderDevice. Same lifetime story as `context`.
-        // Exposed so Python code that wants to call backend-neutral
-        // device methods (create_shader, create_buffer, ...) can reach
-        // them without digging through BackendWindow.
-        .def_prop_ro("device",
-            [](Tgfx2ContextHolder& self) -> tgfx::IRenderDevice& {
-                return *self.device;
-            },
-            nb::rv_policy::reference_internal)
+        // --- FontAtlas ---
+        //
+        // Public C++ FontAtlas (tgfx2/font_atlas.hpp) exposed under the
+        // historical Python name "FontTextureAtlas". The class replaces
+        // the hand-written tgfx/font.py atlas; Python callers that
+        // previously held a FontTextureAtlas instance see the same
+        // interface shape (ensure_glyphs / ensure_texture / measure_text)
+        // — with RenderContext2 references in place of the prior
+        // Tgfx2Context holder.
+        nb::class_<tgfx::FontAtlas::Size2f>(m, "FontMeasure")
+            .def_ro("width", &tgfx::FontAtlas::Size2f::width)
+            .def_ro("height", &tgfx::FontAtlas::Size2f::height);
 
-        .def_prop_ro("graphics_host",
-            [](Tgfx2ContextHolder& self) -> tgfx::GraphicsHost& {
-                if (!self.graphics_host) {
-                    throw std::runtime_error(
-                        "Tgfx2Context has no owning GraphicsHost");
-                }
-                return *self.graphics_host;
-            },
-            nb::rv_policy::reference_internal,
-            "The canonical GraphicsHost owning this context.")
+        nb::class_<tgfx::FontAtlas>(m, "FontTextureAtlas")
+            .def(nb::init<const std::string&, int, int, int>(),
+                 nb::arg("path"),
+                 nb::arg("size") = 14,
+                 nb::arg("atlas_width") = 2048,
+                 nb::arg("atlas_height") = 2048)
 
-        // Backend-neutral texture coordinate contract. Prefer this over
-        // branching on the concrete backend name when deciding whether a
-        // sampled texture needs Y flipping in UI/compositor code.
-        .def_prop_ro("texture_origin_top_left",
-            [](Tgfx2ContextHolder& self) -> bool {
-                return self.device->capabilities().texture_origin_top_left;
-            })
+            // Rasterise every glyph in `text` (UTF-8) at `size` display px.
+            // If `ctx` is given and any new glyph was added, triggers a GPU
+            // re-upload so the next draw sees the fresh atlas. The atlas
+            // quantises `size` to integer pixels internally and caches per
+            // (codepoint, px_size) pair.
+            .def(
+                "ensure_glyphs",
+                [](tgfx::FontAtlas& self, const std::string& text, float size, tgfx::RenderContext2* ctx) {
+                    self.ensure_glyphs(text, size, ctx);
+                },
+                nb::arg("text"),
+                nb::arg("size"),
+                nb::arg("ctx").none() = nb::none())
 
-        // Diagnostic backend identifier as a lowercase string:
-        // "opengl", "vulkan", "metal", "d3d11", "webgpu", "null". Rendering code
-        // should prefer capability properties above.
-        .def_prop_ro("backend",
-            [](Tgfx2ContextHolder& self) -> std::string {
-                switch (self.device->backend_type()) {
-                    case tgfx::BackendType::OpenGL: return "opengl";
-                    case tgfx::BackendType::Vulkan: return "vulkan";
-                    case tgfx::BackendType::Metal:  return "metal";
-                    case tgfx::BackendType::D3D11:  return "d3d11";
-                    case tgfx::BackendType::WebGPU: return "webgpu";
-                    case tgfx::BackendType::Null:   return "null";
-                }
-                return "unknown";
-            })
+            // Measure pixel (width, height) of `text` at display `size`.
+            // Returns a tuple for Python ergonomics — callers typically
+            // unpack as `w, h = font.measure_text(...)`.
+            .def(
+                "measure_text",
+                [](const tgfx::FontAtlas& self, const std::string& text, float size) {
+                    auto m = self.measure_text(text, size);
+                    return nb::make_tuple(m.width, m.height);
+                },
+                nb::arg("text"),
+                nb::arg("size") = 14.0f)
 
-        // --- Texture helpers (narrow API; the full IRenderDevice is
-        // not exposed to Python) ---
+            // Create or refresh the GPU atlas texture. Returns the cached
+            // Tgfx2TextureHandle (same handle across calls with the same
+            // ctx; dropped + recreated on ctx change).
+            .def(
+                "ensure_texture",
+                [](tgfx::FontAtlas& self, tgfx::RenderContext2* ctx) -> tgfx::TextureHandle {
+                    return self.ensure_texture(ctx);
+                },
+                nb::arg("ctx"))
 
-        // Create an R8 texture (typical use: font atlas). `data` is
-        // width*height uint8 bytes; pass None-like empty array to skip
-        // upload. Returned handle is Sampled | CopyDst.
-        .def("create_texture_r8",
-            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
-            -> tgfx::TextureHandle {
-                tgfx::TextureDesc desc;
-                desc.width = w;
-                desc.height = h;
-                desc.format = tgfx::PixelFormat::R8_UNorm;
-                desc.usage = tgfx::TextureUsage::Sampled |
-                             tgfx::TextureUsage::CopyDst;
-                auto handle = self.device->create_texture(desc);
-                if (data.size() > 0) {
-                    self.device->upload_texture(handle,
-                        std::span<const uint8_t>(data.data(), data.size()));
-                }
-                return handle;
-            },
-            nb::arg("width"), nb::arg("height"), nb::arg("data"))
+            // Look up one glyph's atlas entry at `size` display px. Returns
+            // a 6-tuple (u0, v0, u1, v1, width_px, height_px) in display
+            // pixels at the requested size, or None if the glyph has not
+            // been rasterised at that size.
+            .def(
+                "get_glyph",
+                [](const tgfx::FontAtlas& self, uint32_t codepoint, float size) -> nb::object {
+                    auto g = self.get_glyph(codepoint, size);
+                    if (!g)
+                        return nb::none();
+                    return nb::make_tuple(g->u0, g->v0, g->u1, g->v1, g->width_px, g->height_px);
+                },
+                nb::arg("codepoint"),
+                nb::arg("size"))
 
-        // Create an RGBA8 texture (typical use: UI images). Layout is
-        // tightly packed 4-bytes-per-pixel row-major.
-        .def("create_texture_rgba8",
-            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data)
-            -> tgfx::TextureHandle {
-                tgfx::TextureDesc desc;
-                desc.width = w;
-                desc.height = h;
-                desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-                desc.usage = tgfx::TextureUsage::Sampled |
-                             tgfx::TextureUsage::CopyDst;
-                auto handle = self.device->create_texture(desc);
-                if (data.size() > 0) {
-                    self.device->upload_texture(handle,
-                        std::span<const uint8_t>(data.data(), data.size()));
-                }
-                return handle;
-            },
-            nb::arg("width"), nb::arg("height"), nb::arg("data"))
+            // Drop the GPU texture. Safe when the underlying device has
+            // already been torn down — no GL calls are issued.
+            .def("release_gpu", &tgfx::FontAtlas::release_gpu)
 
-        // Full-texture re-upload.
-        .def("upload_texture",
-            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
-               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                self.device->upload_texture(handle,
-                    std::span<const uint8_t>(data.data(), data.size()));
-            },
-            nb::arg("handle"), nb::arg("data"))
+            // --- Size-aware metrics ---
+            // Each returns the value in display pixels at the requested
+            // size. First call at a new size populates an internal cache.
+            .def(
+                "ascent_at",
+                [](const tgfx::FontAtlas& self, float size) { return self.ascent_px(size); },
+                nb::arg("size"))
+            .def(
+                "descent_at",
+                [](const tgfx::FontAtlas& self, float size) { return self.descent_px(size); },
+                nb::arg("size"))
+            .def(
+                "line_height_at",
+                [](const tgfx::FontAtlas& self, float size) { return self.line_height_px(size); },
+                nb::arg("size"))
 
-        // Upload a rectangular sub-region of a texture. ``data`` is a
-        // tightly packed ``w * h * bytes_per_pixel`` buffer. Used by
-        // incremental update paths (e.g. Canvas overlay stroke).
-        .def("upload_texture_region",
-            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle,
-               uint32_t x, uint32_t y, uint32_t w, uint32_t h,
-               nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) {
-                self.device->upload_texture_region(
-                    handle, x, y, w, h,
-                    std::span<const uint8_t>(data.data(), data.size()));
-            },
-            nb::arg("handle"),
-            nb::arg("x"), nb::arg("y"),
-            nb::arg("w"), nb::arg("h"),
-            nb::arg("data"))
+            // --- Preload-size introspection ---
+            // `size` property kept for callers that want the warm-up size
+            // (used to preload the glyph set in the ctor). This is NOT a
+            // "rasterisation resolution" any more — every draw gets its
+            // own per-size bake.
+            .def_prop_ro("size", &tgfx::FontAtlas::default_preload_size)
+            .def_prop_ro("atlas_width", &tgfx::FontAtlas::atlas_width)
+            .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height)
 
-        // Destroy a texture owned by this device.
-        .def("destroy_texture",
-            [](Tgfx2ContextHolder& self, tgfx::TextureHandle handle) {
-                self.device->destroy(handle);
-            },
-            nb::arg("handle"))
+            // --- SDF configuration ---
+            .def_prop_rw("sdf_enabled",
+                         &tgfx::FontAtlas::sdf_enabled,
+                         &tgfx::FontAtlas::set_sdf_enabled,
+                         "Enable SDF rendering for sizes >= sdf_threshold.")
+            .def_prop_rw("sdf_threshold",
+                         &tgfx::FontAtlas::sdf_threshold_px,
+                         &tgfx::FontAtlas::set_sdf_threshold_px,
+                         "Display size threshold (px) above which SDF is used.")
+            .def_prop_ro("sdf_reference_size",
+                         &tgfx::FontAtlas::sdf_reference_px,
+                         "Reference size (px) at which SDF glyphs are baked.")
+            .def_prop_ro("sdf_spread", &tgfx::FontAtlas::sdf_spread, "Distance field spread in reference texels.");
 
-        // Create an offscreen color attachment. Usage is
-        // Sampled|ColorAttachment|CopySrc|CopyDst — safe for passes that
-        // read the texture back and for blits in both directions (CopySrc
-        // is mandatory on Vulkan for `BackendWindow::present` to blit
-        // this texture onto the swapchain image).
-        .def("create_color_attachment",
-            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
-                tgfx::TextureDesc desc;
-                desc.width = w;
-                desc.height = h;
-                desc.format = fmt;
-                desc.sample_count = samples == 0 ? 1 : samples;
-                desc.usage = tgfx::TextureUsage::Sampled |
-                             tgfx::TextureUsage::ColorAttachment |
-                             tgfx::TextureUsage::CopySrc |
-                             tgfx::TextureUsage::CopyDst;
-                return self.device->create_texture(desc);
-            },
-            nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
-            nb::arg("samples") = 1)
+        // --- Text2DRenderer / Text3DRenderer ---
+        //
+        // Pixel-space and billboard text renderers backed by the C++
+        // FontAtlas. API shape mirrors the prior Python Text2D / Text3D
+        // classes so existing callers (UIRenderer, Text3DRenderer-using
+        // tcplot code) need only replace `from tgfx.text2d import …` with
+        // a re-export — the method signatures are intentionally identical
+        // modulo `color` becoming a 4-tuple on the Python side.
 
-        // Create an offscreen depth attachment. Usage is
-        // DepthStencilAttachment|Sampled|CopySrc|CopyDst so passes can write
-        // depth, sample it, and debug/copy it through the framegraph tools.
-        .def("create_depth_attachment",
-            [](Tgfx2ContextHolder& self, uint32_t w, uint32_t h,
-               tgfx::PixelFormat fmt, uint32_t samples) -> tgfx::TextureHandle {
-                tgfx::TextureDesc desc;
-                desc.width = w;
-                desc.height = h;
-                desc.format = fmt;
-                desc.sample_count = samples == 0 ? 1 : samples;
-                desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                             tgfx::TextureUsage::Sampled |
-                             tgfx::TextureUsage::CopySrc |
-                             tgfx::TextureUsage::CopyDst;
-                return self.device->create_texture(desc);
-            },
-            nb::arg("width"), nb::arg("height"),
-            nb::arg("format") = tgfx::PixelFormat::D24_UNorm,
-            nb::arg("samples") = 1);
+        nb::enum_<tgfx::Text2DRenderer::Anchor>(m, "Text2DAnchor")
+            .value("Left", tgfx::Text2DRenderer::Anchor::Left)
+            .value("Center", tgfx::Text2DRenderer::Anchor::Center)
+            .value("Right", tgfx::Text2DRenderer::Anchor::Right)
+            .export_values();
+        nb::enum_<tgfx::Text3DRenderer::Anchor>(m, "Text3DAnchor")
+            .value("Left", tgfx::Text3DRenderer::Anchor::Left)
+            .value("Center", tgfx::Text3DRenderer::Anchor::Center)
+            .value("Right", tgfx::Text3DRenderer::Anchor::Right)
+            .export_values();
 
-    // --- Helpers: bridge Termin C resources to tgfx2 handles ---
-    // Compile a TcShader's GLSL sources into a tgfx2 VS/FS pair.
-    // Uses the same tc_shader_ensure_tgfx2 bridge that C++ passes use,
-    // so the result is cached on the render device and shared across
-    // Python/C++ callers. Returns (vs, fs) as a Tgfx2ShaderPair;
-    // both handles are zero on compile failure.
-    m.def("tc_shader_ensure_tgfx2",
-          [](tgfx::RenderContext2& ctx, termin::TcShader shader) -> ShaderPair {
-              ShaderPair out;
-              tc_shader* raw = tc_shader_get(shader.handle);
-              if (!raw) return out;
-              termin::tc_shader_ensure_tgfx2(raw, &ctx.device(), &out.vs, &out.fs);
-              return out;
-          },
-          nb::arg("ctx"), nb::arg("shader"));
-
-    // CullMode values exposed as module ints.
-    m.attr("CULL_NONE")  = static_cast<int>(tgfx::CullMode::None);
-    m.attr("CULL_BACK")  = static_cast<int>(tgfx::CullMode::Back);
-    m.attr("CULL_FRONT") = static_cast<int>(tgfx::CullMode::Front);
-
-    m.attr("PIXEL_R8")      = static_cast<int>(tgfx::PixelFormat::R8_UNorm);
-    m.attr("PIXEL_RGBA8")   = static_cast<int>(tgfx::PixelFormat::RGBA8_UNorm);
-    m.attr("PIXEL_RGBA16F") = static_cast<int>(tgfx::PixelFormat::RGBA16F);
-    m.attr("PIXEL_D32F")    = static_cast<int>(tgfx::PixelFormat::D32F);
-
-    // --- Mesh draw helper ---
-    //
-    // Backend-neutral TcMesh draw helper. Uses tgfx2's standard tc_mesh bridge:
-    // OpenGL wraps share-group VBO/EBO, Vulkan goes through
-    // IRenderDevice::ensure_tc_mesh. The currently bound shader/resources/state
-    // are used.
-    m.def("draw_tc_mesh",
-        [](tgfx::RenderContext2& ctx, termin::TcMesh& mesh_wrapper) {
-            tc_mesh* mesh = tc_mesh_get(mesh_wrapper.handle);
-            if (!mesh) return false;
-            return tgfx::draw_tc_mesh(ctx, mesh);
-        },
-        nb::arg("ctx"), nb::arg("mesh"));
-
-    // --- FontAtlas ---
-    //
-    // Public C++ FontAtlas (tgfx2/font_atlas.hpp) exposed under the
-    // historical Python name "FontTextureAtlas". The class replaces
-    // the hand-written tgfx/font.py atlas; Python callers that
-    // previously held a FontTextureAtlas instance see the same
-    // interface shape (ensure_glyphs / ensure_texture / measure_text)
-    // — with RenderContext2 references in place of the prior
-    // Tgfx2Context holder.
-    nb::class_<tgfx::FontAtlas::Size2f>(m, "FontMeasure")
-        .def_ro("width", &tgfx::FontAtlas::Size2f::width)
-        .def_ro("height", &tgfx::FontAtlas::Size2f::height);
-
-    nb::class_<tgfx::FontAtlas>(m, "FontTextureAtlas")
-        .def(nb::init<const std::string&, int, int, int>(),
-             nb::arg("path"),
-             nb::arg("size") = 14,
-             nb::arg("atlas_width") = 2048,
-             nb::arg("atlas_height") = 2048)
-
-        // Rasterise every glyph in `text` (UTF-8) at `size` display px.
-        // If `ctx` is given and any new glyph was added, triggers a GPU
-        // re-upload so the next draw sees the fresh atlas. The atlas
-        // quantises `size` to integer pixels internally and caches per
-        // (codepoint, px_size) pair.
-        .def("ensure_glyphs",
-             [](tgfx::FontAtlas& self,
-                const std::string& text,
-                float size,
-                tgfx::RenderContext2* ctx) {
-                 self.ensure_glyphs(text, size, ctx);
-             },
-             nb::arg("text"),
-             nb::arg("size"),
-             nb::arg("ctx").none() = nb::none())
-
-        // Measure pixel (width, height) of `text` at display `size`.
-        // Returns a tuple for Python ergonomics — callers typically
-        // unpack as `w, h = font.measure_text(...)`.
-        .def("measure_text",
-             [](const tgfx::FontAtlas& self,
-                const std::string& text,
-                float size) {
-                 auto m = self.measure_text(text, size);
-                 return nb::make_tuple(m.width, m.height);
-             },
-             nb::arg("text"), nb::arg("size") = 14.0f)
-
-        // Create or refresh the GPU atlas texture. Returns the cached
-        // Tgfx2TextureHandle (same handle across calls with the same
-        // ctx; dropped + recreated on ctx change).
-        .def("ensure_texture",
-             [](tgfx::FontAtlas& self, tgfx::RenderContext2* ctx)
-             -> tgfx::TextureHandle {
-                 return self.ensure_texture(ctx);
-             },
-             nb::arg("ctx"))
-
-        // Look up one glyph's atlas entry at `size` display px. Returns
-        // a 6-tuple (u0, v0, u1, v1, width_px, height_px) in display
-        // pixels at the requested size, or None if the glyph has not
-        // been rasterised at that size.
-        .def("get_glyph",
-             [](const tgfx::FontAtlas& self,
-                uint32_t codepoint,
-                float size) -> nb::object {
-                 auto g = self.get_glyph(codepoint, size);
-                 if (!g) return nb::none();
-                 return nb::make_tuple(g->u0, g->v0, g->u1, g->v1,
-                                       g->width_px, g->height_px);
-             },
-             nb::arg("codepoint"), nb::arg("size"))
-
-        // Drop the GPU texture. Safe when the underlying device has
-        // already been torn down — no GL calls are issued.
-        .def("release_gpu", &tgfx::FontAtlas::release_gpu)
-
-        // --- Size-aware metrics ---
-        // Each returns the value in display pixels at the requested
-        // size. First call at a new size populates an internal cache.
-        .def("ascent_at",
-             [](const tgfx::FontAtlas& self, float size) {
-                 return self.ascent_px(size);
-             },
-             nb::arg("size"))
-        .def("descent_at",
-             [](const tgfx::FontAtlas& self, float size) {
-                 return self.descent_px(size);
-             },
-             nb::arg("size"))
-        .def("line_height_at",
-             [](const tgfx::FontAtlas& self, float size) {
-                 return self.line_height_px(size);
-             },
-             nb::arg("size"))
-
-        // --- Preload-size introspection ---
-        // `size` property kept for callers that want the warm-up size
-        // (used to preload the glyph set in the ctor). This is NOT a
-        // "rasterisation resolution" any more — every draw gets its
-        // own per-size bake.
-        .def_prop_ro("size", &tgfx::FontAtlas::default_preload_size)
-        .def_prop_ro("atlas_width", &tgfx::FontAtlas::atlas_width)
-        .def_prop_ro("atlas_height", &tgfx::FontAtlas::atlas_height)
-
-        // --- SDF configuration ---
-        .def_prop_rw("sdf_enabled",
-                     &tgfx::FontAtlas::sdf_enabled,
-                     &tgfx::FontAtlas::set_sdf_enabled,
-                     "Enable SDF rendering for sizes >= sdf_threshold.")
-        .def_prop_rw("sdf_threshold",
-                     &tgfx::FontAtlas::sdf_threshold_px,
-                     &tgfx::FontAtlas::set_sdf_threshold_px,
-                     "Display size threshold (px) above which SDF is used.")
-        .def_prop_ro("sdf_reference_size",
-                     &tgfx::FontAtlas::sdf_reference_px,
-                     "Reference size (px) at which SDF glyphs are baked.")
-        .def_prop_ro("sdf_spread",
-                     &tgfx::FontAtlas::sdf_spread,
-                     "Distance field spread in reference texels.");
-
-    // --- Text2DRenderer / Text3DRenderer ---
-    //
-    // Pixel-space and billboard text renderers backed by the C++
-    // FontAtlas. API shape mirrors the prior Python Text2D / Text3D
-    // classes so existing callers (UIRenderer, Text3DRenderer-using
-    // tcplot code) need only replace `from tgfx.text2d import …` with
-    // a re-export — the method signatures are intentionally identical
-    // modulo `color` becoming a 4-tuple on the Python side.
-
-    nb::enum_<tgfx::Text2DRenderer::Anchor>(m, "Text2DAnchor")
-        .value("Left",   tgfx::Text2DRenderer::Anchor::Left)
-        .value("Center", tgfx::Text2DRenderer::Anchor::Center)
-        .value("Right",  tgfx::Text2DRenderer::Anchor::Right)
-        .export_values();
-    nb::enum_<tgfx::Text3DRenderer::Anchor>(m, "Text3DAnchor")
-        .value("Left",   tgfx::Text3DRenderer::Anchor::Left)
-        .value("Center", tgfx::Text3DRenderer::Anchor::Center)
-        .value("Right",  tgfx::Text3DRenderer::Anchor::Right)
-        .export_values();
-
-    // Anchor resolution: accept both the enum values and the legacy
-    // lower-case string form ("left"/"center"/"right") used by the
-    // prior Python implementation — existing callers pass strings.
-    auto resolve_text2d_anchor = [](nb::object obj) -> tgfx::Text2DRenderer::Anchor {
-        if (nb::isinstance<nb::str>(obj)) {
-            std::string s = nb::cast<std::string>(obj);
-            if (s == "center") return tgfx::Text2DRenderer::Anchor::Center;
-            if (s == "right")  return tgfx::Text2DRenderer::Anchor::Right;
-            return tgfx::Text2DRenderer::Anchor::Left;
-        }
-        return nb::cast<tgfx::Text2DRenderer::Anchor>(obj);
-    };
-    auto resolve_text3d_anchor = [](nb::object obj) -> tgfx::Text3DRenderer::Anchor {
-        if (nb::isinstance<nb::str>(obj)) {
-            std::string s = nb::cast<std::string>(obj);
-            if (s == "left")  return tgfx::Text3DRenderer::Anchor::Left;
-            if (s == "right") return tgfx::Text3DRenderer::Anchor::Right;
-            return tgfx::Text3DRenderer::Anchor::Center;
-        }
-        return nb::cast<tgfx::Text3DRenderer::Anchor>(obj);
-    };
-
-    nb::enum_<tgfx::CanvasTextureSampling>(m, "CanvasTextureSampling")
-        .value("Linear", tgfx::CanvasTextureSampling::Linear)
-        .value("Nearest", tgfx::CanvasTextureSampling::Nearest);
-
-    nb::class_<tgfx::Color4f>(m, "Color4f")
-        .def(nb::init<>())
-        .def(nb::init<float, float, float, float>(),
-             nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
-        .def("__init__", [](tgfx::CanvasColor* self, nb::tuple t) {
-            if (t.size() < 3) {
-                throw std::runtime_error("CanvasColor tuple must have at least 3 elements");
+        // Anchor resolution: accept both the enum values and the legacy
+        // lower-case string form ("left"/"center"/"right") used by the
+        // prior Python implementation — existing callers pass strings.
+        auto resolve_text2d_anchor = [](nb::object obj) -> tgfx::Text2DRenderer::Anchor {
+            if (nb::isinstance<nb::str>(obj)) {
+                std::string s = nb::cast<std::string>(obj);
+                if (s == "center")
+                    return tgfx::Text2DRenderer::Anchor::Center;
+                if (s == "right")
+                    return tgfx::Text2DRenderer::Anchor::Right;
+                return tgfx::Text2DRenderer::Anchor::Left;
             }
-            const float a = t.size() >= 4 ? nb::cast<float>(t[3]) : 1.0f;
-            new (self) tgfx::CanvasColor{
-                nb::cast<float>(t[0]),
-                nb::cast<float>(t[1]),
-                nb::cast<float>(t[2]),
-                a,
-            };
-        })
-        .def_rw("r", &tgfx::CanvasColor::r)
-        .def_rw("g", &tgfx::CanvasColor::g)
-        .def_rw("b", &tgfx::CanvasColor::b)
-        .def_rw("a", &tgfx::CanvasColor::a)
-        .def_static("white", &tgfx::CanvasColor::white)
-        .def_static("transparent", &tgfx::CanvasColor::transparent)
-        .def("__iter__", [](const tgfx::CanvasColor& c) {
-            return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a));
-        });
+            return nb::cast<tgfx::Text2DRenderer::Anchor>(obj);
+        };
+        auto resolve_text3d_anchor = [](nb::object obj) -> tgfx::Text3DRenderer::Anchor {
+            if (nb::isinstance<nb::str>(obj)) {
+                std::string s = nb::cast<std::string>(obj);
+                if (s == "left")
+                    return tgfx::Text3DRenderer::Anchor::Left;
+                if (s == "right")
+                    return tgfx::Text3DRenderer::Anchor::Right;
+                return tgfx::Text3DRenderer::Anchor::Center;
+            }
+            return nb::cast<tgfx::Text3DRenderer::Anchor>(obj);
+        };
 
-    m.attr("CanvasColor") = m.attr("Color4f");
-    m.attr("CanvasVec2") =
-        nb::module_::import_("tcbase._geom_native").attr("Vec2f");
+        nb::enum_<tgfx::CanvasTextureSampling>(m, "CanvasTextureSampling")
+            .value("Linear", tgfx::CanvasTextureSampling::Linear)
+            .value("Nearest", tgfx::CanvasTextureSampling::Nearest);
 
-    nb::implicitly_convertible<nb::tuple, tgfx::CanvasColor>();
+        nb::class_<tgfx::Color4f>(m, "Color4f")
+            .def(nb::init<>())
+            .def(nb::init<float, float, float, float>(), nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
+            .def("__init__",
+                 [](tgfx::CanvasColor* self, nb::tuple t) {
+                     if (t.size() < 3) {
+                         throw std::runtime_error("CanvasColor tuple must have at least 3 elements");
+                     }
+                     const float a = t.size() >= 4 ? nb::cast<float>(t[3]) : 1.0f;
+                     new (self) tgfx::CanvasColor{
+                         nb::cast<float>(t[0]),
+                         nb::cast<float>(t[1]),
+                         nb::cast<float>(t[2]),
+                         a,
+                     };
+                 })
+            .def_rw("r", &tgfx::CanvasColor::r)
+            .def_rw("g", &tgfx::CanvasColor::g)
+            .def_rw("b", &tgfx::CanvasColor::b)
+            .def_rw("a", &tgfx::CanvasColor::a)
+            .def_static("white", &tgfx::CanvasColor::white)
+            .def_static("transparent", &tgfx::CanvasColor::transparent)
+            .def("__iter__", [](const tgfx::CanvasColor& c) { return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a)); });
 
-    nb::class_<tgfx::Canvas2DRenderer>(m, "Canvas2DRenderer")
-        .def(nb::init<tgfx::FontAtlas*>(),
-             nb::arg("font").none() = nb::none(),
-             nb::keep_alive<1, 2>())
-        .def("begin",
-             [](tgfx::Canvas2DRenderer& self,
-                tgfx::RenderContext2& ctx,
-                int width, int height) {
-                 self.begin(ctx, width, height);
-             },
-             nb::arg("ctx"), nb::arg("width"), nb::arg("height"))
-        .def("begin",
-             [](tgfx::Canvas2DRenderer& self,
-                tgfx::RenderContext2& ctx,
-                int x, int y, int width, int height) {
-                 self.begin(ctx, x, y, width, height);
-             },
-             nb::arg("ctx"), nb::arg("x"), nb::arg("y"),
-             nb::arg("width"), nb::arg("height"))
-        .def("end", &tgfx::Canvas2DRenderer::end)
-        .def("begin_clip", &tgfx::Canvas2DRenderer::begin_clip,
-             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"))
-        .def("end_clip", &tgfx::Canvas2DRenderer::end_clip)
-        .def("draw_rect", &tgfx::Canvas2DRenderer::draw_rect,
-             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
-             nb::arg("color"), nb::arg("radius") = 0.0f)
-        .def("draw_rect_outline", &tgfx::Canvas2DRenderer::draw_rect_outline,
-             nb::arg("x"), nb::arg("y"), nb::arg("w"), nb::arg("h"),
-             nb::arg("color"), nb::arg("thickness") = 1.0f)
-        .def("draw_line", &tgfx::Canvas2DRenderer::draw_line,
-             nb::arg("x0"), nb::arg("y0"), nb::arg("x1"), nb::arg("y1"),
-             nb::arg("color"), nb::arg("thickness") = 1.0f)
-        .def("draw_polyline",
-             [](tgfx::Canvas2DRenderer& self,
-                const std::vector<tgfx::CanvasVec2>& points,
-                tgfx::CanvasColor color,
-                float thickness) {
-                 self.draw_polyline(std::span<const tgfx::CanvasVec2>(
-                                        points.data(), points.size()),
-                                    color, thickness);
-             },
-             nb::arg("points"), nb::arg("color"), nb::arg("thickness") = 1.0f)
-        .def("draw_texture", [](tgfx::Canvas2DRenderer& self,
-                                 tgfx::TextureHandle texture,
-                                 float x, float y, float w, float h,
-                                 std::optional<tgfx::CanvasColor> tint,
-                                 bool flip_v,
-                                 tgfx::CanvasTextureSampling sampling) {
-            self.draw_texture(texture, x, y, w, h,
-                              tint.value_or(tgfx::CanvasColor::white()), flip_v,
-                              sampling);
-        }, nb::arg("texture"), nb::arg("x"), nb::arg("y"), nb::arg("w"),
-           nb::arg("h"), nb::arg("tint").none() = nb::none(),
-           nb::arg("flip_v") = false,
-           nb::arg("sampling") = tgfx::CanvasTextureSampling::Linear)
-        .def("draw_text",
-             [resolve_text2d_anchor](tgfx::Canvas2DRenderer& self,
-                const std::string& text,
-                float x, float y,
-                float size_px,
-                std::optional<tgfx::CanvasColor> color,
-                tgfx::FontAtlas* font,
-                nb::object anchor) {
-                 self.draw_text(text, x, y, size_px,
-                                color.value_or(tgfx::CanvasColor::white()), font,
-                                resolve_text2d_anchor(anchor));
-             },
-             nb::arg("text"),
-             nb::arg("x"), nb::arg("y"),
-             nb::arg("size_px"),
-             nb::arg("color").none() = nb::none(),
-             nb::arg("font").none() = nb::none(),
-             nb::arg("anchor") = "left",
-             nb::keep_alive<1, 7>())
-        .def("measure_text",
-             [](tgfx::Canvas2DRenderer& self,
-                const std::string& text,
-                float size_px,
-                tgfx::FontAtlas* font) {
-                 auto m = self.measure_text(text, size_px, font);
-                 return std::make_tuple(m.width, m.height);
-             },
-             nb::arg("text"),
-             nb::arg("size_px") = 14.0f,
-             nb::arg("font").none() = nb::none())
-        .def("set_default_font", &tgfx::Canvas2DRenderer::set_default_font,
-             nb::arg("font").none() = nb::none(),
-             nb::keep_alive<1, 2>())
-        .def_prop_ro("default_font", &tgfx::Canvas2DRenderer::default_font,
-                     nb::rv_policy::reference_internal)
-        .def("release_gpu", &tgfx::Canvas2DRenderer::release_gpu);
+        m.attr("CanvasColor") = m.attr("Color4f");
+        m.attr("CanvasVec2") = nb::module_::import_("tcbase._geom_native").attr("Vec2f");
 
-    nb::class_<tgfx::Text2DRenderer>(m, "Text2DRenderer")
-        .def(nb::init<tgfx::FontAtlas*>(),
-             nb::arg("font") = nullptr,
-             nb::keep_alive<1, 2>())  // keep font alive while renderer lives
+        nb::implicitly_convertible<nb::tuple, tgfx::CanvasColor>();
 
-        // begin: (ctx, viewport_w, viewport_h, font=None).
-        .def("begin",
-             [](tgfx::Text2DRenderer& self,
-                tgfx::RenderContext2* ctx,
-                int viewport_w, int viewport_h,
-                tgfx::FontAtlas* font) {
-                 self.begin(ctx, viewport_w, viewport_h, font);
-             },
-             nb::arg("ctx"),
-             nb::arg("viewport_w"),
-             nb::arg("viewport_h"),
-             nb::arg("font").none() = nb::none(),
-             nb::keep_alive<1, 5>())
+        nb::class_<tgfx::Canvas2DRenderer>(m, "Canvas2DRenderer")
+            .def(nb::init<tgfx::FontAtlas*>(), nb::arg("font").none() = nb::none(), nb::keep_alive<1, 2>())
+            .def(
+                "begin",
+                [](tgfx::Canvas2DRenderer& self, tgfx::RenderContext2& ctx, int width, int height) {
+                    self.begin(ctx, width, height);
+                },
+                nb::arg("ctx"),
+                nb::arg("width"),
+                nb::arg("height"))
+            .def(
+                "begin",
+                [](tgfx::Canvas2DRenderer& self, tgfx::RenderContext2& ctx, int x, int y, int width, int height) {
+                    self.begin(ctx, x, y, width, height);
+                },
+                nb::arg("ctx"),
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("width"),
+                nb::arg("height"))
+            .def("end", &tgfx::Canvas2DRenderer::end)
+            .def("begin_clip",
+                 &tgfx::Canvas2DRenderer::begin_clip,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("w"),
+                 nb::arg("h"))
+            .def("end_clip", &tgfx::Canvas2DRenderer::end_clip)
+            .def("draw_rect",
+                 &tgfx::Canvas2DRenderer::draw_rect,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("w"),
+                 nb::arg("h"),
+                 nb::arg("color"),
+                 nb::arg("radius") = 0.0f)
+            .def("draw_rect_outline",
+                 &tgfx::Canvas2DRenderer::draw_rect_outline,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("w"),
+                 nb::arg("h"),
+                 nb::arg("color"),
+                 nb::arg("thickness") = 1.0f)
+            .def("draw_line",
+                 &tgfx::Canvas2DRenderer::draw_line,
+                 nb::arg("x0"),
+                 nb::arg("y0"),
+                 nb::arg("x1"),
+                 nb::arg("y1"),
+                 nb::arg("color"),
+                 nb::arg("thickness") = 1.0f)
+            .def(
+                "draw_polyline",
+                [](tgfx::Canvas2DRenderer& self,
+                   const std::vector<tgfx::CanvasVec2>& points,
+                   tgfx::CanvasColor color,
+                   float thickness) {
+                    self.draw_polyline(
+                        std::span<const tgfx::CanvasVec2>(points.data(), points.size()), color, thickness);
+                },
+                nb::arg("points"),
+                nb::arg("color"),
+                nb::arg("thickness") = 1.0f)
+            .def(
+                "draw_texture",
+                [](tgfx::Canvas2DRenderer& self,
+                   tgfx::TextureHandle texture,
+                   float x,
+                   float y,
+                   float w,
+                   float h,
+                   std::optional<tgfx::CanvasColor> tint,
+                   bool flip_v,
+                   tgfx::CanvasTextureSampling sampling) {
+                    self.draw_texture(texture, x, y, w, h, tint.value_or(tgfx::CanvasColor::white()), flip_v, sampling);
+                },
+                nb::arg("texture"),
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("w"),
+                nb::arg("h"),
+                nb::arg("tint").none() = nb::none(),
+                nb::arg("flip_v") = false,
+                nb::arg("sampling") = tgfx::CanvasTextureSampling::Linear)
+            .def(
+                "draw_text",
+                [resolve_text2d_anchor](tgfx::Canvas2DRenderer& self,
+                                        const std::string& text,
+                                        float x,
+                                        float y,
+                                        float size_px,
+                                        std::optional<tgfx::CanvasColor> color,
+                                        tgfx::FontAtlas* font,
+                                        nb::object anchor) {
+                    self.draw_text(text,
+                                   x,
+                                   y,
+                                   size_px,
+                                   color.value_or(tgfx::CanvasColor::white()),
+                                   font,
+                                   resolve_text2d_anchor(anchor));
+                },
+                nb::arg("text"),
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("size_px"),
+                nb::arg("color").none() = nb::none(),
+                nb::arg("font").none() = nb::none(),
+                nb::arg("anchor") = "left",
+                nb::keep_alive<1, 7>())
+            .def(
+                "measure_text",
+                [](tgfx::Canvas2DRenderer& self, const std::string& text, float size_px, tgfx::FontAtlas* font) {
+                    auto m = self.measure_text(text, size_px, font);
+                    return std::make_tuple(m.width, m.height);
+                },
+                nb::arg("text"),
+                nb::arg("size_px") = 14.0f,
+                nb::arg("font").none() = nb::none())
+            .def("set_default_font",
+                 &tgfx::Canvas2DRenderer::set_default_font,
+                 nb::arg("font").none() = nb::none(),
+                 nb::keep_alive<1, 2>())
+            .def_prop_ro("default_font", &tgfx::Canvas2DRenderer::default_font, nb::rv_policy::reference_internal)
+            .def("release_gpu", &tgfx::Canvas2DRenderer::release_gpu);
 
-        .def("draw",
-             [resolve_text2d_anchor](tgfx::Text2DRenderer& self,
-                const std::string& text,
-                float x, float y,
-                std::tuple<float, float, float, float> color,
-                 float size,
-                 nb::object anchor) {
-                 auto [r, g, b, a] = color;
-                 self.draw(text, tgfx::Text2DRenderer::DrawOptions{
-                     x,
-                     y,
-                     termin::Color4{r, g, b, a},
-                     size,
-                     resolve_text2d_anchor(anchor)
-                 });
-             },
-             nb::arg("text"),
-             nb::arg("x"), nb::arg("y"),
-             nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
-             nb::arg("size") = 14.0f,
-             nb::arg("anchor") = "left")
+        nb::class_<tgfx::Text2DRenderer>(m, "Text2DRenderer")
+            .def(nb::init<tgfx::FontAtlas*>(),
+                 nb::arg("font") = nullptr,
+                 nb::keep_alive<1, 2>()) // keep font alive while renderer lives
 
-        .def("measure",
-             [](tgfx::Text2DRenderer& self, const std::string& text, float size) {
-                 if (!self.font()) return std::make_tuple(0.0f, 0.0f);
-                 auto m = self.font()->measure_text(text, size);
-                 return std::make_tuple(m.width, m.height);
-             },
-             nb::arg("text"), nb::arg("size") = 14.0f)
+            // begin: (ctx, viewport_w, viewport_h, font=None).
+            .def(
+                "begin",
+                [](tgfx::Text2DRenderer& self,
+                   tgfx::RenderContext2* ctx,
+                   int viewport_w,
+                   int viewport_h,
+                   tgfx::FontAtlas* font) { self.begin(ctx, viewport_w, viewport_h, font); },
+                nb::arg("ctx"),
+                nb::arg("viewport_w"),
+                nb::arg("viewport_h"),
+                nb::arg("font").none() = nb::none(),
+                nb::keep_alive<1, 5>())
 
-        .def("end", &tgfx::Text2DRenderer::end)
-        .def("release_gpu", &tgfx::Text2DRenderer::release_gpu);
+            .def(
+                "draw",
+                [resolve_text2d_anchor](tgfx::Text2DRenderer& self,
+                                        const std::string& text,
+                                        float x,
+                                        float y,
+                                        std::tuple<float, float, float, float> color,
+                                        float size,
+                                        nb::object anchor) {
+                    auto [r, g, b, a] = color;
+                    self.draw(text,
+                              tgfx::Text2DRenderer::DrawOptions{
+                                  x, y, termin::Color4{r, g, b, a}, size, resolve_text2d_anchor(anchor)});
+                },
+                nb::arg("text"),
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+                nb::arg("size") = 14.0f,
+                nb::arg("anchor") = "left")
 
-    nb::class_<tgfx::Text3DRenderer>(m, "Text3DRenderer")
-        .def(nb::init<tgfx::FontAtlas*>(),
-             nb::arg("font") = nullptr,
-             nb::keep_alive<1, 2>())
+            .def(
+                "measure",
+                [](tgfx::Text2DRenderer& self, const std::string& text, float size) {
+                    if (!self.font())
+                        return std::make_tuple(0.0f, 0.0f);
+                    auto m = self.font()->measure_text(text, size);
+                    return std::make_tuple(m.width, m.height);
+                },
+                nb::arg("text"),
+                nb::arg("size") = 14.0f)
 
-        // begin takes flat mvp[16] + cam_right[3] + cam_up[3] as
-        // numpy arrays. Callers that have a Python-side camera object
-        // should extract these themselves — the renderer is now
-        // decoupled from any specific camera interface.
-        .def("begin",
-             [](tgfx::Text3DRenderer& self,
-                tgfx::RenderContext2* ctx,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> mvp,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_right,
-                nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_up,
-                tgfx::FontAtlas* font) {
-                 if (mvp.size() < 16 || cam_right.size() < 3 || cam_up.size() < 3) {
-                     throw std::invalid_argument(
-                         "Text3DRenderer.begin: mvp needs 16 floats, "
-                         "cam_right/cam_up need 3 each");
-                 }
-                 self.begin(
-                     ctx,
-                     mvp.data(),
-                     termin::Vec3f{cam_right.data()[0], cam_right.data()[1], cam_right.data()[2]},
-                     termin::Vec3f{cam_up.data()[0], cam_up.data()[1], cam_up.data()[2]},
-                     font);
-             },
-             nb::arg("ctx"),
-             nb::arg("mvp"),
-             nb::arg("cam_right"),
-             nb::arg("cam_up"),
-             nb::arg("font").none() = nb::none(),
-             nb::keep_alive<1, 6>())
+            .def("end", &tgfx::Text2DRenderer::end)
+            .def("release_gpu", &tgfx::Text2DRenderer::release_gpu);
 
-        .def("draw",
-             [resolve_text3d_anchor](tgfx::Text3DRenderer& self,
-                const std::string& text,
-                std::tuple<float, float, float> position,
-                std::tuple<float, float, float, float> color,
-                float size,
-                 nb::object anchor) {
-                 auto [px, py, pz] = position;
-                 auto [r, g, b, a] = color;
-                 self.draw(text, tgfx::Text3DRenderer::DrawOptions{
-                     termin::Vec3f{px, py, pz},
-                     termin::Color4{r, g, b, a},
-                     size,
-                     resolve_text3d_anchor(anchor)
-                 });
-             },
-             nb::arg("text"),
-             nb::arg("position"),
-             nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
-             nb::arg("size") = 0.05f,
-             nb::arg("anchor") = "center")
+        nb::class_<tgfx::Text3DRenderer>(m, "Text3DRenderer")
+            .def(nb::init<tgfx::FontAtlas*>(), nb::arg("font") = nullptr, nb::keep_alive<1, 2>())
 
-        .def("end", &tgfx::Text3DRenderer::end)
-        .def("release_gpu", &tgfx::Text3DRenderer::release_gpu);
-}
+            // begin takes flat mvp[16] + cam_right[3] + cam_up[3] as
+            // numpy arrays. Callers that have a Python-side camera object
+            // should extract these themselves — the renderer is now
+            // decoupled from any specific camera interface.
+            .def(
+                "begin",
+                [](tgfx::Text3DRenderer& self,
+                   tgfx::RenderContext2* ctx,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> mvp,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_right,
+                   nb::ndarray<float, nb::c_contig, nb::device::cpu> cam_up,
+                   tgfx::FontAtlas* font) {
+                    if (mvp.size() < 16 || cam_right.size() < 3 || cam_up.size() < 3) {
+                        throw std::invalid_argument("Text3DRenderer.begin: mvp needs 16 floats, "
+                                                    "cam_right/cam_up need 3 each");
+                    }
+                    self.begin(ctx,
+                               mvp.data(),
+                               termin::Vec3f{cam_right.data()[0], cam_right.data()[1], cam_right.data()[2]},
+                               termin::Vec3f{cam_up.data()[0], cam_up.data()[1], cam_up.data()[2]},
+                               font);
+                },
+                nb::arg("ctx"),
+                nb::arg("mvp"),
+                nb::arg("cam_right"),
+                nb::arg("cam_up"),
+                nb::arg("font").none() = nb::none(),
+                nb::keep_alive<1, 6>())
+
+            .def(
+                "draw",
+                [resolve_text3d_anchor](tgfx::Text3DRenderer& self,
+                                        const std::string& text,
+                                        std::tuple<float, float, float> position,
+                                        std::tuple<float, float, float, float> color,
+                                        float size,
+                                        nb::object anchor) {
+                    auto [px, py, pz] = position;
+                    auto [r, g, b, a] = color;
+                    self.draw(text,
+                              tgfx::Text3DRenderer::DrawOptions{termin::Vec3f{px, py, pz},
+                                                                termin::Color4{r, g, b, a},
+                                                                size,
+                                                                resolve_text3d_anchor(anchor)});
+                },
+                nb::arg("text"),
+                nb::arg("position"),
+                nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+                nb::arg("size") = 0.05f,
+                nb::arg("anchor") = "center")
+
+            .def("end", &tgfx::Text3DRenderer::end)
+            .def("release_gpu", &tgfx::Text3DRenderer::release_gpu);
+    }
 
 } // namespace tgfx_bindings

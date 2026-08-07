@@ -16,23 +16,14 @@ static tc_pool_generation_epoch g_program_generation_epoch;
 static tc_resource_map* g_program_uuid_to_index = NULL;
 static bool g_program_initialized = false;
 
-static bool copy_required_string(
-    char* destination,
-    size_t capacity,
-    const char* source,
-    const char* field_name
-) {
+static bool copy_required_string(char* destination, size_t capacity, const char* source, const char* field_name) {
     if (!source || source[0] == '\0') {
         tc_log_error("tc_shader_program_set_payload: %s is required", field_name);
         return false;
     }
     const size_t length = strlen(source);
     if (length >= capacity) {
-        tc_log_error(
-            "tc_shader_program_set_payload: %s '%s' exceeds %zu bytes",
-            field_name,
-            source,
-            capacity - 1);
+        tc_log_error("tc_shader_program_set_payload: %s '%s' exceeds %zu bytes", field_name, source, capacity - 1);
         return false;
     }
     memcpy(destination, source, length + 1);
@@ -40,16 +31,19 @@ static bool copy_required_string(
 }
 
 static void release_phases(tc_shader_program_phase* phases, uint32_t count) {
-    if (!phases) return;
+    if (!phases)
+        return;
     for (uint32_t i = 0; i < count; ++i) {
         tc_shader* shader = tc_shader_get(phases[i].shader);
-        if (shader) tc_shader_release(shader);
+        if (shader)
+            tc_shader_release(shader);
     }
     free(phases);
 }
 
 static void clear_payload(tc_shader_program* program) {
-    if (!program) return;
+    if (!program)
+        return;
     release_phases(program->phases, program->phase_count);
     free(program->properties);
     program->properties = NULL;
@@ -60,11 +54,7 @@ static void clear_payload(tc_shader_program* program) {
 
 void tc_shader_program_init(void) {
     TC_REGISTRY_INIT_GUARD(g_program_initialized, "tc_shader_program");
-    if (!tc_pool_init_rebootstrap(
-            &g_program_pool,
-            sizeof(tc_shader_program),
-            32,
-            &g_program_generation_epoch)) {
+    if (!tc_pool_init_rebootstrap(&g_program_pool, sizeof(tc_shader_program), 32, &g_program_generation_epoch)) {
         tc_log_error("tc_shader_program_init: failed to initialize pool");
         return;
     }
@@ -91,7 +81,8 @@ void tc_shader_program_shutdown(void) {
 }
 
 tc_shader_program_handle tc_shader_program_create(const char* uuid, const char* name) {
-    if (!g_program_initialized) tc_shader_program_init();
+    if (!g_program_initialized)
+        tc_shader_program_init();
     if (!uuid || uuid[0] == '\0' || !name || name[0] == '\0') {
         tc_log_error("tc_shader_program_create: UUID and name are required");
         return tc_shader_program_handle_invalid();
@@ -126,9 +117,11 @@ tc_shader_program_handle tc_shader_program_create(const char* uuid, const char* 
 }
 
 tc_shader_program_handle tc_shader_program_find(const char* uuid) {
-    if (!g_program_initialized || !uuid) return tc_shader_program_handle_invalid();
+    if (!g_program_initialized || !uuid)
+        return tc_shader_program_handle_invalid();
     void* value = tc_resource_map_get(g_program_uuid_to_index, uuid);
-    if (!tc_has_index(value)) return tc_shader_program_handle_invalid();
+    if (!tc_has_index(value))
+        return tc_shader_program_handle_invalid();
     const uint32_t index = tc_unpack_index(value);
     if (index >= g_program_pool.capacity || g_program_pool.states[index] != TC_SLOT_OCCUPIED) {
         return tc_shader_program_handle_invalid();
@@ -139,7 +132,8 @@ tc_shader_program_handle tc_shader_program_find(const char* uuid) {
 
 tc_shader_program_handle tc_shader_program_declare(const char* uuid, const char* name) {
     tc_shader_program_handle existing = tc_shader_program_find(uuid);
-    if (!tc_shader_program_handle_is_invalid(existing)) return existing;
+    if (!tc_shader_program_handle_is_invalid(existing))
+        return existing;
     return tc_shader_program_create(uuid, name);
 }
 
@@ -148,9 +142,9 @@ tc_shader_program_handle tc_shader_program_get_or_create(const char* uuid, const
 }
 
 tc_shader_program* tc_shader_program_get(tc_shader_program_handle handle) {
-    if (!g_program_initialized) return NULL;
-    return (tc_shader_program*)tc_pool_get_checked(
-        &g_program_pool, handle, "tc_shader_program");
+    if (!g_program_initialized)
+        return NULL;
+    return (tc_shader_program*)tc_pool_get_checked(&g_program_pool, handle, "tc_shader_program");
 }
 
 bool tc_shader_program_is_valid(tc_shader_program_handle handle) {
@@ -166,25 +160,24 @@ size_t tc_shader_program_count(void) {
 }
 
 tc_shader_program_info* tc_shader_program_get_all_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
     const size_t program_count = tc_shader_program_count();
-    if (program_count == 0) return NULL;
+    if (program_count == 0)
+        return NULL;
 
-    tc_shader_program_info* infos =
-        (tc_shader_program_info*)calloc(program_count, sizeof(*infos));
+    tc_shader_program_info* infos = (tc_shader_program_info*)calloc(program_count, sizeof(*infos));
     if (!infos) {
         tc_log_error("tc_shader_program_get_all_info: allocation failed");
         return NULL;
     }
 
     size_t output_index = 0;
-    for (uint32_t index = 0;
-         index < g_program_pool.capacity && output_index < program_count;
-         ++index) {
-        if (g_program_pool.states[index] != TC_SLOT_OCCUPIED) continue;
-        tc_shader_program* program =
-            (tc_shader_program*)tc_pool_get_unchecked(&g_program_pool, index);
+    for (uint32_t index = 0; index < g_program_pool.capacity && output_index < program_count; ++index) {
+        if (g_program_pool.states[index] != TC_SLOT_OCCUPIED)
+            continue;
+        tc_shader_program* program = (tc_shader_program*)tc_pool_get_unchecked(&g_program_pool, index);
         tc_shader_program_info* info = &infos[output_index++];
         info->handle.index = index;
         info->handle.generation = g_program_pool.generations[index];
@@ -204,7 +197,8 @@ tc_shader_program_info* tc_shader_program_get_all_info(size_t* count) {
 
 static bool destroy_program(tc_shader_program_handle handle) {
     tc_shader_program* program = tc_shader_program_get(handle);
-    if (!program) return false;
+    if (!program)
+        return false;
     tc_resource_map_remove(g_program_uuid_to_index, program->header.uuid);
     clear_payload(program);
     tc_pool_free_slot(&g_program_pool, handle);
@@ -212,31 +206,35 @@ static bool destroy_program(tc_shader_program_handle handle) {
 }
 
 void tc_shader_program_retain(tc_shader_program* program) {
-    if (program) ++program->header.ref_count;
+    if (program)
+        ++program->header.ref_count;
 }
 
 bool tc_shader_program_release(tc_shader_program* program) {
-    if (!program || program->header.ref_count == 0) return false;
+    if (!program || program->header.ref_count == 0)
+        return false;
     --program->header.ref_count;
-    if (program->header.ref_count != 0) return false;
+    if (program->header.ref_count != 0)
+        return false;
     return destroy_program(program->self_handle);
 }
 
 bool tc_shader_program_remove(tc_shader_program_handle handle) {
     tc_shader_program* program = tc_shader_program_get(handle);
-    if (!program) return false;
+    if (!program)
+        return false;
     if (program->header.ref_count != 0) {
-        tc_log_error(
-            "tc_shader_program_remove: '%s' still has %u retained handle(s)",
-            program->header.uuid,
-            program->header.ref_count);
+        tc_log_error("tc_shader_program_remove: '%s' still has %u retained handle(s)",
+                     program->header.uuid,
+                     program->header.ref_count);
         return false;
     }
     return destroy_program(handle);
 }
 
 static uint64_t fnv1a_append(uint64_t hash, const char* text) {
-    if (!text) return hash;
+    if (!text)
+        return hash;
     while (*text) {
         hash ^= (uint8_t)*text++;
         hash *= UINT64_C(0x100000001b3);
@@ -244,13 +242,12 @@ static uint64_t fnv1a_append(uint64_t hash, const char* text) {
     return hash;
 }
 
-void tc_shader_program_make_phase_uuid(
-    char* out_uuid,
-    size_t out_size,
-    const char* program_uuid,
-    const char* phase_mark
-) {
-    if (!out_uuid || out_size == 0) return;
+void tc_shader_program_make_phase_uuid(char* out_uuid,
+                                       size_t out_size,
+                                       const char* program_uuid,
+                                       const char* phase_mark) {
+    if (!out_uuid || out_size == 0)
+        return;
     uint64_t hash = UINT64_C(0xcbf29ce484222325);
     hash = fnv1a_append(hash, program_uuid);
     hash = fnv1a_append(hash, "::phase::");
@@ -258,12 +255,10 @@ void tc_shader_program_make_phase_uuid(
     snprintf(out_uuid, out_size, "shader-phase-%016llx", (unsigned long long)hash);
 }
 
-static bool build_properties(
-    const tc_shader_program_payload_desc* desc,
-    tc_shader_program_property** out_properties
-) {
+static bool build_properties(const tc_shader_program_payload_desc* desc, tc_shader_program_property** out_properties) {
     *out_properties = NULL;
-    if (desc->property_count == 0) return true;
+    if (desc->property_count == 0)
+        return true;
     if (!desc->properties) {
         tc_log_error("tc_shader_program_set_payload: properties pointer is NULL");
         return false;
@@ -277,12 +272,9 @@ static bool build_properties(
     for (uint32_t i = 0; i < desc->property_count; ++i) {
         const tc_shader_program_property_desc* input = &desc->properties[i];
         tc_shader_program_property* output = &properties[i];
-        if (!copy_required_string(output->name, sizeof(output->name), input->name, "property name")
-            || !copy_required_string(
-                output->property_type,
-                sizeof(output->property_type),
-                input->property_type,
-                "property type")) {
+        if (!copy_required_string(output->name, sizeof(output->name), input->name, "property name") ||
+            !copy_required_string(
+                output->property_type, sizeof(output->property_type), input->property_type, "property type")) {
             free(properties);
             return false;
         }
@@ -318,44 +310,35 @@ static bool build_properties(
         output->has_range_min = input->has_range_min;
         output->has_range_max = input->has_range_max;
         const bool is_texture =
-            strcmp(output->property_type, "Texture") == 0
-            || strcmp(output->property_type, "Texture2D") == 0;
+            strcmp(output->property_type, "Texture") == 0 || strcmp(output->property_type, "Texture2D") == 0;
         if (!is_texture && input->has_expected_encoding) {
-            tc_log_error(
-                "tc_shader_program_set_payload: non-texture property '%s' has expected encoding",
-                output->name);
+            tc_log_error("tc_shader_program_set_payload: non-texture property '%s' has expected encoding",
+                         output->name);
             free(properties);
             return false;
         }
-        if (input->has_expected_encoding
-            && input->expected_encoding != TC_TEXTURE_ENCODING_LINEAR
-            && input->expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
-            tc_log_error(
-                "tc_shader_program_set_payload: property '%s' has invalid expected encoding",
-                output->name);
+        if (input->has_expected_encoding && input->expected_encoding != TC_TEXTURE_ENCODING_LINEAR &&
+            input->expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
+            tc_log_error("tc_shader_program_set_payload: property '%s' has invalid expected encoding", output->name);
             free(properties);
             return false;
         }
         output->has_expected_encoding = input->has_expected_encoding;
         output->expected_encoding = input->expected_encoding;
         if (is_texture && output->has_default) {
-            if (output->default_text[0] == '\0'
-                || (strcmp(output->default_text, "white") != 0
-                    && strcmp(output->default_text, "normal") != 0)) {
-                tc_log_error(
-                    "tc_shader_program_set_payload: texture property '%s' "
-                    "default must be 'white' or 'normal'",
-                    output->name);
+            if (output->default_text[0] == '\0' ||
+                (strcmp(output->default_text, "white") != 0 && strcmp(output->default_text, "normal") != 0)) {
+                tc_log_error("tc_shader_program_set_payload: texture property '%s' "
+                             "default must be 'white' or 'normal'",
+                             output->name);
                 free(properties);
                 return false;
             }
-            if (strcmp(output->default_text, "normal") == 0
-                && output->has_expected_encoding
-                && output->expected_encoding != TC_TEXTURE_ENCODING_LINEAR) {
-                tc_log_error(
-                    "tc_shader_program_set_payload: texture property '%s' "
-                    "normal default requires Linear encoding",
-                    output->name);
+            if (strcmp(output->default_text, "normal") == 0 && output->has_expected_encoding &&
+                output->expected_encoding != TC_TEXTURE_ENCODING_LINEAR) {
+                tc_log_error("tc_shader_program_set_payload: texture property '%s' "
+                             "normal default requires Linear encoding",
+                             output->name);
                 free(properties);
                 return false;
             }
@@ -365,19 +348,17 @@ static bool build_properties(
     return true;
 }
 
-static bool build_phases(
-    const tc_shader_program* program,
-    const tc_shader_program_payload_desc* desc,
-    tc_shader_program_phase** out_phases
-) {
+static bool build_phases(const tc_shader_program* program,
+                         const tc_shader_program_payload_desc* desc,
+                         tc_shader_program_phase** out_phases) {
     *out_phases = NULL;
-    if (desc->phase_count == 0) return true;
+    if (desc->phase_count == 0)
+        return true;
     if (!desc->phases) {
         tc_log_error("tc_shader_program_set_payload: phases pointer is NULL");
         return false;
     }
-    tc_shader_program_phase* phases =
-        (tc_shader_program_phase*)calloc(desc->phase_count, sizeof(*phases));
+    tc_shader_program_phase* phases = (tc_shader_program_phase*)calloc(desc->phase_count, sizeof(*phases));
     if (!phases) {
         tc_log_error("tc_shader_program_set_payload: phase allocation failed");
         return false;
@@ -385,35 +366,23 @@ static bool build_phases(
     for (uint32_t i = 0; i < desc->phase_count; ++i) {
         const tc_shader_program_phase_desc* input = &desc->phases[i];
         tc_shader_program_phase* output = &phases[i];
-        if (!copy_required_string(
-                output->phase_mark,
-                sizeof(output->phase_mark),
-                input->phase_mark,
-                "phase mark")) {
+        if (!copy_required_string(output->phase_mark, sizeof(output->phase_mark), input->phase_mark, "phase mark")) {
             release_phases(phases, i);
             return false;
         }
         for (uint32_t j = 0; j < i; ++j) {
             if (strcmp(phases[j].phase_mark, output->phase_mark) == 0) {
-                tc_log_error(
-                    "tc_shader_program_set_payload: duplicate phase '%s'",
-                    output->phase_mark);
+                tc_log_error("tc_shader_program_set_payload: duplicate phase '%s'", output->phase_mark);
                 release_phases(phases, i);
                 return false;
             }
         }
         char shader_uuid[TC_UUID_SIZE];
-        tc_shader_program_make_phase_uuid(
-            shader_uuid,
-            sizeof(shader_uuid),
-            program->header.uuid,
-            output->phase_mark);
+        tc_shader_program_make_phase_uuid(shader_uuid, sizeof(shader_uuid), program->header.uuid, output->phase_mark);
         output->shader = tc_shader_get_or_create(shader_uuid);
         tc_shader* shader = tc_shader_get(output->shader);
         if (!shader) {
-            tc_log_error(
-                "tc_shader_program_set_payload: failed to declare shader for phase '%s'",
-                output->phase_mark);
+            tc_log_error("tc_shader_program_set_payload: failed to declare shader for phase '%s'", output->phase_mark);
             release_phases(phases, i);
             return false;
         }
@@ -425,17 +394,15 @@ static bool build_phases(
     return true;
 }
 
-bool tc_shader_program_set_payload(
-    tc_shader_program* program,
-    const tc_shader_program_payload_desc* desc
-) {
+bool tc_shader_program_set_payload(tc_shader_program* program, const tc_shader_program_payload_desc* desc) {
     if (!program || !desc || !desc->name || desc->name[0] == '\0') {
         tc_log_error("tc_shader_program_set_payload: program and payload name are required");
         return false;
     }
     tc_shader_program_property* properties = NULL;
     tc_shader_program_phase* phases = NULL;
-    if (!build_properties(desc, &properties)) return false;
+    if (!build_properties(desc, &properties))
+        return false;
     if (!build_phases(program, desc, &phases)) {
         free(properties);
         return false;
@@ -443,10 +410,8 @@ bool tc_shader_program_set_payload(
 
     clear_payload(program);
     program->header.name = tc_intern_string(desc->name);
-    program->source_path =
-        desc->source_path && desc->source_path[0] ? tc_intern_string(desc->source_path) : NULL;
-    program->language =
-        desc->language && desc->language[0] ? tc_intern_string(desc->language) : NULL;
+    program->source_path = desc->source_path && desc->source_path[0] ? tc_intern_string(desc->source_path) : NULL;
+    program->language = desc->language && desc->language[0] ? tc_intern_string(desc->language) : NULL;
     program->features = desc->features;
     program->properties = properties;
     program->property_count = desc->property_count;
@@ -460,13 +425,12 @@ uint32_t tc_shader_program_version(const tc_shader_program* program) {
     return program ? program->header.version : 0;
 }
 
-const tc_shader_program_phase* tc_shader_program_find_phase(
-    const tc_shader_program* program,
-    const char* phase_mark
-) {
-    if (!program || !phase_mark) return NULL;
+const tc_shader_program_phase* tc_shader_program_find_phase(const tc_shader_program* program, const char* phase_mark) {
+    if (!program || !phase_mark)
+        return NULL;
     for (uint32_t i = 0; i < program->phase_count; ++i) {
-        if (strcmp(program->phases[i].phase_mark, phase_mark) == 0) return &program->phases[i];
+        if (strcmp(program->phases[i].phase_mark, phase_mark) == 0)
+            return &program->phases[i];
     }
     return NULL;
 }

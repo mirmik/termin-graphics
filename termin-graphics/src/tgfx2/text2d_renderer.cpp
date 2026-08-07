@@ -37,166 +37,166 @@ extern "C" {
 
 namespace tgfx {
 
-namespace {
+    namespace {
 
-constexpr const char* TEXT2D_SHADER_UUID = "termin-engine-text2d";
-constexpr const char* TEXT2D_SDF_SHADER_UUID = "termin-engine-text2d-sdf";
+        constexpr const char* TEXT2D_SHADER_UUID = "termin-engine-text2d";
+        constexpr const char* TEXT2D_SDF_SHADER_UUID = "termin-engine-text2d-sdf";
 
-// Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
-struct Text2DPushData {
-    float projection[16];
-    float color[4];
-};
-static_assert(sizeof(Text2DPushData) == 80,
-              "Text2DPushData layout drift — shader and C++ disagree");
+        // Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
+        struct Text2DPushData {
+            float projection[16];
+            float color[4];
+        };
+        static_assert(sizeof(Text2DPushData) == 80, "Text2DPushData layout drift — shader and C++ disagree");
 
-// SDF push constants: mat4 + vec4 + float, padded to std140 vec4 alignment.
-struct Text2DSdfPushData {
-    float projection[16];
-    float color[4];
-    float smoothing;
-    float _pad[3];
-};
-static_assert(sizeof(Text2DSdfPushData) == 96,
-              "Text2DSdfPushData layout drift — shader and C++ disagree");
+        // SDF push constants: mat4 + vec4 + float, padded to std140 vec4 alignment.
+        struct Text2DSdfPushData {
+            float projection[16];
+            float color[4];
+            float smoothing;
+            float _pad[3];
+        };
+        static_assert(sizeof(Text2DSdfPushData) == 96, "Text2DSdfPushData layout drift — shader and C++ disagree");
 
-// Build an ortho matrix (column-major) that maps pixel coords y+down
-// → clip-space y+down (Vulkan-native; OpenGL reaches this via
-// glClipControl(GL_UPPER_LEFT), which tgfx2 re-applies at the start
-// of every render pass in OpenGLCommandList::begin_render_pass).
-// Pixel (0,0) maps to clip (-1,-1), i.e. the top-left corner.
-//
-// The matrix is written in math (row-major) notation but stored in the
-// push-constant layout expected by the shader.
-void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
-    if (w <= 0.0f || h <= 0.0f) {
-        std::memset(out, 0, 16 * sizeof(float));
-        out[0] = out[5] = out[10] = out[15] = 1.0f;
-        return;
-    }
-    float m[16]{};
-    m[0] = 2.0f / w;
-    m[3] = -1.0f;
-    m[5] = 2.0f / h;
-    m[7] = -1.0f;
-    m[10] = 1.0f;
-    m[15] = 1.0f;
-    std::memcpy(out, m, sizeof(m));
-}
-
-}  // namespace
-
-// ---------------------------------------------------------------------------
-
-Text2DRenderer::Text2DRenderer(FontAtlas* font) : font_(font) {}
-
-Text2DRenderer::~Text2DRenderer() {
-    // Best-effort release. If the device is already gone we can't
-    // destroy shaders — just drop the handles and leak; the process
-    // is going down anyway.
-    release_gpu();
-}
-
-void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
-    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0
-        && vs_sdf_.id != 0 && fs_sdf_.id != 0) return;
-    compiled_on_ = &device;
-
-    // Bitmap shader pair.
-    if (!tc_shader_is_valid(shader_handle_)) {
-        shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SHADER_UUID);
-    }
-
-    vs_ = ShaderHandle{};
-    fs_ = ShaderHandle{};
-    if (!tc_shader_handle_is_invalid(shader_handle_)) {
-        tc_shader* raw = tc_shader_get(shader_handle_);
-        if (raw) {
-            if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
-                tc::Log::error("[Text2DRenderer] failed to create bitmap shader");
+        // Build an ortho matrix (column-major) that maps pixel coords y+down
+        // → clip-space y+down (Vulkan-native; OpenGL reaches this via
+        // glClipControl(GL_UPPER_LEFT), which tgfx2 re-applies at the start
+        // of every render pass in OpenGLCommandList::begin_render_pass).
+        // Pixel (0,0) maps to clip (-1,-1), i.e. the top-left corner.
+        //
+        // The matrix is written in math (row-major) notation but stored in the
+        // push-constant layout expected by the shader.
+        void build_ortho_pixel_to_ndc(float w, float h, float out[16]) {
+            if (w <= 0.0f || h <= 0.0f) {
+                std::memset(out, 0, 16 * sizeof(float));
+                out[0] = out[5] = out[10] = out[15] = 1.0f;
+                return;
             }
+            float m[16]{};
+            m[0] = 2.0f / w;
+            m[3] = -1.0f;
+            m[5] = 2.0f / h;
+            m[7] = -1.0f;
+            m[10] = 1.0f;
+            m[15] = 1.0f;
+            std::memcpy(out, m, sizeof(m));
+        }
+
+    } // namespace
+
+    // ---------------------------------------------------------------------------
+
+    Text2DRenderer::Text2DRenderer(FontAtlas* font)
+        : font_(font) {}
+
+    Text2DRenderer::~Text2DRenderer() {
+        // Best-effort release. If the device is already gone we can't
+        // destroy shaders — just drop the handles and leak; the process
+        // is going down anyway.
+        release_gpu();
+    }
+
+    void Text2DRenderer::ensure_shader_(IRenderDevice& device) {
+        if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0 && vs_sdf_.id != 0 && fs_sdf_.id != 0)
+            return;
+        compiled_on_ = &device;
+
+        // Bitmap shader pair.
+        if (!tc_shader_is_valid(shader_handle_)) {
+            shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SHADER_UUID);
+        }
+
+        vs_ = ShaderHandle{};
+        fs_ = ShaderHandle{};
+        if (!tc_shader_handle_is_invalid(shader_handle_)) {
+            tc_shader* raw = tc_shader_get(shader_handle_);
+            if (raw) {
+                if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
+                    tc::Log::error("[Text2DRenderer] failed to create bitmap shader");
+                }
+            }
+        }
+
+        if (vs_.id == 0 || fs_.id == 0) {
+            tc::Log::error("[Text2DRenderer] bitmap shader is unavailable");
+        }
+
+        // SDF shader pair uses a larger push block than the bitmap path.
+        if (!tc_shader_is_valid(sdf_shader_handle_)) {
+            sdf_shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SDF_SHADER_UUID);
+        }
+
+        vs_sdf_ = ShaderHandle{};
+        fs_sdf_ = ShaderHandle{};
+        if (!tc_shader_handle_is_invalid(sdf_shader_handle_)) {
+            tc_shader* raw = tc_shader_get(sdf_shader_handle_);
+            if (raw) {
+                if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_sdf_, &fs_sdf_)) {
+                    tc::Log::error("[Text2DRenderer] failed to create SDF shader");
+                }
+            }
+        }
+
+        if (vs_sdf_.id == 0 || fs_sdf_.id == 0) {
+            tc::Log::error("[Text2DRenderer] SDF shader is unavailable");
         }
     }
 
-    if (vs_.id == 0 || fs_.id == 0) {
-        tc::Log::error("[Text2DRenderer] bitmap shader is unavailable");
+    void Text2DRenderer::release_gpu() {
+        // Shaders live on the tc_shader registry (`shader_handle_`) and are
+        // shared across Text2DRenderer instances — nothing to destroy here.
+        // Cached handles (vs_/fs_) are just local views into the slot's
+        // current tgfx2 ids, stale after the device goes away.
+        vs_ = ShaderHandle{};
+        fs_ = ShaderHandle{};
+        vs_sdf_ = ShaderHandle{};
+        fs_sdf_ = ShaderHandle{};
+        compiled_on_ = nullptr;
+        ctx_ = nullptr;
     }
 
-    // SDF shader pair uses a larger push block than the bitmap path.
-    if (!tc_shader_is_valid(sdf_shader_handle_)) {
-        sdf_shader_handle_ = register_builtin_shader_from_catalog(TEXT2D_SDF_SHADER_UUID);
-    }
+    void Text2DRenderer::begin(RenderContext2* ctx, int viewport_w, int viewport_h, FontAtlas* font) {
+        if (font != nullptr)
+            font_ = font;
+        ctx_ = ctx;
 
-    vs_sdf_ = ShaderHandle{};
-    fs_sdf_ = ShaderHandle{};
-    if (!tc_shader_handle_is_invalid(sdf_shader_handle_)) {
-        tc_shader* raw = tc_shader_get(sdf_shader_handle_);
-        if (raw) {
-            if (!termin::tc_shader_ensure_tgfx2(raw, &device, &vs_sdf_, &fs_sdf_)) {
-                tc::Log::error("[Text2DRenderer] failed to create SDF shader");
-            }
+        if (ctx_ != nullptr) {
+            ensure_shader_(ctx_->device());
         }
+
+        // Cache the projection matrix so draw() can rebind every call
+        // without re-computing. draw() must rebind shader + atlas +
+        // projection on every call because callers may interleave Text2D
+        // draws with other draws that change the bound shader.
+        build_ortho_pixel_to_ndc(static_cast<float>(viewport_w), static_cast<float>(viewport_h), proj_);
     }
 
-    if (vs_sdf_.id == 0 || fs_sdf_.id == 0) {
-        tc::Log::error("[Text2DRenderer] SDF shader is unavailable");
-    }
-}
+    void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
+        if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr)
+            return;
 
-void Text2DRenderer::release_gpu() {
-    // Shaders live on the tc_shader registry (`shader_handle_`) and are
-    // shared across Text2DRenderer instances — nothing to destroy here.
-    // Cached handles (vs_/fs_) are just local views into the slot's
-    // current tgfx2 ids, stale after the device goes away.
-    vs_ = ShaderHandle{};
-    fs_ = ShaderHandle{};
-    vs_sdf_ = ShaderHandle{};
-    fs_sdf_ = ShaderHandle{};
-    compiled_on_ = nullptr;
-    ctx_ = nullptr;
-}
+        const bool profile = tc_profiler_enabled();
+        const termin::Color4& color = options.color;
 
-void Text2DRenderer::begin(RenderContext2* ctx,
-                            int viewport_w, int viewport_h,
-                            FontAtlas* font) {
-    if (font != nullptr) font_ = font;
-    ctx_ = ctx;
+        // Rasterise any missing glyphs for this display size and re-upload
+        // the atlas if needed. Bitmap path bakes per-size; SDF path bakes
+        // once at reference size. The atlas handles branching internally.
+        if (profile)
+            tc_profiler_begin_section("text.ensure_glyphs");
+        font_->ensure_glyphs(text_utf8, options.size, ctx_);
+        if (profile)
+            tc_profiler_end_section();
 
-    if (ctx_ != nullptr) {
-        ensure_shader_(ctx_->device());
-    }
+        if (profile)
+            tc_profiler_begin_section("text.measure");
+        auto total = font_->measure_text(text_utf8, options.size);
+        const float total_w = total.width;
+        if (profile)
+            tc_profiler_end_section();
 
-    // Cache the projection matrix so draw() can rebind every call
-    // without re-computing. draw() must rebind shader + atlas +
-    // projection on every call because callers may interleave Text2D
-    // draws with other draws that change the bound shader.
-    build_ortho_pixel_to_ndc(
-        static_cast<float>(viewport_w),
-        static_cast<float>(viewport_h),
-        proj_);
-}
-
-void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
-    if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
-
-    const bool profile = tc_profiler_enabled();
-    const termin::Color4& color = options.color;
-
-    // Rasterise any missing glyphs for this display size and re-upload
-    // the atlas if needed. Bitmap path bakes per-size; SDF path bakes
-    // once at reference size. The atlas handles branching internally.
-    if (profile) tc_profiler_begin_section("text.ensure_glyphs");
-    font_->ensure_glyphs(text_utf8, options.size, ctx_);
-    if (profile) tc_profiler_end_section();
-
-    if (profile) tc_profiler_begin_section("text.measure");
-    auto total = font_->measure_text(text_utf8, options.size);
-    const float total_w = total.width;
-    if (profile) tc_profiler_end_section();
-
-    float start_x = options.x;
-    float start_y = options.y;
-    switch (options.anchor) {
+        float start_x = options.x;
+        float start_y = options.y;
+        switch (options.anchor) {
         case Anchor::Center:
             start_x = options.x - total_w * 0.5f;
             start_y = options.y - options.size * 0.5f;
@@ -207,238 +207,229 @@ void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options
         case Anchor::Left:
         default:
             break;
-    }
-
-    // Snap the text origin to the nearest integer pixel so the first
-    // glyph's left edge lands on a texel boundary. Without this a
-    // fractional start (common after anchor math, DPI scaling, or
-    // caller-side sub-pixel layout) spreads every glyph across two
-    // columns via bilinear filtering — the dominant cause of the
-    // "mыло" / ghosting look on small text. The cursor itself
-    // accumulates in float below so kerning / advance don't drift.
-    start_x = std::floor(start_x + 0.5f);
-    start_y = std::floor(start_y + 0.5f);
-
-    // Rebind shader + push-constants + atlas on every draw — a caller
-    // (e.g. UIRenderer) may have bound a different shader between
-    // our own begin() and this draw.
-    RenderContext2& ctx = *ctx_;
-
-    const bool use_sdf = font_->is_sdf_size(options.size);
-    const float sdf_scale = use_sdf
-        ? options.size / static_cast<float>(font_->sdf_reference_px())
-        : 1.0f;
-    const float sdf_spread_px = use_sdf
-        ? static_cast<float>(font_->sdf_spread()) * sdf_scale
-        : 0.0f;
-
-    const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
-    const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
-    if (selected_vs.id == 0 || selected_fs.id == 0) {
-        tc::Log::error(
-            "[Text2DRenderer] %s shader is unavailable; skipping text draw",
-            use_sdf ? "SDF" : "bitmap"
-        );
-        return;
-    }
-
-    if (profile) tc_profiler_begin_section("text.bind_shader");
-    tc_shader* raw = nullptr;
-    if (use_sdf) {
-        ctx.bind_shader(selected_vs, selected_fs);
-        raw = tc_shader_get(sdf_shader_handle_);
-    } else {
-        ctx.bind_shader(selected_vs, selected_fs);
-        raw = tc_shader_get(shader_handle_);
-    }
-    ctx.use_shader_resource_layout(raw);
-    if (profile) tc_profiler_end_section();
-
-    if (profile) tc_profiler_begin_section("text.draw_data");
-    // Shader expects column-major mat4; `proj_` was stored row-major
-    // (see build_ortho_pixel_to_ndc's comment). Transpose here before
-    // shipping raw bytes to GPU.
-    if (use_sdf) {
-        Text2DSdfPushData push;
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                push.projection[col * 4 + row] = proj_[row * 4 + col];
-            }
         }
-        push.color[0] = color.r;
-        push.color[1] = color.g;
-        push.color[2] = color.b;
-        push.color[3] = color.a;
-        // smoothing: ±1 reference texel edge width → 1/(2*spread) in
-        // texture space where edge=0.5 and dist=[0,1] maps to
-        // [-spread, +spread] reference texels.
-        push.smoothing = 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()));
-        ctx.bind_uniform_data("text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
-    } else {
-        Text2DPushData push;
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                push.projection[col * 4 + row] = proj_[row * 4 + col];
-            }
+
+        // Snap the text origin to the nearest integer pixel so the first
+        // glyph's left edge lands on a texel boundary. Without this a
+        // fractional start (common after anchor math, DPI scaling, or
+        // caller-side sub-pixel layout) spreads every glyph across two
+        // columns via bilinear filtering — the dominant cause of the
+        // "mыло" / ghosting look on small text. The cursor itself
+        // accumulates in float below so kerning / advance don't drift.
+        start_x = std::floor(start_x + 0.5f);
+        start_y = std::floor(start_y + 0.5f);
+
+        // Rebind shader + push-constants + atlas on every draw — a caller
+        // (e.g. UIRenderer) may have bound a different shader between
+        // our own begin() and this draw.
+        RenderContext2& ctx = *ctx_;
+
+        const bool use_sdf = font_->is_sdf_size(options.size);
+        const float sdf_scale = use_sdf ? options.size / static_cast<float>(font_->sdf_reference_px()) : 1.0f;
+        const float sdf_spread_px = use_sdf ? static_cast<float>(font_->sdf_spread()) * sdf_scale : 0.0f;
+
+        const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
+        const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
+        if (selected_vs.id == 0 || selected_fs.id == 0) {
+            tc::Log::error("[Text2DRenderer] %s shader is unavailable; skipping text draw", use_sdf ? "SDF" : "bitmap");
+            return;
         }
-        push.color[0] = color.r;
-        push.color[1] = color.g;
-        push.color[2] = color.b;
-        push.color[3] = color.a;
-        ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
-    }
-    if (profile) tc_profiler_end_section();
 
-    if (profile) tc_profiler_begin_section("text.ensure_texture");
-    TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx)
-                                  : font_->ensure_texture(&ctx);
-    if (profile) tc_profiler_end_section();
-
-    if (profile) tc_profiler_begin_section("text.bind_texture");
-    ctx.bind_texture("u_font_atlas", atlas);
-    if (profile) tc_profiler_end_section();
-
-    // Build one flat vertex array for the whole string.
-    if (profile) tc_profiler_begin_section("text.build_quads");
-    std::vector<float> verts;
-    verts.reserve(text_utf8.size() * 6 * 7);  // rough upper bound
-
-    float cursor_x = start_x;
-    size_t i = 0;
-    while (i < text_utf8.size()) {
-        uint32_t cp = internal::utf8_decode(text_utf8, i);
-        auto gi = font_->get_glyph(cp, options.size);
-        if (!gi) continue;
-
-        // Metrics are already in display pixels at this size — no
-        // scale multiplication here. Matches the atlas contract.
-        const float char_w = gi->width_px;
-        const float char_h = gi->height_px;
-
-        // Snap the quad's left edge to an integer pixel; keep the
-        // width as-is so the glyph shape isn't distorted by rounding
-        // both edges (that produces uneven widths across neighbours).
-        // cursor_x continues to accumulate in float — round-to-draw
-        // doesn't feed back into the advance chain.
-        const float px0 = std::floor(cursor_x + 0.5f);
-        const float px1 = px0 + char_w;
-        // SDF glyph cells include `spread` pixels above and below the
-        // line-height cell. Shift the quad up by that spread so the
-        // actual ink keeps the same baseline as bitmap glyphs.
-        const float py0 = start_y - sdf_spread_px;
-        const float py1 = py0 + char_h;         // bottom edge
-
-        // 6 vertices (2 triangles). CCW in pixel y+down visual →
-        // after ortho y-flip → CCW in NDC y+up → front-facing.
-        // Triangle 1: TL, BL, BR
-        // Triangle 2: TL, BR, TR
-        const float u0 = gi->u0, v0 = gi->v0;
-        const float u1 = gi->u1, v1 = gi->v1;
-
-        const float quad[] = {
-            px0, py0, 0.0f,  u0, v0, 0.0f, 0.0f,  // TL
-            px0, py1, 0.0f,  u0, v1, 0.0f, 0.0f,  // BL
-            px1, py1, 0.0f,  u1, v1, 0.0f, 0.0f,  // BR
-            px0, py0, 0.0f,  u0, v0, 0.0f, 0.0f,  // TL
-            px1, py1, 0.0f,  u1, v1, 0.0f, 0.0f,  // BR
-            px1, py0, 0.0f,  u1, v0, 0.0f, 0.0f,  // TR
-        };
-        verts.insert(verts.end(), std::begin(quad), std::end(quad));
-
-        // Advance by the glyph's true horizontal advance, not the ink
-        // width: the quad is sized by ink (what we rasterise), the
-        // cursor moves by advance (metric that includes sidebearings
-        // and gives space characters their width). Advance is already
-        // in display pixels at this size.
-        cursor_x += gi->advance_px;
-    }
-
-    if (profile) tc_profiler_end_section();  // text.build_quads
-
-    if (verts.empty()) return;
-
-    const uint32_t vertex_count = static_cast<uint32_t>(verts.size() / 7);
-    ctx.draw_immediate_triangles(verts.data(), vertex_count);
-}
-
-void Text2DRenderer::draw_mesh(
-    std::span<const Text2DVertex> vertices,
-    termin::Color4 color,
-    float display_px,
-    FontAtlas* font)
-{
-    if (vertices.empty() || vertices.size() % 3 != 0 ||
-        font == nullptr || ctx_ == nullptr) {
-        return;
-    }
-
-    RenderContext2& ctx = *ctx_;
-    const bool use_sdf = font->is_sdf_size(display_px);
-    const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
-    const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
-    if (selected_vs.id == 0 || selected_fs.id == 0) {
-        tc::Log::error(
-            "[Text2DRenderer] %s shader is unavailable; skipping text mesh",
-            use_sdf ? "SDF" : "bitmap");
-        return;
-    }
-
-    tc_shader* raw = nullptr;
-    if (use_sdf) {
-        ctx.bind_shader(selected_vs, selected_fs);
-        raw = tc_shader_get(sdf_shader_handle_);
-        Text2DSdfPushData push{};
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                push.projection[col * 4 + row] = proj_[row * 4 + col];
-            }
+        if (profile)
+            tc_profiler_begin_section("text.bind_shader");
+        tc_shader* raw = nullptr;
+        if (use_sdf) {
+            ctx.bind_shader(selected_vs, selected_fs);
+            raw = tc_shader_get(sdf_shader_handle_);
+        } else {
+            ctx.bind_shader(selected_vs, selected_fs);
+            raw = tc_shader_get(shader_handle_);
         }
-        push.color[0] = color.r;
-        push.color[1] = color.g;
-        push.color[2] = color.b;
-        push.color[3] = color.a;
-        push.smoothing =
-            1.0f / (2.0f * static_cast<float>(font->sdf_spread()));
         ctx.use_shader_resource_layout(raw);
-        ctx.bind_uniform_data(
-            "text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
-    } else {
-        ctx.bind_shader(selected_vs, selected_fs);
-        raw = tc_shader_get(shader_handle_);
-        Text2DPushData push{};
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                push.projection[col * 4 + row] = proj_[row * 4 + col];
+        if (profile)
+            tc_profiler_end_section();
+
+        if (profile)
+            tc_profiler_begin_section("text.draw_data");
+        // Shader expects column-major mat4; `proj_` was stored row-major
+        // (see build_ortho_pixel_to_ndc's comment). Transpose here before
+        // shipping raw bytes to GPU.
+        if (use_sdf) {
+            Text2DSdfPushData push;
+            for (int row = 0; row < 4; ++row) {
+                for (int col = 0; col < 4; ++col) {
+                    push.projection[col * 4 + row] = proj_[row * 4 + col];
+                }
             }
+            push.color[0] = color.r;
+            push.color[1] = color.g;
+            push.color[2] = color.b;
+            push.color[3] = color.a;
+            // smoothing: ±1 reference texel edge width → 1/(2*spread) in
+            // texture space where edge=0.5 and dist=[0,1] maps to
+            // [-spread, +spread] reference texels.
+            push.smoothing = 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()));
+            ctx.bind_uniform_data("text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
+        } else {
+            Text2DPushData push;
+            for (int row = 0; row < 4; ++row) {
+                for (int col = 0; col < 4; ++col) {
+                    push.projection[col * 4 + row] = proj_[row * 4 + col];
+                }
+            }
+            push.color[0] = color.r;
+            push.color[1] = color.g;
+            push.color[2] = color.b;
+            push.color[3] = color.a;
+            ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
         }
-        push.color[0] = color.r;
-        push.color[1] = color.g;
-        push.color[2] = color.b;
-        push.color[3] = color.a;
-        ctx.use_shader_resource_layout(raw);
-        ctx.bind_uniform_data(
-            "text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
+        if (profile)
+            tc_profiler_end_section();
+
+        if (profile)
+            tc_profiler_begin_section("text.ensure_texture");
+        TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx) : font_->ensure_texture(&ctx);
+        if (profile)
+            tc_profiler_end_section();
+
+        if (profile)
+            tc_profiler_begin_section("text.bind_texture");
+        ctx.bind_texture("u_font_atlas", atlas);
+        if (profile)
+            tc_profiler_end_section();
+
+        // Build one flat vertex array for the whole string.
+        if (profile)
+            tc_profiler_begin_section("text.build_quads");
+        std::vector<float> verts;
+        verts.reserve(text_utf8.size() * 6 * 7); // rough upper bound
+
+        float cursor_x = start_x;
+        size_t i = 0;
+        while (i < text_utf8.size()) {
+            uint32_t cp = internal::utf8_decode(text_utf8, i);
+            auto gi = font_->get_glyph(cp, options.size);
+            if (!gi)
+                continue;
+
+            // Metrics are already in display pixels at this size — no
+            // scale multiplication here. Matches the atlas contract.
+            const float char_w = gi->width_px;
+            const float char_h = gi->height_px;
+
+            // Snap the quad's left edge to an integer pixel; keep the
+            // width as-is so the glyph shape isn't distorted by rounding
+            // both edges (that produces uneven widths across neighbours).
+            // cursor_x continues to accumulate in float — round-to-draw
+            // doesn't feed back into the advance chain.
+            const float px0 = std::floor(cursor_x + 0.5f);
+            const float px1 = px0 + char_w;
+            // SDF glyph cells include `spread` pixels above and below the
+            // line-height cell. Shift the quad up by that spread so the
+            // actual ink keeps the same baseline as bitmap glyphs.
+            const float py0 = start_y - sdf_spread_px;
+            const float py1 = py0 + char_h; // bottom edge
+
+            // 6 vertices (2 triangles). CCW in pixel y+down visual →
+            // after ortho y-flip → CCW in NDC y+up → front-facing.
+            // Triangle 1: TL, BL, BR
+            // Triangle 2: TL, BR, TR
+            const float u0 = gi->u0, v0 = gi->v0;
+            const float u1 = gi->u1, v1 = gi->v1;
+
+            const float quad[] = {
+                px0, py0, 0.0f, u0, v0, 0.0f, 0.0f, // TL
+                px0, py1, 0.0f, u0, v1, 0.0f, 0.0f, // BL
+                px1, py1, 0.0f, u1, v1, 0.0f, 0.0f, // BR
+                px0, py0, 0.0f, u0, v0, 0.0f, 0.0f, // TL
+                px1, py1, 0.0f, u1, v1, 0.0f, 0.0f, // BR
+                px1, py0, 0.0f, u1, v0, 0.0f, 0.0f, // TR
+            };
+            verts.insert(verts.end(), std::begin(quad), std::end(quad));
+
+            // Advance by the glyph's true horizontal advance, not the ink
+            // width: the quad is sized by ink (what we rasterise), the
+            // cursor moves by advance (metric that includes sidebearings
+            // and gives space characters their width). Advance is already
+            // in display pixels at this size.
+            cursor_x += gi->advance_px;
+        }
+
+        if (profile)
+            tc_profiler_end_section(); // text.build_quads
+
+        if (verts.empty())
+            return;
+
+        const uint32_t vertex_count = static_cast<uint32_t>(verts.size() / 7);
+        ctx.draw_immediate_triangles(verts.data(), vertex_count);
     }
 
-    const TextureHandle atlas = use_sdf
-        ? font->sdf_atlas_texture(&ctx)
-        : font->ensure_texture(&ctx);
-    ctx.bind_texture("u_font_atlas", atlas);
+    void Text2DRenderer::draw_mesh(std::span<const Text2DVertex> vertices,
+                                   termin::Color4 color,
+                                   float display_px,
+                                   FontAtlas* font) {
+        if (vertices.empty() || vertices.size() % 3 != 0 || font == nullptr || ctx_ == nullptr) {
+            return;
+        }
 
-    std::vector<float> packed;
-    packed.reserve(vertices.size() * 7);
-    for (const auto& vertex : vertices) {
-        packed.insert(
-            packed.end(),
-            {vertex.position.x, vertex.position.y, 0.0f,
-             vertex.uv.x, vertex.uv.y, 0.0f, 0.0f});
+        RenderContext2& ctx = *ctx_;
+        const bool use_sdf = font->is_sdf_size(display_px);
+        const ShaderHandle selected_vs = use_sdf ? vs_sdf_ : vs_;
+        const ShaderHandle selected_fs = use_sdf ? fs_sdf_ : fs_;
+        if (selected_vs.id == 0 || selected_fs.id == 0) {
+            tc::Log::error("[Text2DRenderer] %s shader is unavailable; skipping text mesh", use_sdf ? "SDF" : "bitmap");
+            return;
+        }
+
+        tc_shader* raw = nullptr;
+        if (use_sdf) {
+            ctx.bind_shader(selected_vs, selected_fs);
+            raw = tc_shader_get(sdf_shader_handle_);
+            Text2DSdfPushData push{};
+            for (int row = 0; row < 4; ++row) {
+                for (int col = 0; col < 4; ++col) {
+                    push.projection[col * 4 + row] = proj_[row * 4 + col];
+                }
+            }
+            push.color[0] = color.r;
+            push.color[1] = color.g;
+            push.color[2] = color.b;
+            push.color[3] = color.a;
+            push.smoothing = 1.0f / (2.0f * static_cast<float>(font->sdf_spread()));
+            ctx.use_shader_resource_layout(raw);
+            ctx.bind_uniform_data("text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
+        } else {
+            ctx.bind_shader(selected_vs, selected_fs);
+            raw = tc_shader_get(shader_handle_);
+            Text2DPushData push{};
+            for (int row = 0; row < 4; ++row) {
+                for (int col = 0; col < 4; ++col) {
+                    push.projection[col * 4 + row] = proj_[row * 4 + col];
+                }
+            }
+            push.color[0] = color.r;
+            push.color[1] = color.g;
+            push.color[2] = color.b;
+            push.color[3] = color.a;
+            ctx.use_shader_resource_layout(raw);
+            ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
+        }
+
+        const TextureHandle atlas = use_sdf ? font->sdf_atlas_texture(&ctx) : font->ensure_texture(&ctx);
+        ctx.bind_texture("u_font_atlas", atlas);
+
+        std::vector<float> packed;
+        packed.reserve(vertices.size() * 7);
+        for (const auto& vertex : vertices) {
+            packed.insert(packed.end(),
+                          {vertex.position.x, vertex.position.y, 0.0f, vertex.uv.x, vertex.uv.y, 0.0f, 0.0f});
+        }
+        ctx.draw_immediate_triangles(packed.data(), static_cast<uint32_t>(vertices.size()));
     }
-    ctx.draw_immediate_triangles(
-        packed.data(), static_cast<uint32_t>(vertices.size()));
-}
 
-void Text2DRenderer::end() {
-    ctx_ = nullptr;
-}
+    void Text2DRenderer::end() {
+        ctx_ = nullptr;
+    }
 
-}  // namespace tgfx
+} // namespace tgfx

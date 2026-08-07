@@ -24,11 +24,7 @@ typedef struct tc_ui_overlay_entry {
     bool has_layout;
 } tc_ui_overlay_entry;
 
-typedef void (*tc_ui_layout_prepare_fn)(
-    tc_ui_document_handle document,
-    tc_ui_rect* rect,
-    void* user_data
-);
+typedef void (*tc_ui_layout_prepare_fn)(tc_ui_document_handle document, tc_ui_rect* rect, void* user_data);
 
 typedef struct tc_ui_layout_prepare_entry {
     uint64_t token;
@@ -95,100 +91,45 @@ struct tc_ui_document {
 extern "C" {
 #endif
 
-TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document(
-    tc_ui_document_handle handle
-);
-TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document_checked(
-    tc_ui_document_handle handle,
-    const char* operation
-);
-TC_UI_INTERNAL uint64_t tc_ui_internal_add_layout_prepare(
-    tc_ui_document_handle document,
-    tc_ui_layout_prepare_fn callback,
-    void* user_data
-);
-TC_UI_INTERNAL void tc_ui_internal_remove_layout_prepare(
-    tc_ui_document_handle document,
-    uint64_t token
-);
-TC_UI_INTERNAL void tc_ui_internal_notify_layout_prepare(
-    tc_ui_document* document,
-    tc_ui_rect* rect
-);
+TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document(tc_ui_document_handle handle);
+TC_UI_INTERNAL tc_ui_document* tc_ui_internal_resolve_document_checked(tc_ui_document_handle handle,
+                                                                       const char* operation);
+TC_UI_INTERNAL uint64_t tc_ui_internal_add_layout_prepare(tc_ui_document_handle document,
+                                                          tc_ui_layout_prepare_fn callback,
+                                                          void* user_data);
+TC_UI_INTERNAL void tc_ui_internal_remove_layout_prepare(tc_ui_document_handle document, uint64_t token);
+TC_UI_INTERNAL void tc_ui_internal_notify_layout_prepare(tc_ui_document* document, tc_ui_rect* rect);
 
 TC_UI_INTERNAL bool tc_ui_internal_same_handle(tc_widget_handle lhs, tc_widget_handle rhs);
-TC_UI_INTERNAL bool tc_ui_internal_reserve_array(
-    void** data,
-    size_t item_size,
-    size_t* capacity,
-    size_t required
-);
-TC_UI_INTERNAL tc_widget_slot* tc_ui_internal_resolve_slot(
-    tc_ui_document* document,
-    tc_widget_handle handle
-);
-TC_UI_INTERNAL const tc_widget_slot* tc_ui_internal_resolve_slot_const(
-    const tc_ui_document* document,
-    tc_widget_handle handle
-);
+TC_UI_INTERNAL bool tc_ui_internal_reserve_array(void** data, size_t item_size, size_t* capacity, size_t required);
+TC_UI_INTERNAL tc_widget_slot* tc_ui_internal_resolve_slot(tc_ui_document* document, tc_widget_handle handle);
+TC_UI_INTERNAL const tc_widget_slot* tc_ui_internal_resolve_slot_const(const tc_ui_document* document,
+                                                                       tc_widget_handle handle);
 TC_UI_INTERNAL bool tc_ui_internal_widget_is_live_pointer(const tc_widget* widget);
 TC_UI_INTERNAL void tc_ui_internal_release_widget_metadata(tc_widget* widget);
-TC_UI_INTERNAL size_t tc_ui_internal_find_child_index(
-    const tc_widget* parent,
-    const tc_widget* child
-);
+TC_UI_INTERNAL size_t tc_ui_internal_find_child_index(const tc_widget* parent, const tc_widget* child);
 TC_UI_INTERNAL void tc_ui_internal_remove_child_at(tc_widget* parent, size_t index);
 TC_UI_INTERNAL bool tc_ui_internal_detach_widget(tc_widget* widget);
-TC_UI_INTERNAL void tc_ui_internal_remove_root_references(
-    tc_ui_document* document,
-    tc_widget_handle handle
-);
-TC_UI_INTERNAL size_t tc_ui_internal_find_overlay_index(
-    const tc_ui_document* document,
-    tc_widget_handle handle
-);
+TC_UI_INTERNAL void tc_ui_internal_remove_root_references(tc_ui_document* document, tc_widget_handle handle);
+TC_UI_INTERNAL size_t tc_ui_internal_find_overlay_index(const tc_ui_document* document, tc_widget_handle handle);
 TC_UI_INTERNAL void tc_ui_internal_remove_overlay_at(tc_ui_document* document, size_t index);
-TC_UI_INTERNAL void tc_ui_internal_remove_overlay_references(
-    tc_ui_document* document,
-    tc_widget_handle handle
-);
-TC_UI_INTERNAL void tc_ui_internal_clear_document_state_references(
-    tc_ui_document* document,
-    tc_widget_handle handle
-);
+TC_UI_INTERNAL void tc_ui_internal_remove_overlay_references(tc_ui_document* document, tc_widget_handle handle);
+TC_UI_INTERNAL void tc_ui_internal_clear_document_state_references(tc_ui_document* document, tc_widget_handle handle);
 TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_interactive(const tc_widget* widget);
 TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_enabled(const tc_widget* widget);
-TC_UI_INTERNAL bool tc_ui_internal_widget_is_descendant_of(
-    const tc_widget* widget,
-    const tc_widget* ancestor
-);
-TC_UI_INTERNAL bool tc_ui_internal_handle_is_in_subtree(
-    tc_ui_document* document,
-    tc_widget_handle handle,
-    const tc_widget* root
-);
-TC_UI_INTERNAL bool tc_ui_internal_cancel_pointer_state(
-    tc_ui_document* document,
-    bool clear_capture,
-    bool clear_pressed,
-    tc_ui_pointer_cancel_reason reason
-);
-TC_UI_INTERNAL void tc_ui_internal_invalidate_subtree_interaction_state(
-    tc_widget* root,
-    tc_ui_pointer_cancel_reason reason
-);
-TC_UI_INTERNAL bool tc_ui_internal_valid_style_override(
-    const tc_ui_style_override* style_override
-);
-TC_UI_INTERNAL bool tc_ui_internal_change_focus(
-    tc_ui_document* document,
-    tc_widget_handle next
-);
-TC_UI_INTERNAL void tc_ui_internal_update_hover(
-    tc_ui_document* document,
-    tc_widget_handle next,
-    const tc_ui_pointer_event* source
-);
+TC_UI_INTERNAL bool tc_ui_internal_widget_is_descendant_of(const tc_widget* widget, const tc_widget* ancestor);
+TC_UI_INTERNAL bool
+tc_ui_internal_handle_is_in_subtree(tc_ui_document* document, tc_widget_handle handle, const tc_widget* root);
+TC_UI_INTERNAL bool tc_ui_internal_cancel_pointer_state(tc_ui_document* document,
+                                                        bool clear_capture,
+                                                        bool clear_pressed,
+                                                        tc_ui_pointer_cancel_reason reason);
+TC_UI_INTERNAL void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root,
+                                                                        tc_ui_pointer_cancel_reason reason);
+TC_UI_INTERNAL bool tc_ui_internal_valid_style_override(const tc_ui_style_override* style_override);
+TC_UI_INTERNAL bool tc_ui_internal_change_focus(tc_ui_document* document, tc_widget_handle next);
+TC_UI_INTERNAL void
+tc_ui_internal_update_hover(tc_ui_document* document, tc_widget_handle next, const tc_ui_pointer_event* source);
 TC_UI_INTERNAL void tc_ui_internal_refresh_cursor(tc_ui_document* document);
 
 #ifdef __cplusplus

@@ -8,19 +8,19 @@
 VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocation)
 
-#include <atomic>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <unordered_map>
 #include <vector>
-#include <functional>
 
-#include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/tgfx2_api.h"
 #include "tgfx2/vulkan/internal/non_coherent_dirty_range.hpp"
 
 // `tc_texture` / `tc_mesh` are forward-declared in i_render_device.hpp.
@@ -28,708 +28,753 @@ VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace tgfx {
 
-class VulkanSwapchain;
+    class VulkanSwapchain;
 
-TGFX2_API AdapterClass classify_vulkan_adapter(VkPhysicalDeviceType device_type);
+    TGFX2_API AdapterClass classify_vulkan_adapter(VkPhysicalDeviceType device_type);
 
-// Internal Vulkan resource types
+    // Internal Vulkan resource types
 
-struct VkBufferResource {
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    BufferDesc desc;
-    // Non-null for host-visible buffers created with
-    // VMA_ALLOCATION_CREATE_MAPPED_BIT — upload_buffer just memcpy's
-    // into this pointer, no map/unmap churn per upload.
-    void* mapped_ptr = nullptr;
-    bool host_coherent = true;
-    bool host_write_pending = false;
-    vulkan_detail::NonCoherentDirtyRange host_dirty_range;
-};
-
-struct VkTextureResource {
-    VkImage image = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    VkImageView view = VK_NULL_HANDLE;
-    TextureDesc desc;
-    VkImageLayout current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    bool external = false;
-    ExternalTextureState required_before_release =
-        ExternalTextureState::ColorAttachment;
-};
-
-struct VkSamplerResource {
-    VkSampler sampler = VK_NULL_HANDLE;
-};
-
-struct VkShaderResource {
-    VkShaderModule module = VK_NULL_HANDLE;
-    ShaderStage stage;
-    std::string entry_point = "main";
-    std::string debug_name;
-    bool vertex_input_locations_known = false;
-    std::vector<uint32_t> vertex_input_locations;
-    // Descriptor bindings reflected from SPIR-V bytecode.
-    // Used by create_pipeline() to build per-pipeline VkDescriptorSetLayout.
-    struct DescriptorBinding {
-        uint32_t binding = 0;
-        VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        uint32_t count = 1;
-    };
-    std::vector<DescriptorBinding> descriptor_bindings;
-};
-
-struct VkPipelineResource {
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout layout = VK_NULL_HANDLE;
-    VkRenderPass render_pass = VK_NULL_HANDLE;
-    PipelineDesc desc;
-    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
-};
-
-struct VkResourceSetResource {
-    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-    bool descriptor_cache_owned = false;
-    // Dynamic offsets emitted at bind time, in binding-number order.
-    // Sized for the worst-case dynamic UBO count per layout.
-    static constexpr uint32_t MAX_DYNAMIC_OFFSETS = 8;
-    uint32_t dynamic_offsets[MAX_DYNAMIC_OFFSETS] = {};
-    uint32_t dynamic_offset_count = 0;
-};
-
-struct VulkanResolvedResourceBinding {
-    uint32_t binding = 0;
-    uint32_t array_element = 0;
-    VkDescriptorType expected_descriptor_type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
-    BoundResourceKind kind = BoundResourceKind::UniformBuffer;
-    BufferHandle buffer;
-    TextureHandle texture;
-    SamplerHandle sampler;
-    uint64_t offset = 0;
-    uint64_t range = 0;
-};
-
-struct VkFramebufferCacheKey {
-    VkRenderPass render_pass = VK_NULL_HANDLE;
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t layers = 1;
-    std::vector<VkImageView> attachments;
-
-    bool operator<(const VkFramebufferCacheKey& other) const {
-        if (std::less<VkRenderPass>{}(render_pass, other.render_pass)) return true;
-        if (std::less<VkRenderPass>{}(other.render_pass, render_pass)) return false;
-        if (width != other.width) return width < other.width;
-        if (height != other.height) return height < other.height;
-        if (layers != other.layers) return layers < other.layers;
-        return attachments < other.attachments;
-    }
-};
-
-// Reuse HandlePool from OpenGL backend concept
-template<typename T>
-class VkHandlePool {
-private:
-    std::unordered_map<uint32_t, T> pool_;
-    uint32_t next_id_ = 1;
-
-public:
-    uint32_t add(T&& resource) {
-        uint32_t id = next_id_++;
-        pool_.emplace(id, std::move(resource));
-        return id;
-    }
-    T* get(uint32_t id) {
-        auto it = pool_.find(id);
-        return (it != pool_.end()) ? &it->second : nullptr;
-    }
-    bool remove(uint32_t id) { return pool_.erase(id) > 0; }
-    auto begin() { return pool_.begin(); }
-    auto end() { return pool_.end(); }
-};
-
-// Initialization params
-struct VulkanDeviceCreateInfo {
-    bool enable_validation = true;
-    PresentationMode presentation_mode = PresentationMode::VSync;
-
-    // Vulkan API version requested through VkApplicationInfo. Zero selects
-    // the backend's platform default (1.0 on Android, 1.3 elsewhere).
-    // Keeping this explicit lets hosts honor runtime requirements and lets
-    // compatibility tests exercise the Vulkan 1.0 extension path.
-    uint32_t api_version = 0;
-
-    // Host-visible dynamic UBO budget per in-flight frame. Keeping this in
-    // device configuration makes the memory/performance tradeoff explicit
-    // and lets stress tests exercise the overflow path deterministically.
-    uint64_t ring_ubo_slot_size = 8u * 1024u * 1024u;
-
-    // Required instance extensions. The typical SDL / GLFW flow fills
-    // this from SDL_Vulkan_GetInstanceExtensions / glfwGetRequiredInstanceExtensions.
-    std::vector<const char*> instance_extensions;
-
-    // Required logical-device extensions. OpenXR hosts fill this from
-    // xrGetVulkanDeviceExtensionsKHR before creating the tgfx2 device.
-    std::vector<const char*> device_extensions;
-
-    // Optional hook for hosts that must choose a specific physical device
-    // after tgfx2 has created the VkInstance. OpenXR uses this to call
-    // xrGetVulkanGraphicsDeviceKHR and keep the session binding compatible
-    // with the runtime-selected GPU.
-    std::function<VkPhysicalDevice(VkInstance)> physical_device_selector;
-
-    // Pre-existing VkSurfaceKHR (rare — mostly for embedded hosts that
-    // create their own VkInstance). Usually left null; use `surface_factory`
-    // instead.
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-
-    // Called AFTER the device creates its VkInstance, to produce a
-    // surface bound to the host window. SDL clients set this to a
-    // lambda wrapping SDL_Vulkan_CreateSurface(win, inst, &surf).
-    // If null (and `surface` is also null), the device stays
-    // offscreen-only — no swapchain.
-    std::function<VkSurfaceKHR(VkInstance)> surface_factory;
-
-    // Optional short-lived surface used only to select a physical device and
-    // queue families capable of presenting to the host window system. Unlike
-    // `surface_factory`, this does not create a device-owned swapchain: the
-    // surface is destroyed before construction completes and presentation
-    // windows create their own surfaces/swapchains afterwards.
-    std::function<VkSurfaceKHR(VkInstance)> presentation_probe_surface_factory;
-
-    // Initial swapchain extent in physical pixels. Only used when a
-    // surface is present. Ignored otherwise. The swapchain may clamp
-    // this to the surface's min/max caps.
-    uint32_t swapchain_width = 0;
-    uint32_t swapchain_height = 0;
-};
-
-class TGFX2_TYPE_API VulkanRenderDevice : public IRenderDevice {
-private:
-    static constexpr uint32_t kFrameSlotCount = 6;
-
-    // --- Frame sync / deferred destroy -----------------------------------
-    //
-    // Frame-local Vulkan resources are split across slots. Every submitted
-    // frame owns one slot: descriptor pool/cache, ring-buffer segment, fence,
-    // deferred destroys, and pending readbacks. Reusing a slot waits only for
-    // that slot's old fence, so the CPU is not forced to serialize on the
-    // immediately previous submit.
-    //
-    // This replaces the previous `vkDeviceWaitIdle`-per-destroy + `vkQueue-
-    // WaitIdle`-per-submit pattern, which stalled the CPU on every frame
-    // end and every deferred-destroyed resource set. On a typical editor
-    // frame that's 50-200 device-wide waits serialised into the hot path.
-    // With fence-based sync, rendering can overlap with CPU work and
-    // destroys only block if the GPU really hasn't finished the slot being
-    // reused.
-    //
-    // Callers must keep handles untouched after `destroy()` returns — the
-    // actual Vk objects are freed later, but `HandlePool` entries stay
-    // reserved until then, so reading through a destroyed handle returns
-    // stale (but valid memory) pointers. That's fine: it matches the
-    // previous behavior except for the lack of immediate wait.
-    struct PendingDestroyQueue {
-        std::vector<BufferHandle> buffers;
-        std::vector<TextureHandle> textures;
-        std::vector<SamplerHandle> samplers;
-        std::vector<ShaderHandle> shaders;
-        std::vector<PipelineHandle> pipelines;
-        std::vector<ResourceSetHandle> resource_sets;
-        std::vector<VkFramebuffer> framebuffers;
-        // Raw VkCommandBuffers freed via `defer_cmd_buffer_free()` — used
-        // by VulkanCommandList's destructor to avoid freeing while the
-        // buffer is still in-flight on the queue.
-        std::vector<VkCommandBuffer> cmd_buffers;
-        // Raw (VkBuffer, VmaAllocation) pairs from staging buffers that
-        // the immediate-cb batch is still going to read. Freed after the
-        // frame fence signals.
-        std::vector<std::pair<VkBuffer, VmaAllocation>> vma_buffers;
-        bool empty() const {
-            return buffers.empty() && textures.empty() && samplers.empty()
-                && shaders.empty() && pipelines.empty()
-                && resource_sets.empty() && framebuffers.empty() && cmd_buffers.empty()
-                && vma_buffers.empty();
-        }
-    };
-
-    // Per-device tc_texture cache. `tgfx2_bridge::wrap_tc_texture_as_tgfx2`
-    // on the Vulkan path asks the device to produce a TextureHandle for a
-    // given tc_texture; we keep one handle per tc_resource_header::pool_index
-    // and re-upload only when the tc_texture's `header.version` bumps.
-    // Owned by the device — handles are destroyed in the destructor or
-    // when `invalidate_tc_texture_cache(pool_index)` is called from the
-    // registry destroy-hook.
-    struct CachedTcTextureEntry {
-        TextureHandle handle;
-        uint32_t      version = 0;
-    };
-
-    // Per-device tc_mesh cache. Same shape as the texture cache but with a
-    // VBO + EBO pair per pool_index. Re-uploaded on `header.version` bump,
-    // invalidated on mesh destruction via the registry hook.
-    struct CachedTcMeshEntry {
-        BufferHandle vbo;
-        BufferHandle ebo;
-        uint32_t     version = 0;
-    };
-
-    struct CachedTcShaderEntry {
-        ShaderHandle vs;
-        ShaderHandle fs;
-        uint32_t     version = 0;
-        uint64_t     resolver_revision = 0;
-        bool         has_vs = false;
-    };
-
-    enum class PixelReadbackKind : uint8_t {
-        Rgba8,
-        DepthF32,
-    };
-
-    struct PendingPixelReadback {
-        uint64_t request_id = 0;
-        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
-        VkBuffer staging = VK_NULL_HANDLE;
+    struct VkBufferResource {
+        VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
+        BufferDesc desc;
+        // Non-null for host-visible buffers created with
+        // VMA_ALLOCATION_CREATE_MAPPED_BIT — upload_buffer just memcpy's
+        // into this pointer, no map/unmap churn per upload.
+        void* mapped_ptr = nullptr;
+        bool host_coherent = true;
+        bool host_write_pending = false;
+        vulkan_detail::NonCoherentDirtyRange host_dirty_range;
     };
 
-    struct CompletedPixelReadback {
-        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
-        std::array<uint8_t, 4> bytes = {0, 0, 0, 0};
+    struct VkTextureResource {
+        VkImage image = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        TextureDesc desc;
+        VkImageLayout current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bool external = false;
+        ExternalTextureState required_before_release = ExternalTextureState::ColorAttachment;
     };
 
-    VkInstance instance_ = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
-    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
-    VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
-    VkDevice device_ = VK_NULL_HANDLE;
-    VkQueue graphics_queue_ = VK_NULL_HANDLE;
-    VkQueue present_queue_ = VK_NULL_HANDLE;
-    uint32_t graphics_family_ = 0;
-    uint32_t present_family_ = 0;
-    uint32_t api_version_ = VK_API_VERSION_1_0;
-    bool multiview_enabled_ = false;
-    uint32_t max_multiview_views_ = 0;
-    std::vector<const char*> device_extensions_;
-
-    VmaAllocator allocator_ = VK_NULL_HANDLE;
-    VkPhysicalDeviceMemoryProperties memory_properties_ = {};
-    VkCommandPool command_pool_ = VK_NULL_HANDLE;
-
-    // Per-frame-slot descriptor pools. Each frame allocates descriptor
-    // sets out of `descriptor_pools_[current_pool_idx_]`; at `submit()`
-    // we advance to the next slot and, after that slot's fence signals,
-    // `vkResetDescriptorPool` returns all sets in one call — cheaper than freeing each
-    // set with `vkFreeDescriptorSets`, and completely removes the "pool
-    // fills up across the frame" failure mode.
-    std::array<VkDescriptorPool, kFrameSlotCount> descriptor_pools_ = {};
-    uint32_t current_pool_idx_ = 0;
-
-    // Per-pool descriptor-set cache keyed on the hash of
-    // BoundResourceSetDesc bindings. A draw that binds the same UBOs and
-    // samplers as an earlier draw in the same frame reuses the already-
-    // allocated VkDescriptorSet instead of paying for another
-    // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cleared when
-    // the corresponding pool is reset in `submit()`.
-    std::array<std::unordered_map<uint64_t, ResourceSetHandle>, kFrameSlotCount> descriptor_cache_;
-
-    // Lazy-created default sampler (see ensure_default_sampler()).
-    VkSampler default_sampler_ = VK_NULL_HANDLE;
-    TextureHandle default_sampled_texture_{};
-
-    BackendCapabilities caps_;
-
-    VkHandlePool<VkBufferResource> buffers_;
-    VkHandlePool<VkTextureResource> textures_;
-    VkHandlePool<VkSamplerResource> samplers_;
-    VkHandlePool<VkShaderResource> shaders_;
-    VkHandlePool<VkPipelineResource> pipelines_;
-    VkHandlePool<VkResourceSetResource> resource_sets_;
-    std::vector<BufferHandle> pending_mapped_buffer_writes_;
-
-    std::unique_ptr<VulkanSwapchain> swapchain_;
-
-    // RenderPass cache (key: format config hash)
-    std::map<std::vector<VkFormat>, VkRenderPass> render_pass_cache_;
-    // Framebuffer cache. VkFramebuffer compatibility includes render pass
-    // and dimensions, not only attachment image views.
-    std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
-
-    // Pipeline layout cache. Key: VkDescriptorSetLayout.
-    // Current transitional backend model: one reflected descriptor set layout
-    // per pipeline. The frontend migration target is scope-first bind-by-name.
-    std::unordered_map<VkDescriptorSetLayout, VkPipelineLayout> pipeline_layout_cache_;
-
-    // Cache of VkDescriptorSetLayout built from merged shader bindings.
-    // Key: FNV-1a hash of (binding, descriptor_type, count) sorted.
-    std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_layout_cache_;
-    std::unordered_map<VkDescriptorSetLayout, std::vector<VkDescriptorSetLayoutBinding>>
-        descriptor_layout_bindings_;
-
-    bool validation_enabled_ = false;
-
-    std::array<VkFence, kFrameSlotCount> frame_fences_ = {};
-    std::array<bool, kFrameSlotCount> frame_fence_in_flight_ = {};
-    PendingDestroyQueue pending_destroy_current_;
-    std::array<PendingDestroyQueue, kFrameSlotCount> pending_destroy_slots_;
-
-    VkCommandBuffer immediate_cb_ = VK_NULL_HANDLE;
-    bool immediate_cb_open_ = false;
-
-    // Ring UBO — backing storage for UNIFORM_BUFFER_DYNAMIC bindings.
-    // Created once in create_ring_ubo(), freed in ~VulkanRenderDevice.
-    //
-    // Split into frame slots. Frame N records into slot X while later frames
-    // can record into other slots. After the fence for slot X signals, that
-    // slot becomes reusable. The flip / reset pattern is identical to descriptor_pools_
-    // above and piggybacks on the same per-slot fence guarantee. Writing
-    // into a single head would race: the just-submitted frame's GPU read
-    // overlaps the next frame's host write into the same offset range.
-    VkBuffer      ring_ubo_buffer_     = VK_NULL_HANDLE;
-    VmaAllocation ring_ubo_allocation_ = VK_NULL_HANDLE;
-    void*         ring_ubo_mapped_     = nullptr;
-    uint64_t      ring_ubo_size_       = 0;  // total (all frame slots)
-    uint64_t      ring_ubo_slot_size_  = 0;  // = ring_ubo_size_ / kFrameSlotCount
-    uint64_t      requested_ring_ubo_slot_size_ = 8u * 1024u * 1024u;
-    // Per-slot head — advances with every write into that slot, reset to
-    // 0 when we flip INTO the slot in submit(). Atomic for forward-compat
-    // with multi-threaded recording; only the render thread writes today,
-    // so relaxed ordering is sufficient.
-    std::array<std::atomic<uint64_t>, kFrameSlotCount> ring_ubo_heads_ = {};
-    uint32_t ring_ubo_slot_idx_ = 0;
-    // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
-    // RenderContext2::bind_uniform_data() path and recognised by
-    // create_bound_resource_set() / bind_resource_set() to emit a dynamic offset
-    // rather than update the descriptor on each bind.
-    BufferHandle ring_ubo_handle_ = {};
-    // Cached VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment.
-    uint32_t ubo_alignment_ = 256;
-    // True when the ring's memory type advertises HOST_COHERENT — the
-    // memcpy is immediately visible to the GPU and no vmaFlushAllocation
-    // is needed. On desktop Linux (NVIDIA / AMD discrete) the CPU_TO_GPU
-    // allocation pool is always coherent, so skipping the flush call
-    // removes ~1 function call × hundreds of writes/frame from the hot
-    // path. Queried once in create_ring_ubo().
-    bool ring_ubo_coherent_ = false;
-    std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount>
-        ring_ubo_dirty_ranges_ = {};
-    uint64_t non_coherent_atom_size_ = 1;
-    std::atomic_bool ring_ubo_overflow_warned_{false};
-
-    // Transient vertex ring for immediate draws. Same frame-slot lifetime
-    // model as ring_ubo_: frame N records into one half while the other
-    // half may still be read by the GPU from frame N-1.
-    VkBuffer      transient_vb_buffer_     = VK_NULL_HANDLE;
-    VmaAllocation transient_vb_allocation_ = VK_NULL_HANDLE;
-    void*         transient_vb_mapped_     = nullptr;
-    uint64_t      transient_vb_size_       = 0;
-    uint64_t      transient_vb_slot_size_  = 0;
-    std::array<std::atomic<uint64_t>, kFrameSlotCount> transient_vb_heads_ = {};
-    uint32_t transient_vb_slot_idx_ = 0;
-    BufferHandle transient_vb_handle_ = {};
-    bool transient_vb_coherent_ = false;
-    std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount>
-        transient_vb_dirty_ranges_ = {};
-    bool transient_vb_overflow_warned_ = false;
-
-    struct SubmitStats {
-        uint64_t submits = 0;
-        std::chrono::steady_clock::time_point window_start =
-            std::chrono::steady_clock::now();
-        double fence_wait_us = 0.0;
-        double readback_cleanup_us = 0.0;
-        double destroy_cleanup_us = 0.0;
-        double descriptor_cleanup_us = 0.0;
+    struct VkSamplerResource {
+        VkSampler sampler = VK_NULL_HANDLE;
     };
-    SubmitStats submit_stats_;
 
-    // tc_texture / tc_mesh per-device resource caches. Keyed by
-    // tc_resource_header::pool_index. Replace the former file-scope
-    // g_tex_cache / g_mesh_cache singletons in tgfx2_bridge.cpp —
-    // ownership is now device-local, destruction is deterministic (caches
-    // are drained in ~VulkanRenderDevice), and registry destroy-hooks can
-    // invalidate entries without dangling device pointers.
-    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
-    std::mutex                                         tc_texture_cache_mtx_;
-    std::unordered_map<uint32_t, CachedTcMeshEntry>    tc_mesh_cache_;
-    std::mutex                                         tc_mesh_cache_mtx_;
-    std::unordered_map<uint32_t, CachedTcShaderEntry>  tc_shader_cache_;
-    std::mutex                                         tc_shader_cache_mtx_;
-    uint64_t next_pixel_readback_id_ = 1;
-    std::vector<PendingPixelReadback> pixel_readbacks_current_;
-    std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
-    std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
-    AdapterInfo adapter_info_;
+    struct VkShaderResource {
+        VkShaderModule module = VK_NULL_HANDLE;
+        ShaderStage stage;
+        std::string entry_point = "main";
+        std::string debug_name;
+        bool vertex_input_locations_known = false;
+        std::vector<uint32_t> vertex_input_locations;
+        // Descriptor bindings reflected from SPIR-V bytecode.
+        // Used by create_pipeline() to build per-pipeline VkDescriptorSetLayout.
+        struct DescriptorBinding {
+            uint32_t binding = 0;
+            VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+            uint32_t count = 1;
+        };
+        std::vector<DescriptorBinding> descriptor_bindings;
+    };
 
-public:
-    explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
-    ~VulkanRenderDevice() override;
+    struct VkPipelineResource {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkRenderPass render_pass = VK_NULL_HANDLE;
+        PipelineDesc desc;
+        VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
+    };
 
-    BackendType backend_type() const override { return BackendType::Vulkan; }
-    AdapterInfo adapter_info() const override { return adapter_info_; }
-    BackendCapabilities capabilities() const override;
-    void wait_idle() override;
-    void invalidate_render_target_cache() override;
+    struct VkResourceSetResource {
+        VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+        bool descriptor_cache_owned = false;
+        // Dynamic offsets emitted at bind time, in binding-number order.
+        // Sized for the worst-case dynamic UBO count per layout.
+        static constexpr uint32_t MAX_DYNAMIC_OFFSETS = 8;
+        uint32_t dynamic_offsets[MAX_DYNAMIC_OFFSETS] = {};
+        uint32_t dynamic_offset_count = 0;
+    };
 
-    BufferHandle create_buffer(const BufferDesc& desc) override;
-    TextureHandle create_texture(const TextureDesc& desc) override;
-    TextureHandle register_external_texture(
-        uintptr_t native_handle, const TextureDesc& desc) override;
-    bool begin_external_texture_access(
-        TextureHandle handle,
-        const ExternalTextureAccessDesc& access) override;
-    bool end_external_texture_access(TextureHandle handle) override;
-    TextureDesc texture_desc(TextureHandle handle) const override;
-    uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
-    uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
-    SamplerHandle create_sampler(const SamplerDesc& desc) override;
-    ShaderHandle create_shader(const ShaderDesc& desc) override;
-    PipelineHandle create_pipeline(const PipelineDesc& desc) override;
-    ResourceSetHandle create_bound_resource_set(
-        const BoundResourceSetDesc& desc) override;
+    struct VulkanResolvedResourceBinding {
+        uint32_t binding = 0;
+        uint32_t array_element = 0;
+        VkDescriptorType expected_descriptor_type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        BoundResourceKind kind = BoundResourceKind::UniformBuffer;
+        BufferHandle buffer;
+        TextureHandle texture;
+        SamplerHandle sampler;
+        uint64_t offset = 0;
+        uint64_t range = 0;
+    };
 
-    void destroy(BufferHandle handle) override;
-    void destroy(TextureHandle handle) override;
-    void destroy(SamplerHandle handle) override;
-    void destroy(ShaderHandle handle) override;
-    void destroy(PipelineHandle handle) override;
-    void destroy(ResourceSetHandle handle) override;
+    struct VkFramebufferCacheKey {
+        VkRenderPass render_pass = VK_NULL_HANDLE;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t layers = 1;
+        std::vector<VkImageView> attachments;
 
-    void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
-    void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
-    void upload_texture_region(TextureHandle dst,
-                               uint32_t x, uint32_t y,
-                               uint32_t w, uint32_t h,
-                               std::span<const uint8_t> data,
-                               uint32_t mip = 0) override;
-    void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
-
-    // Legacy synchronous one-pixel readback helpers. Editor hover/click
-    // uses request_pixel_*/poll_pixel_* on Vulkan to avoid queue-idle
-    // stalls; these remain for direct/debug callers that require an
-    // immediate answer.
-    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
-    bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
-    uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
-    bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
-    uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
-    bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
-    bool read_texture_rgba_float(TextureHandle tex, float* out) override;
-    bool read_texture_depth_float(TextureHandle tex, float* out) override;
-
-    std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
-    void submit(ICommandList& cmd) override;
-    void present() override;
-
-    // Texture-to-texture presentation path. Render surfaces must expose
-    // their composite target as a tgfx2 TextureHandle instead of a raw
-    // backend-native framebuffer.
-    void blit_to_texture(
-        TextureHandle dst,
-        TextureHandle src,
-        termin::Bounds2i src_rect,
-        termin::Bounds2i dst_rect) override;
-
-    void clear_texture(
-        TextureHandle dst,
-        termin::Color4 color,
-        termin::Bounds2i viewport) override;
-
-    // Internal access for command list
-    VkDevice device() const { return device_; }
-    VkBufferResource* get_buffer(BufferHandle h) { return buffers_.get(h.id); }
-    VkTextureResource* get_texture(TextureHandle h) { return textures_.get(h.id); }
-    VkSamplerResource* get_sampler(SamplerHandle h) { return samplers_.get(h.id); }
-    VkShaderResource* get_shader(ShaderHandle h) { return shaders_.get(h.id); }
-    VkPipelineResource* get_pipeline(PipelineHandle h) { return pipelines_.get(h.id); }
-    VkResourceSetResource* get_resource_set(ResourceSetHandle h) { return resource_sets_.get(h.id); }
-
-    VkInstance instance() const { return instance_; }
-    VkPhysicalDevice physical_device() const { return physical_device_; }
-    VkQueue graphics_queue() const { return graphics_queue_; }
-    VkQueue present_queue() const { return present_queue_; }
-    uint32_t graphics_queue_family() const { return graphics_family_; }
-    uint32_t present_queue_family() const { return present_family_; }
-    VkCommandPool command_pool() const { return command_pool_; }
-    VmaAllocator allocator() const { return allocator_; }
-
-    // Get or create a VkRenderPass for the given format configuration
-    VkRenderPass get_or_create_render_pass(
-        const std::vector<PixelFormat>& color_formats,
-        PixelFormat depth_format, bool has_depth,
-        uint32_t sample_count,
-        LoadOp color_load, LoadOp depth_load);
-    VkRenderPass get_or_create_render_pass(
-        const std::vector<PixelFormat>& color_formats,
-        std::span<const LoadOp> color_loads,
-        std::span<const StoreOp> color_stores,
-        PixelFormat depth_format,
-        bool has_depth,
-        uint32_t sample_count,
-        LoadOp depth_load,
-        StoreOp depth_store,
-        uint32_t view_mask = 0);
-
-    // Get or create a VkFramebuffer
-    VkFramebuffer get_or_create_framebuffer(
-        VkRenderPass render_pass,
-        const std::vector<VkImageView>& attachments,
-        uint32_t width, uint32_t height, uint32_t layers = 1);
-
-    // Execute a one-shot command buffer (for uploads, layout transitions)
-    void execute_immediate(std::function<void(VkCommandBuffer)> fn);
-
-    // Transition image layout
-    void transition_image_layout(VkCommandBuffer cmd, VkImage image,
-                                  VkImageLayout old_layout, VkImageLayout new_layout,
-                                  VkImageAspectFlags aspect,
-                                  uint32_t array_layers = 1);
-
-    // Lazy-create a default linear/clamp sampler used when a caller
-    // binds a SampledTexture without an explicit sampler. One per
-    // device; destroyed with the device. Returned as raw VkSampler so
-    // the descriptor write path can drop it into VkDescriptorImageInfo
-    // without translating through SamplerHandle.
-    VkSampler ensure_default_sampler();
-    TextureHandle ensure_default_sampled_texture();
-
-    // --- Ring UBO (for dynamic-offset descriptor path) ------------------
-    //
-    // A single large host-visible, persistently-mapped VkBuffer that
-    // accumulates per-draw UBO data across one frame. Callers (render-pass
-    // code, SkinnedMeshRenderer, material params) write their block via
-    // `ring_ubo_write(data, size, offset)` which returns an aligned byte offset;
-    // the offset is then handed to `vkCmdBindDescriptorSets` as a dynamic
-    // offset for bindings declared UNIFORM_BUFFER_DYNAMIC.
-    //
-    // Replaces per-draw UBO buffers + per-draw descriptor-set allocations.
-    // Expected to drop resource-sets/sec by ~2 orders of magnitude — see
-    // memory/vulkan_perf_dynamic_ubo_plan.md for the rationale.
-    //
-    // Head pointer is reset at the start of every submit() after the
-    // previous frame's fence signals (GPU has finished reading the ring's
-    // previous contents). Wraparound mid-frame would corrupt in-flight
-    // data, so the buffer is sized generously (16 MB ≈ 10 KB × 1600 draws)
-    // and an overflow is an error we log rather than silently wrap.
-    bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
-    VkBuffer ring_ubo_buffer() const { return ring_ubo_buffer_; }
-    // The ring buffer exposed as a normal BufferHandle. BoundResourceSetDesc
-    // values can reference this handle; the
-    // descriptor-set creator recognises it and emits the offset as a dynamic
-    // descriptor offset.
-    BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
-    // minUniformBufferOffsetAlignment from VkPhysicalDeviceLimits. 256 on
-    // NVIDIA desktop, 64 on AMD desktop, up to 256 on mobile. Used by the
-    // ring writer to round each allocation up to a legal dynamic offset,
-    // and by the shared descriptor-set creator to set buffer range = max
-    // UBO block size (cannot exceed buffer range at bind time).
-    uint32_t ubo_alignment() const override { return ubo_alignment_; }
-
-    BufferHandle transient_vertex_buffer() override { return transient_vb_handle_; }
-    uint64_t transient_vertex_write(const void* data, uint32_t size) override;
-
-    // Non-null when the device was created with a surface (via
-    // `info.surface` or `info.surface_factory`). Hosts drive on-screen
-    // frames through this — acquire() at start of frame, present() at
-    // end. Offscreen-only devices return nullptr.
-    VulkanSwapchain* swapchain() const { return swapchain_.get(); }
-
-    // Queue a VkCommandBuffer for deferred release. Called from
-    // VulkanCommandList's destructor — freeing a command buffer while its
-    // work is still in-flight on the queue is UB. The buffer will be
-    // released together with other in-flight resources after the next
-    // fence signal in `submit()`.
-    void defer_cmd_buffer_free(VkCommandBuffer cb) {
-        if (cb != VK_NULL_HANDLE) pending_destroy_current_.cmd_buffers.push_back(cb);
-    }
-
-    // Queue a staging-style VMA buffer for deferred destroy after the
-    // frame fence signals. Used by upload_buffer / upload_texture /
-    // blit_to_texture / read_buffer — they fill a staging buffer, batch
-    // a copy into immediate_cb_, and must NOT destroy the staging
-    // synchronously because the GPU hasn't executed the copy yet.
-    void defer_vma_buffer_destroy(VkBuffer buffer, VmaAllocation alloc) {
-        if (buffer != VK_NULL_HANDLE) {
-            pending_destroy_current_.vma_buffers.emplace_back(buffer, alloc);
+        bool operator<(const VkFramebufferCacheKey& other) const {
+            if (std::less<VkRenderPass>{}(render_pass, other.render_pass))
+                return true;
+            if (std::less<VkRenderPass>{}(other.render_pass, render_pass))
+                return false;
+            if (width != other.width)
+                return width < other.width;
+            if (height != other.height)
+                return height < other.height;
+            if (layers != other.layers)
+                return layers < other.layers;
+            return attachments < other.attachments;
         }
-    }
+    };
 
-    // Get (and lazily open) the shared immediate command buffer. Every
-    // copy / layout-transition / clear that used to be its own submit
-    // now records into this single cb; it's ended and flushed inside
-    // `submit()` as the first entry of the frame's multi-cb submit.
-    // One vkQueueSubmit per frame replaces the previous ~200 tiny
-    // submit + vkQueueWaitIdle pairs that dominated Vulkan CPU time.
-    VkCommandBuffer ensure_immediate_cb();
+    // Reuse HandlePool from OpenGL backend concept
+    template <typename T> class VkHandlePool {
+    private:
+        std::unordered_map<uint32_t, T> pool_;
+        uint32_t next_id_ = 1;
 
-    // --- tc_texture / tc_mesh per-device resource cache ------------------
-    //
-    // Called by `tgfx2_bridge::wrap_tc_texture_as_tgfx2` / `wrap_mesh_as_tgfx2`
-    // on the Vulkan path. Each tc_texture / tc_mesh gets one live handle
-    // per device, reused across frames until the source `header.version`
-    // bumps — then the old handle is destroyed and the resource is
-    // re-uploaded.
-    //
-    // Invariants:
-    //   - Returned handles are OWNED by the device. Callers must NOT pass
-    //     them to `destroy()` — doing so leaves the cache entry pointing
-    //     at a dead handle. `release_texture_binding` /
-    //     `release_mesh_binding` already no-op on the Vulkan path.
-    //   - Lookup / update is guarded by the cache's mutex; safe to call
-    //     from any thread.
-    //   - Entries live until (a) the device is destroyed, or (b) the
-    //     tc_texture / tc_mesh is freed and the registry hook invokes
-    //     `invalidate_tc_texture_cache` / `invalidate_tc_mesh_cache`.
-    TextureHandle ensure_tc_texture(tc_texture* tex) override;
-    void          invalidate_tc_texture_cache(uint32_t pool_index) override;
+    public:
+        uint32_t add(T&& resource) {
+            uint32_t id = next_id_++;
+            pool_.emplace(id, std::move(resource));
+            return id;
+        }
+        T* get(uint32_t id) {
+            auto it = pool_.find(id);
+            return (it != pool_.end()) ? &it->second : nullptr;
+        }
+        bool remove(uint32_t id) {
+            return pool_.erase(id) > 0;
+        }
+        auto begin() {
+            return pool_.begin();
+        }
+        auto end() {
+            return pool_.end();
+        }
+    };
 
-    // Returns {vbo, ebo}. Either is zero-id on upload failure, in which
-    // case the cache entry is left empty so the next call retries.
-    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
-    void          invalidate_tc_mesh_cache(uint32_t pool_index) override;
-    bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
-    void          invalidate_tc_shader_cache(uint32_t pool_index) override;
+    // Initialization params
+    struct VulkanDeviceCreateInfo {
+        bool enable_validation = true;
+        PresentationMode presentation_mode = PresentationMode::VSync;
 
-private:
-    void invalidate_descriptor_cache();
-    void init_instance(const VulkanDeviceCreateInfo& info);
-    void pick_physical_device();
-    void create_logical_device();
-    void create_allocator();
-    void create_command_pool();
-    void create_descriptor_pool();
-    ResourceSetHandle create_resolved_resource_set(
-        VkDescriptorSetLayout layout,
-        const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings,
-        uintptr_t resource_layout_token,
-        std::span<const VulkanResolvedResourceBinding> resolved_bindings,
-        VkResourceSetResource resource,
-        uint64_t cache_domain);
-    void create_ring_ubo();
-    void create_transient_vertex_ring();
-    void flush_pending_host_writes(uint32_t slot);
+        // Vulkan API version requested through VkApplicationInfo. Zero selects
+        // the backend's platform default (1.0 on Android, 1.3 elsewhere).
+        // Keeping this explicit lets hosts honor runtime requirements and lets
+        // compatibility tests exercise the Vulkan 1.0 extension path.
+        uint32_t api_version = 0;
 
-    // Get or create a VkPipelineLayout from the current reflected
-    // VkDescriptorSetLayout plus the standard 128-byte push constant range.
-    // Cached by layout handle.
-    VkPipelineLayout get_or_create_pipeline_layout(VkDescriptorSetLayout set_layout);
+        // Host-visible dynamic UBO budget per in-flight frame. Keeping this in
+        // device configuration makes the memory/performance tradeoff explicit
+        // and lets stress tests exercise the overflow path deterministically.
+        uint64_t ring_ubo_slot_size = 8u * 1024u * 1024u;
 
-    // Build a VkDescriptorSetLayout from merged VS+FS descriptor bindings
-    // (VkShaderResource::DescriptorBinding). Cached by FNV-1a hash of the
-    // (binding, descriptor_type, count) signature.
-    VkDescriptorSetLayout get_or_create_descriptor_set_layout(
-        const std::vector<VkShaderResource::DescriptorBinding>& bindings);
+        // Required instance extensions. The typical SDL / GLFW flow fills
+        // this from SDL_Vulkan_GetInstanceExtensions / glfwGetRequiredInstanceExtensions.
+        std::vector<const char*> instance_extensions;
 
-    // Drain `q` now — actually free the underlying Vk objects. Caller is
-    // responsible for ensuring GPU has finished using these resources.
-    void drain_pending_destroy(PendingDestroyQueue& q);
-    uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
-    void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
-    void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
-    void prepare_frame_slot(uint32_t slot, SubmitStats* stats);
+        // Required logical-device extensions. OpenXR hosts fill this from
+        // xrGetVulkanDeviceExtensionsKHR before creating the tgfx2 device.
+        std::vector<const char*> device_extensions;
 
-};
+        // Optional hook for hosts that must choose a specific physical device
+        // after tgfx2 has created the VkInstance. OpenXR uses this to call
+        // xrGetVulkanGraphicsDeviceKHR and keep the session binding compatible
+        // with the runtime-selected GPU.
+        std::function<VkPhysicalDevice(VkInstance)> physical_device_selector;
+
+        // Pre-existing VkSurfaceKHR (rare — mostly for embedded hosts that
+        // create their own VkInstance). Usually left null; use `surface_factory`
+        // instead.
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+        // Called AFTER the device creates its VkInstance, to produce a
+        // surface bound to the host window. SDL clients set this to a
+        // lambda wrapping SDL_Vulkan_CreateSurface(win, inst, &surf).
+        // If null (and `surface` is also null), the device stays
+        // offscreen-only — no swapchain.
+        std::function<VkSurfaceKHR(VkInstance)> surface_factory;
+
+        // Optional short-lived surface used only to select a physical device and
+        // queue families capable of presenting to the host window system. Unlike
+        // `surface_factory`, this does not create a device-owned swapchain: the
+        // surface is destroyed before construction completes and presentation
+        // windows create their own surfaces/swapchains afterwards.
+        std::function<VkSurfaceKHR(VkInstance)> presentation_probe_surface_factory;
+
+        // Initial swapchain extent in physical pixels. Only used when a
+        // surface is present. Ignored otherwise. The swapchain may clamp
+        // this to the surface's min/max caps.
+        uint32_t swapchain_width = 0;
+        uint32_t swapchain_height = 0;
+    };
+
+    class TGFX2_TYPE_API VulkanRenderDevice : public IRenderDevice {
+    private:
+        static constexpr uint32_t kFrameSlotCount = 6;
+
+        // --- Frame sync / deferred destroy -----------------------------------
+        //
+        // Frame-local Vulkan resources are split across slots. Every submitted
+        // frame owns one slot: descriptor pool/cache, ring-buffer segment, fence,
+        // deferred destroys, and pending readbacks. Reusing a slot waits only for
+        // that slot's old fence, so the CPU is not forced to serialize on the
+        // immediately previous submit.
+        //
+        // This replaces the previous `vkDeviceWaitIdle`-per-destroy + `vkQueue-
+        // WaitIdle`-per-submit pattern, which stalled the CPU on every frame
+        // end and every deferred-destroyed resource set. On a typical editor
+        // frame that's 50-200 device-wide waits serialised into the hot path.
+        // With fence-based sync, rendering can overlap with CPU work and
+        // destroys only block if the GPU really hasn't finished the slot being
+        // reused.
+        //
+        // Callers must keep handles untouched after `destroy()` returns — the
+        // actual Vk objects are freed later, but `HandlePool` entries stay
+        // reserved until then, so reading through a destroyed handle returns
+        // stale (but valid memory) pointers. That's fine: it matches the
+        // previous behavior except for the lack of immediate wait.
+        struct PendingDestroyQueue {
+            std::vector<BufferHandle> buffers;
+            std::vector<TextureHandle> textures;
+            std::vector<SamplerHandle> samplers;
+            std::vector<ShaderHandle> shaders;
+            std::vector<PipelineHandle> pipelines;
+            std::vector<ResourceSetHandle> resource_sets;
+            std::vector<VkFramebuffer> framebuffers;
+            // Raw VkCommandBuffers freed via `defer_cmd_buffer_free()` — used
+            // by VulkanCommandList's destructor to avoid freeing while the
+            // buffer is still in-flight on the queue.
+            std::vector<VkCommandBuffer> cmd_buffers;
+            // Raw (VkBuffer, VmaAllocation) pairs from staging buffers that
+            // the immediate-cb batch is still going to read. Freed after the
+            // frame fence signals.
+            std::vector<std::pair<VkBuffer, VmaAllocation>> vma_buffers;
+            bool empty() const {
+                return buffers.empty() && textures.empty() && samplers.empty() && shaders.empty() &&
+                       pipelines.empty() && resource_sets.empty() && framebuffers.empty() && cmd_buffers.empty() &&
+                       vma_buffers.empty();
+            }
+        };
+
+        // Per-device tc_texture cache. `tgfx2_bridge::wrap_tc_texture_as_tgfx2`
+        // on the Vulkan path asks the device to produce a TextureHandle for a
+        // given tc_texture; we keep one handle per tc_resource_header::pool_index
+        // and re-upload only when the tc_texture's `header.version` bumps.
+        // Owned by the device — handles are destroyed in the destructor or
+        // when `invalidate_tc_texture_cache(pool_index)` is called from the
+        // registry destroy-hook.
+        struct CachedTcTextureEntry {
+            TextureHandle handle;
+            uint32_t version = 0;
+        };
+
+        // Per-device tc_mesh cache. Same shape as the texture cache but with a
+        // VBO + EBO pair per pool_index. Re-uploaded on `header.version` bump,
+        // invalidated on mesh destruction via the registry hook.
+        struct CachedTcMeshEntry {
+            BufferHandle vbo;
+            BufferHandle ebo;
+            uint32_t version = 0;
+        };
+
+        struct CachedTcShaderEntry {
+            ShaderHandle vs;
+            ShaderHandle fs;
+            uint32_t version = 0;
+            uint64_t resolver_revision = 0;
+            bool has_vs = false;
+        };
+
+        enum class PixelReadbackKind : uint8_t {
+            Rgba8,
+            DepthF32,
+        };
+
+        struct PendingPixelReadback {
+            uint64_t request_id = 0;
+            PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+            VkBuffer staging = VK_NULL_HANDLE;
+            VmaAllocation allocation = VK_NULL_HANDLE;
+        };
+
+        struct CompletedPixelReadback {
+            PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+            std::array<uint8_t, 4> bytes = {0, 0, 0, 0};
+        };
+
+        VkInstance instance_ = VK_NULL_HANDLE;
+        VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
+        VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+        VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
+        VkDevice device_ = VK_NULL_HANDLE;
+        VkQueue graphics_queue_ = VK_NULL_HANDLE;
+        VkQueue present_queue_ = VK_NULL_HANDLE;
+        uint32_t graphics_family_ = 0;
+        uint32_t present_family_ = 0;
+        uint32_t api_version_ = VK_API_VERSION_1_0;
+        bool multiview_enabled_ = false;
+        uint32_t max_multiview_views_ = 0;
+        std::vector<const char*> device_extensions_;
+
+        VmaAllocator allocator_ = VK_NULL_HANDLE;
+        VkPhysicalDeviceMemoryProperties memory_properties_ = {};
+        VkCommandPool command_pool_ = VK_NULL_HANDLE;
+
+        // Per-frame-slot descriptor pools. Each frame allocates descriptor
+        // sets out of `descriptor_pools_[current_pool_idx_]`; at `submit()`
+        // we advance to the next slot and, after that slot's fence signals,
+        // `vkResetDescriptorPool` returns all sets in one call — cheaper than freeing each
+        // set with `vkFreeDescriptorSets`, and completely removes the "pool
+        // fills up across the frame" failure mode.
+        std::array<VkDescriptorPool, kFrameSlotCount> descriptor_pools_ = {};
+        uint32_t current_pool_idx_ = 0;
+
+        // Per-pool descriptor-set cache keyed on the hash of
+        // BoundResourceSetDesc bindings. A draw that binds the same UBOs and
+        // samplers as an earlier draw in the same frame reuses the already-
+        // allocated VkDescriptorSet instead of paying for another
+        // vkAllocateDescriptorSets + vkUpdateDescriptorSets. Cleared when
+        // the corresponding pool is reset in `submit()`.
+        std::array<std::unordered_map<uint64_t, ResourceSetHandle>, kFrameSlotCount> descriptor_cache_;
+
+        // Lazy-created default sampler (see ensure_default_sampler()).
+        VkSampler default_sampler_ = VK_NULL_HANDLE;
+        TextureHandle default_sampled_texture_{};
+
+        BackendCapabilities caps_;
+
+        VkHandlePool<VkBufferResource> buffers_;
+        VkHandlePool<VkTextureResource> textures_;
+        VkHandlePool<VkSamplerResource> samplers_;
+        VkHandlePool<VkShaderResource> shaders_;
+        VkHandlePool<VkPipelineResource> pipelines_;
+        VkHandlePool<VkResourceSetResource> resource_sets_;
+        std::vector<BufferHandle> pending_mapped_buffer_writes_;
+
+        std::unique_ptr<VulkanSwapchain> swapchain_;
+
+        // RenderPass cache (key: format config hash)
+        std::map<std::vector<VkFormat>, VkRenderPass> render_pass_cache_;
+        // Framebuffer cache. VkFramebuffer compatibility includes render pass
+        // and dimensions, not only attachment image views.
+        std::map<VkFramebufferCacheKey, VkFramebuffer> framebuffer_cache_;
+
+        // Pipeline layout cache. Key: VkDescriptorSetLayout.
+        // Current transitional backend model: one reflected descriptor set layout
+        // per pipeline. The frontend migration target is scope-first bind-by-name.
+        std::unordered_map<VkDescriptorSetLayout, VkPipelineLayout> pipeline_layout_cache_;
+
+        // Cache of VkDescriptorSetLayout built from merged shader bindings.
+        // Key: FNV-1a hash of (binding, descriptor_type, count) sorted.
+        std::unordered_map<uint64_t, VkDescriptorSetLayout> descriptor_layout_cache_;
+        std::unordered_map<VkDescriptorSetLayout, std::vector<VkDescriptorSetLayoutBinding>>
+            descriptor_layout_bindings_;
+
+        bool validation_enabled_ = false;
+
+        std::array<VkFence, kFrameSlotCount> frame_fences_ = {};
+        std::array<bool, kFrameSlotCount> frame_fence_in_flight_ = {};
+        PendingDestroyQueue pending_destroy_current_;
+        std::array<PendingDestroyQueue, kFrameSlotCount> pending_destroy_slots_;
+
+        VkCommandBuffer immediate_cb_ = VK_NULL_HANDLE;
+        bool immediate_cb_open_ = false;
+
+        // Ring UBO — backing storage for UNIFORM_BUFFER_DYNAMIC bindings.
+        // Created once in create_ring_ubo(), freed in ~VulkanRenderDevice.
+        //
+        // Split into frame slots. Frame N records into slot X while later frames
+        // can record into other slots. After the fence for slot X signals, that
+        // slot becomes reusable. The flip / reset pattern is identical to descriptor_pools_
+        // above and piggybacks on the same per-slot fence guarantee. Writing
+        // into a single head would race: the just-submitted frame's GPU read
+        // overlaps the next frame's host write into the same offset range.
+        VkBuffer ring_ubo_buffer_ = VK_NULL_HANDLE;
+        VmaAllocation ring_ubo_allocation_ = VK_NULL_HANDLE;
+        void* ring_ubo_mapped_ = nullptr;
+        uint64_t ring_ubo_size_ = 0;      // total (all frame slots)
+        uint64_t ring_ubo_slot_size_ = 0; // = ring_ubo_size_ / kFrameSlotCount
+        uint64_t requested_ring_ubo_slot_size_ = 8u * 1024u * 1024u;
+        // Per-slot head — advances with every write into that slot, reset to
+        // 0 when we flip INTO the slot in submit(). Atomic for forward-compat
+        // with multi-threaded recording; only the render thread writes today,
+        // so relaxed ordering is sufficient.
+        std::array<std::atomic<uint64_t>, kFrameSlotCount> ring_ubo_heads_ = {};
+        uint32_t ring_ubo_slot_idx_ = 0;
+        // BufferHandle that aliases ring_ubo_buffer_ in buffers_. Used by the
+        // RenderContext2::bind_uniform_data() path and recognised by
+        // create_bound_resource_set() / bind_resource_set() to emit a dynamic offset
+        // rather than update the descriptor on each bind.
+        BufferHandle ring_ubo_handle_ = {};
+        // Cached VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment.
+        uint32_t ubo_alignment_ = 256;
+        // True when the ring's memory type advertises HOST_COHERENT — the
+        // memcpy is immediately visible to the GPU and no vmaFlushAllocation
+        // is needed. On desktop Linux (NVIDIA / AMD discrete) the CPU_TO_GPU
+        // allocation pool is always coherent, so skipping the flush call
+        // removes ~1 function call × hundreds of writes/frame from the hot
+        // path. Queried once in create_ring_ubo().
+        bool ring_ubo_coherent_ = false;
+        std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount> ring_ubo_dirty_ranges_ = {};
+        uint64_t non_coherent_atom_size_ = 1;
+        std::atomic_bool ring_ubo_overflow_warned_{false};
+
+        // Transient vertex ring for immediate draws. Same frame-slot lifetime
+        // model as ring_ubo_: frame N records into one half while the other
+        // half may still be read by the GPU from frame N-1.
+        VkBuffer transient_vb_buffer_ = VK_NULL_HANDLE;
+        VmaAllocation transient_vb_allocation_ = VK_NULL_HANDLE;
+        void* transient_vb_mapped_ = nullptr;
+        uint64_t transient_vb_size_ = 0;
+        uint64_t transient_vb_slot_size_ = 0;
+        std::array<std::atomic<uint64_t>, kFrameSlotCount> transient_vb_heads_ = {};
+        uint32_t transient_vb_slot_idx_ = 0;
+        BufferHandle transient_vb_handle_ = {};
+        bool transient_vb_coherent_ = false;
+        std::array<vulkan_detail::NonCoherentDirtyRange, kFrameSlotCount> transient_vb_dirty_ranges_ = {};
+        bool transient_vb_overflow_warned_ = false;
+
+        struct SubmitStats {
+            uint64_t submits = 0;
+            std::chrono::steady_clock::time_point window_start = std::chrono::steady_clock::now();
+            double fence_wait_us = 0.0;
+            double readback_cleanup_us = 0.0;
+            double destroy_cleanup_us = 0.0;
+            double descriptor_cleanup_us = 0.0;
+        };
+        SubmitStats submit_stats_;
+
+        // tc_texture / tc_mesh per-device resource caches. Keyed by
+        // tc_resource_header::pool_index. Replace the former file-scope
+        // g_tex_cache / g_mesh_cache singletons in tgfx2_bridge.cpp —
+        // ownership is now device-local, destruction is deterministic (caches
+        // are drained in ~VulkanRenderDevice), and registry destroy-hooks can
+        // invalidate entries without dangling device pointers.
+        std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+        std::mutex tc_texture_cache_mtx_;
+        std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
+        std::mutex tc_mesh_cache_mtx_;
+        std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
+        std::mutex tc_shader_cache_mtx_;
+        uint64_t next_pixel_readback_id_ = 1;
+        std::vector<PendingPixelReadback> pixel_readbacks_current_;
+        std::array<std::vector<PendingPixelReadback>, kFrameSlotCount> pixel_readbacks_slots_;
+        std::unordered_map<uint64_t, CompletedPixelReadback> completed_pixel_readbacks_;
+        AdapterInfo adapter_info_;
+
+    public:
+        explicit VulkanRenderDevice(const VulkanDeviceCreateInfo& info);
+        ~VulkanRenderDevice() override;
+
+        BackendType backend_type() const override {
+            return BackendType::Vulkan;
+        }
+        AdapterInfo adapter_info() const override {
+            return adapter_info_;
+        }
+        BackendCapabilities capabilities() const override;
+        void wait_idle() override;
+        void invalidate_render_target_cache() override;
+
+        BufferHandle create_buffer(const BufferDesc& desc) override;
+        TextureHandle create_texture(const TextureDesc& desc) override;
+        TextureHandle register_external_texture(uintptr_t native_handle, const TextureDesc& desc) override;
+        bool begin_external_texture_access(TextureHandle handle, const ExternalTextureAccessDesc& access) override;
+        bool end_external_texture_access(TextureHandle handle) override;
+        TextureDesc texture_desc(TextureHandle handle) const override;
+        uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
+        uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
+        SamplerHandle create_sampler(const SamplerDesc& desc) override;
+        ShaderHandle create_shader(const ShaderDesc& desc) override;
+        PipelineHandle create_pipeline(const PipelineDesc& desc) override;
+        ResourceSetHandle create_bound_resource_set(const BoundResourceSetDesc& desc) override;
+
+        void destroy(BufferHandle handle) override;
+        void destroy(TextureHandle handle) override;
+        void destroy(SamplerHandle handle) override;
+        void destroy(ShaderHandle handle) override;
+        void destroy(PipelineHandle handle) override;
+        void destroy(ResourceSetHandle handle) override;
+
+        void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
+        void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
+        void upload_texture_region(TextureHandle dst,
+                                   uint32_t x,
+                                   uint32_t y,
+                                   uint32_t w,
+                                   uint32_t h,
+                                   std::span<const uint8_t> data,
+                                   uint32_t mip = 0) override;
+        void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
+
+        // Legacy synchronous one-pixel readback helpers. Editor hover/click
+        // uses request_pixel_*/poll_pixel_* on Vulkan to avoid queue-idle
+        // stalls; these remain for direct/debug callers that require an
+        // immediate answer.
+        bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+        bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
+        uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
+        bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
+        uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
+        bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
+        bool read_texture_rgba_float(TextureHandle tex, float* out) override;
+        bool read_texture_depth_float(TextureHandle tex, float* out) override;
+
+        std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
+        void submit(ICommandList& cmd) override;
+        void present() override;
+
+        // Texture-to-texture presentation path. Render surfaces must expose
+        // their composite target as a tgfx2 TextureHandle instead of a raw
+        // backend-native framebuffer.
+        void blit_to_texture(TextureHandle dst,
+                             TextureHandle src,
+                             termin::Bounds2i src_rect,
+                             termin::Bounds2i dst_rect) override;
+
+        void clear_texture(TextureHandle dst, termin::Color4 color, termin::Bounds2i viewport) override;
+
+        // Internal access for command list
+        VkDevice device() const {
+            return device_;
+        }
+        VkBufferResource* get_buffer(BufferHandle h) {
+            return buffers_.get(h.id);
+        }
+        VkTextureResource* get_texture(TextureHandle h) {
+            return textures_.get(h.id);
+        }
+        VkSamplerResource* get_sampler(SamplerHandle h) {
+            return samplers_.get(h.id);
+        }
+        VkShaderResource* get_shader(ShaderHandle h) {
+            return shaders_.get(h.id);
+        }
+        VkPipelineResource* get_pipeline(PipelineHandle h) {
+            return pipelines_.get(h.id);
+        }
+        VkResourceSetResource* get_resource_set(ResourceSetHandle h) {
+            return resource_sets_.get(h.id);
+        }
+
+        VkInstance instance() const {
+            return instance_;
+        }
+        VkPhysicalDevice physical_device() const {
+            return physical_device_;
+        }
+        VkQueue graphics_queue() const {
+            return graphics_queue_;
+        }
+        VkQueue present_queue() const {
+            return present_queue_;
+        }
+        uint32_t graphics_queue_family() const {
+            return graphics_family_;
+        }
+        uint32_t present_queue_family() const {
+            return present_family_;
+        }
+        VkCommandPool command_pool() const {
+            return command_pool_;
+        }
+        VmaAllocator allocator() const {
+            return allocator_;
+        }
+
+        // Get or create a VkRenderPass for the given format configuration
+        VkRenderPass get_or_create_render_pass(const std::vector<PixelFormat>& color_formats,
+                                               PixelFormat depth_format,
+                                               bool has_depth,
+                                               uint32_t sample_count,
+                                               LoadOp color_load,
+                                               LoadOp depth_load);
+        VkRenderPass get_or_create_render_pass(const std::vector<PixelFormat>& color_formats,
+                                               std::span<const LoadOp> color_loads,
+                                               std::span<const StoreOp> color_stores,
+                                               PixelFormat depth_format,
+                                               bool has_depth,
+                                               uint32_t sample_count,
+                                               LoadOp depth_load,
+                                               StoreOp depth_store,
+                                               uint32_t view_mask = 0);
+
+        // Get or create a VkFramebuffer
+        VkFramebuffer get_or_create_framebuffer(VkRenderPass render_pass,
+                                                const std::vector<VkImageView>& attachments,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                uint32_t layers = 1);
+
+        // Execute a one-shot command buffer (for uploads, layout transitions)
+        void execute_immediate(std::function<void(VkCommandBuffer)> fn);
+
+        // Transition image layout
+        void transition_image_layout(VkCommandBuffer cmd,
+                                     VkImage image,
+                                     VkImageLayout old_layout,
+                                     VkImageLayout new_layout,
+                                     VkImageAspectFlags aspect,
+                                     uint32_t array_layers = 1);
+
+        // Lazy-create a default linear/clamp sampler used when a caller
+        // binds a SampledTexture without an explicit sampler. One per
+        // device; destroyed with the device. Returned as raw VkSampler so
+        // the descriptor write path can drop it into VkDescriptorImageInfo
+        // without translating through SamplerHandle.
+        VkSampler ensure_default_sampler();
+        TextureHandle ensure_default_sampled_texture();
+
+        // --- Ring UBO (for dynamic-offset descriptor path) ------------------
+        //
+        // A single large host-visible, persistently-mapped VkBuffer that
+        // accumulates per-draw UBO data across one frame. Callers (render-pass
+        // code, SkinnedMeshRenderer, material params) write their block via
+        // `ring_ubo_write(data, size, offset)` which returns an aligned byte offset;
+        // the offset is then handed to `vkCmdBindDescriptorSets` as a dynamic
+        // offset for bindings declared UNIFORM_BUFFER_DYNAMIC.
+        //
+        // Replaces per-draw UBO buffers + per-draw descriptor-set allocations.
+        // Expected to drop resource-sets/sec by ~2 orders of magnitude — see
+        // memory/vulkan_perf_dynamic_ubo_plan.md for the rationale.
+        //
+        // Head pointer is reset at the start of every submit() after the
+        // previous frame's fence signals (GPU has finished reading the ring's
+        // previous contents). Wraparound mid-frame would corrupt in-flight
+        // data, so the buffer is sized generously (16 MB ≈ 10 KB × 1600 draws)
+        // and an overflow is an error we log rather than silently wrap.
+        bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
+        VkBuffer ring_ubo_buffer() const {
+            return ring_ubo_buffer_;
+        }
+        // The ring buffer exposed as a normal BufferHandle. BoundResourceSetDesc
+        // values can reference this handle; the
+        // descriptor-set creator recognises it and emits the offset as a dynamic
+        // descriptor offset.
+        BufferHandle ring_ubo_handle() const override {
+            return ring_ubo_handle_;
+        }
+        // minUniformBufferOffsetAlignment from VkPhysicalDeviceLimits. 256 on
+        // NVIDIA desktop, 64 on AMD desktop, up to 256 on mobile. Used by the
+        // ring writer to round each allocation up to a legal dynamic offset,
+        // and by the shared descriptor-set creator to set buffer range = max
+        // UBO block size (cannot exceed buffer range at bind time).
+        uint32_t ubo_alignment() const override {
+            return ubo_alignment_;
+        }
+
+        BufferHandle transient_vertex_buffer() override {
+            return transient_vb_handle_;
+        }
+        uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+
+        // Non-null when the device was created with a surface (via
+        // `info.surface` or `info.surface_factory`). Hosts drive on-screen
+        // frames through this — acquire() at start of frame, present() at
+        // end. Offscreen-only devices return nullptr.
+        VulkanSwapchain* swapchain() const {
+            return swapchain_.get();
+        }
+
+        // Queue a VkCommandBuffer for deferred release. Called from
+        // VulkanCommandList's destructor — freeing a command buffer while its
+        // work is still in-flight on the queue is UB. The buffer will be
+        // released together with other in-flight resources after the next
+        // fence signal in `submit()`.
+        void defer_cmd_buffer_free(VkCommandBuffer cb) {
+            if (cb != VK_NULL_HANDLE)
+                pending_destroy_current_.cmd_buffers.push_back(cb);
+        }
+
+        // Queue a staging-style VMA buffer for deferred destroy after the
+        // frame fence signals. Used by upload_buffer / upload_texture /
+        // blit_to_texture / read_buffer — they fill a staging buffer, batch
+        // a copy into immediate_cb_, and must NOT destroy the staging
+        // synchronously because the GPU hasn't executed the copy yet.
+        void defer_vma_buffer_destroy(VkBuffer buffer, VmaAllocation alloc) {
+            if (buffer != VK_NULL_HANDLE) {
+                pending_destroy_current_.vma_buffers.emplace_back(buffer, alloc);
+            }
+        }
+
+        // Get (and lazily open) the shared immediate command buffer. Every
+        // copy / layout-transition / clear that used to be its own submit
+        // now records into this single cb; it's ended and flushed inside
+        // `submit()` as the first entry of the frame's multi-cb submit.
+        // One vkQueueSubmit per frame replaces the previous ~200 tiny
+        // submit + vkQueueWaitIdle pairs that dominated Vulkan CPU time.
+        VkCommandBuffer ensure_immediate_cb();
+
+        // --- tc_texture / tc_mesh per-device resource cache ------------------
+        //
+        // Called by `tgfx2_bridge::wrap_tc_texture_as_tgfx2` / `wrap_mesh_as_tgfx2`
+        // on the Vulkan path. Each tc_texture / tc_mesh gets one live handle
+        // per device, reused across frames until the source `header.version`
+        // bumps — then the old handle is destroyed and the resource is
+        // re-uploaded.
+        //
+        // Invariants:
+        //   - Returned handles are OWNED by the device. Callers must NOT pass
+        //     them to `destroy()` — doing so leaves the cache entry pointing
+        //     at a dead handle. `release_texture_binding` /
+        //     `release_mesh_binding` already no-op on the Vulkan path.
+        //   - Lookup / update is guarded by the cache's mutex; safe to call
+        //     from any thread.
+        //   - Entries live until (a) the device is destroyed, or (b) the
+        //     tc_texture / tc_mesh is freed and the registry hook invokes
+        //     `invalidate_tc_texture_cache` / `invalidate_tc_mesh_cache`.
+        TextureHandle ensure_tc_texture(tc_texture* tex) override;
+        void invalidate_tc_texture_cache(uint32_t pool_index) override;
+
+        // Returns {vbo, ebo}. Either is zero-id on upload failure, in which
+        // case the cache entry is left empty so the next call retries.
+        std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+        void invalidate_tc_mesh_cache(uint32_t pool_index) override;
+        bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
+        void invalidate_tc_shader_cache(uint32_t pool_index) override;
+
+    private:
+        void invalidate_descriptor_cache();
+        void init_instance(const VulkanDeviceCreateInfo& info);
+        void pick_physical_device();
+        void create_logical_device();
+        void create_allocator();
+        void create_command_pool();
+        void create_descriptor_pool();
+        ResourceSetHandle create_resolved_resource_set(VkDescriptorSetLayout layout,
+                                                       const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings,
+                                                       uintptr_t resource_layout_token,
+                                                       std::span<const VulkanResolvedResourceBinding> resolved_bindings,
+                                                       VkResourceSetResource resource,
+                                                       uint64_t cache_domain);
+        void create_ring_ubo();
+        void create_transient_vertex_ring();
+        void flush_pending_host_writes(uint32_t slot);
+
+        // Get or create a VkPipelineLayout from the current reflected
+        // VkDescriptorSetLayout plus the standard 128-byte push constant range.
+        // Cached by layout handle.
+        VkPipelineLayout get_or_create_pipeline_layout(VkDescriptorSetLayout set_layout);
+
+        // Build a VkDescriptorSetLayout from merged VS+FS descriptor bindings
+        // (VkShaderResource::DescriptorBinding). Cached by FNV-1a hash of the
+        // (binding, descriptor_type, count) signature.
+        VkDescriptorSetLayout
+        get_or_create_descriptor_set_layout(const std::vector<VkShaderResource::DescriptorBinding>& bindings);
+
+        // Drain `q` now — actually free the underlying Vk objects. Caller is
+        // responsible for ensuring GPU has finished using these resources.
+        void drain_pending_destroy(PendingDestroyQueue& q);
+        uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
+        void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
+        void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
+        void prepare_frame_slot(uint32_t slot, SubmitStats* stats);
+    };
 
 } // namespace tgfx
 

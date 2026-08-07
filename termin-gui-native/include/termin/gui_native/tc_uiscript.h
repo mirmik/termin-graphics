@@ -16,21 +16,11 @@ extern "C" {
 #define TC_UISCRIPT_TYPE_ABI_VERSION 4u
 #define TC_RUNTIME_TYPE_FACET_UISCRIPT "termin.gui.uiscript"
 
-typedef bool (*tc_uiscript_apply_properties_fn)(
-    tc_widget* widget,
-    const tc_value* properties
-);
+typedef bool (*tc_uiscript_apply_properties_fn)(tc_widget* widget, const tc_value* properties);
 
-typedef bool (*tc_uiscript_validate_property_fn)(
-    const char* property_name,
-    const tc_value* value
-);
+typedef bool (*tc_uiscript_validate_property_fn)(const char* property_name, const tc_value* value);
 
-typedef bool (*tc_uiscript_attach_child_fn)(
-    tc_widget* parent,
-    tc_widget* child,
-    const tc_value* child_properties
-);
+typedef bool (*tc_uiscript_attach_child_fn)(tc_widget* parent, tc_widget* child, const tc_value* child_properties);
 
 typedef struct tc_uiscript_type_descriptor {
     uint32_t abi_version;
@@ -44,8 +34,7 @@ typedef struct tc_uiscript_type_descriptor {
     size_t max_child_count;
 } tc_uiscript_type_descriptor;
 
-TERMIN_GUI_NATIVE_API const tc_uiscript_type_descriptor*
-tc_uiscript_type_descriptor_get(const char* type_name);
+TERMIN_GUI_NATIVE_API const tc_uiscript_type_descriptor* tc_uiscript_type_descriptor_get(const char* type_name);
 
 #ifdef __cplusplus
 }

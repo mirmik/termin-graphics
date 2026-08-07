@@ -1,17 +1,17 @@
 // Test: RenderContext2 + PipelineCache draw a triangle and verify pixels.
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <glad/glad.h>
 
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
@@ -24,11 +24,16 @@
 static int test_count = 0;
 static int pass_count = 0;
 
-#define CHECK(cond, msg) do { \
-    test_count++; \
-    if (cond) { pass_count++; printf("  PASS: %s\n", msg); } \
-    else { printf("  FAIL: %s\n", msg); } \
-} while(0)
+#define CHECK(cond, msg)                                                                                               \
+    do {                                                                                                               \
+        test_count++;                                                                                                  \
+        if (cond) {                                                                                                    \
+            pass_count++;                                                                                              \
+            printf("  PASS: %s\n", msg);                                                                               \
+        } else {                                                                                                       \
+            printf("  FAIL: %s\n", msg);                                                                               \
+        }                                                                                                              \
+    } while (0)
 
 static const char* VERT_SRC = R"(
 #version 330 core
@@ -103,15 +108,13 @@ void main() {
 static std::filesystem::path make_fsq_artifact_root() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     std::filesystem::path root =
-        std::filesystem::temp_directory_path() /
-        ("termin-render-context2-fsq-" + std::to_string(stamp));
+        std::filesystem::temp_directory_path() / ("termin-render-context2-fsq-" + std::to_string(stamp));
     std::filesystem::path shader_dir = root / "shaders" / "opengl";
     std::filesystem::create_directories(shader_dir);
     std::ofstream out(shader_dir / "termin-engine-fsq.vert.glsl", std::ios::binary);
     out << FSQ_OPENGL_ARTIFACT_SRC;
     if (!out) {
-        fprintf(stderr, "Failed to write FSQ OpenGL artifact under %s\n",
-                shader_dir.string().c_str());
+        fprintf(stderr, "Failed to write FSQ OpenGL artifact under %s\n", shader_dir.string().c_str());
         return {};
     }
     return root;
@@ -146,9 +149,21 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
 
     // Create vertex buffer: triangle with RGB colors
     float vertices[] = {
-         0.0f,  0.8f,  1.f, 0.f, 0.f,  // top: red
-        -0.8f, -0.8f,  0.f, 1.f, 0.f,  // bottom-left: green
-         0.8f, -0.8f,  0.f, 0.f, 1.f,  // bottom-right: blue
+        0.0f,
+        0.8f,
+        1.f,
+        0.f,
+        0.f, // top: red
+        -0.8f,
+        -0.8f,
+        0.f,
+        1.f,
+        0.f, // bottom-left: green
+        0.8f,
+        -0.8f,
+        0.f,
+        0.f,
+        1.f, // bottom-right: blue
     };
     uint32_t indices[] = {0, 1, 2};
 
@@ -168,7 +183,7 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
     tgfx::RenderContext2 ctx(device, cache);
     ctx.begin_frame();
 
-    float clear[] = {0.f, 0.f, 0.2f, 1.f};  // dark blue background
+    float clear[] = {0.f, 0.f, 0.2f, 1.f}; // dark blue background
     ctx.begin_pass(rt, {}, clear);
     ctx.set_viewport(0, 0, W, H);
 
@@ -208,15 +223,17 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
     glDeleteFramebuffers(1, &read_fbo);
 
     // Check center pixel (should be part of triangle — some color)
-    size_t center = (H/2 * W + W/2) * 4;
+    size_t center = (H / 2 * W + W / 2) * 4;
     printf("  Center pixel: (%u, %u, %u, %u)\n",
-           pixels[center], pixels[center+1], pixels[center+2], pixels[center+3]);
+           pixels[center],
+           pixels[center + 1],
+           pixels[center + 2],
+           pixels[center + 3]);
 
     // Check corner pixel (should be clear color: 0,0,51,255)
-    printf("  Corner pixel: (%u, %u, %u, %u)\n",
-           pixels[0], pixels[1], pixels[2], pixels[3]);
+    printf("  Corner pixel: (%u, %u, %u, %u)\n", pixels[0], pixels[1], pixels[2], pixels[3]);
 
-    bool center_has_color = (pixels[center] > 20 || pixels[center+1] > 20 || pixels[center+2] > 60);
+    bool center_has_color = (pixels[center] > 20 || pixels[center + 1] > 20 || pixels[center + 2] > 60);
     bool corner_is_blue = (pixels[0] < 10 && pixels[1] < 10 && pixels[2] > 40);
 
     CHECK(center_has_color, "center pixel has triangle color");
@@ -233,8 +250,7 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
     device.destroy(rt);
 }
 
-static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& device,
-                                                           tgfx::PipelineCache& cache) {
+static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Indexed Draw After Pipeline Change ---\n");
 
     const uint32_t W = 64, H = 64;
@@ -264,9 +280,21 @@ static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& 
     CHECK(bool(vs) && bool(red_fs) && bool(green_fs), "pipeline-change shaders created");
 
     float vertices[] = {
-         0.0f,  0.8f,  1.f, 1.f, 1.f,
-        -0.8f, -0.8f,  1.f, 1.f, 1.f,
-         0.8f, -0.8f,  1.f, 1.f, 1.f,
+        0.0f,
+        0.8f,
+        1.f,
+        1.f,
+        1.f,
+        -0.8f,
+        -0.8f,
+        1.f,
+        1.f,
+        1.f,
+        0.8f,
+        -0.8f,
+        1.f,
+        1.f,
+        1.f,
     };
     uint32_t indices[] = {0, 1, 2};
 
@@ -289,7 +317,8 @@ static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& 
         {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},
     };
 
-    while (glGetError() != GL_NO_ERROR) {}
+    while (glGetError() != GL_NO_ERROR) {
+    }
 
     tgfx::RenderContext2 ctx(device, cache);
     ctx.begin_frame();
@@ -330,12 +359,14 @@ static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDeleteFramebuffers(1, &read_fbo);
 
-    size_t center = (H/2 * W + W/2) * 4;
+    size_t center = (H / 2 * W + W / 2) * 4;
     printf("  Center pixel after pipeline switch: (%u, %u, %u, %u)\n",
-           pixels[center], pixels[center+1], pixels[center+2], pixels[center+3]);
+           pixels[center],
+           pixels[center + 1],
+           pixels[center + 2],
+           pixels[center + 3]);
 
-    bool center_is_green =
-        pixels[center] < 40 && pixels[center+1] > 200 && pixels[center+2] < 40;
+    bool center_is_green = pixels[center] < 40 && pixels[center + 1] > 200 && pixels[center + 2] < 40;
     CHECK(center_is_green, "second indexed draw after pipeline change overwrites center");
 
     CHECK(cache.size() == 2, "pipeline change cached two pipelines");
@@ -385,7 +416,8 @@ static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCach
     ctx.bind_shader({}, fs);
 
     // Check GL errors before draw
-    while (glGetError() != GL_NO_ERROR) {}
+    while (glGetError() != GL_NO_ERROR) {
+    }
     ctx.draw_fullscreen_quad();
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
@@ -424,11 +456,14 @@ static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCach
     glDeleteFramebuffers(1, &read_fbo);
 
     // All pixels should be red
-    size_t center = (H/2 * W + W/2) * 4;
+    size_t center = (H / 2 * W + W / 2) * 4;
     printf("  Center pixel: (%u, %u, %u, %u)\n",
-           pixels[center], pixels[center+1], pixels[center+2], pixels[center+3]);
+           pixels[center],
+           pixels[center + 1],
+           pixels[center + 2],
+           pixels[center + 3]);
 
-    bool is_red = (pixels[center] > 200 && pixels[center+1] < 20 && pixels[center+2] < 20);
+    bool is_red = (pixels[center] > 200 && pixels[center + 1] < 20 && pixels[center + 2] < 20);
     CHECK(is_red, "FSQ fills entire render target with red");
 
     // Check another pixel to be sure
@@ -439,36 +474,23 @@ static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCach
     device.destroy(rt);
 }
 
-static bool pixel_near(
-    const float pixel[4],
-    float r,
-    float g,
-    float b
-) {
+static bool pixel_near(const float pixel[4], float r, float g, float b) {
     constexpr float epsilon = 0.05f;
-    return std::abs(pixel[0] - r) < epsilon &&
-        std::abs(pixel[1] - g) < epsilon &&
-        std::abs(pixel[2] - b) < epsilon &&
-        pixel[3] > 0.9f;
+    return std::abs(pixel[0] - r) < epsilon && std::abs(pixel[1] - g) < epsilon && std::abs(pixel[2] - b) < epsilon &&
+           pixel[3] > 0.9f;
 }
 
-static void test_ordered_mrt_clear_and_draw(
-    tgfx::IRenderDevice& device,
-    tgfx::PipelineCache&)
-{
+static void test_ordered_mrt_clear_and_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&) {
     tgfx::ShaderDesc fs_desc;
     fs_desc.stage = tgfx::ShaderStage::Fragment;
     fs_desc.source = MRT_FRAG_SRC;
     const tgfx::ShaderHandle fragment = device.create_shader(fs_desc);
     CHECK(fragment, "MRT fragment shader created");
 
-    const bool passed = tgfx::tests::run_ordered_mrt_smoke(
-        device,
-        "OpenGL/GLFW",
-        [&](tgfx::RenderContext2& context) {
-            context.bind_shader({}, fragment);
-            context.draw_fullscreen_quad();
-        });
+    const bool passed = tgfx::tests::run_ordered_mrt_smoke(device, "OpenGL/GLFW", [&](tgfx::RenderContext2& context) {
+        context.bind_shader({}, fragment);
+        context.draw_fullscreen_quad();
+    });
     CHECK(passed, "portable ordered MRT scenario passes");
     device.destroy(fragment);
 }
@@ -496,8 +518,7 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     key.fragment_shader = fs;
     auto p1 = cache.get(key);
     tgfx::PipelineCacheStats stats_after_first = cache.stats();
-    CHECK(stats_after_first.miss_count == stats_before.miss_count + 1,
-          "first lookup records pipeline cache miss");
+    CHECK(stats_after_first.miss_count == stats_before.miss_count + 1, "first lookup records pipeline cache miss");
     CHECK(stats_after_first.create_pipeline_count == stats_before.create_pipeline_count + 1,
           "first lookup records create_pipeline");
     CHECK(stats_after_first.unique_vertex_layout_signature_count ==
@@ -508,8 +529,7 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
     auto p2 = cache.get(key);
     CHECK(p1 == p2, "same key returns same pipeline handle");
     tgfx::PipelineCacheStats stats_after_hit = cache.stats();
-    CHECK(stats_after_hit.hit_count == stats_before.hit_count + 1,
-          "second lookup records pipeline cache hit");
+    CHECK(stats_after_hit.hit_count == stats_before.hit_count + 1, "second lookup records pipeline cache hit");
     CHECK(stats_after_hit.create_pipeline_count == stats_after_first.create_pipeline_count,
           "cache hit does not create a pipeline");
 
@@ -524,8 +544,7 @@ static void test_pipeline_cache_reuse(tgfx::IRenderDevice& device, tgfx::Pipelin
           "different state records second pipeline cache miss");
     CHECK(stats_after_second_miss.create_pipeline_count == stats_before.create_pipeline_count + 2,
           "different state records second create_pipeline");
-    CHECK(stats_after_second_miss.cached_pipeline_count == before + 2,
-          "stats report cached pipeline count");
+    CHECK(stats_after_second_miss.cached_pipeline_count == before + 2, "stats report cached pipeline count");
     CHECK(!stats_after_second_miss.vertex_layout_signature_hashes.empty(),
           "stats expose vertex layout signature hashes");
 
@@ -568,10 +587,22 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
 
     tgfx::WorldSpaceLineParams params;
     params.view_projection = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
     };
     params.camera_position = {0.0f, 0.0f, -5.0f};
 
@@ -586,11 +617,11 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
 
     const tgfx::LinePoint3 near_points[] = {
         {-0.85f, 0.0f, 0.25f},
-        { 0.85f, 0.0f, 0.25f},
+        {0.85f, 0.0f, 0.25f},
     };
     const tgfx::LinePoint3 far_points[] = {
         {-0.85f, 0.0f, 0.75f},
-        { 0.85f, 0.0f, 0.75f},
+        {0.85f, 0.0f, 0.75f},
     };
 
     ctx.begin_frame();
@@ -601,22 +632,17 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
     ctx.set_depth_write(true);
     ctx.set_cull(tgfx::CullMode::None);
 
-    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(near_points, 2),
-                           near_style, params);
-    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(far_points, 2),
-                           far_style, params);
+    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(near_points, 2), near_style, params);
+    renderer.draw_polyline(ctx, std::span<const tgfx::LinePoint3>(far_points, 2), far_style, params);
 
     ctx.end_pass();
     ctx.end_frame();
 
     float center[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    CHECK(device.read_pixel_rgba8(color, W / 2, H / 2, center),
-          "line center pixel readback works");
-    printf("  Line center pixel: (%.2f, %.2f, %.2f, %.2f)\n",
-           center[0], center[1], center[2], center[3]);
+    CHECK(device.read_pixel_rgba8(color, W / 2, H / 2, center), "line center pixel readback works");
+    printf("  Line center pixel: (%.2f, %.2f, %.2f, %.2f)\n", center[0], center[1], center[2], center[3]);
 
-    const bool center_is_near_red =
-        center[0] > 0.75f && center[1] < 0.20f && center[2] < 0.20f;
+    const bool center_is_near_red = center[0] > 0.75f && center[1] < 0.20f && center[2] < 0.20f;
     CHECK(center_is_near_red, "far billboard line is rejected by depth test");
 
     renderer.release(ctx);
@@ -624,9 +650,7 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
     device.destroy(depth);
 }
 
-static void test_clear_scissor_uses_current_render_extent(
-    tgfx::IRenderDevice& device,
-    tgfx::PipelineCache& cache) {
+static void test_clear_scissor_uses_current_render_extent(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Clear scissor render extent ---\n");
 
     tgfx::TextureDesc color_desc;
@@ -644,16 +668,14 @@ static void test_clear_scissor_uses_current_render_extent(
 
     GLint scissor[4] = {};
     glGetIntegerv(GL_SCISSOR_BOX, scissor);
-    CHECK(scissor[0] == 0 && scissor[1] == 0 &&
-              scissor[2] == 73 && scissor[3] == 41,
+    CHECK(scissor[0] == 0 && scissor[1] == 0 && scissor[2] == 73 && scissor[3] == 41,
           "clear_scissor uses the current color target extent");
 
     ctx.set_viewport(0, 0, 29, 17);
     ctx.set_scissor(1, 1, 2, 2);
     ctx.clear_scissor();
     glGetIntegerv(GL_SCISSOR_BOX, scissor);
-    CHECK(scissor[0] == 0 && scissor[1] == 24 &&
-              scissor[2] == 29 && scissor[3] == 17,
+    CHECK(scissor[0] == 0 && scissor[1] == 24 && scissor[2] == 29 && scissor[3] == 17,
           "clear_scissor follows a changed viewport extent");
 
     ctx.end_pass();
@@ -672,8 +694,7 @@ static void test_clear_scissor_uses_current_render_extent(
     ctx.set_scissor(1, 1, 2, 2);
     ctx.clear_scissor();
     glGetIntegerv(GL_SCISSOR_BOX, scissor);
-    CHECK(scissor[0] == 0 && scissor[1] == 0 &&
-              scissor[2] == 37 && scissor[3] == 23,
+    CHECK(scissor[0] == 0 && scissor[1] == 0 && scissor[2] == 37 && scissor[3] == 23,
           "clear_scissor uses a depth-only target extent");
     ctx.end_pass();
     ctx.end_frame();
@@ -760,7 +781,8 @@ int main() {
     std::error_code remove_error;
     std::filesystem::remove_all(fsq_artifact_root, remove_error);
     if (remove_error) {
-        fprintf(stderr, "Failed to remove FSQ artifact root %s: %s\n",
+        fprintf(stderr,
+                "Failed to remove FSQ artifact root %s: %s\n",
                 fsq_artifact_root.string().c_str(),
                 remove_error.message().c_str());
     }

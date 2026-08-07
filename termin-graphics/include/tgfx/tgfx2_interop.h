@@ -6,7 +6,9 @@
 
 #ifdef __cplusplus
 #include <cstdint>
-namespace tgfx { class IRenderDevice; }
+namespace tgfx {
+    class IRenderDevice;
+}
 
 extern "C" {
 #else
@@ -31,8 +33,7 @@ TGFX2_API uintptr_t tgfx2_interop_get_graphics_domain_key(void);
 // Registers a shader from the installed SDK builtin catalog for the current
 // graphics domain. This is the backend-neutral host API for samples and
 // embedders; it resolves the artifact matching the active backend.
-TGFX2_API tc_shader_handle tgfx2_interop_register_builtin_shader(
-    const char* shader_uuid);
+TGFX2_API tc_shader_handle tgfx2_interop_register_builtin_shader(const char* shader_uuid);
 
 // ---------------------------------------------------------------------------
 // External GL texture registration - plain-C bridge to
@@ -51,10 +52,7 @@ TGFX2_API tc_shader_handle tgfx2_interop_register_builtin_shader(
 // The returned handle is owned by the caller; release it with
 // `tgfx2_interop_destroy_texture_handle`.
 TGFX2_API uint32_t tgfx2_interop_register_external_gl_texture(
-    uint32_t gl_tex_id,
-    uint32_t width, uint32_t height,
-    int format,
-    uint32_t usage);
+    uint32_t gl_tex_id, uint32_t width, uint32_t height, int format, uint32_t usage);
 
 // Release a handle previously returned by
 // tgfx2_interop_register_external_gl_texture. Safe to call with id == 0.
@@ -62,11 +60,7 @@ TGFX2_API void tgfx2_interop_destroy_texture_handle(uint32_t handle_id);
 
 // Copy/resolve one tgfx2 texture into another. Both arguments are
 // TextureHandle ids owned by the current interop device.
-TGFX2_API void tgfx2_interop_blit_texture(
-    uint32_t src_handle_id,
-    uint32_t dst_handle_id,
-    int width,
-    int height);
+TGFX2_API void tgfx2_interop_blit_texture(uint32_t src_handle_id, uint32_t dst_handle_id, int width, int height);
 
 // ---------------------------------------------------------------------------
 // D3D11 swapchain presentation bridge.
@@ -80,22 +74,13 @@ TGFX2_API void tgfx2_interop_blit_texture(
 // required construction-time DXGI tearing flags. Functions return 1 on
 // success and 0 on error; failures are logged through tc_log. The separate
 // D3DImage bridge below is not a swapchain and is unaffected by this policy.
-TGFX2_API void* tgfx2_interop_create_d3d11_swapchain(
-    void* hwnd,
-    uint32_t width,
-    uint32_t height);
+TGFX2_API void* tgfx2_interop_create_d3d11_swapchain(void* hwnd, uint32_t width, uint32_t height);
 
 TGFX2_API void tgfx2_interop_destroy_d3d11_swapchain(void* swapchain);
 
-TGFX2_API int tgfx2_interop_resize_d3d11_swapchain(
-    void* swapchain,
-    uint32_t width,
-    uint32_t height);
+TGFX2_API int tgfx2_interop_resize_d3d11_swapchain(void* swapchain, uint32_t width, uint32_t height);
 
-TGFX2_API int tgfx2_interop_present_d3d11_swapchain(
-    void* swapchain,
-    uint32_t source_handle_id,
-    uint32_t sync_interval);
+TGFX2_API int tgfx2_interop_present_d3d11_swapchain(void* swapchain, uint32_t source_handle_id, uint32_t sync_interval);
 
 // ---------------------------------------------------------------------------
 // D3D11 -> WPF D3DImage presentation bridge.
@@ -106,20 +91,13 @@ TGFX2_API int tgfx2_interop_present_d3d11_swapchain(
 // tgfx2_interop_get_d3d11_d3dimage_surface and passes it to
 // D3DImage.SetBackBuffer. Each present blits the source tgfx2 texture into the
 // shared texture; WPF composites it with the rest of the visual tree.
-TGFX2_API void* tgfx2_interop_create_d3d11_d3dimage_bridge(
-    uint32_t width,
-    uint32_t height);
+TGFX2_API void* tgfx2_interop_create_d3d11_d3dimage_bridge(uint32_t width, uint32_t height);
 
 TGFX2_API void tgfx2_interop_destroy_d3d11_d3dimage_bridge(void* bridge);
 
-TGFX2_API int tgfx2_interop_resize_d3d11_d3dimage_bridge(
-    void* bridge,
-    uint32_t width,
-    uint32_t height);
+TGFX2_API int tgfx2_interop_resize_d3d11_d3dimage_bridge(void* bridge, uint32_t width, uint32_t height);
 
-TGFX2_API int tgfx2_interop_present_d3d11_d3dimage_bridge(
-    void* bridge,
-    uint32_t source_handle_id);
+TGFX2_API int tgfx2_interop_present_d3d11_d3dimage_bridge(void* bridge, uint32_t source_handle_id);
 
 TGFX2_API void* tgfx2_interop_get_d3d11_d3dimage_surface(void* bridge);
 
@@ -129,17 +107,17 @@ TGFX2_API void* tgfx2_interop_get_d3d11_d3dimage_surface(void* bridge);
 // C++ typed accessors
 namespace tgfx {
 
-inline bool claim_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
-    return tgfx2_interop_claim_device(static_cast<void*>(device), owner) != 0;
-}
+    inline bool claim_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
+        return tgfx2_interop_claim_device(static_cast<void*>(device), owner) != 0;
+    }
 
-inline bool release_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
-    return tgfx2_interop_release_device(static_cast<void*>(device), owner) != 0;
-}
+    inline bool release_tgfx2_device(tgfx::IRenderDevice* device, const void* owner) {
+        return tgfx2_interop_release_device(static_cast<void*>(device), owner) != 0;
+    }
 
-inline tgfx::IRenderDevice* get_tgfx2_device() {
-    return static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
-}
+    inline tgfx::IRenderDevice* get_tgfx2_device() {
+        return static_cast<tgfx::IRenderDevice*>(tgfx2_interop_get_device());
+    }
 
 } // namespace tgfx
 #endif

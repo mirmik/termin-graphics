@@ -2,8 +2,8 @@
 #ifndef TC_CAMERA_CAPABILITY_H
 #define TC_CAMERA_CAPABILITY_H
 
-#include "core/tc_component_capability.h"
 #include "core/tc_component.h"
+#include "core/tc_component_capability.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -13,12 +13,12 @@ extern "C" {
 
 // Plain C camera data for rendering (matches C++ RenderCamera layout)
 typedef struct tc_camera_data {
-    double view[16];        // 4x4 column-major view matrix
-    double projection[16];  // 4x4 column-major projection matrix
-    double position[3];     // world-space camera position
+    double view[16];       // 4x4 column-major view matrix
+    double projection[16]; // 4x4 column-major projection matrix
+    double position[3];    // world-space camera position
     double near_clip;
     double far_clip;
-    uint64_t layer_mask;    // camera visibility mask
+    uint64_t layer_mask;           // camera visibility mask
     uint64_t render_category_mask; // optional render category visibility mask
 } tc_camera_data;
 
@@ -38,11 +38,7 @@ typedef struct tc_camera_capability {
 TC_API tc_component_cap_id tc_camera_capability_id(void);
 
 // Attach camera capability to a component
-TC_API bool tc_camera_capability_attach(
-    tc_component* c,
-    const tc_camera_vtable* vtable,
-    void* userdata
-);
+TC_API bool tc_camera_capability_attach(tc_component* c, const tc_camera_vtable* vtable, void* userdata);
 
 // Get camera capability from component (NULL if not a camera)
 TC_API const tc_camera_capability* tc_camera_capability_get(const tc_component* c);

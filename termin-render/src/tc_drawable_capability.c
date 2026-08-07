@@ -15,12 +15,14 @@ tc_component_cap_id tc_drawable_capability_id(void) {
 }
 
 bool tc_drawable_capability_attach(tc_component* c, const tc_drawable_vtable* vtable, void* userdata) {
-    if (!c || !vtable) return false;
+    if (!c || !vtable)
+        return false;
 
     tc_drawable_capability* cap = (tc_drawable_capability*)tc_component_get_capability(c, tc_drawable_capability_id());
     if (!cap) {
         cap = (tc_drawable_capability*)calloc(1, sizeof(tc_drawable_capability));
-        if (!cap) return false;
+        if (!cap)
+            return false;
         if (!tc_component_attach_capability(c, tc_drawable_capability_id(), cap)) {
             free(cap);
             return false;
@@ -33,6 +35,7 @@ bool tc_drawable_capability_attach(tc_component* c, const tc_drawable_vtable* vt
 }
 
 const tc_drawable_capability* tc_drawable_capability_get(const tc_component* c) {
-    if (!c) return NULL;
+    if (!c)
+        return NULL;
     return (const tc_drawable_capability*)tc_component_get_capability(c, tc_drawable_capability_id());
 }

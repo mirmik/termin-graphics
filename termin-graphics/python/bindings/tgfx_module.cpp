@@ -10,7 +10,7 @@ namespace tgfx_bindings {
     void bind_texture(nb::module_& m);
     void bind_tgfx2(nb::module_& m);
     void bind_immediate(nb::module_& m);
-}
+} // namespace tgfx_bindings
 
 NB_MODULE(_tgfx_native, m) {
     m.doc() = "termin-graphics native Python bindings";

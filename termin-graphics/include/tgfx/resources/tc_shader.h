@@ -1,13 +1,13 @@
 // tc_shader.h - Shader data structures with variant support
 #pragma once
 
-#include "tgfx/tgfx_api.h"
 #include "tgfx/tc_handle.h"
+#include "tgfx/tgfx_api.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 #include <tcbase/tc_binding_types.h>
 #include <tcbase/tc_uuid.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +44,7 @@ typedef enum tc_shader_variant_op {
 
 typedef enum tc_shader_feature {
     TC_SHADER_FEATURE_NONE = 0,
-    TC_SHADER_FEATURE_LIGHTING_UBO = 1 << 0,  // Uses UBO for lighting data
+    TC_SHADER_FEATURE_LIGHTING_UBO = 1 << 0, // Uses UBO for lighting data
 } tc_shader_feature;
 
 // ============================================================================
@@ -67,7 +67,7 @@ typedef enum tc_shader_artifact_policy {
 // Shader data
 // ============================================================================
 
-#define TC_SHADER_HASH_LEN 17  // 16 hex chars + null terminator
+#define TC_SHADER_HASH_LEN 17 // 16 hex chars + null terminator
 #define TC_MATERIAL_UBO_NAME_MAX 64
 #define TC_MATERIAL_UBO_TYPE_MAX 16
 #define TC_SHADER_RESOURCE_NAME_MAX 64
@@ -99,8 +99,7 @@ typedef enum tc_shader_stage_mask {
     TC_SHADER_STAGE_FRAGMENT = 1 << 1,
     TC_SHADER_STAGE_GEOMETRY = 1 << 2,
     TC_SHADER_STAGE_COMPUTE = 1 << 3,
-    TC_SHADER_STAGE_ALL_GRAPHICS =
-        TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY,
+    TC_SHADER_STAGE_ALL_GRAPHICS = TC_SHADER_STAGE_VERTEX | TC_SHADER_STAGE_FRAGMENT | TC_SHADER_STAGE_GEOMETRY,
     TC_SHADER_STAGE_ALL = 0xffffffffu,
 } tc_shader_stage_mask;
 
@@ -152,12 +151,12 @@ typedef struct tc_shader_webgpu_placement {
 
 typedef struct tc_shader_resource_binding {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
-    uint32_t kind;        // tc_shader_resource_kind
-    uint32_t scope;       // tc_shader_resource_scope
+    uint32_t kind;  // tc_shader_resource_kind
+    uint32_t scope; // tc_shader_resource_scope
     uint32_t set;
     uint32_t binding;
-    uint32_t stage_mask;  // tc_shader_stage_mask
-    uint32_t size;        // bytes for buffers, 0 when unknown/not applicable
+    uint32_t stage_mask; // tc_shader_stage_mask
+    uint32_t size;       // bytes for buffers, 0 when unknown/not applicable
     uint8_t has_d3d11_placement;
     uint8_t d3d11_scalar_sampler_for_texture_array;
     uint8_t has_webgpu_placement;
@@ -194,17 +193,17 @@ typedef enum tc_shader_contract_value_type {
 
 typedef struct tc_shader_contract_vertex_input {
     char semantic[TC_SHADER_RESOURCE_NAME_MAX];
-    uint32_t type;      // tc_shader_contract_value_type
-    uint32_t required;  // non-zero when the draw path must provide it
+    uint32_t type;     // tc_shader_contract_value_type
+    uint32_t required; // non-zero when the draw path must provide it
 } tc_shader_contract_vertex_input;
 
 typedef struct tc_shader_resource_requirement {
     char name[TC_SHADER_RESOURCE_NAME_MAX];
-    uint32_t kind;            // tc_shader_resource_kind
-    uint32_t scope;           // tc_shader_resource_scope
-    uint32_t stage_mask;      // tc_shader_stage_mask
-    uint32_t size;            // bytes for buffers, 0 when unknown/not applicable
-    uint32_t element_stride;  // bytes for structured buffers, 0 when unknown/not applicable
+    uint32_t kind;           // tc_shader_resource_kind
+    uint32_t scope;          // tc_shader_resource_scope
+    uint32_t stage_mask;     // tc_shader_stage_mask
+    uint32_t size;           // bytes for buffers, 0 when unknown/not applicable
+    uint32_t element_stride; // bytes for structured buffers, 0 when unknown/not applicable
     tc_shader_resource_field* fields;
     uint32_t field_count;
 } tc_shader_resource_requirement;
@@ -328,32 +327,32 @@ typedef struct tc_material_ubo_entry {
 } tc_material_ubo_entry;
 
 typedef struct tc_shader {
-    char* vertex_source;         // vertex shader source (owned)
-    char* fragment_source;       // fragment shader source (owned)
-    char* geometry_source;       // geometry shader source (owned, may be NULL)
-    char* vertex_entry;          // vertex shader entry point (owned, defaults to "main")
-    char* fragment_entry;        // fragment shader entry point (owned, defaults to "main")
-    char* geometry_entry;        // geometry shader entry point (owned, defaults to "main")
-    char source_hash[TC_SHADER_HASH_LEN];  // source + metadata identity hash
-    uint32_t version;            // incremented on source change
-    uint32_t ref_count;          // reference count for ownership
-    char uuid[TC_UUID_SIZE];     // unique identifier
-    const char* name;            // human-readable name (interned string)
-    const char* source_path;     // optional source file path (interned string)
-    uint8_t is_variant;          // true if this is a derived variant
-    uint8_t variant_op;          // tc_shader_variant_op if is_variant
-    uint8_t is_static;           // true if registered via tc_shader_register_static
-                                 // (engine shader, never destroyed — see
-                                 // tc_shader_register_static in tc_shader_registry.h)
-    uint8_t has_resource_layout; // true once artifact/catalog layout was loaded,
-                                 // even if the reflected resource list is empty
-    tc_shader_handle original_handle;  // handle to original shader (if is_variant)
-    uint32_t original_version;   // version of original when variant was created
-    uint32_t features;           // tc_shader_feature bitflags
-    uint32_t language;           // tc_shader_language
-    uint32_t artifact_policy;    // tc_shader_artifact_policy
-    uint32_t program_role;       // tc_shader_program_role
-    uint32_t pool_index;         // index in shader pool (for GPUContext lookup)
+    char* vertex_source;                  // vertex shader source (owned)
+    char* fragment_source;                // fragment shader source (owned)
+    char* geometry_source;                // geometry shader source (owned, may be NULL)
+    char* vertex_entry;                   // vertex shader entry point (owned, defaults to "main")
+    char* fragment_entry;                 // fragment shader entry point (owned, defaults to "main")
+    char* geometry_entry;                 // geometry shader entry point (owned, defaults to "main")
+    char source_hash[TC_SHADER_HASH_LEN]; // source + metadata identity hash
+    uint32_t version;                     // incremented on source change
+    uint32_t ref_count;                   // reference count for ownership
+    char uuid[TC_UUID_SIZE];              // unique identifier
+    const char* name;                     // human-readable name (interned string)
+    const char* source_path;              // optional source file path (interned string)
+    uint8_t is_variant;                   // true if this is a derived variant
+    uint8_t variant_op;                   // tc_shader_variant_op if is_variant
+    uint8_t is_static;                    // true if registered via tc_shader_register_static
+                                          // (engine shader, never destroyed — see
+                                          // tc_shader_register_static in tc_shader_registry.h)
+    uint8_t has_resource_layout;          // true once artifact/catalog layout was loaded,
+                                          // even if the reflected resource list is empty
+    tc_shader_handle original_handle;     // handle to original shader (if is_variant)
+    uint32_t original_version;            // version of original when variant was created
+    uint32_t features;                    // tc_shader_feature bitflags
+    uint32_t language;                    // tc_shader_language
+    uint32_t artifact_policy;             // tc_shader_artifact_policy
+    uint32_t program_role;                // tc_shader_program_role
+    uint32_t pool_index;                  // index in shader pool (for GPUContext lookup)
 
     // Optional std140 material UBO layout, populated by the shader parser
     // when the `.shader` program declares `@features material_ubo`. Consumed
@@ -392,9 +391,12 @@ typedef struct tc_shader {
 // Calculate total source size in bytes
 static inline size_t tc_shader_source_size(const tc_shader* shader) {
     size_t size = 0;
-    if (shader->vertex_source) size += strlen(shader->vertex_source) + 1;
-    if (shader->fragment_source) size += strlen(shader->fragment_source) + 1;
-    if (shader->geometry_source) size += strlen(shader->geometry_source) + 1;
+    if (shader->vertex_source)
+        size += strlen(shader->vertex_source) + 1;
+    if (shader->fragment_source)
+        size += strlen(shader->fragment_source) + 1;
+    if (shader->geometry_source)
+        size += strlen(shader->geometry_source) + 1;
     return size;
 }
 
@@ -439,12 +441,10 @@ TGFX_API bool tc_shader_release(tc_shader* shader);
 // Compute legacy source-only FNV-1a hash, truncated to 16 hex chars.
 // Registry identity hashing also includes shader language and artifact policy.
 // Result is written to hash_out (must be at least TC_SHADER_HASH_LEN bytes)
-TGFX_API void tc_shader_compute_hash(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,  // may be NULL
-    char* hash_out
-);
+TGFX_API void tc_shader_compute_hash(const char* vertex_source,
+                                     const char* fragment_source,
+                                     const char* geometry_source, // may be NULL
+                                     char* hash_out);
 
 // Recompute and update shader's source_hash field
 TGFX_API void tc_shader_update_hash(tc_shader* shader);
@@ -464,12 +464,10 @@ TGFX_API tc_shader_artifact_policy tc_shader_get_artifact_policy(const tc_shader
 // come from tc_shader_set_resource_layout() / compiler sidecars.
 // Version is NOT bumped — layout changes travel together with source changes,
 // which already bump version via tc_shader_set_sources.
-TGFX_API void tc_shader_set_material_ubo_layout(
-    tc_shader* shader,
-    const tc_material_ubo_entry* entries,
-    uint32_t count,
-    uint32_t block_size
-);
+TGFX_API void tc_shader_set_material_ubo_layout(tc_shader* shader,
+                                                const tc_material_ubo_entry* entries,
+                                                uint32_t count,
+                                                uint32_t block_size);
 
 // Read access for consumers (e.g., material UBO packer in migrated passes).
 TGFX_API uint32_t tc_shader_material_ubo_entry_count(const tc_shader* shader);
@@ -484,18 +482,12 @@ TGFX_API uint32_t tc_shader_material_ubo_block_size(const tc_shader* shader);
 // retains ownership. Pass count=0 to clear. Version is not bumped for the same
 // reason as material UBO layout: resource layout belongs to the compiled source
 // identity and is populated immediately after source/artifact load.
-TGFX_API void tc_shader_set_resource_layout(
-    tc_shader* shader,
-    const tc_shader_resource_binding* bindings,
-    uint32_t count
-);
+TGFX_API void
+tc_shader_set_resource_layout(tc_shader* shader, const tc_shader_resource_binding* bindings, uint32_t count);
 
 TGFX_API uint32_t tc_shader_resource_binding_count(const tc_shader* shader);
 TGFX_API const tc_shader_resource_binding* tc_shader_resource_bindings(const tc_shader* shader);
-TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(
-    const tc_shader* shader,
-    const char* name
-);
+TGFX_API const tc_shader_resource_binding* tc_shader_find_resource_binding(const tc_shader* shader, const char* name);
 TGFX_API bool tc_shader_has_resource_layout(const tc_shader* shader);
 TGFX_API void tc_shader_mark_resource_layout_known(tc_shader* shader);
 
@@ -505,17 +497,11 @@ TGFX_API void tc_shader_mark_resource_layout_known(tc_shader* shader);
 
 // Replace the shader's generic interface contract. A deep copy of all arrays
 // is made; caller retains ownership. Passing NULL clears the contract.
-TGFX_API bool tc_shader_set_contract(
-    tc_shader* shader,
-    const tc_shader_contract_desc* desc
-);
+TGFX_API bool tc_shader_set_contract(tc_shader* shader, const tc_shader_contract_desc* desc);
 
 TGFX_API void tc_shader_clear_contract(tc_shader* shader);
 TGFX_API bool tc_shader_has_contract(const tc_shader* shader);
-TGFX_API bool tc_shader_get_contract_view(
-    const tc_shader* shader,
-    tc_shader_contract_view* out
-);
+TGFX_API bool tc_shader_get_contract_view(const tc_shader* shader, tc_shader_contract_view* out);
 
 // Synchronize the effective resource requirements with the complete compiler
 // resource layout. Declared contracts keep their authored vertex inputs while
@@ -530,26 +516,15 @@ TGFX_API bool tc_shader_sync_reflected_contract_resources(tc_shader* shader);
 
 // Replace the shader's surface producer metadata with an owned deep copy.
 // Passing NULL clears it and restores TC_SHADER_PROGRAM_EXECUTABLE.
-TGFX_API bool tc_shader_set_surface_producer(
-    tc_shader* shader,
-    const tc_shader_surface_producer_desc* desc
-);
+TGFX_API bool tc_shader_set_surface_producer(tc_shader* shader, const tc_shader_surface_producer_desc* desc);
 TGFX_API void tc_shader_clear_surface_producer(tc_shader* shader);
 TGFX_API bool tc_shader_has_surface_producer(const tc_shader* shader);
-TGFX_API bool tc_shader_get_surface_producer_view(
-    const tc_shader* shader,
-    tc_shader_surface_producer_view* out
-);
-TGFX_API tc_shader_program_role tc_shader_get_program_role(
-    const tc_shader* shader
-);
+TGFX_API bool tc_shader_get_surface_producer_view(const tc_shader* shader, tc_shader_surface_producer_view* out);
+TGFX_API tc_shader_program_role tc_shader_get_program_role(const tc_shader* shader);
 TGFX_API bool tc_shader_is_executable(const tc_shader* shader);
 // Validate a compile/bind boundary and emit an actionable error for
 // evaluator-only programs. operation is included in the diagnostic.
-TGFX_API bool tc_shader_require_executable(
-    const tc_shader* shader,
-    const char* operation
-);
+TGFX_API bool tc_shader_require_executable(const tc_shader* shader, const char* operation);
 
 #ifdef __cplusplus
 }

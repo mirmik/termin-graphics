@@ -2,8 +2,8 @@
 #ifndef TC_LIGHT_CAPABILITY_H
 #define TC_LIGHT_CAPABILITY_H
 
-#include "core/tc_component_capability.h"
 #include "core/tc_component.h"
+#include "core/tc_component_capability.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -33,14 +33,14 @@ typedef struct tc_light_shadow_params {
 // Plain C light data struct (matches C++ Light for rendering)
 typedef struct tc_light_data {
     tc_light_type type;
-    double color[3];        // RGB
+    double color[3]; // RGB
     double intensity;
-    double direction[3];    // normalized direction
-    double position[3];     // world position
+    double direction[3]; // normalized direction
+    double position[3];  // world position
     bool has_range;
     double range;
-    double inner_angle;     // radians
-    double outer_angle;     // radians
+    double inner_angle; // radians
+    double outer_angle; // radians
     tc_light_shadow_params shadows;
 } tc_light_data;
 
@@ -60,11 +60,7 @@ typedef struct tc_light_capability {
 TC_API tc_component_cap_id tc_light_capability_id(void);
 
 // Attach light capability to a component
-TC_API bool tc_light_capability_attach(
-    tc_component* c,
-    const tc_light_vtable* vtable,
-    void* userdata
-);
+TC_API bool tc_light_capability_attach(tc_component* c, const tc_light_vtable* vtable, void* userdata);
 
 // Get light capability from component (NULL if not a light)
 TC_API const tc_light_capability* tc_light_capability_get(const tc_component* c);

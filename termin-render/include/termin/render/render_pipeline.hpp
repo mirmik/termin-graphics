@@ -6,16 +6,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include <tgfx/frame_graph_resource.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/texture_pool.hpp>
-#include <tgfx/frame_graph_resource.hpp>
 
-#include <termin/render/render_export.hpp>
 #include "termin/render/fbo_pool.hpp"
 #include "termin/render/resource_aliases.hpp"
 #include "termin/render/resource_spec.hpp"
 #include "termin/render/tc_pipeline_template.hpp"
+#include <termin/render/render_export.hpp>
 
 extern "C" {
 #include "render/tc_pipeline.h"
@@ -23,98 +23,109 @@ extern "C" {
 
 namespace termin {
 
-using PipelineTextureEntry = tgfx::TexturePoolEntry;
+    using PipelineTextureEntry = tgfx::TexturePoolEntry;
 
-class RENDER_CORE_API PipelineTexturePool : public tgfx::TexturePool {
-public:
-    PipelineTexturePool() = default;
-    PipelineTexturePool(PipelineTexturePool&&) = default;
-    PipelineTexturePool& operator=(PipelineTexturePool&&) = default;
-    PipelineTexturePool(const PipelineTexturePool&) = delete;
-    PipelineTexturePool& operator=(const PipelineTexturePool&) = delete;
-    ~PipelineTexturePool() = default;
-};
+    class RENDER_CORE_API PipelineTexturePool : public tgfx::TexturePool {
+    public:
+        PipelineTexturePool() = default;
+        PipelineTexturePool(PipelineTexturePool&&) = default;
+        PipelineTexturePool& operator=(PipelineTexturePool&&) = default;
+        PipelineTexturePool(const PipelineTexturePool&) = delete;
+        PipelineTexturePool& operator=(const PipelineTexturePool&) = delete;
+        ~PipelineTexturePool() = default;
+    };
 
-// Opaque render cache stored in tc_pipeline.render_cache
-struct RENDER_CORE_API PipelineRenderCache {
-    FBOPool fbo_pool;
-    PipelineTexturePool texture_pool;
-    std::unordered_map<std::string, std::unique_ptr<FrameGraphResource>>
-        frame_graph_resources;
-    std::vector<ResourceSpec> specs;
-    std::unordered_map<std::string, ResourceView> resource_views;
-    std::unordered_map<std::string, FboComposition> fbo_compositions;
-    std::unordered_map<std::string, std::string> texture_alias_to_canonical;
-};
+    // Opaque render cache stored in tc_pipeline.render_cache
+    struct RENDER_CORE_API PipelineRenderCache {
+        FBOPool fbo_pool;
+        PipelineTexturePool texture_pool;
+        std::unordered_map<std::string, std::unique_ptr<FrameGraphResource>> frame_graph_resources;
+        std::vector<ResourceSpec> specs;
+        std::unordered_map<std::string, ResourceView> resource_views;
+        std::unordered_map<std::string, FboComposition> fbo_compositions;
+        std::unordered_map<std::string, std::string> texture_alias_to_canonical;
+    };
 
-// Mutable execution instance. It owns live passes and device-local caches while
-// holding a strong reference to an immutable/backend-neutral TcPipelineTemplate.
-class RENDER_CORE_API RenderPipeline {
-public:
-    tc_pipeline_handle handle_;
+    // Mutable execution instance. It owns live passes and device-local caches while
+    // holding a strong reference to an immutable/backend-neutral TcPipelineTemplate.
+    class RENDER_CORE_API RenderPipeline {
+    public:
+        tc_pipeline_handle handle_;
 
-public:
-    RenderPipeline() : handle_(TC_PIPELINE_HANDLE_INVALID) {}
-    explicit RenderPipeline(tc_pipeline_handle h) : handle_(h) {}
+    public:
+        RenderPipeline()
+            : handle_(TC_PIPELINE_HANDLE_INVALID) {}
+        explicit RenderPipeline(tc_pipeline_handle h)
+            : handle_(h) {}
 
-    // Create a new pipeline in the pool (caller must destroy() when done)
-    explicit RenderPipeline(const std::string& name);
-    explicit RenderPipeline(const TcPipelineTemplate& pipeline_template);
+        // Create a new pipeline in the pool (caller must destroy() when done)
+        explicit RenderPipeline(const std::string& name);
+        explicit RenderPipeline(const TcPipelineTemplate& pipeline_template);
 
-    tc_pipeline* ptr() { return tc_pipeline_get_ptr(handle_); }
-    const tc_pipeline* ptr() const { return tc_pipeline_get_ptr(handle_); }
+        tc_pipeline* ptr() {
+            return tc_pipeline_get_ptr(handle_);
+        }
+        const tc_pipeline* ptr() const {
+            return tc_pipeline_get_ptr(handle_);
+        }
 
-    tc_pipeline_handle handle() const { return handle_; }
-    tc_pipeline_template_handle template_handle() const {
-        return tc_pipeline_get_template(handle_);
-    }
-    bool is_valid() const { return tc_pipeline_pool_alive(handle_); }
+        tc_pipeline_handle handle() const {
+            return handle_;
+        }
+        tc_pipeline_template_handle template_handle() const {
+            return tc_pipeline_get_template(handle_);
+        }
+        bool is_valid() const {
+            return tc_pipeline_pool_alive(handle_);
+        }
 
-    std::string name() const;
-    void set_name(const std::string& name);
+        std::string name() const;
+        void set_name(const std::string& name);
 
-    void add_pass(tc_pass* pass);
-    void remove_pass(tc_pass* pass);
-    size_t remove_passes_by_name(const std::string& name);
-    void insert_pass_before(tc_pass* pass, tc_pass* before);
-    bool move_pass_before(tc_pass* pass, tc_pass* before);
-    tc_pass* get_pass(const std::string& name);
-    tc_pass* get_pass_at(size_t index);
-    const tc_pass* get_pass_at(size_t index) const;
-    size_t pass_count() const;
+        void add_pass(tc_pass* pass);
+        void remove_pass(tc_pass* pass);
+        size_t remove_passes_by_name(const std::string& name);
+        void insert_pass_before(tc_pass* pass, tc_pass* before);
+        bool move_pass_before(tc_pass* pass, tc_pass* before);
+        tc_pass* get_pass(const std::string& name);
+        tc_pass* get_pass_at(size_t index);
+        const tc_pass* get_pass_at(size_t index) const;
+        size_t pass_count() const;
 
-    void add_spec(const ResourceSpec& spec);
-    void clear_specs();
-    size_t spec_count() const;
-    const ResourceSpec* get_spec_at(size_t index) const;
-    const std::vector<ResourceSpec>& specs() const;
+        void add_spec(const ResourceSpec& spec);
+        void clear_specs();
+        size_t spec_count() const;
+        const ResourceSpec* get_spec_at(size_t index) const;
+        const std::vector<ResourceSpec>& specs() const;
 
-    bool is_dirty() const;
-    void mark_dirty();
+        bool is_dirty() const;
+        void mark_dirty();
 
-    std::vector<ResourceSpec> collect_specs() const;
+        std::vector<ResourceSpec> collect_specs() const;
 
-    // Render cache (lazy-created in pool)
-    PipelineRenderCache& cache();
-    FBOPool& fbo_pool() { return cache().fbo_pool; }
-    const FBOPool& fbo_pool() const;
+        // Render cache (lazy-created in pool)
+        PipelineRenderCache& cache();
+        FBOPool& fbo_pool() {
+            return cache().fbo_pool;
+        }
+        const FBOPool& fbo_pool() const;
 
-    tgfx::TextureHandle get_color_tex2(const std::string& name) {
-        return fbo_pool().get_color_tgfx2(name);
-    }
-    tgfx::TextureHandle get_depth_tex2(const std::string& name) {
-        return fbo_pool().get_depth_tgfx2(name);
-    }
-    tgfx::IRenderDevice* tex2_device() {
-        return fbo_pool().device();
-    }
+        tgfx::TextureHandle get_color_tex2(const std::string& name) {
+            return fbo_pool().get_color_tgfx2(name);
+        }
+        tgfx::TextureHandle get_depth_tex2(const std::string& name) {
+            return fbo_pool().get_depth_tgfx2(name);
+        }
+        tgfx::IRenderDevice* tex2_device() {
+            return fbo_pool().device();
+        }
 
-    // Destroy pipeline in pool (frees passes, render_cache, frame_graph)
-    void destroy();
-};
+        // Destroy pipeline in pool (frees passes, render_cache, frame_graph)
+        void destroy();
+    };
 
-// Explicit name for code that needs to distinguish execution state from the
-// canonical TcPipelineTemplate definition.
-using RenderPipelineInstance = RenderPipeline;
+    // Explicit name for code that needs to distinguish execution state from the
+    // canonical TcPipelineTemplate definition.
+    using RenderPipelineInstance = RenderPipeline;
 
 } // namespace termin

@@ -9,11 +9,10 @@ extern "C" {
 #endif
 
 typedef tc_phase_mask (*tc_py_drawable_phase_mask_fn)(void* py_self);
-typedef bool (*tc_py_drawable_collect_render_items_fn)(
-    void* py_self,
-    tc_component* component,
-    const tc_render_item_collect_context* context,
-    tc_render_item_sink* sink);
+typedef bool (*tc_py_drawable_collect_render_items_fn)(void* py_self,
+                                                       tc_component* component,
+                                                       const tc_render_item_collect_context* context,
+                                                       tc_render_item_sink* sink);
 
 typedef struct {
     tc_py_drawable_phase_mask_fn phase_mask;

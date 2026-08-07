@@ -1,14 +1,14 @@
+#include <render/tc_frame_graph.h>
 #include <render/tc_pipeline.h>
 #include <render/tc_pipeline_pool.h>
-#include <render/tc_frame_graph.h>
 #include <render/tc_pipeline_template_registry.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <tc_pipeline_registry.h>
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdio.h>
 
 #define MAX_PIPELINE_POOL_SIZE 256
 #define PIPELINE_INITIAL_POOL_CAPACITY 16
@@ -21,7 +21,8 @@ static bool g_pipeline_pool_initialized = false;
 #define PIPELINES ((tc_pipeline*)g_pipeline_pool.data)
 
 static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
-    if (!pass) return;
+    if (!pass)
+        return;
     pass->owner_pipeline = TC_PIPELINE_HANDLE_INVALID;
     pass->deleter = NULL;
     tc_pass_destroy(pass);
@@ -33,7 +34,8 @@ static void destroy_owned_pass(tc_pass* pass, tc_pass_deleter deleter) {
 }
 
 static void destroy_all_pipeline_passes(tc_pipeline* pipeline) {
-    if (!pipeline) return;
+    if (!pipeline)
+        return;
     const size_t count = pipeline->pass_count;
     pipeline->pass_count = 0;
     for (size_t i = 0; i < count; ++i) {
@@ -46,7 +48,8 @@ static void destroy_all_pipeline_passes(tc_pipeline* pipeline) {
 }
 
 static void destroy_pipeline_slot(tc_pipeline* pipeline) {
-    if (!pipeline) return;
+    if (!pipeline)
+        return;
 
     void* render_cache = pipeline->render_cache;
     void (*render_cache_destructor)(void*) = pipeline->render_cache_destructor;
@@ -67,10 +70,10 @@ static void destroy_pipeline_slot(tc_pipeline* pipeline) {
     }
 
     destroy_all_pipeline_passes(pipeline);
-    tc_pipeline_template* pipeline_template =
-        tc_pipeline_template_get(pipeline->pipeline_template);
+    tc_pipeline_template* pipeline_template = tc_pipeline_template_get(pipeline->pipeline_template);
     pipeline->pipeline_template = tc_pipeline_template_handle_invalid();
-    if (pipeline_template) tc_pipeline_template_release(pipeline_template);
+    if (pipeline_template)
+        tc_pipeline_template_release(pipeline_template);
     free(pipeline->passes);
     free(pipeline->pass_deleters);
     free(pipeline->name);
@@ -78,10 +81,12 @@ static void destroy_pipeline_slot(tc_pipeline* pipeline) {
 }
 
 static char* tc_pipeline_strdup(const char* s) {
-    if (s == NULL) return NULL;
+    if (s == NULL)
+        return NULL;
     size_t len = strlen(s) + 1;
     char* copy = (char*)malloc(len);
-    if (copy) memcpy(copy, s, len);
+    if (copy)
+        memcpy(copy, s, len);
     return copy;
 }
 
@@ -110,11 +115,7 @@ void tc_pipeline_pool_init(void) {
         .name = "tc_pipeline_pool",
         .generation_epoch = &g_pipeline_generation_epoch,
     };
-    if (!tc_pool_init_ex(
-            &g_pipeline_pool,
-            sizeof(tc_pipeline),
-            PIPELINE_INITIAL_POOL_CAPACITY,
-            &config)) {
+    if (!tc_pool_init_ex(&g_pipeline_pool, sizeof(tc_pipeline), PIPELINE_INITIAL_POOL_CAPACITY, &config)) {
         tc_log_error("[tc_pipeline_pool] storage allocation failed");
         return;
     }
@@ -138,18 +139,15 @@ void tc_pipeline_pool_shutdown(void) {
 
 static inline bool pipeline_handle_alive(tc_pipeline_handle h) {
     const tc_handle pool_handle = {h.index, h.generation};
-    return g_pipeline_pool_initialized &&
-        tc_pool_is_valid(&g_pipeline_pool, pool_handle);
+    return g_pipeline_pool_initialized && tc_pool_is_valid(&g_pipeline_pool, pool_handle);
 }
 
 bool tc_pipeline_pool_alive(tc_pipeline_handle h) {
     return pipeline_handle_alive(h);
 }
 
-static tc_pipeline_handle pipeline_pool_alloc_with_template(
-    const char* name,
-    tc_pipeline_template_handle template_handle
-) {
+static tc_pipeline_handle pipeline_pool_alloc_with_template(const char* name,
+                                                            tc_pipeline_template_handle template_handle) {
     if (!g_pipeline_pool_initialized) {
         tc_pipeline_pool_init();
         if (!g_pipeline_pool_initialized) {
@@ -167,7 +165,8 @@ static tc_pipeline_handle pipeline_pool_alloc_with_template(
     p->name = name ? tc_pipeline_strdup(name) : tc_pipeline_strdup("default");
     p->pipeline_template = template_handle;
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
-    if (pipeline_template) tc_pipeline_template_retain(pipeline_template);
+    if (pipeline_template)
+        tc_pipeline_template_retain(pipeline_template);
     p->passes = NULL;
     p->pass_deleters = NULL;
     p->pass_count = 0;
@@ -198,13 +197,12 @@ tc_pipeline_handle tc_pipeline_pool_alloc(const char* name) {
 }
 
 tc_pipeline_handle tc_pipeline_create(const char* name) {
-    return pipeline_pool_alloc_with_template(
-        name ? name : "default",
-        tc_pipeline_template_handle_invalid());
+    return pipeline_pool_alloc_with_template(name ? name : "default", tc_pipeline_template_handle_invalid());
 }
 
 void tc_pipeline_pool_free(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return;
+    if (!pipeline_handle_alive(h))
+        return;
 
     tc_pipeline* p = &PIPELINES[h.index];
 
@@ -223,7 +221,8 @@ size_t tc_pipeline_pool_count(void) {
 }
 
 void tc_pipeline_pool_foreach(tc_pipeline_pool_iter_fn callback, void* user_data) {
-    if (!g_pipeline_pool_initialized || !callback) return;
+    if (!g_pipeline_pool_initialized || !callback)
+        return;
     for (uint32_t i = 0; i < g_pipeline_pool.capacity; ++i) {
         if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             tc_pipeline_handle h = {i, g_pipeline_pool.generations[i]};
@@ -235,32 +234,38 @@ void tc_pipeline_pool_foreach(tc_pipeline_pool_iter_fn callback, void* user_data
 }
 
 tc_pipeline* tc_pipeline_get_ptr(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return NULL;
+    if (!pipeline_handle_alive(h))
+        return NULL;
     return &PIPELINES[h.index];
 }
 
 tc_pipeline_template_handle tc_pipeline_get_template(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return tc_pipeline_template_handle_invalid();
+    if (!pipeline_handle_alive(h))
+        return tc_pipeline_template_handle_invalid();
     return PIPELINES[h.index].pipeline_template;
 }
 
 const char* tc_pipeline_get_name(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return NULL;
+    if (!pipeline_handle_alive(h))
+        return NULL;
     return PIPELINES[h.index].name;
 }
 
 void tc_pipeline_set_name(tc_pipeline_handle h, const char* name) {
-    if (!pipeline_handle_alive(h)) return;
+    if (!pipeline_handle_alive(h))
+        return;
     tc_pipeline_strset(&PIPELINES[h.index].name, name);
 }
 
 void* tc_pipeline_get_render_cache(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return NULL;
+    if (!pipeline_handle_alive(h))
+        return NULL;
     return PIPELINES[h.index].render_cache;
 }
 
 void tc_pipeline_set_render_cache(tc_pipeline_handle h, void* cache, void (*destructor)(void*)) {
-    if (!pipeline_handle_alive(h)) return;
+    if (!pipeline_handle_alive(h))
+        return;
     tc_pipeline* p = &PIPELINES[h.index];
     if (p->render_cache && p->render_cache_destructor) {
         p->render_cache_destructor(p->render_cache);
@@ -278,10 +283,7 @@ static bool pipeline_ensure_capacity(tc_pipeline* p) {
             return false;
         }
         p->passes = passes;
-        tc_pass_deleter* deleters = (tc_pass_deleter*)realloc(
-            p->pass_deleters,
-            new_capacity * sizeof(tc_pass_deleter)
-        );
+        tc_pass_deleter* deleters = (tc_pass_deleter*)realloc(p->pass_deleters, new_capacity * sizeof(tc_pass_deleter));
         if (!deleters) {
             tc_log_error("[tc_pipeline] failed to grow pass deleter storage");
             return false;
@@ -292,11 +294,7 @@ static bool pipeline_ensure_capacity(tc_pipeline* p) {
     return true;
 }
 
-bool tc_pipeline_adopt_pass(
-    tc_pipeline_handle h,
-    tc_pass* pass,
-    tc_pass_deleter deleter
-) {
+bool tc_pipeline_adopt_pass(tc_pipeline_handle h, tc_pass* pass, tc_pass_deleter deleter) {
     if (!pipeline_handle_alive(h) || !pass || !deleter) {
         tc_log_error("[tc_pipeline] pass adoption requires a live pipeline, pass and deleter");
         return false;
@@ -305,17 +303,20 @@ bool tc_pipeline_adopt_pass(
 
     if (tc_pipeline_handle_valid(pass->owner_pipeline)) {
         if (tc_pipeline_handle_eq(pass->owner_pipeline, h)) {
-            tc_log(TC_LOG_ERROR, "tc_pipeline_adopt_pass: pass '%s' is already in this pipeline",
+            tc_log(TC_LOG_ERROR,
+                   "tc_pipeline_adopt_pass: pass '%s' is already in this pipeline",
                    pass->pass_name ? pass->pass_name : "(unnamed)");
             return false;
         } else {
-            tc_log(TC_LOG_ERROR, "tc_pipeline_adopt_pass: pass '%s' is already in another pipeline",
+            tc_log(TC_LOG_ERROR,
+                   "tc_pipeline_adopt_pass: pass '%s' is already in another pipeline",
                    pass->pass_name ? pass->pass_name : "(unnamed)");
             return false;
         }
     }
 
-    if (!pipeline_ensure_capacity(p)) return false;
+    if (!pipeline_ensure_capacity(p))
+        return false;
     pass->owner_pipeline = h;
     pass->deleter = deleter;
     p->passes[p->pass_count++] = pass;
@@ -324,12 +325,7 @@ bool tc_pipeline_adopt_pass(
     return true;
 }
 
-bool tc_pipeline_adopt_pass_before(
-    tc_pipeline_handle h,
-    tc_pass* pass,
-    tc_pass_deleter deleter,
-    tc_pass* before
-) {
+bool tc_pipeline_adopt_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass_deleter deleter, tc_pass* before) {
     if (!pipeline_handle_alive(h) || !pass || !deleter) {
         tc_log_error("[tc_pipeline] pass adoption requires a live pipeline, pass and deleter");
         return false;
@@ -355,14 +351,14 @@ bool tc_pipeline_adopt_pass_before(
         }
     }
 
-    if (!pipeline_ensure_capacity(p)) return false;
+    if (!pipeline_ensure_capacity(p))
+        return false;
     pass->owner_pipeline = h;
     pass->deleter = deleter;
 
     if (!before) {
         memmove(&p->passes[1], &p->passes[0], p->pass_count * sizeof(tc_pass*));
-        memmove(&p->pass_deleters[1], &p->pass_deleters[0],
-                p->pass_count * sizeof(tc_pass_deleter));
+        memmove(&p->pass_deleters[1], &p->pass_deleters[0], p->pass_count * sizeof(tc_pass_deleter));
         p->passes[0] = pass;
         p->pass_deleters[0] = deleter;
         p->pass_count++;
@@ -370,9 +366,9 @@ bool tc_pipeline_adopt_pass_before(
         return true;
     }
 
-    memmove(&p->passes[insert_idx + 1], &p->passes[insert_idx],
-            (p->pass_count - insert_idx) * sizeof(tc_pass*));
-    memmove(&p->pass_deleters[insert_idx + 1], &p->pass_deleters[insert_idx],
+    memmove(&p->passes[insert_idx + 1], &p->passes[insert_idx], (p->pass_count - insert_idx) * sizeof(tc_pass*));
+    memmove(&p->pass_deleters[insert_idx + 1],
+            &p->pass_deleters[insert_idx],
             (p->pass_count - insert_idx) * sizeof(tc_pass_deleter));
     p->passes[insert_idx] = pass;
     p->pass_deleters[insert_idx] = deleter;
@@ -381,12 +377,9 @@ bool tc_pipeline_adopt_pass_before(
     return true;
 }
 
-bool tc_pipeline_move_pass_before(
-    tc_pipeline_handle h,
-    tc_pass* pass,
-    tc_pass* before
-) {
-    if (!pipeline_handle_alive(h) || !pass) return false;
+bool tc_pipeline_move_pass_before(tc_pipeline_handle h, tc_pass* pass, tc_pass* before) {
+    if (!pipeline_handle_alive(h) || !pass)
+        return false;
     tc_pipeline* pipeline = &PIPELINES[h.index];
     size_t source = pipeline->pass_count;
     for (size_t i = 0; i < pipeline->pass_count; ++i) {
@@ -399,12 +392,15 @@ bool tc_pipeline_move_pass_before(
         tc_log_error("[tc_pipeline] cannot move a pass not owned by the pipeline");
         return false;
     }
-    if (before == pass) return true;
+    if (before == pass)
+        return true;
 
     tc_pass_deleter deleter = pipeline->pass_deleters[source];
-    memmove(&pipeline->passes[source], &pipeline->passes[source + 1],
+    memmove(&pipeline->passes[source],
+            &pipeline->passes[source + 1],
             (pipeline->pass_count - source - 1) * sizeof(tc_pass*));
-    memmove(&pipeline->pass_deleters[source], &pipeline->pass_deleters[source + 1],
+    memmove(&pipeline->pass_deleters[source],
+            &pipeline->pass_deleters[source + 1],
             (pipeline->pass_count - source - 1) * sizeof(tc_pass_deleter));
     pipeline->pass_count--;
 
@@ -418,9 +414,11 @@ bool tc_pipeline_move_pass_before(
         }
         if (destination == pipeline->pass_count) {
             tc_log_error("[tc_pipeline] move target does not belong to the pipeline");
-            memmove(&pipeline->passes[source + 1], &pipeline->passes[source],
+            memmove(&pipeline->passes[source + 1],
+                    &pipeline->passes[source],
                     (pipeline->pass_count - source) * sizeof(tc_pass*));
-            memmove(&pipeline->pass_deleters[source + 1], &pipeline->pass_deleters[source],
+            memmove(&pipeline->pass_deleters[source + 1],
+                    &pipeline->pass_deleters[source],
                     (pipeline->pass_count - source) * sizeof(tc_pass_deleter));
             pipeline->passes[source] = pass;
             pipeline->pass_deleters[source] = deleter;
@@ -429,9 +427,11 @@ bool tc_pipeline_move_pass_before(
         }
     }
 
-    memmove(&pipeline->passes[destination + 1], &pipeline->passes[destination],
+    memmove(&pipeline->passes[destination + 1],
+            &pipeline->passes[destination],
             (pipeline->pass_count - destination) * sizeof(tc_pass*));
-    memmove(&pipeline->pass_deleters[destination + 1], &pipeline->pass_deleters[destination],
+    memmove(&pipeline->pass_deleters[destination + 1],
+            &pipeline->pass_deleters[destination],
             (pipeline->pass_count - destination) * sizeof(tc_pass_deleter));
     pipeline->passes[destination] = pass;
     pipeline->pass_deleters[destination] = deleter;
@@ -441,7 +441,8 @@ bool tc_pipeline_move_pass_before(
 }
 
 void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
-    if (!pipeline_handle_alive(h) || !pass) return;
+    if (!pipeline_handle_alive(h) || !pass)
+        return;
     tc_pipeline* p = &PIPELINES[h.index];
 
     size_t idx = p->pass_count;
@@ -451,20 +452,20 @@ void tc_pipeline_remove_pass(tc_pipeline_handle h, tc_pass* pass) {
             break;
         }
     }
-    if (idx >= p->pass_count) return;
+    if (idx >= p->pass_count)
+        return;
 
-    memmove(&p->passes[idx], &p->passes[idx + 1],
-            (p->pass_count - idx - 1) * sizeof(tc_pass*));
+    memmove(&p->passes[idx], &p->passes[idx + 1], (p->pass_count - idx - 1) * sizeof(tc_pass*));
     tc_pass_deleter deleter = p->pass_deleters[idx];
-    memmove(&p->pass_deleters[idx], &p->pass_deleters[idx + 1],
-            (p->pass_count - idx - 1) * sizeof(tc_pass_deleter));
+    memmove(&p->pass_deleters[idx], &p->pass_deleters[idx + 1], (p->pass_count - idx - 1) * sizeof(tc_pass_deleter));
     p->pass_count--;
     p->dirty = true;
     destroy_owned_pass(pass, deleter);
 }
 
 size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name) {
-    if (!pipeline_handle_alive(h) || !name) return 0;
+    if (!pipeline_handle_alive(h) || !name)
+        return 0;
     tc_pipeline* p = &PIPELINES[h.index];
     size_t removed_count = 0;
 
@@ -472,10 +473,10 @@ size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name)
         tc_pass* pass = p->passes[i - 1];
         if (pass && pass->pass_name && strcmp(pass->pass_name, name) == 0) {
             size_t idx = i - 1;
-            memmove(&p->passes[idx], &p->passes[idx + 1],
-                    (p->pass_count - idx - 1) * sizeof(tc_pass*));
+            memmove(&p->passes[idx], &p->passes[idx + 1], (p->pass_count - idx - 1) * sizeof(tc_pass*));
             tc_pass_deleter deleter = p->pass_deleters[idx];
-            memmove(&p->pass_deleters[idx], &p->pass_deleters[idx + 1],
+            memmove(&p->pass_deleters[idx],
+                    &p->pass_deleters[idx + 1],
                     (p->pass_count - idx - 1) * sizeof(tc_pass_deleter));
             p->pass_count--;
             destroy_owned_pass(pass, deleter);
@@ -491,7 +492,8 @@ size_t tc_pipeline_remove_passes_by_name(tc_pipeline_handle h, const char* name)
 }
 
 tc_pass* tc_pipeline_get_pass(tc_pipeline_handle h, const char* name) {
-    if (!pipeline_handle_alive(h) || !name) return NULL;
+    if (!pipeline_handle_alive(h) || !name)
+        return NULL;
     tc_pipeline* p = &PIPELINES[h.index];
     for (size_t i = 0; i < p->pass_count; i++) {
         tc_pass* pass = p->passes[i];
@@ -503,52 +505,38 @@ tc_pass* tc_pipeline_get_pass(tc_pipeline_handle h, const char* name) {
 }
 
 tc_pass* tc_pipeline_get_pass_at(tc_pipeline_handle h, size_t index) {
-    if (!pipeline_handle_alive(h)) return NULL;
+    if (!pipeline_handle_alive(h))
+        return NULL;
     tc_pipeline* p = &PIPELINES[h.index];
-    if (index >= p->pass_count) return NULL;
+    if (index >= p->pass_count)
+        return NULL;
     return p->passes[index];
 }
 
-bool tc_pipeline_replace_pass_at(
-    tc_pipeline_handle h,
-    size_t index,
-    tc_pass* replacement,
-    tc_pass_deleter deleter
-) {
+bool tc_pipeline_replace_pass_at(tc_pipeline_handle h, size_t index, tc_pass* replacement, tc_pass_deleter deleter) {
     tc_pass* previous = tc_pipeline_get_pass_at(h, index);
     tc_pass_deleter previous_deleter = NULL;
-    if (!tc_pipeline_exchange_pass_at_checked(
-            h,
-            index,
-            previous,
-            replacement,
-            deleter,
-            &previous_deleter)) {
+    if (!tc_pipeline_exchange_pass_at_checked(h, index, previous, replacement, deleter, &previous_deleter)) {
         return false;
     }
     destroy_owned_pass(previous, previous_deleter);
     return true;
 }
 
-bool tc_pipeline_exchange_pass_at_checked(
-    tc_pipeline_handle h,
-    size_t index,
-    tc_pass* expected,
-    tc_pass* replacement,
-    tc_pass_deleter replacement_deleter,
-    tc_pass_deleter* expected_deleter
-) {
-    if (!pipeline_handle_alive(h) || !expected || !replacement ||
-        !replacement_deleter || !expected_deleter) {
+bool tc_pipeline_exchange_pass_at_checked(tc_pipeline_handle h,
+                                          size_t index,
+                                          tc_pass* expected,
+                                          tc_pass* replacement,
+                                          tc_pass_deleter replacement_deleter,
+                                          tc_pass_deleter* expected_deleter) {
+    if (!pipeline_handle_alive(h) || !expected || !replacement || !replacement_deleter || !expected_deleter) {
         return false;
     }
     tc_pipeline* pipeline = &PIPELINES[h.index];
-    if (index >= pipeline->pass_count || pipeline->passes[index] != expected ||
-        expected == replacement) {
+    if (index >= pipeline->pass_count || pipeline->passes[index] != expected || expected == replacement) {
         return false;
     }
-    if (!tc_pipeline_handle_eq(expected->owner_pipeline, h) ||
-        tc_pipeline_handle_valid(replacement->owner_pipeline)) {
+    if (!tc_pipeline_handle_eq(expected->owner_pipeline, h) || tc_pipeline_handle_valid(replacement->owner_pipeline)) {
         tc_log(TC_LOG_ERROR, "tc_pipeline_exchange_pass_at_checked: stale source or owned replacement");
         return false;
     }
@@ -565,12 +553,14 @@ bool tc_pipeline_exchange_pass_at_checked(
 }
 
 size_t tc_pipeline_pass_count(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return 0;
+    if (!pipeline_handle_alive(h))
+        return 0;
     return PIPELINES[h.index].pass_count;
 }
 
 void tc_pipeline_foreach(tc_pipeline_handle h, tc_pipeline_pass_iter_fn callback, void* user_data) {
-    if (!pipeline_handle_alive(h) || !callback) return;
+    if (!pipeline_handle_alive(h) || !callback)
+        return;
     tc_pipeline* p = &PIPELINES[h.index];
     for (size_t i = 0; i < p->pass_count; i++) {
         if (!callback(h, p->passes[i], i, user_data)) {
@@ -591,12 +581,13 @@ size_t tc_pipeline_registry_count(void) {
 }
 
 tc_pipeline_handle tc_pipeline_registry_get_at(size_t index) {
-    if (!g_pipeline_pool_initialized) return TC_PIPELINE_HANDLE_INVALID;
+    if (!g_pipeline_pool_initialized)
+        return TC_PIPELINE_HANDLE_INVALID;
     size_t current = 0;
     for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
         if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             if (current == index) {
-                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
+                tc_pipeline_handle h = {(uint32_t)i, g_pipeline_pool.generations[i]};
                 return h;
             }
             current++;
@@ -606,12 +597,13 @@ tc_pipeline_handle tc_pipeline_registry_get_at(size_t index) {
 }
 
 tc_pipeline_handle tc_pipeline_registry_find_by_name(const char* name) {
-    if (!name || !g_pipeline_pool_initialized) return TC_PIPELINE_HANDLE_INVALID;
+    if (!name || !g_pipeline_pool_initialized)
+        return TC_PIPELINE_HANDLE_INVALID;
     for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
         if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             tc_pipeline* p = &PIPELINES[i];
             if (p->name && strcmp(p->name, name) == 0) {
-                tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
+                tc_pipeline_handle h = {(uint32_t)i, g_pipeline_pool.generations[i]};
                 return h;
             }
         }
@@ -620,20 +612,23 @@ tc_pipeline_handle tc_pipeline_registry_find_by_name(const char* name) {
 }
 
 tc_pipeline_info* tc_pipeline_registry_get_all_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
 
     size_t pipeline_count = tc_pipeline_pool_count();
-    if (pipeline_count == 0) return NULL;
+    if (pipeline_count == 0)
+        return NULL;
 
     tc_pipeline_info* infos = (tc_pipeline_info*)malloc(pipeline_count * sizeof(tc_pipeline_info));
-    if (!infos) return NULL;
+    if (!infos)
+        return NULL;
 
     size_t idx = 0;
     for (size_t i = 0; i < g_pipeline_pool.capacity && idx < pipeline_count; i++) {
         if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             tc_pipeline* p = &PIPELINES[i];
-            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
+            tc_pipeline_handle h = {(uint32_t)i, g_pipeline_pool.generations[i]};
             infos[idx].handle = h;
             infos[idx].name = p->name;
             infos[idx].pass_count = p->pass_count;
@@ -646,9 +641,11 @@ tc_pipeline_info* tc_pipeline_registry_get_all_info(size_t* count) {
 }
 
 tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
-    if (!g_pipeline_pool_initialized) return NULL;
+    if (!g_pipeline_pool_initialized)
+        return NULL;
 
     size_t total_passes = 0;
     for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
@@ -656,16 +653,18 @@ tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
             total_passes += PIPELINES[i].pass_count;
         }
     }
-    if (total_passes == 0) return NULL;
+    if (total_passes == 0)
+        return NULL;
 
     tc_pass_info* infos = (tc_pass_info*)malloc(total_passes * sizeof(tc_pass_info));
-    if (!infos) return NULL;
+    if (!infos)
+        return NULL;
 
     size_t idx = 0;
     for (size_t i = 0; i < g_pipeline_pool.capacity; i++) {
         if (g_pipeline_pool.states[i] == TC_SLOT_OCCUPIED) {
             tc_pipeline* p = &PIPELINES[i];
-            tc_pipeline_handle h = { (uint32_t)i, g_pipeline_pool.generations[i] };
+            tc_pipeline_handle h = {(uint32_t)i, g_pipeline_pool.generations[i]};
             for (size_t j = 0; j < p->pass_count; j++) {
                 tc_pass* pass = p->passes[j];
                 if (pass) {
@@ -689,22 +688,26 @@ tc_pass_info* tc_pass_registry_get_all_instance_info(size_t* count) {
 }
 
 bool tc_pipeline_is_dirty(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return true;
+    if (!pipeline_handle_alive(h))
+        return true;
     return PIPELINES[h.index].dirty;
 }
 
 void tc_pipeline_mark_dirty(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return;
+    if (!pipeline_handle_alive(h))
+        return;
     PIPELINES[h.index].dirty = true;
 }
 
 void tc_pipeline_clear_dirty(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return;
+    if (!pipeline_handle_alive(h))
+        return;
     PIPELINES[h.index].dirty = false;
 }
 
 tc_frame_graph* tc_pipeline_get_frame_graph(tc_pipeline_handle h) {
-    if (!pipeline_handle_alive(h)) return NULL;
+    if (!pipeline_handle_alive(h))
+        return NULL;
     tc_pipeline* p = &PIPELINES[h.index];
 
     if (!p->dirty && p->cached_frame_graph) {

@@ -11,7 +11,9 @@ static tc_phase_mask py_drawable_phase_mask(tc_component* c) {
     return TC_PHASE_NONE;
 }
 
-static bool py_drawable_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
+static bool py_drawable_collect_render_items(tc_component* c,
+                                             const tc_render_item_collect_context* context,
+                                             tc_render_item_sink* sink) {
     if (g_py_drawable_callbacks.collect_render_items && c->body) {
         return g_py_drawable_callbacks.collect_render_items(c->body, c, context, sink);
     }

@@ -20,18 +20,18 @@ typedef enum tc_texture_encoding {
 
 namespace tgfx {
 
-enum class TextureEncoding : uint8_t {
-    Linear = TC_TEXTURE_ENCODING_LINEAR,
-    SRGB = TC_TEXTURE_ENCODING_SRGB,
-};
+    enum class TextureEncoding : uint8_t {
+        Linear = TC_TEXTURE_ENCODING_LINEAR,
+        SRGB = TC_TEXTURE_ENCODING_SRGB,
+    };
 
-constexpr tc_texture_encoding to_tc_texture_encoding(TextureEncoding encoding) {
-    return static_cast<tc_texture_encoding>(static_cast<uint8_t>(encoding));
-}
+    constexpr tc_texture_encoding to_tc_texture_encoding(TextureEncoding encoding) {
+        return static_cast<tc_texture_encoding>(static_cast<uint8_t>(encoding));
+    }
 
-constexpr TextureEncoding from_tc_texture_encoding(tc_texture_encoding encoding) {
-    return static_cast<TextureEncoding>(static_cast<uint8_t>(encoding));
-}
+    constexpr TextureEncoding from_tc_texture_encoding(tc_texture_encoding encoding) {
+        return static_cast<TextureEncoding>(static_cast<uint8_t>(encoding));
+    }
 
 } // namespace tgfx
 #endif

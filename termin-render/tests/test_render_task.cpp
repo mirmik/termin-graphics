@@ -6,9 +6,9 @@
 
 namespace {
 
-struct DrawPayload final : termin::RenderTaskExtension {
-    std::array<float, 16> model{};
-};
+    struct DrawPayload final : termin::RenderTaskExtension {
+        std::array<float, 16> model{};
+    };
 
 } // namespace
 
@@ -24,12 +24,9 @@ TEST_CASE("RenderTaskList keeps task resource packets valid after planning growt
     first.debug_name = "first";
 
     const termin::RenderItemNamedUniformBinding uniform{
-        "draw_data", payload.model.data(),
-        static_cast<uint32_t>(sizeof(payload.model))};
-    const termin::RenderItemNamedTextureBinding texture{
-        "albedo", tgfx::TextureHandle{9}, tgfx::SamplerHandle{3}};
-    first.set_resources(nullptr, std::span{&uniform, size_t{1}},
-                        std::span{&texture, size_t{1}});
+        "draw_data", payload.model.data(), static_cast<uint32_t>(sizeof(payload.model))};
+    const termin::RenderItemNamedTextureBinding texture{"albedo", tgfx::TextureHandle{9}, tgfx::SamplerHandle{3}};
+    first.set_resources(nullptr, std::span{&uniform, size_t{1}}, std::span{&texture, size_t{1}});
 
     for (int i = 0; i < 64; ++i) {
         tasks.append().debug_name = "later";

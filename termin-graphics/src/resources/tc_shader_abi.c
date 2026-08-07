@@ -97,10 +97,7 @@ const tc_shader_abi_resource_decl* tc_shader_abi_resource(uint32_t id) {
     return NULL;
 }
 
-bool tc_shader_abi_name_is_legacy_alias(
-    const tc_shader_abi_resource_decl* decl,
-    const char* name)
-{
+bool tc_shader_abi_name_is_legacy_alias(const tc_shader_abi_resource_decl* decl, const char* name) {
     if (!decl || !name) {
         return false;
     }
@@ -112,15 +109,11 @@ bool tc_shader_abi_name_is_legacy_alias(
     return false;
 }
 
-bool tc_shader_abi_name_matches(
-    const tc_shader_abi_resource_decl* decl,
-    const char* name)
-{
+bool tc_shader_abi_name_matches(const tc_shader_abi_resource_decl* decl, const char* name) {
     if (!decl || !decl->canonical_name || !name) {
         return false;
     }
-    return strcmp(decl->canonical_name, name) == 0 ||
-        tc_shader_abi_name_is_legacy_alias(decl, name);
+    return strcmp(decl->canonical_name, name) == 0 || tc_shader_abi_name_is_legacy_alias(decl, name);
 }
 
 const tc_shader_abi_resource_decl* tc_shader_abi_find_resource(const char* name) {
@@ -135,22 +128,15 @@ const tc_shader_abi_resource_decl* tc_shader_abi_find_resource(const char* name)
     return NULL;
 }
 
-bool tc_shader_abi_binding_matches(
-    const tc_shader_abi_resource_decl* decl,
-    const tc_shader_resource_binding* binding)
-{
+bool tc_shader_abi_binding_matches(const tc_shader_abi_resource_decl* decl, const tc_shader_resource_binding* binding) {
     if (!decl || !binding) {
         return false;
     }
-    return tc_shader_abi_name_matches(decl, binding->name) &&
-        binding->kind == decl->kind &&
-        binding->scope == decl->scope;
+    return tc_shader_abi_name_matches(decl, binding->name) && binding->kind == decl->kind &&
+           binding->scope == decl->scope;
 }
 
-const tc_shader_resource_binding* tc_shader_abi_find_resource_binding(
-    const tc_shader* shader,
-    uint32_t id)
-{
+const tc_shader_resource_binding* tc_shader_abi_find_resource_binding(const tc_shader* shader, uint32_t id) {
     if (!shader) {
         return NULL;
     }
@@ -158,8 +144,7 @@ const tc_shader_resource_binding* tc_shader_abi_find_resource_binding(
     if (!decl) {
         return NULL;
     }
-    const tc_shader_resource_binding* rb =
-        tc_shader_find_resource_binding(shader, decl->canonical_name);
+    const tc_shader_resource_binding* rb = tc_shader_find_resource_binding(shader, decl->canonical_name);
     if (rb && tc_shader_abi_binding_matches(decl, rb)) {
         return rb;
     }

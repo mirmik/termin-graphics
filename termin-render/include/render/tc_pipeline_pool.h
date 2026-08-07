@@ -1,10 +1,10 @@
 #ifndef TC_PIPELINE_POOL_H
 #define TC_PIPELINE_POOL_H
 
-#include <tc_types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <tc_types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,9 +16,9 @@ typedef struct {
 } tc_pipeline_handle;
 
 #ifdef __cplusplus
-    #define TC_PIPELINE_HANDLE_INVALID (tc_pipeline_handle{0xFFFFFFFF, 0})
+#define TC_PIPELINE_HANDLE_INVALID (tc_pipeline_handle{0xFFFFFFFF, 0})
 #else
-    #define TC_PIPELINE_HANDLE_INVALID ((tc_pipeline_handle){0xFFFFFFFF, 0})
+#define TC_PIPELINE_HANDLE_INVALID ((tc_pipeline_handle){0xFFFFFFFF, 0})
 #endif
 
 static inline bool tc_pipeline_handle_valid(tc_pipeline_handle h) {

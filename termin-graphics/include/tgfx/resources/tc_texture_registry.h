@@ -89,34 +89,26 @@ TGFX_API void tc_texture_foreach(tc_texture_iter_fn callback, void* user_data);
 
 typedef void (*tc_texture_destroy_hook_fn)(uint32_t pool_index, void* user_data);
 
-TGFX_API void tc_texture_registry_add_destroy_hook(
-    tc_texture_destroy_hook_fn cb, void* user_data);
-TGFX_API void tc_texture_registry_remove_destroy_hook(
-    tc_texture_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_texture_registry_add_destroy_hook(tc_texture_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_texture_registry_remove_destroy_hook(tc_texture_destroy_hook_fn cb, void* user_data);
 
 // ============================================================================
 // Texture data helpers
 // ============================================================================
 
-TGFX_API bool tc_texture_set_data(
-    tc_texture* tex,
-    const void* data,
-    uint32_t width,
-    uint32_t height,
-    uint8_t channels,
-    const char* name,
-    const char* source_path
-);
+TGFX_API bool tc_texture_set_data(tc_texture* tex,
+                                  const void* data,
+                                  uint32_t width,
+                                  uint32_t height,
+                                  uint8_t channels,
+                                  const char* name,
+                                  const char* source_path);
 
-TGFX_API void tc_texture_set_transforms(
-    tc_texture* tex,
-    bool flip_x,
-    bool flip_y,
-    bool transpose
-);
+TGFX_API void tc_texture_set_transforms(tc_texture* tex, bool flip_x, bool flip_y, bool transpose);
 
 static inline void tc_texture_bump_version(tc_texture* tex) {
-    if (tex) tex->header.version++;
+    if (tex)
+        tex->header.version++;
 }
 
 #ifdef __cplusplus

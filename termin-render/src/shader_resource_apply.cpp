@@ -11,180 +11,153 @@ extern "C" {
 }
 
 namespace termin {
-namespace {
+    namespace {
 
-const char* shader_debug_name(const tc_shader* shader) {
-    if (!shader) return "<null>";
-    if (shader->name && shader->name[0] != '\0') return shader->name;
-    if (shader->uuid[0] != '\0') return shader->uuid;
-    return "<unnamed>";
-}
-
-const tc_shader_resource_binding* find_abi_resource_by_any_name(
-    const tc_shader* shader,
-    const ShaderAbiResourceDecl& decl)
-{
-    if (!shader) return nullptr;
-    const tc_shader_resource_binding* rb =
-        tc_shader_find_resource_binding(shader, decl.canonical_name.data());
-    if (rb) {
-        return rb;
-    }
-    for (std::string_view alias : decl.legacy_aliases) {
-        rb = tc_shader_find_resource_binding(shader, alias.data());
-        if (rb) {
-            return rb;
+        const char* shader_debug_name(const tc_shader* shader) {
+            if (!shader)
+                return "<null>";
+            if (shader->name && shader->name[0] != '\0')
+                return shader->name;
+            if (shader->uuid[0] != '\0')
+                return shader->uuid;
+            return "<unnamed>";
         }
-    }
-    return nullptr;
-}
 
-const tc_shader_resource_binding* find_valid_abi_resource(
-    const tc_shader* shader,
-    ShaderAbiResourceId id,
-    const char* diagnostic_name)
-{
-    const ShaderAbiResourceDecl& decl = shader_abi_resource(id);
-    const tc_shader_resource_binding* rb =
-        find_abi_resource_by_any_name(shader, decl);
-    if (!rb) {
-        return nullptr;
-    }
-    if (shader_abi_binding_matches(decl, *rb)) {
-        return rb;
-    }
+        const tc_shader_resource_binding* find_abi_resource_by_any_name(const tc_shader* shader,
+                                                                        const ShaderAbiResourceDecl& decl) {
+            if (!shader)
+                return nullptr;
+            const tc_shader_resource_binding* rb = tc_shader_find_resource_binding(shader, decl.canonical_name.data());
+            if (rb) {
+                return rb;
+            }
+            for (std::string_view alias : decl.legacy_aliases) {
+                rb = tc_shader_find_resource_binding(shader, alias.data());
+                if (rb) {
+                    return rb;
+                }
+            }
+            return nullptr;
+        }
 
-    tc::Log::error(
-        "[ShaderResourceApply] shader '%s' declares %s ABI resource '%s' "
-        "with kind=%u scope=%u, expected kind=%u scope=%u",
-        shader_debug_name(shader),
-        diagnostic_name,
-        rb->name,
-        rb->kind,
-        rb->scope,
-        decl.kind,
-        decl.scope);
-    return nullptr;
-}
+        const tc_shader_resource_binding*
+        find_valid_abi_resource(const tc_shader* shader, ShaderAbiResourceId id, const char* diagnostic_name) {
+            const ShaderAbiResourceDecl& decl = shader_abi_resource(id);
+            const tc_shader_resource_binding* rb = find_abi_resource_by_any_name(shader, decl);
+            if (!rb) {
+                return nullptr;
+            }
+            if (shader_abi_binding_matches(decl, *rb)) {
+                return rb;
+            }
 
-} // namespace
+            tc::Log::error("[ShaderResourceApply] shader '%s' declares %s ABI resource '%s' "
+                           "with kind=%u scope=%u, expected kind=%u scope=%u",
+                           shader_debug_name(shader),
+                           diagnostic_name,
+                           rb->name,
+                           rb->kind,
+                           rb->scope,
+                           decl.kind,
+                           decl.scope);
+            return nullptr;
+        }
 
-bool shader_layout_present(const tc_shader* shader) {
-    return tc_shader_has_resource_layout(shader);
-}
+    } // namespace
 
-static bool shader_layout_omits_resource(const tc_shader* shader) {
-    return tc_shader_has_resource_layout(shader);
-}
-
-bool bind_lighting_ubo_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    tgfx::BufferHandle lighting_ubo)
-{
-    if (!lighting_ubo) return false;
-
-    const tc_shader_resource_binding* rb = find_valid_abi_resource(
-        shader,
-        ShaderAbiResourceId::Lighting,
-        "lighting");
-    if (rb) {
-        ctx.bind_uniform(rb, lighting_ubo);
-        return true;
+    bool shader_layout_present(const tc_shader* shader) {
+        return tc_shader_has_resource_layout(shader);
     }
 
-    if (shader_layout_omits_resource(shader)) {
-        return false;
+    static bool shader_layout_omits_resource(const tc_shader* shader) {
+        return tc_shader_has_resource_layout(shader);
     }
 
-    tc::Log::error(
-        "[ShaderResourceApply] shader '%s' has no lighting constant-buffer "
-        "resource layout entry",
-        shader_debug_name(shader));
-    return false;
-}
+    bool
+    bind_lighting_ubo_for_shader(tgfx::RenderContext2& ctx, const tc_shader* shader, tgfx::BufferHandle lighting_ubo) {
+        if (!lighting_ubo)
+            return false;
 
-bool bind_shadow_block_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    const void* data,
-    uint32_t size)
-{
-    if (!data || size == 0) return false;
+        const tc_shader_resource_binding* rb =
+            find_valid_abi_resource(shader, ShaderAbiResourceId::Lighting, "lighting");
+        if (rb) {
+            ctx.bind_uniform(rb, lighting_ubo);
+            return true;
+        }
 
-    const tc_shader_resource_binding* rb = find_valid_abi_resource(
-        shader,
-        ShaderAbiResourceId::ShadowBlock,
-        "shadow_block");
-    if (rb) {
-        ctx.bind_uniform_data(rb, data, size);
-        return true;
-    }
-
-    if (shader_layout_omits_resource(shader)) {
-        return false;
-    }
-
-    tc::Log::error(
-        "[ShaderResourceApply] shader '%s' has no shadow_block constant-buffer "
-        "resource layout entry",
-        shader_debug_name(shader));
-    return false;
-}
-
-bool bind_shadow_maps_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    std::span<const tgfx::TextureHandle> shadow_maps,
-    tgfx::SamplerHandle sampler,
-    size_t max_count)
-{
-    const tc_shader_resource_binding* rb = find_valid_abi_resource(
-        shader,
-        ShaderAbiResourceId::ShadowMaps,
-        "shadow_maps");
-    if (rb) {
-        // Bind by reflected resource name below.
-    } else {
         if (shader_layout_omits_resource(shader)) {
             return false;
         }
-        tc::Log::error(
-            "[ShaderResourceApply] shader '%s' has no shadow map texture "
-            "resource layout entry",
-            shader_debug_name(shader));
+
+        tc::Log::error("[ShaderResourceApply] shader '%s' has no lighting constant-buffer "
+                       "resource layout entry",
+                       shader_debug_name(shader));
         return false;
     }
 
-    // Comparison samplers are part of the statically compiled shader ABI even
-    // when this frame has no shadow-casting lights. D3D11's debug layer
-    // rejects a draw when that sampler slot is left unbound. Bind the sampler
-    // through the reflected texture slot with a null texture; backends that
-    // require a complete sampled-image descriptor supply their canonical
-    // fallback texture while preserving the comparison sampler.
-    if (shadow_maps.empty()) {
-        ctx.bind_texture_array_element(
-            rb,
-            0,
-            tgfx::TextureHandle{},
-            sampler);
-        return true;
+    bool
+    bind_shadow_block_for_shader(tgfx::RenderContext2& ctx, const tc_shader* shader, const void* data, uint32_t size) {
+        if (!data || size == 0)
+            return false;
+
+        const tc_shader_resource_binding* rb =
+            find_valid_abi_resource(shader, ShaderAbiResourceId::ShadowBlock, "shadow_block");
+        if (rb) {
+            ctx.bind_uniform_data(rb, data, size);
+            return true;
+        }
+
+        if (shader_layout_omits_resource(shader)) {
+            return false;
+        }
+
+        tc::Log::error("[ShaderResourceApply] shader '%s' has no shadow_block constant-buffer "
+                       "resource layout entry",
+                       shader_debug_name(shader));
+        return false;
     }
 
-    bool any_bound = false;
-    const size_t count = std::min(shadow_maps.size(), max_count);
-    for (size_t i = 0; i < count; ++i) {
-        if (!shadow_maps[i]) continue;
+    bool bind_shadow_maps_for_shader(tgfx::RenderContext2& ctx,
+                                     const tc_shader* shader,
+                                     std::span<const tgfx::TextureHandle> shadow_maps,
+                                     tgfx::SamplerHandle sampler,
+                                     size_t max_count) {
+        const tc_shader_resource_binding* rb =
+            find_valid_abi_resource(shader, ShaderAbiResourceId::ShadowMaps, "shadow_maps");
         if (rb) {
-            ctx.bind_texture_array_element(
-                rb,
-                static_cast<uint32_t>(i),
-                shadow_maps[i],
-                sampler);
+            // Bind by reflected resource name below.
+        } else {
+            if (shader_layout_omits_resource(shader)) {
+                return false;
+            }
+            tc::Log::error("[ShaderResourceApply] shader '%s' has no shadow map texture "
+                           "resource layout entry",
+                           shader_debug_name(shader));
+            return false;
         }
-        any_bound = true;
+
+        // Comparison samplers are part of the statically compiled shader ABI even
+        // when this frame has no shadow-casting lights. D3D11's debug layer
+        // rejects a draw when that sampler slot is left unbound. Bind the sampler
+        // through the reflected texture slot with a null texture; backends that
+        // require a complete sampled-image descriptor supply their canonical
+        // fallback texture while preserving the comparison sampler.
+        if (shadow_maps.empty()) {
+            ctx.bind_texture_array_element(rb, 0, tgfx::TextureHandle{}, sampler);
+            return true;
+        }
+
+        bool any_bound = false;
+        const size_t count = std::min(shadow_maps.size(), max_count);
+        for (size_t i = 0; i < count; ++i) {
+            if (!shadow_maps[i])
+                continue;
+            if (rb) {
+                ctx.bind_texture_array_element(rb, static_cast<uint32_t>(i), shadow_maps[i], sampler);
+            }
+            any_bound = true;
+        }
+        return any_bound;
     }
-    return any_bound;
-}
 
 } // namespace termin

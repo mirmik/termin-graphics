@@ -1,11 +1,11 @@
+#include <inspect/tc_runtime_type_registry.h>
 #include <render/tc_pass.h>
 #include <render/tc_pipeline.h>
-#include <inspect/tc_runtime_type_registry.h>
-#include <tc_pipeline_registry.h>
-#include <tcbase/tc_log.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tc_pipeline_registry.h>
+#include <tcbase/tc_log.h>
 
 #ifdef _WIN32
 #define tc_strdup _strdup
@@ -24,59 +24,45 @@ typedef struct tc_frame_pass_facet_payload {
 } tc_frame_pass_facet_payload;
 
 static tc_frame_pass_facet_payload* pass_facet(const char* type_name) {
-    return (tc_frame_pass_facet_payload*)tc_runtime_type_registry_get_facet(
-        type_name,
-        TC_RUNTIME_TYPE_FACET_FRAME_PASS
-    );
+    return (tc_frame_pass_facet_payload*)tc_runtime_type_registry_get_facet(type_name,
+                                                                            TC_RUNTIME_TYPE_FACET_FRAME_PASS);
 }
 
 static void destroy_pass_facet(void* payload) {
     tc_frame_pass_facet_payload* facet = (tc_frame_pass_facet_payload*)payload;
-    if (!facet) return;
+    if (!facet)
+        return;
     tc_runtime_owned_factory_reset(&facet->factory);
     free(facet);
 }
 
-static bool prepare_pass_facet_unload(
-    const char* type_name,
-    void* payload,
-    void* context
-) {
+static bool prepare_pass_facet_unload(const char* type_name, void* payload, void* context) {
     (void)payload;
     const size_t instance_count = tc_runtime_type_registry_instance_count(type_name);
     if (!type_name || instance_count == 0) {
         return true;
     }
     if (!g_prepare_unload_callback) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] refusing to unload pass type '%s' with %zu live instance(s): "
-            "no prepare-unload callback is installed",
-            type_name,
-            instance_count
-        );
+        tc_log(TC_LOG_ERROR,
+               "[tc_pass] refusing to unload pass type '%s' with %zu live instance(s): "
+               "no prepare-unload callback is installed",
+               type_name,
+               instance_count);
         return false;
     }
-    return g_prepare_unload_callback(
-        type_name,
-        context,
-        g_prepare_unload_user_data
-    );
+    return g_prepare_unload_callback(type_name, context, g_prepare_unload_user_data);
 }
 
-bool tc_pass_type_descriptor_add_facet(
-    tc_runtime_type_descriptor* descriptor,
-    tc_runtime_owned_factory* factory,
-    tc_pass_kind kind
-) {
+bool tc_pass_type_descriptor_add_facet(tc_runtime_type_descriptor* descriptor,
+                                       tc_runtime_owned_factory* factory,
+                                       tc_pass_kind kind) {
     tc_runtime_owned_factory owned_factory = tc_runtime_owned_factory_take(factory);
     if (!descriptor) {
         tc_log(TC_LOG_ERROR, "[tc_pass] cannot attach a pass facet to a null descriptor");
         tc_runtime_owned_factory_reset(&owned_factory);
         return false;
     }
-    tc_frame_pass_facet_payload* facet =
-        (tc_frame_pass_facet_payload*)calloc(1, sizeof(*facet));
+    tc_frame_pass_facet_payload* facet = (tc_frame_pass_facet_payload*)calloc(1, sizeof(*facet));
     if (!facet) {
         tc_log(TC_LOG_ERROR, "[tc_pass] failed to allocate staged pass facet");
         tc_runtime_owned_factory_reset(&owned_factory);
@@ -85,12 +71,7 @@ bool tc_pass_type_descriptor_add_facet(
     facet->factory = tc_runtime_owned_factory_take(&owned_factory);
     facet->kind = kind;
     if (!tc_runtime_type_descriptor_add_facet(
-            descriptor,
-            TC_RUNTIME_TYPE_FACET_FRAME_PASS,
-            facet,
-            destroy_pass_facet,
-            prepare_pass_facet_unload,
-            1)) {
+            descriptor, TC_RUNTIME_TYPE_FACET_FRAME_PASS, facet, destroy_pass_facet, prepare_pass_facet_unload, 1)) {
         return false;
     }
     return true;
@@ -110,10 +91,7 @@ static bool collect_pass_type(const char* type_name, void* user_data) {
 
     if (ctx->count >= ctx->capacity) {
         size_t new_capacity = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
-        const char** names = (const char**)realloc(
-            ctx->names,
-            new_capacity * sizeof(const char*)
-        );
+        const char** names = (const char**)realloc(ctx->names, new_capacity * sizeof(const char*));
         if (!names) {
             tc_log(TC_LOG_ERROR, "[tc_pass] failed to grow pass type list during registry cleanup");
             return false;
@@ -131,24 +109,12 @@ bool tc_pass_link_registered_type(tc_pass* p, const char* type_name) {
         return false;
     }
     if (!pass_facet(type_name)) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] cannot link pass instance to unregistered type '%s'",
-            type_name
-        );
+        tc_log(TC_LOG_ERROR, "[tc_pass] cannot link pass instance to unregistered type '%s'", type_name);
         return false;
     }
 
-    if (!tc_runtime_type_registry_link_instance(
-            type_name,
-            &p->runtime_type_link,
-            p
-        )) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] failed to link pass instance to runtime type '%s'",
-            type_name
-        );
+    if (!tc_runtime_type_registry_link_instance(type_name, &p->runtime_type_link, p)) {
+        tc_log(TC_LOG_ERROR, "[tc_pass] failed to link pass instance to runtime type '%s'", type_name);
         return false;
     }
 
@@ -156,44 +122,44 @@ bool tc_pass_link_registered_type(tc_pass* p, const char* type_name) {
 }
 
 void tc_pass_set_name(tc_pass* p, const char* name) {
-    if (!p) return;
-    if (p->pass_name) free(p->pass_name);
+    if (!p)
+        return;
+    if (p->pass_name)
+        free(p->pass_name);
     p->pass_name = name ? tc_strdup(name) : NULL;
 }
 
 void tc_pass_set_enabled(tc_pass* p, bool enabled) {
-    if (p) p->enabled = enabled;
+    if (p)
+        p->enabled = enabled;
 }
 
 void tc_pass_set_passthrough(tc_pass* p, bool passthrough) {
-    if (p) p->passthrough = passthrough;
+    if (p)
+        p->passthrough = passthrough;
 }
 
 void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name) {
-    if (!p) return;
+    if (!p)
+        return;
     free(p->viewport_name);
-    p->viewport_name = viewport_name && viewport_name[0]
-        ? tc_strdup(viewport_name)
-        : NULL;
+    p->viewport_name = viewport_name && viewport_name[0] ? tc_strdup(viewport_name) : NULL;
 }
 
 void tc_pass_delete_unowned(tc_pass* p) {
-    if (!p) return;
+    if (!p)
+        return;
     if (tc_pipeline_handle_valid(p->owner_pipeline)) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] refusing to delete pass '%s' while it belongs to a pipeline",
-            p->pass_name ? p->pass_name : "<unnamed>"
-        );
+        tc_log(TC_LOG_ERROR,
+               "[tc_pass] refusing to delete pass '%s' while it belongs to a pipeline",
+               p->pass_name ? p->pass_name : "<unnamed>");
         return;
     }
     tc_pass_deleter deleter = p->deleter;
     if (!deleter) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] cannot delete unowned pass '%s': no deleter is installed",
-            p->pass_name ? p->pass_name : "<unnamed>"
-        );
+        tc_log(TC_LOG_ERROR,
+               "[tc_pass] cannot delete unowned pass '%s': no deleter is installed",
+               p->pass_name ? p->pass_name : "<unnamed>");
         return;
     }
     p->deleter = NULL;
@@ -202,7 +168,8 @@ void tc_pass_delete_unowned(tc_pass* p) {
 }
 
 void tc_pass_registry_unregister(const char* type_name) {
-    if (!type_name) return;
+    if (!type_name)
+        return;
     if (!tc_runtime_type_registry_unregister_type_with_context(type_name, NULL)) {
         tc_log(TC_LOG_ERROR, "[tc_pass] failed to unregister pass type '%s'", type_name);
     }
@@ -243,39 +210,33 @@ tc_pass_kind tc_pass_registry_get_kind(const char* type_name) {
 }
 
 size_t tc_pass_registry_instance_count(const char* type_name) {
-    if (!type_name) return 0;
+    if (!type_name)
+        return 0;
     return tc_runtime_type_registry_instance_count(type_name);
 }
 
-void tc_pass_registry_set_prepare_unload_callback(
-    tc_pass_prepare_unload_fn callback,
-    void* user_data
-) {
+void tc_pass_registry_set_prepare_unload_callback(tc_pass_prepare_unload_fn callback, void* user_data) {
     g_prepare_unload_callback = callback;
     g_prepare_unload_user_data = user_data;
 }
 
 void tc_pass_unlink_from_registry(tc_pass* p) {
-    if (!p) return;
+    if (!p)
+        return;
     tc_runtime_type_registry_unlink_instance(&p->runtime_type_link);
 }
 
 void tc_pass_registry_cleanup(void) {
     g_prepare_unload_callback = NULL;
     g_prepare_unload_user_data = NULL;
-    pass_type_collect_ctx ctx = { NULL, 0, 0 };
-    tc_runtime_type_registry_foreach_type_with_facet(
-        TC_RUNTIME_TYPE_FACET_FRAME_PASS,
-        collect_pass_type,
-        &ctx
-    );
+    pass_type_collect_ctx ctx = {NULL, 0, 0};
+    tc_runtime_type_registry_foreach_type_with_facet(TC_RUNTIME_TYPE_FACET_FRAME_PASS, collect_pass_type, &ctx);
     for (size_t i = 0; i < ctx.count; ++i) {
         if (!tc_runtime_type_registry_unregister_type_with_context(ctx.names[i], NULL)) {
             tc_log(TC_LOG_ERROR, "[tc_pass] failed to clean up pass type '%s'", ctx.names[i]);
         }
     }
     free(ctx.names);
-
 }
 
 static tc_external_pass_callbacks g_external_callbacks = {0};
@@ -347,7 +308,8 @@ void tc_pass_set_external_callbacks(const tc_external_pass_callbacks* callbacks)
 
 tc_pass* tc_pass_new_external(void* body, const char* type_name) {
     tc_pass* p = (tc_pass*)calloc(1, sizeof(tc_pass));
-    if (!p) return NULL;
+    if (!p)
+        return NULL;
 
     tc_pass_init_unowned(p, &g_external_vtable);
     p->body = body;
@@ -373,17 +335,18 @@ tc_pass* tc_pass_new_external(void* body, const char* type_name) {
 }
 
 void tc_pass_free_external(tc_pass* p) {
-    if (!p) return;
+    if (!p)
+        return;
     if (tc_pipeline_handle_valid(p->owner_pipeline)) {
-        tc_log(
-            TC_LOG_ERROR,
-            "[tc_pass] refusing to free external pass '%s' while it belongs to a pipeline",
-            p->pass_name ? p->pass_name : "<unnamed>"
-        );
+        tc_log(TC_LOG_ERROR,
+               "[tc_pass] refusing to free external pass '%s' while it belongs to a pipeline",
+               p->pass_name ? p->pass_name : "<unnamed>");
         return;
     }
     tc_pass_unlink_from_registry(p);
-    if (p->pass_name) free(p->pass_name);
-    if (p->viewport_name) free(p->viewport_name);
+    if (p->pass_name)
+        free(p->pass_name);
+    if (p->viewport_name)
+        free(p->viewport_name);
     free(p);
 }

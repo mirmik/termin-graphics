@@ -23,8 +23,8 @@ typedef struct tc_scene_skybox {
     float color[3];              // Solid color RGB
     float top_color[3];          // Gradient top RGB
     float bottom_color[3];       // Gradient bottom RGB
-    tc_mesh_handle mesh;             // Skybox cube mesh (refcounted via handle)
-    tc_material_handle material;     // Optional external skybox material handle
+    tc_mesh_handle mesh;         // Skybox cube mesh (refcounted via handle)
+    tc_material_handle material; // Optional external skybox material handle
 } tc_scene_skybox;
 
 // Initialize with defaults

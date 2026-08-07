@@ -1,16 +1,16 @@
-#include <termin/gui_native/tc_ui_document.h>
 #include <termin/gui_native/tc_document.hpp>
+#include <termin/gui_native/tc_ui_document.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <limits>
 #include <string>
-#include <vector>
 #include <type_traits>
+#include <vector>
 
 struct TestWidget {
-    tc_widget widget {};
+    tc_widget widget{};
     int* destroy_count = nullptr;
     int* delete_count = nullptr;
     int* paint_count = nullptr;
@@ -22,13 +22,8 @@ struct TextMeasureProbe {
     bool return_invalid_metrics = false;
 };
 
-static bool probe_text_measure(
-    void* user_data,
-    const char*,
-    size_t byte_length,
-    float font_size,
-    tc_ui_text_metrics* out_metrics
-) {
+static bool
+probe_text_measure(void* user_data, const char*, size_t byte_length, float font_size, tc_ui_text_metrics* out_metrics) {
     auto* probe = static_cast<TextMeasureProbe*>(user_data);
     probe->last_length = byte_length;
     probe->last_font_size = font_size;
@@ -66,7 +61,7 @@ static void test_widget_paint(tc_widget* widget, tc_ui_document_handle, tc_ui_pa
     }
 }
 
-static const tc_widget_vtable TEST_WIDGET_VTABLE {
+static const tc_widget_vtable TEST_WIDGET_VTABLE{
     "TestWidget",
     nullptr,
     nullptr,
@@ -81,26 +76,18 @@ static const tc_widget_vtable TEST_WIDGET_VTABLE {
     test_widget_on_destroy,
 };
 
-static TestWidget* make_test_widget(
-    int* destroy_count = nullptr,
-    int* delete_count = nullptr,
-    int* paint_count = nullptr
-) {
+static TestWidget*
+make_test_widget(int* destroy_count = nullptr, int* delete_count = nullptr, int* paint_count = nullptr) {
     auto* widget = new TestWidget();
     widget->destroy_count = destroy_count;
     widget->delete_count = delete_count;
     widget->paint_count = paint_count;
-    tc_widget_init_unowned(
-        &widget->widget,
-        &TEST_WIDGET_VTABLE,
-        TC_LANGUAGE_CXX,
-        widget
-    );
+    tc_widget_init_unowned(&widget->widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, widget);
     return widget;
 }
 
 struct RouteWidget {
-    tc_widget widget {};
+    tc_widget widget{};
     int id = 0;
     std::vector<int>* pointer_log = nullptr;
     std::vector<int>* key_log = nullptr;
@@ -122,12 +109,7 @@ static RouteWidget* route_widget_from(tc_widget* widget) {
     return static_cast<RouteWidget*>(widget->body);
 }
 
-static tc_widget_handle route_widget_hit_test(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    float x,
-    float
-) {
+static tc_widget_handle route_widget_hit_test(tc_widget* widget, tc_ui_document_handle, float x, float) {
     RouteWidget* self = route_widget_from(widget);
     if (x >= 50.0f) {
         return tc_widget_handle_invalid();
@@ -135,11 +117,8 @@ static tc_widget_handle route_widget_hit_test(
     return tc_widget_handle_is_invalid(self->hit_target) ? widget->handle : self->hit_target;
 }
 
-static tc_ui_event_result route_widget_pointer_event(
-    tc_widget* widget,
-    tc_ui_document_handle document,
-    const tc_ui_pointer_event* event
-) {
+static tc_ui_event_result
+route_widget_pointer_event(tc_widget* widget, tc_ui_document_handle document, const tc_ui_pointer_event* event) {
     RouteWidget* self = route_widget_from(widget);
     if (self->pointer_log) {
         self->pointer_log->push_back(self->id * 10 + static_cast<int>(event->type));
@@ -152,16 +131,14 @@ static tc_ui_event_result route_widget_pointer_event(
             tc_ui_document_destroy_widget(document, self->destroy_on_cancel);
         }
     }
-    if (event->type == TC_UI_POINTER_DOWN &&
-        !tc_widget_handle_is_invalid(self->destroy_target)) {
+    if (event->type == TC_UI_POINTER_DOWN && !tc_widget_handle_is_invalid(self->destroy_target)) {
         if (self->destroy_recursive) {
             tc_ui_document_destroy_widget_recursive(document, self->destroy_target);
         } else {
             tc_ui_document_destroy_widget(document, self->destroy_target);
         }
     }
-    if (event->type == TC_UI_POINTER_LEAVE &&
-        !tc_widget_handle_is_invalid(self->destroy_on_leave)) {
+    if (event->type == TC_UI_POINTER_LEAVE && !tc_widget_handle_is_invalid(self->destroy_on_leave)) {
         tc_ui_document_destroy_widget(document, self->destroy_on_leave);
     }
     return event->type == self->handled_pointer ? TC_UI_EVENT_HANDLED : TC_UI_EVENT_IGNORED;
@@ -174,11 +151,7 @@ static void route_widget_paint(tc_widget* widget, tc_ui_document_handle, tc_ui_p
     }
 }
 
-static tc_ui_event_result route_widget_key_event(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    const tc_ui_key_event*
-) {
+static tc_ui_event_result route_widget_key_event(tc_widget* widget, tc_ui_document_handle, const tc_ui_key_event*) {
     RouteWidget* self = route_widget_from(widget);
     if (self->key_log) {
         self->key_log->push_back(self->id);
@@ -196,18 +169,15 @@ static void route_widget_focus_event(tc_widget* widget, tc_ui_document_handle do
     }
 }
 
-static void route_widget_overlay_dismissed(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    tc_ui_overlay_dismiss_reason reason
-) {
+static void
+route_widget_overlay_dismissed(tc_widget* widget, tc_ui_document_handle, tc_ui_overlay_dismiss_reason reason) {
     RouteWidget* self = route_widget_from(widget);
     if (self->dismiss_log) {
         self->dismiss_log->push_back(self->id * 10 + static_cast<int>(reason));
     }
 }
 
-static const tc_widget_vtable ROUTE_WIDGET_VTABLE {
+static const tc_widget_vtable ROUTE_WIDGET_VTABLE{
     "RouteWidget",
     nullptr,
     nullptr,
@@ -222,18 +192,9 @@ static const tc_widget_vtable ROUTE_WIDGET_VTABLE {
     nullptr,
 };
 
-static tc_widget_handle adopt_route_widget(
-    tc_ui_document_handle document,
-    RouteWidget& widget,
-    int id
-) {
+static tc_widget_handle adopt_route_widget(tc_ui_document_handle document, RouteWidget& widget, int id) {
     widget.id = id;
-    tc_widget_init_unowned(
-        &widget.widget,
-        &ROUTE_WIDGET_VTABLE,
-        TC_LANGUAGE_CXX,
-        &widget
-    );
+    tc_widget_init_unowned(&widget.widget, &ROUTE_WIDGET_VTABLE, TC_LANGUAGE_CXX, &widget);
     return tc_ui_document_attach_borrowed_widget(document, &widget.widget);
 }
 
@@ -253,38 +214,30 @@ static void test_pointer_cancel_reasons_and_callback_mutation() {
     assert(tc_ui_document_set_pointer_capture(document, first_handle));
     first.destroy_on_cancel = first_handle;
     assert(tc_ui_document_set_pointer_capture(document, second_handle));
-    assert((first_cancels == std::vector{
-        TC_UI_POINTER_CANCEL_CAPTURE_REPLACED}));
+    assert((first_cancels == std::vector{TC_UI_POINTER_CANCEL_CAPTURE_REPLACED}));
     assert(!tc_ui_document_is_alive(document, first_handle));
-    assert(tc_widget_handle_eq(
-        tc_ui_document_pointer_capture(document), second_handle));
+    assert(tc_widget_handle_eq(tc_ui_document_pointer_capture(document), second_handle));
 
-    assert(tc_ui_document_cancel_pointer_interaction(
-        document, TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST));
-    assert((second_cancels == std::vector{
-        TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST}));
-    assert(tc_widget_handle_is_invalid(
-        tc_ui_document_pointer_capture(document)));
+    assert(tc_ui_document_cancel_pointer_interaction(document, TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST));
+    assert((second_cancels == std::vector{TC_UI_POINTER_CANCEL_WINDOW_FOCUS_LOST}));
+    assert(tc_widget_handle_is_invalid(tc_ui_document_pointer_capture(document)));
 
     assert(tc_ui_document_set_pointer_capture(document, second_handle));
     tc_widget_set_visible(&second.widget, false);
-    assert(second_cancels.back() ==
-           TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
+    assert(second_cancels.back() == TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
     tc_widget_set_visible(&second.widget, true);
 
     assert(tc_ui_document_set_pointer_capture(document, second_handle));
-    assert(tc_ui_document_show_overlay(
-        document, modal_handle, TC_UI_OVERLAY_MODAL));
+    assert(tc_ui_document_show_overlay(document, modal_handle, TC_UI_OVERLAY_MODAL));
     assert(second_cancels.back() == TC_UI_POINTER_CANCEL_MODAL_OPENED);
-    assert(tc_widget_handle_is_invalid(
-        tc_ui_document_pointer_capture(document)));
+    assert(tc_widget_handle_is_invalid(tc_ui_document_pointer_capture(document)));
 
     tc_ui_document_destroy(document);
 }
 
 struct OverlayLayoutProbe {
-    tc_widget widget {};
-    tc_ui_size preferred {0.0f, 0.0f};
+    tc_widget widget{};
+    tc_ui_size preferred{0.0f, 0.0f};
     int measure_count = 0;
     int layout_count = 0;
 };
@@ -293,46 +246,29 @@ static OverlayLayoutProbe* overlay_layout_probe_from(tc_widget* widget) {
     return static_cast<OverlayLayoutProbe*>(widget->body);
 }
 
-static tc_ui_size overlay_layout_probe_measure(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    tc_ui_constraints constraints
-) {
+static tc_ui_size
+overlay_layout_probe_measure(tc_widget* widget, tc_ui_document_handle, tc_ui_constraints constraints) {
     OverlayLayoutProbe* self = overlay_layout_probe_from(widget);
     self->measure_count += 1;
-    return tc_ui_size {
-        std::min(std::max(self->preferred.width, constraints.min_size.width),
-                 constraints.max_size.width),
-        std::min(std::max(self->preferred.height, constraints.min_size.height),
-                 constraints.max_size.height)
-    };
+    return tc_ui_size{
+        std::min(std::max(self->preferred.width, constraints.min_size.width), constraints.max_size.width),
+        std::min(std::max(self->preferred.height, constraints.min_size.height), constraints.max_size.height)};
 }
 
-static void overlay_layout_probe_layout(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    tc_ui_rect rect
-) {
+static void overlay_layout_probe_layout(tc_widget* widget, tc_ui_document_handle, tc_ui_rect rect) {
     OverlayLayoutProbe* self = overlay_layout_probe_from(widget);
     self->layout_count += 1;
     tc_widget_set_bounds(widget, rect);
 }
 
-static tc_widget_handle overlay_layout_probe_hit_test(
-    tc_widget* widget,
-    tc_ui_document_handle,
-    float x,
-    float y
-) {
+static tc_widget_handle overlay_layout_probe_hit_test(tc_widget* widget, tc_ui_document_handle, float x, float y) {
     const tc_ui_rect bounds = widget->bounds;
-    return x >= bounds.x && y >= bounds.y &&
-                   x < bounds.x + bounds.width &&
-                   y < bounds.y + bounds.height
-        ? widget->handle
-        : tc_widget_handle_invalid();
+    return x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.width && y < bounds.y + bounds.height
+               ? widget->handle
+               : tc_widget_handle_invalid();
 }
 
-static const tc_widget_vtable OVERLAY_LAYOUT_PROBE_VTABLE {
+static const tc_widget_vtable OVERLAY_LAYOUT_PROBE_VTABLE{
     "OverlayLayoutProbe",
     overlay_layout_probe_measure,
     overlay_layout_probe_layout,
@@ -347,22 +283,13 @@ static const tc_widget_vtable OVERLAY_LAYOUT_PROBE_VTABLE {
     nullptr,
 };
 
-static tc_widget_handle adopt_overlay_layout_probe(
-    tc_ui_document_handle document,
-    OverlayLayoutProbe& probe
-) {
-    tc_widget_init_unowned(
-        &probe.widget,
-        &OVERLAY_LAYOUT_PROBE_VTABLE,
-        TC_LANGUAGE_CXX,
-        &probe
-    );
+static tc_widget_handle adopt_overlay_layout_probe(tc_ui_document_handle document, OverlayLayoutProbe& probe) {
+    tc_widget_init_unowned(&probe.widget, &OVERLAY_LAYOUT_PROBE_VTABLE, TC_LANGUAGE_CXX, &probe);
     return tc_ui_document_attach_borrowed_widget(document, &probe.widget);
 }
 
 static tc_widget_handle adopt(tc_ui_document_handle document, TestWidget* widget) {
-    tc_widget_handle handle = tc_ui_document_adopt_widget(
-        document, &widget->widget, &test_widget_delete);
+    tc_widget_handle handle = tc_ui_document_adopt_widget(document, &widget->widget, &test_widget_delete);
     assert(!tc_widget_handle_is_invalid(handle));
     assert(tc_ui_document_handle_eq(widget->widget.document, document));
     assert(tc_widget_handle_eq(widget->widget.handle, handle));
@@ -371,8 +298,7 @@ static tc_widget_handle adopt(tc_ui_document_handle document, TestWidget* widget
 
 static void test_init_defaults_and_common_state() {
     TestWidget borrowed;
-    tc_widget_init_unowned(
-        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
+    tc_widget_init_unowned(&borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
     assert(tc_ui_document_handle_is_invalid(borrowed.widget.document));
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
@@ -384,19 +310,16 @@ static void test_init_defaults_and_common_state() {
     assert(!tc_widget_is_focusable(&borrowed.widget));
     assert(!tc_widget_is_mouse_transparent(&borrowed.widget));
 
-    tc_widget_set_bounds(&borrowed.widget, tc_ui_rect {1.0f, 2.0f, 30.0f, 40.0f});
-    tc_widget_set_min_size(&borrowed.widget, tc_ui_size {3.0f, 4.0f});
-    tc_widget_set_preferred_size(&borrowed.widget, tc_ui_size {5.0f, 6.0f});
-    tc_widget_set_max_size(&borrowed.widget, tc_ui_size {70.0f, 80.0f});
+    tc_widget_set_bounds(&borrowed.widget, tc_ui_rect{1.0f, 2.0f, 30.0f, 40.0f});
+    tc_widget_set_min_size(&borrowed.widget, tc_ui_size{3.0f, 4.0f});
+    tc_widget_set_preferred_size(&borrowed.widget, tc_ui_size{5.0f, 6.0f});
+    tc_widget_set_max_size(&borrowed.widget, tc_ui_size{70.0f, 80.0f});
     assert(tc_widget_bounds(&borrowed.widget).x == 1.0f);
     assert(tc_widget_bounds(&borrowed.widget).height == 40.0f);
     assert(tc_widget_min_size(&borrowed.widget).width == 3.0f);
     assert(tc_widget_preferred_size(&borrowed.widget).height == 6.0f);
     assert(tc_widget_max_size(&borrowed.widget).width == 70.0f);
-    assert(tc_widget_has_dirty_flags(
-        &borrowed.widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT
-    ));
+    assert(tc_widget_has_dirty_flags(&borrowed.widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
 
     tc_widget_clear_dirty(&borrowed.widget, TC_WIDGET_DIRTY_MASK);
     tc_widget_set_visible(&borrowed.widget, false);
@@ -412,8 +335,7 @@ static void test_borrowed_widget_can_be_adopted_and_released() {
     int destroyed = 0;
     TestWidget borrowed;
     borrowed.destroy_count = &destroyed;
-    tc_widget_init_unowned(
-        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
+    tc_widget_init_unowned(&borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
 
     tc_ui_document_handle document = tc_ui_document_create();
     tc_widget_handle handle = tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
@@ -441,8 +363,7 @@ static void test_document_handles_become_stale_after_destroy() {
 }
 
 static void test_presentation_metrics_value_and_document_contract() {
-    tc_ui_presentation_metrics identity =
-        tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
+    tc_ui_presentation_metrics identity = tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
     tc_ui_rect rect{};
     assert(tc_ui_presentation_metrics_is_valid(&identity));
     assert(tc_ui_presentation_metrics_logical_viewport(&identity, &rect));
@@ -467,8 +388,7 @@ static void test_presentation_metrics_value_and_document_contract() {
     assert(rect.width == 320.0f && rect.height == 580.0f);
     assert(tc_ui_presentation_metrics_effective_font_scale(&scaled) == 4.5f);
     tc_ui_point logical_point{};
-    assert(tc_ui_presentation_metrics_physical_to_logical_point(
-        &scaled, tc_ui_point{150.0f, 75.0f}, &logical_point));
+    assert(tc_ui_presentation_metrics_physical_to_logical_point(&scaled, tc_ui_point{150.0f, 75.0f}, &logical_point));
     assert(logical_point.x == 50.0f && logical_point.y == 25.0f);
 
     tc_ui_presentation_metrics fractional{
@@ -496,10 +416,8 @@ static void test_presentation_metrics_value_and_document_contract() {
     const tc_ui_document_handle handle = tc_ui_document_create();
     termin::gui_native::TcDocument document{handle};
     TestWidget child;
-    tc_widget_init_unowned(
-        &child.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &child);
-    assert(!tc_widget_handle_is_invalid(
-        tc_ui_document_attach_borrowed_widget(handle, &child.widget)));
+    tc_widget_init_unowned(&child.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &child);
+    assert(!tc_widget_handle_is_invalid(tc_ui_document_attach_borrowed_widget(handle, &child.widget)));
     tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
 
     assert(!document.has_presentation_metrics());
@@ -508,8 +426,7 @@ static void test_presentation_metrics_value_and_document_contract() {
     assert(document.set_presentation_metrics(identity));
     assert(document.has_presentation_metrics());
     assert(document.presentation_revision() == 1);
-    assert(tc_widget_has_dirty_flags(
-        &child.widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
+    assert(tc_widget_has_dirty_flags(&child.widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
 
     tc_ui_presentation_metrics stored{};
     assert(document.presentation_metrics(stored));
@@ -536,8 +453,7 @@ static void test_presentation_metrics_value_and_document_contract() {
     const uint64_t revision = document.presentation_revision();
     assert(!document.set_presentation_metrics(invalid));
     assert(document.presentation_revision() == revision);
-    assert(!document.set_root_layout_policy(
-        static_cast<tc_ui_root_layout_policy>(99)));
+    assert(!document.set_root_layout_policy(static_cast<tc_ui_root_layout_policy>(99)));
     assert(document.presentation_revision() == revision);
 
     tc_ui_document_destroy(handle);
@@ -552,7 +468,7 @@ static void test_document_pool_enumeration_reports_live_documents() {
     bool found = false;
     const size_t capacity = tc_ui_document_pool_capacity();
     for (size_t index = 0; index < capacity; ++index) {
-        tc_ui_document_info info {};
+        tc_ui_document_info info{};
         if (!tc_ui_document_info_at(index, &info)) {
             continue;
         }
@@ -590,20 +506,17 @@ static void test_document_destroy_invalidates_widgets_once() {
 
 static void test_owned_adoption_requires_deleter_and_is_atomic() {
     TestWidget borrowed;
-    tc_widget_init_unowned(
-        &borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
+    tc_widget_init_unowned(&borrowed.widget, &TEST_WIDGET_VTABLE, TC_LANGUAGE_CXX, &borrowed);
     tc_ui_document_handle document = tc_ui_document_create();
 
-    const tc_widget_handle rejected =
-        tc_ui_document_adopt_widget(document, &borrowed.widget, nullptr);
+    const tc_widget_handle rejected = tc_ui_document_adopt_widget(document, &borrowed.widget, nullptr);
     assert(tc_widget_handle_is_invalid(rejected));
     assert(tc_ui_document_handle_is_invalid(borrowed.widget.document));
     assert(tc_widget_handle_is_invalid(borrowed.widget.handle));
     assert(borrowed.widget.deleter == nullptr);
     assert(tc_widget_ownership(&borrowed.widget) == TC_WIDGET_BORROWED);
 
-    const tc_widget_handle attached =
-        tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
+    const tc_widget_handle attached = tc_ui_document_attach_borrowed_widget(document, &borrowed.widget);
     assert(!tc_widget_handle_is_invalid(attached));
     assert(tc_widget_ownership(&borrowed.widget) == TC_WIDGET_BORROWED);
     assert(tc_ui_document_destroy_widget(document, attached));
@@ -612,8 +525,7 @@ static void test_owned_adoption_requires_deleter_and_is_atomic() {
     int deletes = 0;
     TestWidget* owned = make_test_widget(nullptr, &deletes);
     document = tc_ui_document_create();
-    const tc_widget_handle adopted =
-        tc_ui_document_adopt_widget(document, &owned->widget, &test_widget_delete);
+    const tc_widget_handle adopted = tc_ui_document_adopt_widget(document, &owned->widget, &test_widget_delete);
     assert(!tc_widget_handle_is_invalid(adopted));
     assert(tc_widget_ownership(&owned->widget) == TC_WIDGET_OWNED);
     assert(owned->widget.deleter == &test_widget_delete);
@@ -661,14 +573,8 @@ static void test_tree_order_reparent_and_root_invariants() {
     assert(tc_widget_child_count(&parent_a->widget) == 2);
     assert(tc_widget_child_count(&parent_b->widget) == 1);
     assert(tc_widget_parent(&child_a->widget) == &parent_b->widget);
-    assert(tc_widget_has_dirty_flags(
-        &parent_a->widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT
-    ));
-    assert(tc_widget_has_dirty_flags(
-        &parent_b->widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT
-    ));
+    assert(tc_widget_has_dirty_flags(&parent_a->widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
+    assert(tc_widget_has_dirty_flags(&parent_b->widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
     assert(tc_widget_remove_child(&parent_b->widget, &child_a->widget));
     assert(tc_widget_parent(&child_a->widget) == nullptr);
     assert(!tc_widget_detach(&child_a->widget));
@@ -774,10 +680,9 @@ static void test_roots_are_explicit_visible_paint_entrypoints() {
 
 static void test_document_text_measurement_service_contract() {
     tc_ui_document_handle document = tc_ui_document_create();
-    tc_ui_text_metrics metrics {};
+    tc_ui_text_metrics metrics{};
     assert(!tc_ui_document_measure_text(document, "abc", 3, 12.0f, &metrics));
-    const tc_ui_presentation_metrics identity =
-        tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
+    const tc_ui_presentation_metrics identity = tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f});
     assert(tc_ui_document_set_presentation_metrics(document, &identity));
 
     TextMeasureProbe probe;
@@ -796,8 +701,7 @@ static void test_document_text_measurement_service_contract() {
         tc_ui_insets{},
     };
     assert(tc_ui_document_set_presentation_metrics(document, &scaled));
-    assert(tc_ui_document_measure_text(
-        document, bytes, sizeof(bytes), 10.0f, &metrics));
+    assert(tc_ui_document_measure_text(document, bytes, sizeof(bytes), 10.0f, &metrics));
     assert(probe.last_font_size == 26.0f);
     assert(metrics.width == 39.0f);
     assert(metrics.line_height == 13.0f);
@@ -825,30 +729,30 @@ static void test_pointer_routing_hover_pressed_and_bubbling() {
     assert(tc_widget_append_child(&root.widget, &child.widget));
     assert(tc_ui_document_add_root(document, root_handle));
 
-    tc_ui_pointer_event event {};
+    tc_ui_pointer_event event{};
     event.type = TC_UI_POINTER_MOVE;
     event.x = 10.0f;
     assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_IGNORED);
-    assert((log == std::vector<int> {24, 20, 10}));
+    assert((log == std::vector<int>{24, 20, 10}));
     assert(tc_widget_handle_eq(tc_ui_document_hovered_widget(document), child_handle));
 
     log.clear();
     event.type = TC_UI_POINTER_DOWN;
     assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_HANDLED);
-    assert((log == std::vector<int> {21, 11}));
+    assert((log == std::vector<int>{21, 11}));
     assert(tc_widget_handle_eq(tc_ui_document_pressed_widget(document), root_handle));
 
     log.clear();
     event.type = TC_UI_POINTER_MOVE;
     event.x = 100.0f;
     assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_IGNORED);
-    assert((log == std::vector<int> {25, 10}));
+    assert((log == std::vector<int>{25, 10}));
     assert(tc_widget_handle_is_invalid(tc_ui_document_hovered_widget(document)));
 
     log.clear();
     event.type = TC_UI_POINTER_UP;
     assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_IGNORED);
-    assert((log == std::vector<int> {12}));
+    assert((log == std::vector<int>{12}));
     assert(tc_widget_handle_is_invalid(tc_ui_document_pressed_widget(document)));
     tc_ui_document_destroy(document);
 }
@@ -868,11 +772,11 @@ static void test_routing_snapshot_survives_destroyed_target() {
     assert(tc_widget_append_child(&root.widget, &child.widget));
     assert(tc_ui_document_add_root(document, root_handle));
 
-    tc_ui_pointer_event event {};
+    tc_ui_pointer_event event{};
     event.type = TC_UI_POINTER_DOWN;
     event.x = 10.0f;
     assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_HANDLED);
-    assert((log == std::vector<int> {24, 21, 11}));
+    assert((log == std::vector<int>{24, 21, 11}));
     assert(!tc_ui_document_is_alive(document, child_handle));
     assert(tc_ui_document_is_alive(document, root_handle));
     assert(tc_widget_handle_eq(tc_ui_document_pressed_widget(document), root_handle));
@@ -909,25 +813,25 @@ static void test_keyboard_bubbling_focus_events_and_tab_traversal() {
 
     assert(tc_ui_document_focus_next(document));
     assert(tc_widget_handle_eq(tc_ui_document_focused_widget(document), first_handle));
-    assert((focus_log == std::vector<int> {21}));
+    assert((focus_log == std::vector<int>{21}));
     assert(tc_ui_document_focus_next(document));
     assert(tc_widget_handle_eq(tc_ui_document_focused_widget(document), third_handle));
-    assert((focus_log == std::vector<int> {21, 20, 41}));
+    assert((focus_log == std::vector<int>{21, 20, 41}));
     assert(tc_ui_document_focus_previous(document));
     assert(tc_widget_handle_eq(tc_ui_document_focused_widget(document), first_handle));
 
-    tc_ui_key_event event {};
+    tc_ui_key_event event{};
     event.type = TC_UI_KEY_DOWN;
     event.key = TC_UI_KEY_ENTER;
     assert(tc_ui_document_dispatch_key_event(document, &event) == TC_UI_EVENT_HANDLED);
-    assert((key_log == std::vector<int> {2, 1}));
+    assert((key_log == std::vector<int>{2, 1}));
 
     root.handle_key = false;
     key_log.clear();
     event.key = TC_UI_KEY_TAB;
     event.modifiers = TC_UI_MOD_SHIFT;
     assert(tc_ui_document_dispatch_key_event(document, &event) == TC_UI_EVENT_HANDLED);
-    assert((key_log == std::vector<int> {2, 1}));
+    assert((key_log == std::vector<int>{2, 1}));
     assert(tc_widget_handle_eq(tc_ui_document_focused_widget(document), third_handle));
 
     assert(tc_ui_document_destroy_widget(document, third_handle));
@@ -944,7 +848,7 @@ static void test_state_setters_survive_lifecycle_callback_destroy() {
         tc_widget_handle handle = adopt_route_widget(document, hovered, 1);
         hovered.destroy_on_leave = handle;
         assert(tc_ui_document_add_root(document, handle));
-        tc_ui_pointer_event event {};
+        tc_ui_pointer_event event{};
         event.type = TC_UI_POINTER_MOVE;
         event.x = 10.0f;
         assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_IGNORED);
@@ -985,11 +889,10 @@ static void test_overlay_paint_hit_order_and_tooltip_transparency() {
     assert(tc_ui_document_show_overlay(document, tooltip_handle, TC_UI_OVERLAY_TOOLTIP));
     assert(tc_ui_document_overlay_count(document) == 2);
     assert(tc_widget_handle_eq(tc_ui_document_overlay_at(document, 0), popup_handle));
-    assert((tc_ui_document_overlay_flags_at(document, 1) &
-            TC_UI_OVERLAY_POINTER_TRANSPARENT) != 0);
+    assert((tc_ui_document_overlay_flags_at(document, 1) & TC_UI_OVERLAY_POINTER_TRANSPARENT) != 0);
 
     tc_ui_document_paint(document, nullptr);
-    assert((paint_log == std::vector<int> {1, 2, 3}));
+    assert((paint_log == std::vector<int>{1, 2, 3}));
     assert(tc_widget_handle_eq(tc_ui_document_hit_test(document, 10.0f, 10.0f), popup_handle));
     assert(!tc_ui_document_add_root(document, popup_handle));
     assert(!tc_widget_append_child(&root.widget, &popup.widget));
@@ -1012,34 +915,26 @@ static void test_overlay_outside_escape_and_programmatic_dismissal() {
     root.pointer_log = &pointer_log;
     popup.dismiss_log = &dismiss_log;
     assert(tc_ui_document_add_root(document, root_handle));
-    assert(tc_ui_document_show_overlay(
-        document,
-        popup_handle,
-        TC_UI_OVERLAY_DISMISS_ON_OUTSIDE
-    ));
+    assert(tc_ui_document_show_overlay(document, popup_handle, TC_UI_OVERLAY_DISMISS_ON_OUTSIDE));
 
-    tc_ui_pointer_event pointer {};
+    tc_ui_pointer_event pointer{};
     pointer.type = TC_UI_POINTER_DOWN;
     pointer.x = 100.0f;
     assert(tc_ui_document_dispatch_pointer_event(document, &pointer) == TC_UI_EVENT_HANDLED);
     assert(pointer_log.empty());
-    assert((dismiss_log == std::vector<int> {21}));
+    assert((dismiss_log == std::vector<int>{21}));
     assert(tc_ui_document_overlay_count(document) == 0);
 
     assert(tc_ui_document_show_overlay(document, popup_handle, 0));
-    tc_ui_key_event key {};
+    tc_ui_key_event key{};
     key.type = TC_UI_KEY_DOWN;
     key.key = TC_UI_KEY_ESCAPE;
     assert(tc_ui_document_dispatch_key_event(document, &key) == TC_UI_EVENT_HANDLED);
-    assert((dismiss_log == std::vector<int> {21, 22}));
+    assert((dismiss_log == std::vector<int>{21, 22}));
 
     assert(tc_ui_document_show_overlay(document, popup_handle, 0));
-    assert(tc_ui_document_dismiss_overlay(
-        document,
-        popup_handle,
-        TC_UI_OVERLAY_DISMISS_PROGRAMMATIC
-    ));
-    assert((dismiss_log == std::vector<int> {21, 22, 20}));
+    assert(tc_ui_document_dismiss_overlay(document, popup_handle, TC_UI_OVERLAY_DISMISS_PROGRAMMATIC));
+    assert((dismiss_log == std::vector<int>{21, 22, 20}));
     tc_ui_document_destroy(document);
 }
 
@@ -1066,17 +961,17 @@ static void test_modal_overlay_blocks_lower_input_and_scopes_focus() {
     assert(tc_ui_document_show_overlay(document, modal_handle, TC_UI_OVERLAY_MODAL));
     assert(tc_widget_handle_is_invalid(tc_ui_document_focused_widget(document)));
 
-    tc_ui_pointer_event pointer {};
+    tc_ui_pointer_event pointer{};
     pointer.type = TC_UI_POINTER_DOWN;
     pointer.x = 100.0f;
     assert(tc_ui_document_dispatch_pointer_event(document, &pointer) == TC_UI_EVENT_HANDLED);
     assert(pointer_log.empty());
 
-    tc_ui_key_event key {};
+    tc_ui_key_event key{};
     key.type = TC_UI_KEY_DOWN;
     key.key = TC_UI_KEY_ENTER;
     assert(tc_ui_document_dispatch_key_event(document, &key) == TC_UI_EVENT_HANDLED);
-    assert((key_log == std::vector<int> {2}));
+    assert((key_log == std::vector<int>{2}));
     assert(tc_ui_document_focus_next(document));
     assert(tc_widget_handle_eq(tc_ui_document_focused_widget(document), modal_focus_handle));
     assert(tc_ui_document_focus_next(document));
@@ -1085,24 +980,20 @@ static void test_modal_overlay_blocks_lower_input_and_scopes_focus() {
 }
 
 static void test_tooltip_rect_is_host_driven_and_clamped() {
-    tc_ui_rect rect = tc_ui_tooltip_rect(
-        tc_ui_rect {0.0f, 0.0f, 100.0f, 80.0f},
-        tc_ui_point {95.0f, 75.0f},
-        tc_ui_size {30.0f, 20.0f},
-        tc_ui_point {12.0f, 18.0f},
-        4.0f
-    );
+    tc_ui_rect rect = tc_ui_tooltip_rect(tc_ui_rect{0.0f, 0.0f, 100.0f, 80.0f},
+                                         tc_ui_point{95.0f, 75.0f},
+                                         tc_ui_size{30.0f, 20.0f},
+                                         tc_ui_point{12.0f, 18.0f},
+                                         4.0f);
     assert(rect.x == 66.0f);
     assert(rect.y == 56.0f);
     assert(rect.width == 30.0f);
     assert(rect.height == 20.0f);
-    rect = tc_ui_tooltip_rect(
-        tc_ui_rect {10.0f, 20.0f, 20.0f, 10.0f},
-        tc_ui_point {0.0f, 0.0f},
-        tc_ui_size {100.0f, 100.0f},
-        tc_ui_point {0.0f, 0.0f},
-        3.0f
-    );
+    rect = tc_ui_tooltip_rect(tc_ui_rect{10.0f, 20.0f, 20.0f, 10.0f},
+                              tc_ui_point{0.0f, 0.0f},
+                              tc_ui_size{100.0f, 100.0f},
+                              tc_ui_point{0.0f, 0.0f},
+                              3.0f);
     assert(rect.x == 13.0f && rect.y == 23.0f);
     assert(rect.width == 14.0f && rect.height == 4.0f);
 }
@@ -1114,87 +1005,65 @@ static void test_document_owned_overlay_layout_tracks_viewport_anchor_and_conten
     OverlayLayoutProbe overlay;
     tc_widget_handle root_handle = adopt_route_widget(document, root, 1);
     tc_widget_handle anchor_handle = adopt_route_widget(document, anchor, 2);
-    tc_widget_handle overlay_handle =
-        adopt_overlay_layout_probe(document, overlay);
+    tc_widget_handle overlay_handle = adopt_overlay_layout_probe(document, overlay);
     assert(tc_widget_append_child(&root.widget, &anchor.widget));
     assert(tc_ui_document_add_root(document, root_handle));
-    tc_widget_set_bounds(&root.widget, tc_ui_rect {0.0f, 0.0f, 120.0f, 80.0f});
-    tc_widget_set_bounds(&anchor.widget, tc_ui_rect {70.0f, 55.0f, 40.0f, 10.0f});
-    overlay.preferred = tc_ui_size {80.0f, 30.0f};
+    tc_widget_set_bounds(&root.widget, tc_ui_rect{0.0f, 0.0f, 120.0f, 80.0f});
+    tc_widget_set_bounds(&anchor.widget, tc_ui_rect{70.0f, 55.0f, 40.0f, 10.0f});
+    overlay.preferred = tc_ui_size{80.0f, 30.0f};
 
-    tc_ui_overlay_layout layout {};
+    tc_ui_overlay_layout layout{};
     layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW;
     layout.anchor = anchor_handle;
     layout.margin = 4.0f;
     layout.match_anchor_width = true;
     assert(tc_ui_document_show_overlay_with_layout(
-        document,
-        overlay_handle,
-        0,
-        &layout,
-        tc_ui_rect {0.0f, 0.0f, 120.0f, 80.0f}
-    ));
+        document, overlay_handle, 0, &layout, tc_ui_rect{0.0f, 0.0f, 120.0f, 80.0f}));
     assert(overlay.widget.bounds.x == 70.0f);
     assert(overlay.widget.bounds.y == 25.0f);
     assert(overlay.widget.bounds.width == 40.0f);
     assert(overlay.widget.bounds.height == 30.0f);
 
-    tc_widget_set_bounds(&anchor.widget, tc_ui_rect {10.0f, 5.0f, 50.0f, 10.0f});
-    tc_ui_document_layout_roots(
-        document, tc_ui_rect {0.0f, 0.0f, 200.0f, 120.0f});
+    tc_widget_set_bounds(&anchor.widget, tc_ui_rect{10.0f, 5.0f, 50.0f, 10.0f});
+    tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 200.0f, 120.0f});
     assert(overlay.widget.bounds.x == 10.0f);
     assert(overlay.widget.bounds.y == 15.0f);
     assert(overlay.widget.bounds.width == 50.0f);
     assert(overlay.widget.bounds.height == 30.0f);
 
-    overlay.preferred = tc_ui_size {90.0f, 60.0f};
-    tc_ui_document_layout_roots(
-        document, tc_ui_rect {0.0f, 0.0f, 200.0f, 120.0f});
+    overlay.preferred = tc_ui_size{90.0f, 60.0f};
+    tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 200.0f, 120.0f});
     assert(overlay.widget.bounds.x == 10.0f);
     assert(overlay.widget.bounds.y == 15.0f);
     assert(overlay.widget.bounds.width == 50.0f);
     assert(overlay.widget.bounds.height == 60.0f);
 
-    tc_ui_document_layout_roots(
-        document, tc_ui_rect {0.0f, 0.0f, 40.0f, 30.0f});
+    tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 40.0f, 30.0f});
     assert(overlay.widget.bounds.x == 4.0f);
     assert(overlay.widget.bounds.y == 4.0f);
     assert(overlay.widget.bounds.width == 32.0f);
     assert(overlay.widget.bounds.height == 22.0f);
-    assert(tc_widget_handle_eq(
-        tc_ui_document_hit_test(document, 5.0f, 5.0f), overlay_handle));
-    assert(tc_widget_handle_is_invalid(
-        tc_ui_document_hit_test(document, 50.0f, 50.0f)));
+    assert(tc_widget_handle_eq(tc_ui_document_hit_test(document, 5.0f, 5.0f), overlay_handle));
+    assert(tc_widget_handle_is_invalid(tc_ui_document_hit_test(document, 50.0f, 50.0f)));
 
-    layout = tc_ui_overlay_layout {};
+    layout = tc_ui_overlay_layout{};
     layout.placement = TC_UI_OVERLAY_PLACEMENT_VIEWPORT_CENTER;
-    overlay.preferred = tc_ui_size {30.0f, 20.0f};
+    overlay.preferred = tc_ui_size{30.0f, 20.0f};
     assert(tc_ui_document_show_overlay_with_layout(
-        document,
-        overlay_handle,
-        TC_UI_OVERLAY_MODAL,
-        &layout,
-        tc_ui_rect {0.0f, 0.0f, 100.0f, 80.0f}
-    ));
+        document, overlay_handle, TC_UI_OVERLAY_MODAL, &layout, tc_ui_rect{0.0f, 0.0f, 100.0f, 80.0f}));
     assert(overlay.widget.bounds.x == 35.0f);
     assert(overlay.widget.bounds.y == 30.0f);
-    tc_ui_document_layout_roots(
-        document, tc_ui_rect {0.0f, 0.0f, 60.0f, 40.0f});
+    tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 60.0f, 40.0f});
     assert(overlay.widget.bounds.x == 15.0f);
     assert(overlay.widget.bounds.y == 10.0f);
 
-    layout = tc_ui_overlay_layout {};
+    layout = tc_ui_overlay_layout{};
     layout.placement = TC_UI_OVERLAY_PLACEMENT_POINT;
-    layout.point = tc_ui_point {95.0f, 75.0f};
-    layout.offset = tc_ui_point {12.0f, 18.0f};
+    layout.point = tc_ui_point{95.0f, 75.0f};
+    layout.offset = tc_ui_point{12.0f, 18.0f};
     layout.margin = 4.0f;
     assert(tc_ui_document_show_overlay_with_layout(
-        document,
-        overlay_handle,
-        TC_UI_OVERLAY_TOOLTIP,
-        &layout,
-        tc_ui_rect {0.0f, 0.0f, 100.0f, 80.0f}
-    ));
+        document, overlay_handle, TC_UI_OVERLAY_TOOLTIP, &layout, tc_ui_rect{0.0f, 0.0f, 100.0f, 80.0f}));
     assert(overlay.widget.bounds.x == 66.0f);
     assert(overlay.widget.bounds.y == 56.0f);
     assert(overlay.measure_count >= 7);
@@ -1207,9 +1076,9 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
     RouteWidget parent_a;
     RouteWidget parent_b;
     RouteWidget child;
-    tc_ui_style style {};
-    tc_ui_style_override inherited {};
-    tc_ui_style_override local {};
+    tc_ui_style style{};
+    tc_ui_style_override inherited{};
+    tc_ui_style_override local{};
     tc_ui_theme theme = *tc_ui_document_theme(document);
     const uint64_t initial_revision = tc_ui_document_theme_revision(document);
     const tc_widget_handle parent_a_handle = adopt_route_widget(document, parent_a, 1);
@@ -1228,7 +1097,7 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
     inherited.fields = TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_FOREGROUND;
     inherited.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
     inherited.value.font_size = 19.0f;
-    inherited.value.foreground = tc_ui_color {1.0f, 0.5f, 0.25f, 1.0f};
+    inherited.value.foreground = tc_ui_color{1.0f, 0.5f, 0.25f, 1.0f};
     assert(tc_widget_set_style_override(&parent_a.widget, &inherited));
     assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
     assert(style.font_size == 19.0f);
@@ -1243,38 +1112,24 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
 
     tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
     assert(tc_widget_append_child(&parent_b.widget, &child.widget));
-    assert(tc_widget_has_dirty_flags(
-        &child.widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
-    ));
+    assert(tc_widget_has_dirty_flags(&child.widget,
+                                     TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE));
     assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
     assert(style.font_size == 23.0f);
     assert(style.foreground.r == theme.roles[TC_UI_STYLE_BUTTON].base.foreground.r);
 
-    assert(tc_ui_document_resolve_style(
-        document,
-        &child.widget,
-        TC_UI_STYLE_STATE_HOVERED,
-        &style
-    ));
+    assert(tc_ui_document_resolve_style(document, &child.widget, TC_UI_STYLE_STATE_HOVERED, &style));
     assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].hovered.value.background.r);
     assert(tc_ui_document_resolve_style(
-        document,
-        &child.widget,
-        TC_UI_STYLE_STATE_PRESSED | TC_UI_STYLE_STATE_FOCUSED,
-        &style
-    ));
+        document, &child.widget, TC_UI_STYLE_STATE_PRESSED | TC_UI_STYLE_STATE_FOCUSED, &style));
     assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].pressed.value.background.r);
     assert(style.border.r == theme.roles[TC_UI_STYLE_BUTTON].focused.value.border.r);
 
     tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
     tc_widget_set_enabled(&parent_b.widget, false);
-    assert(tc_widget_has_dirty_flags(
-        &child.widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
-    ));
-    assert((tc_ui_document_widget_style_state(document, &child.widget) &
-        TC_UI_STYLE_STATE_DISABLED) != 0);
+    assert(tc_widget_has_dirty_flags(&child.widget,
+                                     TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE));
+    assert((tc_ui_document_widget_style_state(document, &child.widget) & TC_UI_STYLE_STATE_DISABLED) != 0);
     assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
     assert(style.background.r == theme.roles[TC_UI_STYLE_BUTTON].disabled.value.background.r);
 
@@ -1283,14 +1138,12 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
     tc_widget_clear_dirty(&child.widget, TC_WIDGET_DIRTY_MASK);
     assert(tc_ui_document_set_theme(document, &theme));
     assert(tc_ui_document_theme_revision(document) == initial_revision + 1);
-    assert(tc_widget_has_dirty_flags(
-        &child.widget,
-        TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
-    ));
+    assert(tc_widget_has_dirty_flags(&child.widget,
+                                     TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE));
     assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
     assert(style.font_size == 17.0f);
 
-    tc_ui_style_override invalid {};
+    tc_ui_style_override invalid{};
     invalid.fields = TC_UI_STYLE_FONT_SIZE;
     invalid.value.font_size = -1.0f;
     assert(!tc_widget_set_style_override(&child.widget, &invalid));
@@ -1392,8 +1245,7 @@ static void test_generic_widget_layout_spec_contract() {
     TestWidget widget{};
     tc_widget_init_unowned(&widget.widget, nullptr, TC_LANGUAGE_C, &widget);
     tc_ui_size resolved{};
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, false, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, false, &resolved));
     assert(resolved.width == 80.0f && resolved.height == 30.0f);
 
     spec.width = {TC_UI_LENGTH_FIXED, 120.0f};
@@ -1406,20 +1258,16 @@ static void test_generic_widget_layout_spec_contract() {
     assert(stored.width.mode == TC_UI_LENGTH_FIXED && stored.width.value == 120.0f);
     assert(stored.height.mode == TC_UI_LENGTH_FILL && stored.height.value == 0.0f);
     assert(stored.margin.bottom == 4.0f);
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
     assert(resolved.width == 120.0f && resolved.height == 150.0f);
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, false, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&stored, {80.0f, 30.0f}, {400.0f, 200.0f}, true, false, &resolved));
     assert(resolved.width == 120.0f && resolved.height == 40.0f);
 
     spec = tc_ui_widget_layout_spec_default();
     spec.width = {TC_UI_LENGTH_PERCENT, 0.25f};
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&spec, {80.0f, 30.0f}, {400.0f, 200.0f}, true, true, &resolved));
     assert(resolved.width == 100.0f);
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, true, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&spec, {80.0f, 30.0f}, {400.0f, 200.0f}, false, true, &resolved));
     assert(resolved.width == 80.0f);
 
     spec = tc_ui_widget_layout_spec_default();
@@ -1427,8 +1275,7 @@ static void test_generic_widget_layout_spec_contract() {
     spec.aspect_ratio = 2.0f;
     spec.touch_target_policy = TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM;
     spec.minimum_touch_target = {180.0f, 90.0f};
-    assert(tc_ui_widget_layout_spec_resolve_size(
-        &spec, {10.0f, 10.0f}, {}, false, false, &resolved));
+    assert(tc_ui_widget_layout_spec_resolve_size(&spec, {10.0f, 10.0f}, {}, false, false, &resolved));
     assert(resolved.width == 180.0f && resolved.height == 90.0f);
 
     const tc_ui_widget_layout_spec previous = tc_widget_layout_spec(&widget.widget);

@@ -25,266 +25,283 @@ extern "C" {
 
 #include "tgfx/frame_graph_resource.hpp"
 #include <termin/geom/rect2.hpp>
-#include <termin/render/resource_spec.hpp>
 #include <termin/render/render_export.hpp>
+#include <termin/render/resource_spec.hpp>
 
 namespace termin {
 
-struct ExecuteContext;
-class FrameGraphCapture;
+    struct ExecuteContext;
+    class FrameGraphCapture;
 
-struct InternalSymbolTiming {
-    std::string name;
-    double cpu_time_ms = 0.0;
-    double gpu_time_ms = 0.0;
-};
+    struct InternalSymbolTiming {
+        std::string name;
+        double cpu_time_ms = 0.0;
+        double gpu_time_ms = 0.0;
+    };
 
-using ResourceMap = std::unordered_map<std::string, FrameGraphResource*>;
-using FBOMap = ResourceMap;
+    using ResourceMap = std::unordered_map<std::string, FrameGraphResource*>;
+    using FBOMap = ResourceMap;
 
-inline tc_value make_pass_graph_socket_list(std::initializer_list<std::pair<const char*, const char*>> sockets) {
-    tc_value list = tc_value_list_new();
-    for (const auto& [name, type] : sockets) {
-        tc_value item = tc_value_list_new();
-        tc_value_list_push(&item, tc_value_string(name));
-        tc_value_list_push(&item, tc_value_string(type));
-        tc_value_list_push(&list, item);
-    }
-    return list;
-}
-
-inline tc_value make_pass_graph_pair_list(std::initializer_list<std::pair<const char*, const char*>> pairs) {
-    tc_value list = tc_value_list_new();
-    for (const auto& [first, second] : pairs) {
-        tc_value item = tc_value_list_new();
-        tc_value_list_push(&item, tc_value_string(first));
-        tc_value_list_push(&item, tc_value_string(second));
-        tc_value_list_push(&list, item);
-    }
-    return list;
-}
-
-inline tc_value make_pass_graph_metadata(
-    std::initializer_list<std::pair<const char*, const char*>> inputs,
-    std::initializer_list<std::pair<const char*, const char*>> outputs,
-    std::initializer_list<std::pair<const char*, const char*>> inplace_pairs = {}
-) {
-    tc_value graph = tc_value_dict_new();
-    tc_value_dict_set(&graph, "node_inputs", make_pass_graph_socket_list(inputs));
-    tc_value_dict_set(&graph, "node_outputs", make_pass_graph_socket_list(outputs));
-    tc_value_dict_set(&graph, "node_inplace_pairs", make_pass_graph_pair_list(inplace_pairs));
-    return graph;
-}
-
-class RENDER_CORE_API CxxFramePass {
-public:
-    tc_pass _c;
-
-private:
-    mutable std::vector<std::string> _cached_aliases;
-    mutable std::vector<std::string> _cached_symbols;
-    static const tc_pass_vtable _cpp_vtable;
-
-    static void _cb_execute(tc_pass* p, void* ctx);
-    static size_t _cb_get_reads(tc_pass* p, const char** out, size_t max);
-    static size_t _cb_get_writes(tc_pass* p, const char** out, size_t max);
-    static size_t _cb_get_inplace_aliases(tc_pass* p, const char** out, size_t max);
-    static size_t _cb_get_resource_specs(tc_pass* p, void* out, size_t max);
-    static size_t _cb_get_internal_symbols(tc_pass* p, const char** out, size_t max);
-    static void _cb_destroy(tc_pass* p);
-
-public:
-    CxxFramePass();
-    virtual ~CxxFramePass();
-
-    CxxFramePass(const CxxFramePass&) = delete;
-    CxxFramePass& operator=(const CxxFramePass&) = delete;
-
-    tc_pass* tc_pass_ptr() { return &_c; }
-    const tc_pass* tc_pass_ptr() const { return &_c; }
-
-    static CxxFramePass* from_tc(tc_pass* p) {
-        if (!p || p->kind != TC_NATIVE_PASS) return nullptr;
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
-        return reinterpret_cast<CxxFramePass*>(reinterpret_cast<char*>(p) - offsetof(CxxFramePass, _c));
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-    }
-
-    static const CxxFramePass* from_tc(const tc_pass* p) {
-        if (!p || p->kind != TC_NATIVE_PASS) return nullptr;
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
-        return reinterpret_cast<const CxxFramePass*>(reinterpret_cast<const char*>(p) - offsetof(CxxFramePass, _c));
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-    }
-
-    static void delete_owned_pass(tc_pass* p) {
-        delete from_tc(p);
-    }
-
-    void link_to_type_registry(const char* type_name) {
-        if (!type_name) return;
-        if (!tc_pass_registry_has(type_name)) {
-            tc_log(
-                TC_LOG_ERROR,
-                "[CxxFramePass] cannot link instance to unregistered pass type '%s'",
-                type_name);
-            return;
+    inline tc_value make_pass_graph_socket_list(std::initializer_list<std::pair<const char*, const char*>> sockets) {
+        tc_value list = tc_value_list_new();
+        for (const auto& [name, type] : sockets) {
+            tc_value item = tc_value_list_new();
+            tc_value_list_push(&item, tc_value_string(name));
+            tc_value_list_push(&item, tc_value_string(type));
+            tc_value_list_push(&list, item);
         }
-        tc_pass_link_registered_type(&_c, type_name);
+        return list;
     }
 
-    void set_language_body(void* body, tc_language language) {
-        _c.body = body;
-        _c.native_language = language;
+    inline tc_value make_pass_graph_pair_list(std::initializer_list<std::pair<const char*, const char*>> pairs) {
+        tc_value list = tc_value_list_new();
+        for (const auto& [first, second] : pairs) {
+            tc_value item = tc_value_list_new();
+            tc_value_list_push(&item, tc_value_string(first));
+            tc_value_list_push(&item, tc_value_string(second));
+            tc_value_list_push(&list, item);
+        }
+        return list;
     }
 
-    std::string pass_name_get() const { return _c.pass_name ? _c.pass_name : ""; }
-    void pass_name_set(const std::string& name) { tc_pass_set_name(&_c, name.c_str()); }
-
-    bool enabled_get() const { return _c.enabled; }
-    void enabled_set(bool v) { _c.enabled = v; }
-
-    std::string viewport_name_get() const {
-        return _c.viewport_name ? _c.viewport_name : "";
+    inline tc_value
+    make_pass_graph_metadata(std::initializer_list<std::pair<const char*, const char*>> inputs,
+                             std::initializer_list<std::pair<const char*, const char*>> outputs,
+                             std::initializer_list<std::pair<const char*, const char*>> inplace_pairs = {}) {
+        tc_value graph = tc_value_dict_new();
+        tc_value_dict_set(&graph, "node_inputs", make_pass_graph_socket_list(inputs));
+        tc_value_dict_set(&graph, "node_outputs", make_pass_graph_socket_list(outputs));
+        tc_value_dict_set(&graph, "node_inplace_pairs", make_pass_graph_pair_list(inplace_pairs));
+        return graph;
     }
 
-    void viewport_name_set(const std::string& name) {
-        if (_c.viewport_name) free(_c.viewport_name);
-        _c.viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
-    }
+    class RENDER_CORE_API CxxFramePass {
+    public:
+        tc_pass _c;
 
-    const std::string get_pass_name() const { return pass_name_get(); }
-    void set_pass_name(const std::string& name) { pass_name_set(name); }
-    bool get_enabled() const { return enabled_get(); }
-    void set_enabled(bool v) { enabled_set(v); }
-    const std::string get_viewport_name() const { return viewport_name_get(); }
-    void set_viewport_name(const std::string& name) { viewport_name_set(name); }
+    private:
+        mutable std::vector<std::string> _cached_aliases;
+        mutable std::vector<std::string> _cached_symbols;
+        static const tc_pass_vtable _cpp_vtable;
 
-    virtual void execute(ExecuteContext& ctx) {
-        (void)ctx;
-    }
+        static void _cb_execute(tc_pass* p, void* ctx);
+        static size_t _cb_get_reads(tc_pass* p, const char** out, size_t max);
+        static size_t _cb_get_writes(tc_pass* p, const char** out, size_t max);
+        static size_t _cb_get_inplace_aliases(tc_pass* p, const char** out, size_t max);
+        static size_t _cb_get_resource_specs(tc_pass* p, void* out, size_t max);
+        static size_t _cb_get_internal_symbols(tc_pass* p, const char** out, size_t max);
+        static void _cb_destroy(tc_pass* p);
 
-    virtual std::set<const char*> compute_reads() const {
-        return {};
-    }
+    public:
+        CxxFramePass();
+        virtual ~CxxFramePass();
 
-    virtual std::set<const char*> compute_writes() const {
-        return {};
-    }
+        CxxFramePass(const CxxFramePass&) = delete;
+        CxxFramePass& operator=(const CxxFramePass&) = delete;
 
-    virtual bool set_graph_resource_input(
-        const std::string& socket_name,
-        const std::string& resource_name
-    ) {
-        (void)socket_name;
-        (void)resource_name;
-        return false;
-    }
+        tc_pass* tc_pass_ptr() {
+            return &_c;
+        }
+        const tc_pass* tc_pass_ptr() const {
+            return &_c;
+        }
 
-    virtual std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const {
-        return {};
-    }
+        static CxxFramePass* from_tc(tc_pass* p) {
+            if (!p || p->kind != TC_NATIVE_PASS)
+                return nullptr;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif
+            return reinterpret_cast<CxxFramePass*>(reinterpret_cast<char*>(p) - offsetof(CxxFramePass, _c));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+        }
 
-    virtual std::vector<ResourceSpec> get_resource_specs() const {
-        return {};
-    }
+        static const CxxFramePass* from_tc(const tc_pass* p) {
+            if (!p || p->kind != TC_NATIVE_PASS)
+                return nullptr;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif
+            return reinterpret_cast<const CxxFramePass*>(reinterpret_cast<const char*>(p) - offsetof(CxxFramePass, _c));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+        }
 
-    virtual std::vector<std::string> get_internal_symbols() const {
-        return {};
-    }
+        static void delete_owned_pass(tc_pass* p) {
+            delete from_tc(p);
+        }
 
-    virtual std::vector<InternalSymbolTiming> get_internal_symbols_with_timing() const {
-        return {};
-    }
+        void link_to_type_registry(const char* type_name) {
+            if (!type_name)
+                return;
+            if (!tc_pass_registry_has(type_name)) {
+                tc_log(TC_LOG_ERROR, "[CxxFramePass] cannot link instance to unregistered pass type '%s'", type_name);
+                return;
+            }
+            tc_pass_link_registered_type(&_c, type_name);
+        }
 
-    virtual void destroy() {}
+        void set_language_body(void* body, tc_language language) {
+            _c.body = body;
+            _c.native_language = language;
+        }
 
-    bool is_inplace() const {
-        return !get_inplace_aliases().empty();
-    }
+        std::string pass_name_get() const {
+            return _c.pass_name ? _c.pass_name : "";
+        }
+        void pass_name_set(const std::string& name) {
+            tc_pass_set_name(&_c, name.c_str());
+        }
 
-    std::set<const char*> required_resources() const {
-        auto result = compute_reads();
-        auto writes = compute_writes();
-        result.insert(writes.begin(), writes.end());
-        return result;
-    }
+        bool enabled_get() const {
+            return _c.enabled;
+        }
+        void enabled_set(bool v) {
+            _c.enabled = v;
+        }
 
-private:
-    void _init_tc_pass();
-    void _cleanup_tc_pass();
-};
+        std::string viewport_name_get() const {
+            return _c.viewport_name ? _c.viewport_name : "";
+        }
 
-class RENDER_CORE_API FramePassTypeDescriptorBuilder {
-    tc_runtime_type_descriptor* _descriptor = nullptr;
-    tc::InspectFacetBuilder _inspect;
-    std::string _type_name;
-    std::string _owner;
-    bool _valid = true;
+        void viewport_name_set(const std::string& name) {
+            if (_c.viewport_name)
+                free(_c.viewport_name);
+            _c.viewport_name = name.empty() ? nullptr : tc_strdup(name.c_str());
+        }
 
-public:
-    FramePassTypeDescriptorBuilder(
-        const char* type_name,
-        const char* owner,
-        const char* parent,
-        tc_runtime_owned_factory factory,
-        tc_pass_kind kind,
-        bool allow_same_owner_replacement = false
-    );
-    ~FramePassTypeDescriptorBuilder();
+        const std::string get_pass_name() const {
+            return pass_name_get();
+        }
+        void set_pass_name(const std::string& name) {
+            pass_name_set(name);
+        }
+        bool get_enabled() const {
+            return enabled_get();
+        }
+        void set_enabled(bool v) {
+            enabled_set(v);
+        }
+        const std::string get_viewport_name() const {
+            return viewport_name_get();
+        }
+        void set_viewport_name(const std::string& name) {
+            viewport_name_set(name);
+        }
 
-    FramePassTypeDescriptorBuilder(const FramePassTypeDescriptorBuilder&) = delete;
-    FramePassTypeDescriptorBuilder& operator=(const FramePassTypeDescriptorBuilder&) = delete;
-    FramePassTypeDescriptorBuilder(FramePassTypeDescriptorBuilder&& other) noexcept;
-    FramePassTypeDescriptorBuilder& operator=(FramePassTypeDescriptorBuilder&& other) noexcept;
+        virtual void execute(ExecuteContext& ctx) {
+            (void)ctx;
+        }
 
-    tc::InspectFacetBuilder& inspect() { return _inspect; }
-    void set_inspect(tc::InspectFacetBuilder&& inspect) { _inspect = std::move(inspect); }
-    FramePassTypeDescriptorBuilder& runtime_binding(
-        const char* binding_id,
-        void* payload,
-        tc_runtime_type_facet_destroy_fn destroy = nullptr);
-    bool commit();
+        virtual std::set<const char*> compute_reads() const {
+            return {};
+        }
 
-    template<typename PassClass>
-    static FramePassTypeDescriptorBuilder native(
-        const char* type_name,
-        const char* owner,
-        const char* parent = "CxxFramePass"
-    ) {
-        return FramePassTypeDescriptorBuilder(
-            type_name,
-            owner,
-            parent,
-            tc_runtime_owned_factory_make([](void*, const void*, void* out_result) -> bool {
-                if (!out_result) return false;
-                auto* pass = new PassClass();
-                tc_pass* raw = pass->tc_pass_ptr();
-                raw->deleter = &CxxFramePass::delete_owned_pass;
-                *static_cast<tc_pass**>(out_result) = raw;
-                return true;
-            }, nullptr, nullptr),
-            TC_NATIVE_PASS);
-    }
+        virtual std::set<const char*> compute_writes() const {
+            return {};
+        }
 
-    static FramePassTypeDescriptorBuilder abstract_native(
-        const char* type_name,
-        const char* owner,
-        const char* parent = nullptr
-    ) {
-        return FramePassTypeDescriptorBuilder(
-            type_name, owner, parent, tc_runtime_owned_factory{}, TC_NATIVE_PASS);
-    }
-};
+        virtual bool set_graph_resource_input(const std::string& socket_name, const std::string& resource_name) {
+            (void)socket_name;
+            (void)resource_name;
+            return false;
+        }
+
+        virtual std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const {
+            return {};
+        }
+
+        virtual std::vector<ResourceSpec> get_resource_specs() const {
+            return {};
+        }
+
+        virtual std::vector<std::string> get_internal_symbols() const {
+            return {};
+        }
+
+        virtual std::vector<InternalSymbolTiming> get_internal_symbols_with_timing() const {
+            return {};
+        }
+
+        virtual void destroy() {}
+
+        bool is_inplace() const {
+            return !get_inplace_aliases().empty();
+        }
+
+        std::set<const char*> required_resources() const {
+            auto result = compute_reads();
+            auto writes = compute_writes();
+            result.insert(writes.begin(), writes.end());
+            return result;
+        }
+
+    private:
+        void _init_tc_pass();
+        void _cleanup_tc_pass();
+    };
+
+    class RENDER_CORE_API FramePassTypeDescriptorBuilder {
+        tc_runtime_type_descriptor* _descriptor = nullptr;
+        tc::InspectFacetBuilder _inspect;
+        std::string _type_name;
+        std::string _owner;
+        bool _valid = true;
+
+    public:
+        FramePassTypeDescriptorBuilder(const char* type_name,
+                                       const char* owner,
+                                       const char* parent,
+                                       tc_runtime_owned_factory factory,
+                                       tc_pass_kind kind,
+                                       bool allow_same_owner_replacement = false);
+        ~FramePassTypeDescriptorBuilder();
+
+        FramePassTypeDescriptorBuilder(const FramePassTypeDescriptorBuilder&) = delete;
+        FramePassTypeDescriptorBuilder& operator=(const FramePassTypeDescriptorBuilder&) = delete;
+        FramePassTypeDescriptorBuilder(FramePassTypeDescriptorBuilder&& other) noexcept;
+        FramePassTypeDescriptorBuilder& operator=(FramePassTypeDescriptorBuilder&& other) noexcept;
+
+        tc::InspectFacetBuilder& inspect() {
+            return _inspect;
+        }
+        void set_inspect(tc::InspectFacetBuilder&& inspect) {
+            _inspect = std::move(inspect);
+        }
+        FramePassTypeDescriptorBuilder&
+        runtime_binding(const char* binding_id, void* payload, tc_runtime_type_facet_destroy_fn destroy = nullptr);
+        bool commit();
+
+        template <typename PassClass>
+        static FramePassTypeDescriptorBuilder
+        native(const char* type_name, const char* owner, const char* parent = "CxxFramePass") {
+            return FramePassTypeDescriptorBuilder(type_name,
+                                                  owner,
+                                                  parent,
+                                                  tc_runtime_owned_factory_make(
+                                                      [](void*, const void*, void* out_result) -> bool {
+                                                          if (!out_result)
+                                                              return false;
+                                                          auto* pass = new PassClass();
+                                                          tc_pass* raw = pass->tc_pass_ptr();
+                                                          raw->deleter = &CxxFramePass::delete_owned_pass;
+                                                          *static_cast<tc_pass**>(out_result) = raw;
+                                                          return true;
+                                                      },
+                                                      nullptr,
+                                                      nullptr),
+                                                  TC_NATIVE_PASS);
+        }
+
+        static FramePassTypeDescriptorBuilder
+        abstract_native(const char* type_name, const char* owner, const char* parent = nullptr) {
+            return FramePassTypeDescriptorBuilder(type_name, owner, parent, tc_runtime_owned_factory{}, TC_NATIVE_PASS);
+        }
+    };
 
 } // namespace termin

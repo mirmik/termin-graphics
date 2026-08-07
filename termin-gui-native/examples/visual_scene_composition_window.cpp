@@ -10,7 +10,5 @@ int main(int argc, char** argv) {
     }
     return run_document_window(
         "termin-gui-native: widgets + TcVisualScene",
-        [](termin::gui_native::TcDocument document) {
-            build_visual_scene_composition(document);
-        });
+        [](termin::gui_native::TcDocument document) { build_visual_scene_composition(document); });
 }

@@ -18,13 +18,13 @@ typedef enum tc_shadow_method {
 // Scene lighting properties
 typedef struct tc_scene_lighting {
     // Ambient lighting
-    float ambient_color[3];   // RGB, default (1, 1, 1)
-    float ambient_intensity;  // Default 0.1
+    float ambient_color[3];  // RGB, default (1, 1, 1)
+    float ambient_intensity; // Default 0.1
 
     // Shadow settings
-    int shadow_method;        // tc_shadow_method, default PCF
-    float shadow_softness;    // Sampling radius multiplier, default 1.0
-    float shadow_bias;        // World-space light-depth bias.
+    int shadow_method;     // tc_shadow_method, default PCF
+    float shadow_softness; // Sampling radius multiplier, default 1.0
+    float shadow_bias;     // World-space light-depth bias.
 } tc_scene_lighting;
 
 // Initialize with defaults

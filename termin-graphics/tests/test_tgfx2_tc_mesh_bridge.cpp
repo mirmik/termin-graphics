@@ -8,59 +8,74 @@
 
 namespace {
 
-class FakeRenderDevice final : public tgfx::IRenderDevice {
-public:
-    int create_buffer_count = 0;
-    int upload_buffer_count = 0;
-    int ensure_mesh_count = 0;
+    class FakeRenderDevice final : public tgfx::IRenderDevice {
+    public:
+        int create_buffer_count = 0;
+        int upload_buffer_count = 0;
+        int ensure_mesh_count = 0;
 
-    tgfx::BackendType backend_type() const override { return tgfx::BackendType::Null; }
-    tgfx::BackendCapabilities capabilities() const override { return {}; }
-    void wait_idle() override {}
+        tgfx::BackendType backend_type() const override {
+            return tgfx::BackendType::Null;
+        }
+        tgfx::BackendCapabilities capabilities() const override {
+            return {};
+        }
+        void wait_idle() override {}
 
-    tgfx::BufferHandle create_buffer(const tgfx::BufferDesc&) override {
-        ++create_buffer_count;
-        return tgfx::BufferHandle{100u + static_cast<uint32_t>(create_buffer_count)};
-    }
-    tgfx::TextureHandle create_texture(const tgfx::TextureDesc&) override { return {}; }
-    tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override { return {}; }
-    tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override { return {}; }
-    tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override { return {}; }
-    tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override { return {}; }
+        tgfx::BufferHandle create_buffer(const tgfx::BufferDesc&) override {
+            ++create_buffer_count;
+            return tgfx::BufferHandle{100u + static_cast<uint32_t>(create_buffer_count)};
+        }
+        tgfx::TextureHandle create_texture(const tgfx::TextureDesc&) override {
+            return {};
+        }
+        tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
+            return {};
+        }
+        tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override {
+            return {};
+        }
+        tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override {
+            return {};
+        }
+        tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override {
+            return {};
+        }
 
-    void destroy(tgfx::BufferHandle) override {}
-    void destroy(tgfx::TextureHandle) override {}
-    void destroy(tgfx::SamplerHandle) override {}
-    void destroy(tgfx::ShaderHandle) override {}
-    void destroy(tgfx::PipelineHandle) override {}
-    void destroy(tgfx::ResourceSetHandle) override {}
+        void destroy(tgfx::BufferHandle) override {}
+        void destroy(tgfx::TextureHandle) override {}
+        void destroy(tgfx::SamplerHandle) override {}
+        void destroy(tgfx::ShaderHandle) override {}
+        void destroy(tgfx::PipelineHandle) override {}
+        void destroy(tgfx::ResourceSetHandle) override {}
 
-    void upload_buffer(tgfx::BufferHandle, std::span<const uint8_t>, uint64_t = 0) override {
-        ++upload_buffer_count;
-    }
-    void upload_texture(tgfx::TextureHandle, std::span<const uint8_t>, uint32_t = 0) override {}
-    void upload_texture_region(
-        tgfx::TextureHandle,
-        uint32_t,
-        uint32_t,
-        uint32_t,
-        uint32_t,
-        std::span<const uint8_t>,
-        uint32_t = 0) override {}
-    void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
-    tgfx::TextureDesc texture_desc(tgfx::TextureHandle) const override { return {}; }
+        void upload_buffer(tgfx::BufferHandle, std::span<const uint8_t>, uint64_t = 0) override {
+            ++upload_buffer_count;
+        }
+        void upload_texture(tgfx::TextureHandle, std::span<const uint8_t>, uint32_t = 0) override {}
+        void upload_texture_region(tgfx::TextureHandle,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   std::span<const uint8_t>,
+                                   uint32_t = 0) override {}
+        void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
+        tgfx::TextureDesc texture_desc(tgfx::TextureHandle) const override {
+            return {};
+        }
 
-    std::unique_ptr<tgfx::ICommandList> create_command_list(tgfx::QueueType = tgfx::QueueType::Graphics) override {
-        return {};
-    }
-    void submit(tgfx::ICommandList&) override {}
-    void present() override {}
+        std::unique_ptr<tgfx::ICommandList> create_command_list(tgfx::QueueType = tgfx::QueueType::Graphics) override {
+            return {};
+        }
+        void submit(tgfx::ICommandList&) override {}
+        void present() override {}
 
-    std::pair<tgfx::BufferHandle, tgfx::BufferHandle> ensure_tc_mesh(tc_mesh*) override {
-        ++ensure_mesh_count;
-        return {tgfx::BufferHandle{1}, tgfx::BufferHandle{2}};
-    }
-};
+        std::pair<tgfx::BufferHandle, tgfx::BufferHandle> ensure_tc_mesh(tc_mesh*) override {
+            ++ensure_mesh_count;
+            return {tgfx::BufferHandle{1}, tgfx::BufferHandle{2}};
+        }
+    };
 
 } // namespace
 
@@ -74,10 +89,7 @@ TEST_CASE("filter vertex layout by semantic names") {
     layout.attributes[3] = {5, tgfx::VertexFormat::Float4, 64, tgfx::intern_vertex_semantic("weights")};
 
     tgfx::VertexLayoutDesc filtered =
-        tgfx::filter_vertex_layout_to_semantics(
-            layout,
-            {"position", "joints", "weights"},
-            true);
+        tgfx::filter_vertex_layout_to_semantics(layout, {"position", "joints", "weights"}, true);
 
     CHECK_EQ(filtered.stride, 80u);
     CHECK(filtered.use_shader_input_locations);
@@ -94,10 +106,7 @@ TEST_CASE("semantic filter falls back to standard locations") {
     layout.attributes[0] = {0, tgfx::VertexFormat::Float3, 0, nullptr};
     layout.attributes[1] = {1, tgfx::VertexFormat::Float3, 12, nullptr};
 
-    tgfx::VertexLayoutDesc filtered =
-        tgfx::filter_vertex_layout_to_semantics(
-            layout,
-            {"position", "normal"});
+    tgfx::VertexLayoutDesc filtered = tgfx::filter_vertex_layout_to_semantics(layout, {"position", "normal"});
 
     REQUIRE_EQ(filtered.attribute_count, 2u);
     CHECK_EQ(filtered.attributes[0].location, 0u);
@@ -108,30 +117,18 @@ TEST_CASE("semantic filter rejects a layout missing a required attribute") {
     tgfx::VertexLayoutDesc layout;
     layout.stride = 12;
     layout.attribute_count = 1;
-    layout.attributes[0] = {
-        0,
-        tgfx::VertexFormat::Float3,
-        0,
-        tgfx::intern_vertex_semantic("position")};
+    layout.attributes[0] = {0, tgfx::VertexFormat::Float3, 0, tgfx::intern_vertex_semantic("position")};
 
     tgfx::VertexLayoutDesc filtered;
-    CHECK_FALSE(tgfx::try_filter_vertex_layout_to_semantics(
-        layout,
-        {"position", "normal"},
-        filtered));
+    CHECK_FALSE(tgfx::try_filter_vertex_layout_to_semantics(layout, {"position", "normal"}, filtered));
     CHECK_EQ(filtered.stride, 12u);
     REQUIRE_EQ(filtered.attribute_count, 1u);
-    CHECK_EQ(filtered.attributes[0].semantic,
-             tgfx::intern_vertex_semantic("position"));
+    CHECK_EQ(filtered.attributes[0].semantic, tgfx::intern_vertex_semantic("position"));
 }
 
 TEST_CASE("vertex semantic helpers prefer explicit names over standard locations") {
     tgfx::VertexAttributeDesc position{0, tgfx::VertexFormat::Float3, 0, nullptr};
-    tgfx::VertexAttributeDesc custom{
-        0,
-        tgfx::VertexFormat::Float3,
-        0,
-        tgfx::intern_vertex_semantic("custom_position")};
+    tgfx::VertexAttributeDesc custom{0, tgfx::VertexFormat::Float3, 0, tgfx::intern_vertex_semantic("custom_position")};
 
     CHECK_EQ(tgfx::standard_vertex_semantic_for_location(0), "position");
     CHECK_EQ(tgfx::vertex_attribute_semantic(position), "position");
@@ -165,12 +162,9 @@ TEST_CASE("wrap mesh keeps canonical layout without per-draw augmentation") {
     CHECK_FALSE(binding.destroy_vertex_buffer);
     CHECK_EQ(binding.layout_desc.stride, mesh.layout.stride);
     REQUIRE_EQ(binding.layout_desc.attribute_count, 3u);
-    CHECK_EQ(binding.layout_desc.attributes[0].semantic,
-             tgfx::intern_vertex_semantic("position"));
-    CHECK_EQ(binding.layout_desc.attributes[1].semantic,
-             tgfx::intern_vertex_semantic("normal"));
-    CHECK_EQ(binding.layout_desc.attributes[2].semantic,
-             tgfx::intern_vertex_semantic("uv"));
+    CHECK_EQ(binding.layout_desc.attributes[0].semantic, tgfx::intern_vertex_semantic("position"));
+    CHECK_EQ(binding.layout_desc.attributes[1].semantic, tgfx::intern_vertex_semantic("normal"));
+    CHECK_EQ(binding.layout_desc.attributes[2].semantic, tgfx::intern_vertex_semantic("uv"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "position"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "normal"));
     CHECK(tgfx::vertex_layout_has_semantic(binding.layout_desc, "uv"));

@@ -19,26 +19,21 @@ typedef struct probe {
 static int g_prepare_order = 0;
 
 static probe* probe_from_component(tc_component* component) {
-    const tc_render_lifecycle_capability* capability =
-        tc_render_lifecycle_capability_get(component);
+    const tc_render_lifecycle_capability* capability = tc_render_lifecycle_capability_get(component);
     return capability ? (probe*)capability->userdata : NULL;
 }
 
-static void on_attach(
-    tc_component* component,
-    const tc_render_attachment_context* context
-) {
+static void on_attach(tc_component* component, const tc_render_attachment_context* context) {
     probe* self = probe_from_component(component);
-    if (!self || !context) return;
+    if (!self || !context)
+        return;
     self->attach_count++;
 }
 
-static void on_prepare(
-    tc_component* component,
-    const tc_render_prepare_context* context
-) {
+static void on_prepare(tc_component* component, const tc_render_prepare_context* context) {
     probe* self = probe_from_component(component);
-    if (!self || !context) return;
+    if (!self || !context)
+        return;
     self->prepare_count++;
     self->prepare_order = ++g_prepare_order;
     tc_debug_geometry_drawer drawer = {
@@ -51,12 +46,10 @@ static void on_prepare(
     tc_debug_geometry_drawer_line(&drawer, start, end, color, false);
 }
 
-static void on_detach(
-    tc_component* component,
-    const tc_render_attachment_context* context
-) {
+static void on_detach(tc_component* component, const tc_render_attachment_context* context) {
     probe* self = probe_from_component(component);
-    if (!self || !context) return;
+    if (!self || !context)
+        return;
     self->detach_count++;
 }
 
@@ -69,16 +62,15 @@ static const tc_render_lifecycle_vtable probe_vtable = {
 static bool probe_init(probe* self) {
     *self = (probe){0};
     tc_component_init(&self->component, NULL);
-    return tc_render_lifecycle_capability_attach(
-        &self->component, &probe_vtable, self);
+    return tc_render_lifecycle_capability_attach(&self->component, &probe_vtable, self);
 }
 
 GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
     tc_scene_ext_registry_init();
     tc_scene_render_mount_extension_init();
 
-    tc_debug_geometry_type_id debug_type = tc_debug_geometry_type_register(
-        "test.render.lifecycle", "Render lifecycle test", "Tests", true);
+    tc_debug_geometry_type_id debug_type =
+        tc_debug_geometry_type_register("test.render.lifecycle", "Render lifecycle test", "Tests", true);
     GUARD_C_REQUIRE(debug_type != TC_DEBUG_GEOMETRY_TYPE_INVALID);
     GUARD_C_CHECK_EQ_INT(1, (int)tc_debug_geometry_type_count());
 
@@ -96,14 +88,12 @@ GUARD_C_TEST(test_render_lifecycle_is_balanced_for_dynamic_components) {
     tc_entity_pool_add_component(pool, entity, &early.component);
 
     int attachment_storage = 0;
-    const tc_render_attachment_context* attachment =
-        (const tc_render_attachment_context*)&attachment_storage;
+    const tc_render_attachment_context* attachment = (const tc_render_attachment_context*)&attachment_storage;
     tc_scene_render_mount_notify_attach(scene, attachment);
     GUARD_C_CHECK_EQ_INT(1, early.attach_count);
 
     int prepare_storage = 0;
-    const tc_render_prepare_context* prepare =
-        (const tc_render_prepare_context*)&prepare_storage;
+    const tc_render_prepare_context* prepare = (const tc_render_prepare_context*)&prepare_storage;
     tc_scene_render_mount_prepare(scene, prepare);
     GUARD_C_CHECK_EQ_INT(1, early.prepare_count);
     GUARD_C_CHECK_EQ_INT(1, (int)tc_scene_debug_geometry_primitive_count(scene));

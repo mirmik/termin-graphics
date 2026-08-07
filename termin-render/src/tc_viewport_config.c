@@ -1,10 +1,11 @@
 // tc_viewport_config.c - Viewport configuration implementation
 #include "tc_viewport_config.h"
-#include <tcbase/tc_string.h>
 #include <string.h>
+#include <tcbase/tc_string.h>
 
 void tc_viewport_config_init(tc_viewport_config* config) {
-    if (!config) return;
+    if (!config)
+        return;
     memset(config, 0, sizeof(tc_viewport_config));
     config->display_name = tc_intern_string("Main");
     config->region[0] = 0.0f;
@@ -16,7 +17,8 @@ void tc_viewport_config_init(tc_viewport_config* config) {
 }
 
 void tc_viewport_config_copy(tc_viewport_config* dst, const tc_viewport_config* src) {
-    if (!dst || !src) return;
+    if (!dst || !src)
+        return;
     dst->name = src->name ? tc_intern_string(src->name) : NULL;
     dst->display_name = src->display_name ? tc_intern_string(src->display_name) : tc_intern_string("Main");
     dst->render_target_name = src->render_target_name ? tc_intern_string(src->render_target_name) : NULL;

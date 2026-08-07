@@ -6,9 +6,9 @@
 
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
+#include <tcbase/tc_registry_utils.h>
 #include <tcbase/tc_resource_map.h>
 #include <tcbase/tc_string.h>
-#include <tcbase/tc_registry_utils.h>
 
 static tc_pool g_animation_pool;
 static tc_pool_generation_epoch g_animation_generation_epoch;
@@ -17,7 +17,8 @@ static uint64_t g_next_uuid = 1;
 static bool g_initialized = false;
 
 static void animation_free_data(tc_animation* animation) {
-    if (!animation) return;
+    if (!animation)
+        return;
     if (animation->channels) {
         for (size_t i = 0; i < animation->channel_count; i++) {
             tc_animation_channel_free(&animation->channels[i]);
@@ -32,11 +33,7 @@ static void animation_free_data(tc_animation* animation) {
 void tc_animation_init(void) {
     TC_REGISTRY_INIT_GUARD(g_initialized, "tc_animation");
 
-    if (!tc_pool_init_rebootstrap(
-            &g_animation_pool,
-            sizeof(tc_animation),
-            64,
-            &g_animation_generation_epoch)) {
+    if (!tc_pool_init_rebootstrap(&g_animation_pool, sizeof(tc_animation), 64, &g_animation_generation_epoch)) {
         tc_log_error("tc_animation_init: failed to init pool");
         return;
     }
@@ -210,20 +207,24 @@ tc_animation_handle tc_animation_declare(const char* uuid, const char* name) {
 }
 
 tc_animation* tc_animation_get(tc_animation_handle h) {
-    if (!g_initialized) return NULL;
+    if (!g_initialized)
+        return NULL;
     return (tc_animation*)tc_pool_get_checked(&g_animation_pool, h, "tc_animation");
 }
 
 bool tc_animation_is_valid(tc_animation_handle h) {
-    if (!g_initialized) return false;
+    if (!g_initialized)
+        return false;
     return tc_pool_is_valid(&g_animation_pool, h);
 }
 
 bool tc_animation_destroy(tc_animation_handle h) {
-    if (!g_initialized) return false;
+    if (!g_initialized)
+        return false;
 
     tc_animation* animation = tc_animation_get(h);
-    if (!animation) return false;
+    if (!animation)
+        return false;
 
     tc_resource_map_remove(g_uuid_to_index, animation->header.uuid);
     animation_free_data(animation);
@@ -231,31 +232,32 @@ bool tc_animation_destroy(tc_animation_handle h) {
 }
 
 bool tc_animation_contains(const char* uuid) {
-    if (!g_initialized || !uuid) return false;
+    if (!g_initialized || !uuid)
+        return false;
     return tc_resource_map_contains(g_uuid_to_index, uuid);
 }
 
 size_t tc_animation_count(void) {
-    if (!g_initialized) return 0;
+    if (!g_initialized)
+        return 0;
     return tc_pool_count(&g_animation_pool);
 }
 
 bool tc_animation_is_loaded(tc_animation_handle h) {
     tc_animation* animation = tc_animation_get(h);
-    if (!animation) return false;
+    if (!animation)
+        return false;
     return animation->header.is_loaded != 0;
 }
 
 bool tc_animation_ensure_loaded(tc_animation_handle h) {
     tc_animation* animation = tc_animation_get(h);
-    if (!animation) return false;
+    if (!animation)
+        return false;
 
     bool success = tc_resource_header_ensure_loaded(&animation->header);
     if (!success) {
-        tc_log_error(
-            "tc_animation_ensure_loaded: resource loader failed for '%s'",
-            animation->header.uuid
-        );
+        tc_log_error("tc_animation_ensure_loaded: resource loader failed for '%s'", animation->header.uuid);
     }
     return success;
 }
@@ -267,7 +269,8 @@ void tc_animation_add_ref(tc_animation* animation) {
 }
 
 bool tc_animation_release(tc_animation* animation) {
-    if (!animation || animation->header.ref_count == 0) return false;
+    if (!animation || animation->header.ref_count == 0)
+        return false;
 
     animation->header.ref_count--;
     if (animation->header.ref_count == 0) {
@@ -281,10 +284,12 @@ bool tc_animation_release(tc_animation* animation) {
 }
 
 tc_animation_channel* tc_animation_alloc_channels(tc_animation* anim, size_t count) {
-    if (!anim) return NULL;
+    if (!anim)
+        return NULL;
 
     animation_free_data(anim);
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
 
     anim->channels = (tc_animation_channel*)calloc(count, sizeof(tc_animation_channel));
     if (!anim->channels) {
@@ -303,12 +308,14 @@ tc_animation_channel* tc_animation_alloc_channels(tc_animation* anim, size_t cou
 }
 
 tc_animation_channel* tc_animation_get_channel(tc_animation* anim, size_t index) {
-    if (!anim || index >= anim->channel_count) return NULL;
+    if (!anim || index >= anim->channel_count)
+        return NULL;
     return &anim->channels[index];
 }
 
 int tc_animation_find_channel(const tc_animation* anim, const char* target_name) {
-    if (!anim || !target_name || !anim->channels) return -1;
+    if (!anim || !target_name || !anim->channels)
+        return -1;
 
     for (size_t i = 0; i < anim->channel_count; i++) {
         if (strcmp(anim->channels[i].target_name, target_name) == 0) {
@@ -319,49 +326,59 @@ int tc_animation_find_channel(const tc_animation* anim, const char* target_name)
 }
 
 tc_keyframe_vec3* tc_animation_channel_alloc_translation(tc_animation_channel* ch, size_t count) {
-    if (!ch) return NULL;
+    if (!ch)
+        return NULL;
     if (ch->translation_keys) {
         free(ch->translation_keys);
         ch->translation_keys = NULL;
     }
     ch->translation_count = 0;
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
     ch->translation_keys = (tc_keyframe_vec3*)calloc(count, sizeof(tc_keyframe_vec3));
-    if (!ch->translation_keys) return NULL;
+    if (!ch->translation_keys)
+        return NULL;
     ch->translation_count = count;
     return ch->translation_keys;
 }
 
 tc_keyframe_quat* tc_animation_channel_alloc_rotation(tc_animation_channel* ch, size_t count) {
-    if (!ch) return NULL;
+    if (!ch)
+        return NULL;
     if (ch->rotation_keys) {
         free(ch->rotation_keys);
         ch->rotation_keys = NULL;
     }
     ch->rotation_count = 0;
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
     ch->rotation_keys = (tc_keyframe_quat*)calloc(count, sizeof(tc_keyframe_quat));
-    if (!ch->rotation_keys) return NULL;
+    if (!ch->rotation_keys)
+        return NULL;
     ch->rotation_count = count;
     return ch->rotation_keys;
 }
 
 tc_keyframe_scalar* tc_animation_channel_alloc_scale(tc_animation_channel* ch, size_t count) {
-    if (!ch) return NULL;
+    if (!ch)
+        return NULL;
     if (ch->scale_keys) {
         free(ch->scale_keys);
         ch->scale_keys = NULL;
     }
     ch->scale_count = 0;
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
     ch->scale_keys = (tc_keyframe_scalar*)calloc(count, sizeof(tc_keyframe_scalar));
-    if (!ch->scale_keys) return NULL;
+    if (!ch->scale_keys)
+        return NULL;
     ch->scale_count = count;
     return ch->scale_keys;
 }
 
 void tc_animation_recompute_duration(tc_animation* anim) {
-    if (!anim) return;
+    if (!anim)
+        return;
 
     double max_ticks = 0.0;
     for (size_t i = 0; i < anim->channel_count; i++) {
@@ -389,58 +406,74 @@ static bool animation_iter_adapter(uint32_t index, void* item, void* ctx_ptr) {
 }
 
 void tc_animation_foreach(tc_animation_iter_fn callback, void* user_data) {
-    if (!g_initialized || !callback) return;
-    animation_iter_ctx ctx = { callback, user_data };
+    if (!g_initialized || !callback)
+        return;
+    animation_iter_ctx ctx = {callback, user_data};
     tc_pool_foreach(&g_animation_pool, animation_iter_adapter, &ctx);
 }
 
 static size_t find_keyframe_index_vec3(const tc_keyframe_vec3* keys, size_t count, double t) {
-    if (count == 0) return 0;
-    if (t <= keys[0].time) return 0;
-    if (t >= keys[count - 1].time) return count - 1;
+    if (count == 0)
+        return 0;
+    if (t <= keys[0].time)
+        return 0;
+    if (t >= keys[count - 1].time)
+        return count - 1;
 
     size_t lo = 0;
     size_t hi = count - 1;
     while (lo + 1 < hi) {
         size_t mid = (lo + hi) / 2;
-        if (keys[mid].time <= t) lo = mid;
-        else hi = mid;
+        if (keys[mid].time <= t)
+            lo = mid;
+        else
+            hi = mid;
     }
     return lo;
 }
 
 static size_t find_keyframe_index_quat(const tc_keyframe_quat* keys, size_t count, double t) {
-    if (count == 0) return 0;
-    if (t <= keys[0].time) return 0;
-    if (t >= keys[count - 1].time) return count - 1;
+    if (count == 0)
+        return 0;
+    if (t <= keys[0].time)
+        return 0;
+    if (t >= keys[count - 1].time)
+        return count - 1;
 
     size_t lo = 0;
     size_t hi = count - 1;
     while (lo + 1 < hi) {
         size_t mid = (lo + hi) / 2;
-        if (keys[mid].time <= t) lo = mid;
-        else hi = mid;
+        if (keys[mid].time <= t)
+            lo = mid;
+        else
+            hi = mid;
     }
     return lo;
 }
 
 static size_t find_keyframe_index_scalar(const tc_keyframe_scalar* keys, size_t count, double t) {
-    if (count == 0) return 0;
-    if (t <= keys[0].time) return 0;
-    if (t >= keys[count - 1].time) return count - 1;
+    if (count == 0)
+        return 0;
+    if (t <= keys[0].time)
+        return 0;
+    if (t >= keys[count - 1].time)
+        return count - 1;
 
     size_t lo = 0;
     size_t hi = count - 1;
     while (lo + 1 < hi) {
         size_t mid = (lo + hi) / 2;
-        if (keys[mid].time <= t) lo = mid;
-        else hi = mid;
+        if (keys[mid].time <= t)
+            lo = mid;
+        else
+            hi = mid;
     }
     return lo;
 }
 
 static void quat_slerp(const double* a, const double* b, double t, double* out) {
-    double dot = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+    double dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 
     double b_adj[4];
     if (dot < 0.0) {
@@ -461,7 +494,7 @@ static void quat_slerp(const double* a, const double* b, double t, double* out) 
         out[1] = a[1] + t * (b_adj[1] - a[1]);
         out[2] = a[2] + t * (b_adj[2] - a[2]);
         out[3] = a[3] + t * (b_adj[3] - a[3]);
-        double len = sqrt(out[0]*out[0] + out[1]*out[1] + out[2]*out[2] + out[3]*out[3]);
+        double len = sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3]);
         if (len > 0.0) {
             out[0] /= len;
             out[1] /= len;
@@ -487,7 +520,8 @@ static void quat_slerp(const double* a, const double* b, double t, double* out) 
 
 void tc_animation_channel_sample(const tc_animation_channel* ch, double t_ticks, tc_channel_sample* out) {
     tc_channel_sample_init(out);
-    if (!ch) return;
+    if (!ch)
+        return;
 
     if (ch->translation_keys && ch->translation_count > 0) {
         out->has_translation = 1;
@@ -542,11 +576,13 @@ void tc_animation_channel_sample(const tc_animation_channel* ch, double t_ticks,
 }
 
 size_t tc_animation_sample(const tc_animation* anim, double t_seconds, tc_channel_sample* out_samples) {
-    if (!anim || !out_samples || anim->channel_count == 0) return 0;
+    if (!anim || !out_samples || anim->channel_count == 0)
+        return 0;
 
     if (anim->loop && anim->duration > 0.0) {
         t_seconds = fmod(t_seconds, anim->duration);
-        if (t_seconds < 0.0) t_seconds += anim->duration;
+        if (t_seconds < 0.0)
+            t_seconds += anim->duration;
     }
 
     double t_ticks = t_seconds * anim->tps;
@@ -580,18 +616,22 @@ static bool collect_animation_info(tc_animation_handle h, tc_animation* animatio
 }
 
 tc_animation_info* tc_animation_get_all_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
 
-    if (!g_initialized) return NULL;
+    if (!g_initialized)
+        return NULL;
 
     size_t animation_count = tc_pool_count(&g_animation_pool);
-    if (animation_count == 0) return NULL;
+    if (animation_count == 0)
+        return NULL;
 
     tc_animation_info* infos = (tc_animation_info*)malloc(animation_count * sizeof(tc_animation_info));
-    if (!infos) return NULL;
+    if (!infos)
+        return NULL;
 
-    animation_info_collector collector = { infos, 0 };
+    animation_info_collector collector = {infos, 0};
     tc_animation_foreach(collect_animation_info, &collector);
 
     *count = collector.count;

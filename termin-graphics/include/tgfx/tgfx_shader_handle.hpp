@@ -4,378 +4,382 @@
 // CPU-side shader resource only — all GPU operations live in tgfx2.
 
 extern "C" {
+#include <tcbase/tc_log.h>
 #include <tgfx/resources/tc_shader.h>
 #include <tgfx/resources/tc_shader_registry.h>
-#include <tcbase/tc_log.h>
 }
 
-#include <string>
 #include <cstring>
 #include <optional>
+#include <string>
 
 namespace termin {
 
-struct TcShaderSources {
-    std::string vertex;
-    std::string fragment;
-    std::string geometry;
-    std::string name;
-    std::string source_path;
-    std::string vertex_entry;
-    std::string fragment_entry;
-    std::string geometry_entry;
+    struct TcShaderSources {
+        std::string vertex;
+        std::string fragment;
+        std::string geometry;
+        std::string name;
+        std::string source_path;
+        std::string vertex_entry;
+        std::string fragment_entry;
+        std::string geometry_entry;
 
-    tc_shader_source_desc to_c_desc() const {
-        return {
-            vertex.c_str(),
-            fragment.c_str(),
-            geometry.empty() ? nullptr : geometry.c_str(),
-            name.empty() ? nullptr : name.c_str(),
-            source_path.empty() ? nullptr : source_path.c_str(),
-            vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
-            fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
-            geometry_entry.empty() ? nullptr : geometry_entry.c_str()
-        };
-    }
-};
-
-struct TcShaderCreateInfo {
-    TcShaderSources sources;
-    std::string uuid;
-    tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
-    tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
-    // Optional authored ABI contract. The descriptor and every array it
-    // references only need to remain alive for the duration of from_sources();
-    // the shader registry takes an owned copy.
-    const tc_shader_contract_desc* declared_contract = nullptr;
-    const tc_shader_surface_producer_desc* surface_producer = nullptr;
-
-    tc_shader_create_desc to_c_desc() const {
-        return {
-            sources.to_c_desc(),
-            uuid.empty() ? nullptr : uuid.c_str(),
-            language,
-            artifact_policy,
-            surface_producer
-        };
-    }
-};
-
-// TcShader - shader wrapper with registry integration
-// Stores handle (index + generation) instead of raw pointer
-class TcShader {
-public:
-    tc_shader_handle handle = tc_shader_handle_invalid();
-
-    TcShader() = default;
-
-    explicit TcShader(tc_shader_handle h) : handle(h) {
-        if (tc_shader* s = tc_shader_get(handle)) {
-            tc_shader_add_ref(s);
+        tc_shader_source_desc to_c_desc() const {
+            return {vertex.c_str(),
+                    fragment.c_str(),
+                    geometry.empty() ? nullptr : geometry.c_str(),
+                    name.empty() ? nullptr : name.c_str(),
+                    source_path.empty() ? nullptr : source_path.c_str(),
+                    vertex_entry.empty() ? nullptr : vertex_entry.c_str(),
+                    fragment_entry.empty() ? nullptr : fragment_entry.c_str(),
+                    geometry_entry.empty() ? nullptr : geometry_entry.c_str()};
         }
-    }
+    };
 
-    // Construct from raw pointer (finds handle for it)
-    explicit TcShader(tc_shader* s) {
-        if (s) {
-            handle = tc_shader_find(s->uuid);
-            tc_shader_add_ref(s);
+    struct TcShaderCreateInfo {
+        TcShaderSources sources;
+        std::string uuid;
+        tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
+        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_OPTIONAL;
+        // Optional authored ABI contract. The descriptor and every array it
+        // references only need to remain alive for the duration of from_sources();
+        // the shader registry takes an owned copy.
+        const tc_shader_contract_desc* declared_contract = nullptr;
+        const tc_shader_surface_producer_desc* surface_producer = nullptr;
+
+        tc_shader_create_desc to_c_desc() const {
+            return {sources.to_c_desc(),
+                    uuid.empty() ? nullptr : uuid.c_str(),
+                    language,
+                    artifact_policy,
+                    surface_producer};
         }
-    }
+    };
 
-    TcShader(const TcShader& other) : handle(other.handle) {
-        if (tc_shader* s = tc_shader_get(handle)) {
-            tc_shader_add_ref(s);
-        }
-    }
+    // TcShader - shader wrapper with registry integration
+    // Stores handle (index + generation) instead of raw pointer
+    class TcShader {
+    public:
+        tc_shader_handle handle = tc_shader_handle_invalid();
 
-    TcShader(TcShader&& other) noexcept : handle(other.handle) {
-        other.handle = tc_shader_handle_invalid();
-    }
+        TcShader() = default;
 
-    TcShader& operator=(const TcShader& other) {
-        if (this != &other) {
-            if (tc_shader* s = tc_shader_get(handle)) {
-                tc_shader_release(s);
-            }
-            handle = other.handle;
+        explicit TcShader(tc_shader_handle h)
+            : handle(h) {
             if (tc_shader* s = tc_shader_get(handle)) {
                 tc_shader_add_ref(s);
             }
         }
-        return *this;
-    }
 
-    TcShader& operator=(TcShader&& other) noexcept {
-        if (this != &other) {
+        // Construct from raw pointer (finds handle for it)
+        explicit TcShader(tc_shader* s) {
+            if (s) {
+                handle = tc_shader_find(s->uuid);
+                tc_shader_add_ref(s);
+            }
+        }
+
+        TcShader(const TcShader& other)
+            : handle(other.handle) {
+            if (tc_shader* s = tc_shader_get(handle)) {
+                tc_shader_add_ref(s);
+            }
+        }
+
+        TcShader(TcShader&& other) noexcept
+            : handle(other.handle) {
+            other.handle = tc_shader_handle_invalid();
+        }
+
+        TcShader& operator=(const TcShader& other) {
+            if (this != &other) {
+                if (tc_shader* s = tc_shader_get(handle)) {
+                    tc_shader_release(s);
+                }
+                handle = other.handle;
+                if (tc_shader* s = tc_shader_get(handle)) {
+                    tc_shader_add_ref(s);
+                }
+            }
+            return *this;
+        }
+
+        TcShader& operator=(TcShader&& other) noexcept {
+            if (this != &other) {
+                if (tc_shader* s = tc_shader_get(handle)) {
+                    tc_shader_release(s);
+                }
+                handle = other.handle;
+                other.handle = tc_shader_handle_invalid();
+            }
+            return *this;
+        }
+
+        ~TcShader() {
             if (tc_shader* s = tc_shader_get(handle)) {
                 tc_shader_release(s);
             }
-            handle = other.handle;
-            other.handle = tc_shader_handle_invalid();
+            handle = tc_shader_handle_invalid();
         }
-        return *this;
-    }
 
-    ~TcShader() {
-        if (tc_shader* s = tc_shader_get(handle)) {
-            tc_shader_release(s);
+        // Get raw pointer (may return nullptr if handle is stale)
+        tc_shader* get() const {
+            return tc_shader_get(handle);
         }
-        handle = tc_shader_handle_invalid();
-    }
 
-    // Get raw pointer (may return nullptr if handle is stale)
-    tc_shader* get() const { return tc_shader_get(handle); }
-
-    // Query (safe - returns defaults if handle is stale)
-    bool is_valid() const { return tc_shader_is_valid(handle); }
-
-    const char* uuid() const {
-        tc_shader* s = get();
-        return s ? s->uuid : "";
-    }
-
-    const char* name() const {
-        tc_shader* s = get();
-        return (s && s->name) ? s->name : "";
-    }
-
-    const char* source_path() const {
-        tc_shader* s = get();
-        return (s && s->source_path) ? s->source_path : "";
-    }
-
-    uint32_t version() const {
-        tc_shader* s = get();
-        return s ? s->version : 0;
-    }
-
-    const char* source_hash() const {
-        tc_shader* s = get();
-        return s ? s->source_hash : "";
-    }
-
-    // Source accessors
-    const char* vertex_source() const {
-        tc_shader* s = get();
-        return (s && s->vertex_source) ? s->vertex_source : "";
-    }
-
-    const char* fragment_source() const {
-        tc_shader* s = get();
-        return (s && s->fragment_source) ? s->fragment_source : "";
-    }
-
-    const char* geometry_source() const {
-        tc_shader* s = get();
-        return (s && s->geometry_source) ? s->geometry_source : "";
-    }
-
-    bool has_geometry() const {
-        tc_shader* s = get();
-        return s && tc_shader_has_geometry(s);
-    }
-
-    // Features
-    uint32_t features() const {
-        tc_shader* s = get();
-        return s ? s->features : 0;
-    }
-
-    bool has_feature(tc_shader_feature feature) const {
-        tc_shader* s = get();
-        return s && tc_shader_has_feature(s, feature);
-    }
-
-    void set_feature(tc_shader_feature feature) {
-        tc_shader* s = get();
-        if (s) tc_shader_set_feature(s, feature);
-    }
-
-    void clear_feature(tc_shader_feature feature) {
-        tc_shader* s = get();
-        if (s) tc_shader_clear_feature(s, feature);
-    }
-
-    void set_features(uint32_t features) {
-        tc_shader* s = get();
-        if (s) s->features = features;
-    }
-
-    tc_shader_language language() const {
-        tc_shader* s = get();
-        return tc_shader_get_language(s);
-    }
-
-    bool set_language(tc_shader_language language) {
-        tc_shader* s = get();
-        return s && tc_shader_set_language(s, language);
-    }
-
-    tc_shader_artifact_policy artifact_policy() const {
-        tc_shader* s = get();
-        return tc_shader_get_artifact_policy(s);
-    }
-
-    bool set_artifact_policy(tc_shader_artifact_policy policy) {
-        tc_shader* s = get();
-        return s && tc_shader_set_artifact_policy(s, policy);
-    }
-
-    bool requires_artifacts() const {
-        tc_shader* s = get();
-        return tc_shader_requires_artifacts(s);
-    }
-
-    tc_shader_program_role program_role() const {
-        return tc_shader_get_program_role(get());
-    }
-
-    bool is_executable() const {
-        return tc_shader_is_executable(get());
-    }
-
-    bool has_surface_producer() const {
-        return tc_shader_has_surface_producer(get());
-    }
-
-    uint32_t resource_binding_count() const {
-        tc_shader* s = get();
-        return tc_shader_resource_binding_count(s);
-    }
-
-    const tc_shader_resource_binding* find_resource_binding(const char* name) const {
-        tc_shader* s = get();
-        return tc_shader_find_resource_binding(s, name);
-    }
-
-    std::optional<tc_shader_resource_binding> resource_binding(const char* name) const {
-        const tc_shader_resource_binding* binding = find_resource_binding(name);
-        if (!binding) return std::nullopt;
-        return *binding;
-    }
-
-    // Variant info
-    bool is_variant() const {
-        tc_shader* s = get();
-        return s && s->is_variant;
-    }
-
-    tc_shader_variant_op variant_op() const {
-        tc_shader* s = get();
-        return s ? static_cast<tc_shader_variant_op>(s->variant_op) : TC_SHADER_VARIANT_NONE;
-    }
-
-    TcShader original() const {
-        tc_shader* s = get();
-        if (!s || !s->is_variant) return TcShader();
-        return TcShader(s->original_handle);
-    }
-
-    bool variant_is_stale() const {
-        return tc_shader_variant_is_stale(handle);
-    }
-
-    void bump_version() {
-        if (tc_shader* s = get()) {
-            s->version++;
+        // Query (safe - returns defaults if handle is stale)
+        bool is_valid() const {
+            return tc_shader_is_valid(handle);
         }
-    }
 
-    // Set sources
-    bool set_sources(
-        const std::string& vertex,
-        const std::string& fragment,
-        const std::string& geometry = "",
-        const std::string& shader_name = "",
-        const std::string& src_path = ""
-    ) {
-        tc_shader* s = get();
-        if (!s) return false;
-        return tc_shader_set_sources(
-            s,
-            vertex.c_str(),
-            fragment.c_str(),
-            geometry.empty() ? nullptr : geometry.c_str(),
-            shader_name.empty() ? nullptr : shader_name.c_str(),
-            src_path.empty() ? nullptr : src_path.c_str()
-        );
-    }
-
-    bool set_sources(const TcShaderSources& sources) {
-        tc_shader* s = get();
-        if (!s) return false;
-        const tc_shader_source_desc desc = sources.to_c_desc();
-        return tc_shader_set_sources_desc(s, &desc);
-    }
-
-    // Set variant info (called after creating variant shader)
-    void set_variant_info(const TcShader& original, tc_shader_variant_op op) {
-        tc_shader* s = get();
-        if (s) {
-            tc_shader_set_variant_info(s, original.handle, op);
+        const char* uuid() const {
+            tc_shader* s = get();
+            return s ? s->uuid : "";
         }
-    }
 
-    // Static factory methods
-
-    // Create from sources (finds existing by hash or creates new)
-    static TcShader from_sources(const TcShaderCreateInfo& create_info) {
-        const tc_shader_create_desc desc = create_info.to_c_desc();
-        tc_shader_handle h = tc_shader_from_sources_desc(&desc);
-        if (tc_shader_handle_is_invalid(h)) {
-            return TcShader();
+        const char* name() const {
+            tc_shader* s = get();
+            return (s && s->name) ? s->name : "";
         }
-        if (create_info.declared_contract) {
-            tc_shader* shader = tc_shader_get(h);
-            if (!shader || !tc_shader_set_contract(shader, create_info.declared_contract)) {
-                tc_log_error(
-                    "TcShader::from_sources failed to attach declared contract to shader '%s'",
-                    create_info.sources.name.empty()
-                        ? (create_info.uuid.empty() ? "<unnamed>" : create_info.uuid.c_str())
-                        : create_info.sources.name.c_str());
+
+        const char* source_path() const {
+            tc_shader* s = get();
+            return (s && s->source_path) ? s->source_path : "";
+        }
+
+        uint32_t version() const {
+            tc_shader* s = get();
+            return s ? s->version : 0;
+        }
+
+        const char* source_hash() const {
+            tc_shader* s = get();
+            return s ? s->source_hash : "";
+        }
+
+        // Source accessors
+        const char* vertex_source() const {
+            tc_shader* s = get();
+            return (s && s->vertex_source) ? s->vertex_source : "";
+        }
+
+        const char* fragment_source() const {
+            tc_shader* s = get();
+            return (s && s->fragment_source) ? s->fragment_source : "";
+        }
+
+        const char* geometry_source() const {
+            tc_shader* s = get();
+            return (s && s->geometry_source) ? s->geometry_source : "";
+        }
+
+        bool has_geometry() const {
+            tc_shader* s = get();
+            return s && tc_shader_has_geometry(s);
+        }
+
+        // Features
+        uint32_t features() const {
+            tc_shader* s = get();
+            return s ? s->features : 0;
+        }
+
+        bool has_feature(tc_shader_feature feature) const {
+            tc_shader* s = get();
+            return s && tc_shader_has_feature(s, feature);
+        }
+
+        void set_feature(tc_shader_feature feature) {
+            tc_shader* s = get();
+            if (s)
+                tc_shader_set_feature(s, feature);
+        }
+
+        void clear_feature(tc_shader_feature feature) {
+            tc_shader* s = get();
+            if (s)
+                tc_shader_clear_feature(s, feature);
+        }
+
+        void set_features(uint32_t features) {
+            tc_shader* s = get();
+            if (s)
+                s->features = features;
+        }
+
+        tc_shader_language language() const {
+            tc_shader* s = get();
+            return tc_shader_get_language(s);
+        }
+
+        bool set_language(tc_shader_language language) {
+            tc_shader* s = get();
+            return s && tc_shader_set_language(s, language);
+        }
+
+        tc_shader_artifact_policy artifact_policy() const {
+            tc_shader* s = get();
+            return tc_shader_get_artifact_policy(s);
+        }
+
+        bool set_artifact_policy(tc_shader_artifact_policy policy) {
+            tc_shader* s = get();
+            return s && tc_shader_set_artifact_policy(s, policy);
+        }
+
+        bool requires_artifacts() const {
+            tc_shader* s = get();
+            return tc_shader_requires_artifacts(s);
+        }
+
+        tc_shader_program_role program_role() const {
+            return tc_shader_get_program_role(get());
+        }
+
+        bool is_executable() const {
+            return tc_shader_is_executable(get());
+        }
+
+        bool has_surface_producer() const {
+            return tc_shader_has_surface_producer(get());
+        }
+
+        uint32_t resource_binding_count() const {
+            tc_shader* s = get();
+            return tc_shader_resource_binding_count(s);
+        }
+
+        const tc_shader_resource_binding* find_resource_binding(const char* name) const {
+            tc_shader* s = get();
+            return tc_shader_find_resource_binding(s, name);
+        }
+
+        std::optional<tc_shader_resource_binding> resource_binding(const char* name) const {
+            const tc_shader_resource_binding* binding = find_resource_binding(name);
+            if (!binding)
+                return std::nullopt;
+            return *binding;
+        }
+
+        // Variant info
+        bool is_variant() const {
+            tc_shader* s = get();
+            return s && s->is_variant;
+        }
+
+        tc_shader_variant_op variant_op() const {
+            tc_shader* s = get();
+            return s ? static_cast<tc_shader_variant_op>(s->variant_op) : TC_SHADER_VARIANT_NONE;
+        }
+
+        TcShader original() const {
+            tc_shader* s = get();
+            if (!s || !s->is_variant)
                 return TcShader();
+            return TcShader(s->original_handle);
+        }
+
+        bool variant_is_stale() const {
+            return tc_shader_variant_is_stale(handle);
+        }
+
+        void bump_version() {
+            if (tc_shader* s = get()) {
+                s->version++;
             }
         }
-        return TcShader(h);
-    }
 
-    // Get by UUID from registry
-    static TcShader from_uuid(const std::string& uuid) {
-        tc_shader_handle h = tc_shader_find(uuid.c_str());
-        if (tc_shader_handle_is_invalid(h)) {
-            return TcShader();
+        // Set sources
+        bool set_sources(const std::string& vertex,
+                         const std::string& fragment,
+                         const std::string& geometry = "",
+                         const std::string& shader_name = "",
+                         const std::string& src_path = "") {
+            tc_shader* s = get();
+            if (!s)
+                return false;
+            return tc_shader_set_sources(s,
+                                         vertex.c_str(),
+                                         fragment.c_str(),
+                                         geometry.empty() ? nullptr : geometry.c_str(),
+                                         shader_name.empty() ? nullptr : shader_name.c_str(),
+                                         src_path.empty() ? nullptr : src_path.c_str());
         }
-        return TcShader(h);
-    }
 
-    // Get by source hash
-    static TcShader from_hash(const std::string& hash) {
-        tc_shader_handle h = tc_shader_find_by_hash(hash.c_str());
-        if (tc_shader_handle_is_invalid(h)) {
-            return TcShader();
+        bool set_sources(const TcShaderSources& sources) {
+            tc_shader* s = get();
+            if (!s)
+                return false;
+            const tc_shader_source_desc desc = sources.to_c_desc();
+            return tc_shader_set_sources_desc(s, &desc);
         }
-        return TcShader(h);
-    }
 
-    // Get by name
-    static TcShader from_name(const std::string& name) {
-        tc_shader_handle h = tc_shader_find_by_name(name.c_str());
-        if (tc_shader_handle_is_invalid(h)) {
-            return TcShader();
+        // Set variant info (called after creating variant shader)
+        void set_variant_info(const TcShader& original, tc_shader_variant_op op) {
+            tc_shader* s = get();
+            if (s) {
+                tc_shader_set_variant_info(s, original.handle, op);
+            }
         }
-        return TcShader(h);
-    }
 
-    // Get or create by UUID
-    static TcShader get_or_create(const std::string& uuid) {
-        tc_shader_handle h = tc_shader_get_or_create(uuid.c_str());
-        if (tc_shader_handle_is_invalid(h)) {
-            return TcShader();
+        // Static factory methods
+
+        // Create from sources (finds existing by hash or creates new)
+        static TcShader from_sources(const TcShaderCreateInfo& create_info) {
+            const tc_shader_create_desc desc = create_info.to_c_desc();
+            tc_shader_handle h = tc_shader_from_sources_desc(&desc);
+            if (tc_shader_handle_is_invalid(h)) {
+                return TcShader();
+            }
+            if (create_info.declared_contract) {
+                tc_shader* shader = tc_shader_get(h);
+                if (!shader || !tc_shader_set_contract(shader, create_info.declared_contract)) {
+                    tc_log_error("TcShader::from_sources failed to attach declared contract to shader '%s'",
+                                 create_info.sources.name.empty()
+                                     ? (create_info.uuid.empty() ? "<unnamed>" : create_info.uuid.c_str())
+                                     : create_info.sources.name.c_str());
+                    return TcShader();
+                }
+            }
+            return TcShader(h);
         }
-        return TcShader(h);
-    }
 
-};
+        // Get by UUID from registry
+        static TcShader from_uuid(const std::string& uuid) {
+            tc_shader_handle h = tc_shader_find(uuid.c_str());
+            if (tc_shader_handle_is_invalid(h)) {
+                return TcShader();
+            }
+            return TcShader(h);
+        }
+
+        // Get by source hash
+        static TcShader from_hash(const std::string& hash) {
+            tc_shader_handle h = tc_shader_find_by_hash(hash.c_str());
+            if (tc_shader_handle_is_invalid(h)) {
+                return TcShader();
+            }
+            return TcShader(h);
+        }
+
+        // Get by name
+        static TcShader from_name(const std::string& name) {
+            tc_shader_handle h = tc_shader_find_by_name(name.c_str());
+            if (tc_shader_handle_is_invalid(h)) {
+                return TcShader();
+            }
+            return TcShader(h);
+        }
+
+        // Get or create by UUID
+        static TcShader get_or_create(const std::string& uuid) {
+            tc_shader_handle h = tc_shader_get_or_create(uuid.c_str());
+            if (tc_shader_handle_is_invalid(h)) {
+                return TcShader();
+            }
+            return TcShader(h);
+        }
+    };
 
 } // namespace termin

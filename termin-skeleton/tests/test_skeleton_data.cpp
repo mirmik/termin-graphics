@@ -4,12 +4,12 @@
 
 namespace {
 
-termin::Bone bone(const char* name, int parent_index) {
-    termin::Bone result;
-    result.name = name;
-    result.parent_index = parent_index;
-    return result;
-}
+    termin::Bone bone(const char* name, int parent_index) {
+        termin::Bone result;
+        result.name = name;
+        result.parent_index = parent_index;
+        return result;
+    }
 
 } // namespace
 

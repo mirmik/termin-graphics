@@ -2,46 +2,30 @@
 
 #include "widgets_test_support.hpp"
 
-namespace termin_gui_native_test
-{
-    namespace
-    {
+namespace termin_gui_native_test {
+    namespace {
 
-        class WidthDependentWidget final : public NativeWidget
-        {
+        class WidthDependentWidget final : public NativeWidget {
         public:
             std::vector<tc_ui_constraints> measurements;
 
             explicit WidthDependentWidget(const char* debug_name = nullptr)
-                : NativeWidget(debug_name)
-            {
-            }
+                : NativeWidget(debug_name) {}
 
-            tc_ui_size measure(tc_ui_document_handle,
-                               tc_ui_constraints constraints) override
-            {
+            tc_ui_size measure(tc_ui_document_handle, tc_ui_constraints constraints) override {
                 measurements.push_back(constraints);
-                const float max_width = constraints.max_size.width > 0.0f
-                                            ? constraints.max_size.width
-                                            : 200.0f;
-                const float width = std::max(constraints.min_size.width,
-                                             std::min(200.0f, max_width));
-                const float reflow_height =
-                    std::ceil(200.0f / std::max(1.0f, width)) * 10.0f;
-                const float max_height = constraints.max_size.height > 0.0f
-                                             ? constraints.max_size.height
-                                             : reflow_height;
-                return tc_ui_size{
-                    width,
-                    std::max(constraints.min_size.height,
-                             std::min(reflow_height, max_height))};
+                const float max_width = constraints.max_size.width > 0.0f ? constraints.max_size.width : 200.0f;
+                const float width = std::max(constraints.min_size.width, std::min(200.0f, max_width));
+                const float reflow_height = std::ceil(200.0f / std::max(1.0f, width)) * 10.0f;
+                const float max_height =
+                    constraints.max_size.height > 0.0f ? constraints.max_size.height : reflow_height;
+                return tc_ui_size{width, std::max(constraints.min_size.height, std::min(reflow_height, max_height))};
             }
         };
 
     } // namespace
 
-    void test_box_layout_sets_child_bounds_and_paints()
-    {
+    void test_box_layout_sets_child_bounds_and_paints() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -67,8 +51,7 @@ namespace termin_gui_native_test
         assert(second.bounds().height == 49.0f);
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
-        tc_ui_paint_context* paint_context =
-            tc_ui_paint_context_create(draw_list);
+        tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         document.paint_roots(paint_context);
 
         /* Root fill + root clip pair + two panel fills. Panels are borderless
@@ -81,21 +64,18 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_widget_metadata_is_owned_and_exposed()
-    {
+    void test_widget_metadata_is_owned_and_exposed() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
         std::string debug_name = "initial-debug";
-        auto& root =
-            ui.make_root<BoxLayout>(Orientation::Vertical, debug_name.c_str());
+        auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, debug_name.c_str());
         debug_name = "mutated-debug";
 
         assert(root.debug_name());
         assert(std::strcmp(root.debug_name(), "initial-debug") == 0);
-        assert(std::strcmp(tc_widget_debug_name(root.c_widget()),
-                           "initial-debug") == 0);
+        assert(std::strcmp(tc_widget_debug_name(root.c_widget()), "initial-debug") == 0);
 
         root.set_stable_id("showcase.root");
         root.set_name("Root");
@@ -103,8 +83,7 @@ namespace termin_gui_native_test
         assert(std::strcmp(root.stable_id(), "showcase.root") == 0);
         assert(std::strcmp(root.name(), "Root") == 0);
         assert(std::strcmp(root.debug_name(), "renamed-root") == 0);
-        assert(std::strcmp(tc_widget_stable_id(root.c_widget()),
-                           "showcase.root") == 0);
+        assert(std::strcmp(tc_widget_stable_id(root.c_widget()), "showcase.root") == 0);
         assert(std::strcmp(tc_widget_name(root.c_widget()), "Root") == 0);
 
         root.set_name({});
@@ -114,8 +93,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_dirty_flags_track_layout_paint_and_state_changes()
-    {
+    void test_dirty_flags_track_layout_paint_and_state_changes() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -123,8 +101,7 @@ namespace termin_gui_native_test
         auto& root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
         root.clear_dirty(TC_WIDGET_DIRTY_MASK);
         root.set_spacing(4.0f);
-        assert(root.has_dirty_flags(TC_WIDGET_DIRTY_LAYOUT |
-                                    TC_WIDGET_DIRTY_PAINT));
+        assert(root.has_dirty_flags(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT));
         assert(!root.has_dirty_flags(TC_WIDGET_DIRTY_STATE));
 
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 40.0f});
@@ -139,16 +116,14 @@ namespace termin_gui_native_test
         auto& button = ui.make<Button>("Run");
         button.clear_dirty(TC_WIDGET_DIRTY_MASK);
         button.set_text("Stop");
-        assert(button.has_dirty_flags(TC_WIDGET_DIRTY_STATE |
-                                      TC_WIDGET_DIRTY_PAINT));
+        assert(button.has_dirty_flags(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT));
 
         auto& slider = ui.make<Slider>(0.0f);
         slider.clear_dirty(TC_WIDGET_DIRTY_MASK);
         slider.set_focusable(true);
         assert(slider.dirty_flags() == 0);
         slider.set_value(0.5f);
-        assert(slider.has_dirty_flags(TC_WIDGET_DIRTY_STATE |
-                                      TC_WIDGET_DIRTY_PAINT));
+        assert(slider.has_dirty_flags(TC_WIDGET_DIRTY_STATE | TC_WIDGET_DIRTY_PAINT));
         slider.clear_dirty(TC_WIDGET_DIRTY_STATE);
         assert(!slider.has_dirty_flags(TC_WIDGET_DIRTY_STATE));
         assert(slider.has_dirty_flags(TC_WIDGET_DIRTY_PAINT));
@@ -156,8 +131,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_child_policies_allocate_primary_axis()
-    {
+    void test_box_layout_child_policies_allocate_primary_axis() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -192,8 +166,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_hstack_vstack_wrappers_use_expected_orientation()
-    {
+    void test_hstack_vstack_wrappers_use_expected_orientation() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -222,15 +195,13 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_grid_layout_tracks_spans_and_hit_test()
-    {
+    void test_grid_layout_tracks_spans_and_hit_test() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
         auto& grid = ui.make_root<GridLayout>("grid");
-        grid.set_padding(EdgeInsets{2.0f, 3.0f, 4.0f, 5.0f})
-            .set_spacing(10.0f, 6.0f);
+        grid.set_padding(EdgeInsets{2.0f, 3.0f, 4.0f, 5.0f}).set_spacing(10.0f, 6.0f);
         grid.add_column(LayoutPolicy::Fixed, 40.0f);
         grid.add_column(LayoutPolicy::Stretch);
         grid.add_column(LayoutPolicy::Flex, 2.0f);
@@ -260,20 +231,17 @@ namespace termin_gui_native_test
         assert(near(bottom.bounds().y, 29.0f));
         assert(near(bottom.bounds().width, 76.0f));
         assert(near(bottom.bounds().height, 66.0f));
-        assert(tc_widget_handle_eq(document.hit_test(125.0f, 35.0f),
-                                   bottom.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(125.0f, 35.0f), bottom.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_grid_and_scroll_remeasure_width_dependent_children()
-    {
+    void test_box_grid_and_scroll_remeasure_width_dependent_children() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
-        auto& box =
-            ui.make_root<BoxLayout>(Orientation::Vertical, "reflow-box");
+        auto& box = ui.make_root<BoxLayout>(Orientation::Vertical, "reflow-box");
         auto& box_child = ui.make<WidthDependentWidget>("box-child");
         box.add_preferred_child(box_child);
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
@@ -288,11 +256,9 @@ namespace termin_gui_native_test
         assert(near(box_child.bounds().height, 40.0f));
         assert(box_child.measurements.size() == 4);
 
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       box.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), box.handle()));
 
-        auto& row =
-            ui.make_root<BoxLayout>(Orientation::Horizontal, "reflow-row");
+        auto& row = ui.make_root<BoxLayout>(Orientation::Horizontal, "reflow-row");
         row.set_cross_axis_alignment(CrossAxisAlignment::Start);
         auto& left = ui.make<WidthDependentWidget>("row-left");
         auto& right = ui.make<WidthDependentWidget>("row-right");
@@ -306,8 +272,7 @@ namespace termin_gui_native_test
         assert(left.measurements.size() == 2);
         assert(right.measurements.size() == 2);
 
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       row.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), row.handle()));
 
         auto& grid = ui.make_root<GridLayout>("reflow-grid");
         grid.add_column(LayoutPolicy::Stretch);
@@ -321,8 +286,7 @@ namespace termin_gui_native_test
         assert(near(grid_child.measurements.back().min_size.width, 50.0f));
         assert(near(grid_child.measurements.back().max_size.width, 50.0f));
 
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       grid.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), grid.handle()));
 
         auto& scroll = ui.make_root<ScrollArea>("reflow-scroll");
         scroll.set_scroll_axes(false, true);
@@ -339,14 +303,12 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_resolves_percent_and_limits_from_definite_parent()
-    {
+    void test_box_layout_resolves_percent_and_limits_from_definite_parent() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
-        auto& box =
-            ui.make_root<BoxLayout>(Orientation::Vertical, "percent-box");
+        auto& box = ui.make_root<BoxLayout>(Orientation::Vertical, "percent-box");
         box.set_cross_axis_alignment(CrossAxisAlignment::Start);
         auto& child = ui.make<Spacer>(tc_ui_size{20.0f, 10.0f});
         tc_ui_widget_layout_spec spec = tc_ui_widget_layout_spec_default();
@@ -365,13 +327,10 @@ namespace termin_gui_native_test
         assert(near(child.bounds().width, 80.0f));
 
         const tc_ui_size intrinsic = child.measure(
-            document.get(),
-            tc_ui_constraints{tc_ui_size{0.0f, 0.0f},
-                              tc_ui_size{1000000.0f, 1000000.0f}});
+            document.get(), tc_ui_constraints{tc_ui_size{0.0f, 0.0f}, tc_ui_size{1000000.0f, 1000000.0f}});
         assert(near(intrinsic.width, 20.0f));
 
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       box.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), box.handle()));
         auto& grid = ui.make_root<GridLayout>("percent-grid");
         grid.add_column(LayoutPolicy::Stretch);
         grid.add_row(LayoutPolicy::Preferred);
@@ -385,8 +344,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_grid_layout_recursive_destroy_children()
-    {
+    void test_grid_layout_recursive_destroy_children() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -398,15 +356,13 @@ namespace termin_gui_native_test
         grid.add_child(second, 1, 1);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 3);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       grid.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), grid.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_group_box_lays_out_content_and_routes_hit_test()
-    {
+    void test_group_box_lays_out_content_and_routes_hit_test() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -421,14 +377,11 @@ namespace termin_gui_native_test
         assert(near(content.bounds().y, 36.0f));
         assert(near(content.bounds().width, 162.0f));
         assert(near(content.bounds().height, 72.0f));
-        assert(tc_widget_handle_eq(document.hit_test(20.0f, 45.0f),
-                                   content.handle()));
-        assert(tc_widget_handle_eq(document.hit_test(20.0f, 12.0f),
-                                   group.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 45.0f), content.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 12.0f), group.handle()));
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
-        tc_ui_paint_context* paint_context =
-            tc_ui_paint_context_create(draw_list);
+        tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         document.paint_roots(paint_context);
         assert(count_commands(draw_list, TC_UI_DRAW_TEXT) == 1);
         assert(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP) == 2);
@@ -439,8 +392,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_group_box_recursive_destroy_content()
-    {
+    void test_group_box_recursive_destroy_content() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -450,24 +402,19 @@ namespace termin_gui_native_test
         group.set_content(content);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 2);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       group.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), group.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_splitter_layout_drag_and_hit_test()
-    {
+    void test_splitter_layout_drag_and_hit_test() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
-        auto& splitter =
-            ui.make_root<Splitter>(Orientation::Horizontal, "splitter");
-        splitter.set_split_fraction(0.25f)
-            .set_min_extents(20.0f, 20.0f)
-            .set_divider_thickness(8.0f);
+        auto& splitter = ui.make_root<Splitter>(Orientation::Horizontal, "splitter");
+        splitter.set_split_fraction(0.25f).set_min_extents(20.0f, 20.0f).set_divider_thickness(8.0f);
         auto& left = ui.make<Panel>("left");
         auto& right = ui.make<Panel>("right");
         splitter.set_first(left);
@@ -477,26 +424,22 @@ namespace termin_gui_native_test
         assert(near(left.bounds().width, 50.0f));
         assert(near(right.bounds().x, 58.0f));
         assert(near(right.bounds().width, 150.0f));
-        assert(tc_widget_handle_eq(document.hit_test(54.0f, 10.0f),
-                                   splitter.handle()));
-        assert(tc_widget_handle_eq(document.hit_test(100.0f, 10.0f),
-                                   right.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(54.0f, 10.0f), splitter.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(100.0f, 10.0f), right.handle()));
 
         tc_ui_pointer_event event{};
         event.type = TC_UI_POINTER_MOVE;
         event.x = 54.0f;
         event.y = 10.0f;
         assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_IGNORED);
-        assert(
-            tc_widget_handle_eq(document.hovered_widget(), splitter.handle()));
+        assert(tc_widget_handle_eq(document.hovered_widget(), splitter.handle()));
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
         tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
         document.paint_roots(context);
-        const tc_ui_draw_command* divider_command = tc_ui_draw_list_command_at(
-            draw_list, tc_ui_draw_list_command_count(draw_list) - 1);
-        assert(divider_command &&
-               divider_command->type == TC_UI_DRAW_FILL_RECT);
+        const tc_ui_draw_command* divider_command =
+            tc_ui_draw_list_command_at(draw_list, tc_ui_draw_list_command_count(draw_list) - 1);
+        assert(divider_command && divider_command->type == TC_UI_DRAW_FILL_RECT);
         assert(near(divider_command->rect.width, 2.0f));
         assert(near(divider_command->color.b, 0.88f));
         tc_ui_paint_context_destroy(context);
@@ -504,8 +447,7 @@ namespace termin_gui_native_test
 
         event.type = TC_UI_POINTER_DOWN;
         assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
-        assert(
-            tc_widget_handle_eq(document.pointer_capture(), splitter.handle()));
+        assert(tc_widget_handle_eq(document.pointer_capture(), splitter.handle()));
 
         event.type = TC_UI_POINTER_MOVE;
         event.x = 140.0f;
@@ -520,29 +462,25 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_splitter_recursive_destroy_children()
-    {
+    void test_splitter_recursive_destroy_children() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
-        auto& splitter =
-            ui.make_root<Splitter>(Orientation::Vertical, "splitter");
+        auto& splitter = ui.make_root<Splitter>(Orientation::Vertical, "splitter");
         auto& first = ui.make<Panel>("first");
         auto& second = ui.make<Panel>("second");
         splitter.set_first(first);
         splitter.set_second(second);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 3);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       splitter.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), splitter.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_scroll_area_lays_out_content_with_clip_and_scroll()
-    {
+    void test_scroll_area_lays_out_content_with_clip_and_scroll() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -561,36 +499,27 @@ namespace termin_gui_native_test
         assert(near(content.bounds().y, 0.0f));
         assert(near(scroll.content_size().width, 120.0f));
         assert(near(scroll.content_size().height, 200.0f));
-        assert(
-            tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), top.handle()));
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 70.0f),
-                                   tc_widget_handle_invalid()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), top.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 70.0f), tc_widget_handle_invalid()));
 
         scroll.set_scroll(0.0f, 40.0f);
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 60.0f});
         assert(near(scroll.scroll_y(), 40.0f));
         assert(near(content.bounds().y, -40.0f));
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 45.0f),
-                                   bottom.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 45.0f), bottom.handle()));
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
-        tc_ui_paint_context* paint_context =
-            tc_ui_paint_context_create(draw_list);
+        tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         document.paint_roots(paint_context);
 
         assert(tc_ui_draw_list_command_count(draw_list) >= 4);
-        const tc_ui_draw_command* first =
-            tc_ui_draw_list_command_at(draw_list, 0);
+        const tc_ui_draw_command* first = tc_ui_draw_list_command_at(draw_list, 0);
         assert(first && first->type == TC_UI_DRAW_PUSH_CLIP);
         assert(near(first->rect.width, 100.0f));
         bool found_pop_clip = false;
-        for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list);
-             ++index)
-        {
-            const tc_ui_draw_command* command =
-                tc_ui_draw_list_command_at(draw_list, index);
-            found_pop_clip = found_pop_clip ||
-                             (command && command->type == TC_UI_DRAW_POP_CLIP);
+        for (size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+            const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, index);
+            found_pop_clip = found_pop_clip || (command && command->type == TC_UI_DRAW_POP_CLIP);
         }
         assert(found_pop_clip);
 
@@ -600,8 +529,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_scroll_area_can_fit_content_to_disabled_scroll_axis()
-    {
+    void test_scroll_area_can_fit_content_to_disabled_scroll_axis() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -626,8 +554,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_scroll_area_wheel_clamps_and_recursive_destroy_content()
-    {
+    void test_scroll_area_wheel_clamps_and_recursive_destroy_content() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -653,15 +580,13 @@ namespace termin_gui_native_test
         assert(document.dispatch_pointer_event(wheel) == TC_UI_EVENT_IGNORED);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 3);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       scroll.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), scroll.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_scroll_area_programmatic_keyboard_thumb_and_focus_contract()
-    {
+    void test_scroll_area_programmatic_keyboard_thumb_and_focus_contract() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -678,12 +603,10 @@ namespace termin_gui_native_test
 
         int change_count = 0;
         float observed_y = -1.0f;
-        scroll.changed().connect(
-            [&](ScrollArea&, float, float y)
-            {
-                ++change_count;
-                observed_y = y;
-            });
+        scroll.changed().connect([&](ScrollArea&, float, float y) {
+            ++change_count;
+            observed_y = y;
+        });
 
         scroll.set_scroll(12.0f, 40.0f);
         assert(near(content.bounds().x, -12.0f));
@@ -691,12 +614,10 @@ namespace termin_gui_native_test
         assert(change_count == 1);
         assert(near(observed_y, 40.0f));
 
-        scroll.set_scrollbar_policy(ScrollBarPolicy::Hidden,
-                                    ScrollBarPolicy::Always);
+        scroll.set_scrollbar_policy(ScrollBarPolicy::Hidden, ScrollBarPolicy::Always);
         assert(!scroll.horizontal_scrollbar_visible());
         assert(scroll.vertical_scrollbar_visible());
-        scroll.set_scrollbar_policy(ScrollBarPolicy::Auto,
-                                    ScrollBarPolicy::Auto);
+        scroll.set_scrollbar_policy(ScrollBarPolicy::Auto, ScrollBarPolicy::Auto);
         assert(scroll.horizontal_scrollbar_visible());
         assert(scroll.vertical_scrollbar_visible());
 
@@ -721,8 +642,7 @@ namespace termin_gui_native_test
         pointer.x = 92.0f;
         pointer.y = 5.0f;
         assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
-        assert(
-            tc_widget_handle_eq(document.pointer_capture(), scroll.handle()));
+        assert(tc_widget_handle_eq(document.pointer_capture(), scroll.handle()));
         pointer.type = TC_UI_POINTER_MOVE;
         pointer.y = 50.0f;
         assert(document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
@@ -735,8 +655,7 @@ namespace termin_gui_native_test
         scroll.set_scroll(0.0f, 0.0f);
         assert(document.set_focus(bottom));
         assert(scroll.scroll_y() > 0.0f);
-        assert(bottom.bounds().y + bottom.bounds().height <=
-               scroll.bounds().y + scroll.bounds().height + 0.001f);
+        assert(bottom.bounds().y + bottom.bounds().height <= scroll.bounds().y + scroll.bounds().height + 0.001f);
 
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 300.0f});
         assert(near(scroll.scroll_y(), 0.0f));
@@ -744,8 +663,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_nested_scroll_area_bubbles_wheel_at_inner_boundary()
-    {
+    void test_nested_scroll_area_bubbles_wheel_at_inner_boundary() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -780,8 +698,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_tab_view_switches_selected_page_and_clips_paint()
-    {
+    void test_tab_view_switches_selected_page_and_clips_paint() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -798,10 +715,8 @@ namespace termin_gui_native_test
         assert(near(first.bounds().y, 32.0f));
         assert(near(first.bounds().height, 68.0f));
         assert(near(second.bounds().width, 0.0f));
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f),
-                                   tabs.handle()));
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 40.0f),
-                                   first.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), tabs.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 40.0f), first.handle()));
 
         tc_ui_pointer_event event{};
         event.type = TC_UI_POINTER_DOWN;
@@ -810,21 +725,15 @@ namespace termin_gui_native_test
         assert(document.dispatch_pointer_event(event) == TC_UI_EVENT_HANDLED);
         assert(tabs.selected_index() == 1);
         assert(near(second.bounds().y, 32.0f));
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 40.0f),
-                                   second.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 40.0f), second.handle()));
 
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
-        tc_ui_paint_context* paint_context =
-            tc_ui_paint_context_create(draw_list);
+        tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         document.paint_roots(paint_context);
         bool saw_body_clip = false;
-        for (size_t i = 0; i < tc_ui_draw_list_command_count(draw_list); ++i)
-        {
-            const tc_ui_draw_command* command =
-                tc_ui_draw_list_command_at(draw_list, i);
-            if (command && command->type == TC_UI_DRAW_PUSH_CLIP &&
-                near(command->rect.y, 32.0f))
-            {
+        for (size_t i = 0; i < tc_ui_draw_list_command_count(draw_list); ++i) {
+            const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, i);
+            if (command && command->type == TC_UI_DRAW_PUSH_CLIP && near(command->rect.y, 32.0f)) {
                 saw_body_clip = true;
             }
         }
@@ -835,8 +744,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_tab_view_recursive_destroy_pages()
-    {
+    void test_tab_view_recursive_destroy_pages() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -848,15 +756,13 @@ namespace termin_gui_native_test
         tabs.add_page("Second", second);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 3);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       tabs.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), tabs.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_tab_view_page_mutation_and_selection_signal()
-    {
+    void test_tab_view_page_mutation_and_selection_signal() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -867,8 +773,7 @@ namespace termin_gui_native_test
         tabs.add_page("First", first);
         tabs.add_page("Second", second);
         std::vector<size_t> selected;
-        tabs.selection_changed().connect([&selected](TabView&, size_t index)
-                                         { selected.push_back(index); });
+        tabs.selection_changed().connect([&selected](TabView&, size_t index) { selected.push_back(index); });
 
         tabs.set_selected_index(1);
         assert((selected == std::vector<size_t>{1}));
@@ -884,17 +789,14 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_tab_view_focus_traversal_uses_only_selected_page()
-    {
+    void test_tab_view_focus_traversal_uses_only_selected_page() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
         auto& tabs = ui.make_root<TabView>("tabs");
-        auto& first_page =
-            ui.make<BoxLayout>(Orientation::Vertical, "first-page");
-        auto& second_page =
-            ui.make<BoxLayout>(Orientation::Vertical, "second-page");
+        auto& first_page = ui.make<BoxLayout>(Orientation::Vertical, "first-page");
+        auto& second_page = ui.make<BoxLayout>(Orientation::Vertical, "second-page");
         auto& first_a = ui.make<FocusProbe>();
         auto& first_b = ui.make<FocusProbe>();
         auto& second_a = ui.make<FocusProbe>();
@@ -911,11 +813,9 @@ namespace termin_gui_native_test
         assert(document.focus_next());
         assert(tc_widget_handle_eq(document.focused_widget(), tabs.handle()));
         assert(document.focus_next());
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), first_a.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), first_a.handle()));
         assert(document.focus_next());
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), first_b.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), first_b.handle()));
 
         tabs.set_selected_index(1);
         assert(tc_widget_handle_is_invalid(document.focused_widget()));
@@ -924,19 +824,15 @@ namespace termin_gui_native_test
         assert(document.focus_next());
         assert(tc_widget_handle_eq(document.focused_widget(), tabs.handle()));
         assert(document.focus_next());
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), second_a.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), second_a.handle()));
         assert(document.set_focus(tabs));
         assert(document.focus_previous());
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), second_b.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), second_b.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void
-    test_tab_view_removing_selected_page_clears_focus_and_restores_reuse_state()
-    {
+    void test_tab_view_removing_selected_page_clears_focus_and_restores_reuse_state() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -968,8 +864,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_tab_view_selected_hidden_or_disabled_page_has_no_focus_fallback()
-    {
+    void test_tab_view_selected_hidden_or_disabled_page_has_no_focus_fallback() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1007,8 +902,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_shrinks_flexible_children_before_overflowing()
-    {
+    void test_box_layout_shrinks_flexible_children_before_overflowing() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1036,8 +930,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_respects_child_extent_limits()
-    {
+    void test_box_layout_respects_child_extent_limits() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1060,8 +953,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_cross_axis_alignment_and_exact_placement()
-    {
+    void test_box_layout_cross_axis_alignment_and_exact_placement() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1076,26 +968,12 @@ namespace termin_gui_native_test
         root.add_child(start);
         root.add_child(center);
         root.add_child(end);
-        assert(root.set_child_placement(start,
-                                        LayoutPolicy::Fixed,
-                                        30.0f,
-                                        0.0f,
-                                        0.0f,
-                                        0.0f,
-                                        0.0f,
-                                        CrossAxisAlignment::Start));
         assert(root.set_child_placement(
-            center, LayoutPolicy::Preferred, 0.0f, 1.0f, 1.0f, 0.0f, 40.0f));
-        assert(root.set_child_placement(end,
-                                        LayoutPolicy::Flex,
-                                        0.0f,
-                                        2.0f,
-                                        0.0f,
-                                        0.0f,
-                                        0.0f,
-                                        CrossAxisAlignment::End));
-        assert(!root.set_child_placement(
-            end, LayoutPolicy::Fixed, 20.0f, 1.0f, 0.0f, 0.0f, 0.0f));
+            start, LayoutPolicy::Fixed, 30.0f, 0.0f, 0.0f, 0.0f, 0.0f, CrossAxisAlignment::Start));
+        assert(root.set_child_placement(center, LayoutPolicy::Preferred, 0.0f, 1.0f, 1.0f, 0.0f, 40.0f));
+        assert(
+            root.set_child_placement(end, LayoutPolicy::Flex, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, CrossAxisAlignment::End));
+        assert(!root.set_child_placement(end, LayoutPolicy::Fixed, 20.0f, 1.0f, 0.0f, 0.0f, 0.0f));
         assert(root.items()[2].policy == LayoutPolicy::Flex);
 
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 144.0f, 60.0f});
@@ -1121,8 +999,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_allows_preferred_overflow_when_no_child_can_shrink()
-    {
+    void test_box_layout_allows_preferred_overflow_when_no_child_can_shrink() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1143,8 +1020,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_document_hit_test_returns_deepest_child()
-    {
+    void test_document_hit_test_returns_deepest_child() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1157,17 +1033,14 @@ namespace termin_gui_native_test
 
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 200.0f, 40.0f});
 
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f),
-                                   first.handle()));
-        assert(tc_widget_handle_eq(document.hit_test(150.0f, 10.0f),
-                                   second.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), first.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(150.0f, 10.0f), second.handle()));
         assert(tc_widget_handle_is_invalid(document.hit_test(250.0f, 10.0f)));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_document_hit_test_prefers_topmost_root()
-    {
+    void test_document_hit_test_prefers_topmost_root() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1178,16 +1051,13 @@ namespace termin_gui_native_test
 
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 100.0f, 100.0f});
 
-        assert(
-            tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), top.handle()));
-        assert(!tc_widget_handle_eq(document.hit_test(20.0f, 20.0f),
-                                    bottom.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), top.handle()));
+        assert(!tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), bottom.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_box_layout_hit_test_skips_stale_child_handles()
-    {
+    void test_box_layout_hit_test_skips_stale_child_handles() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1200,14 +1070,12 @@ namespace termin_gui_native_test
         tc_widget_handle child_handle = child.handle();
         assert(tc_ui_document_destroy_widget(document.get(), child_handle));
 
-        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f),
-                                   root.handle()));
+        assert(tc_widget_handle_eq(document.hit_test(10.0f, 10.0f), root.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_pointer_dispatch_updates_hovered_widget()
-    {
+    void test_pointer_dispatch_updates_hovered_widget() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1238,8 +1106,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_pointer_capture_routes_events_outside_bounds_until_release()
-    {
+    void test_pointer_capture_routes_events_outside_bounds_until_release() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1275,8 +1142,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_destroy_clears_hover_and_pointer_capture()
-    {
+    void test_destroy_clears_hover_and_pointer_capture() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1301,22 +1167,19 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_remove_child_clears_subtree_focus_and_preserves_reuse()
-    {
+    void test_remove_child_clears_subtree_focus_and_preserves_reuse() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
 
         auto& root = ui.make_root<BoxLayout>(Orientation::Horizontal, "root");
-        auto& container =
-            ui.make<BoxLayout>(Orientation::Horizontal, "container");
+        auto& container = ui.make<BoxLayout>(Orientation::Horizontal, "container");
         auto& focusable = ui.make<FocusProbe>();
         container.add_preferred_child(focusable);
         root.add_stretch_child(container);
 
         assert(document.set_focus(focusable));
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
         assert(root.remove_child(container));
         assert(tc_widget_handle_is_invalid(document.focused_widget()));
         assert(container.parent_widget() == nullptr);
@@ -1325,14 +1188,12 @@ namespace termin_gui_native_test
 
         assert(root.append_child(container));
         assert(document.set_focus(focusable));
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_detach_clears_pointer_interaction_state_only_inside_subtree()
-    {
+    void test_detach_clears_pointer_interaction_state_only_inside_subtree() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1356,20 +1217,17 @@ namespace termin_gui_native_test
 
         assert(probe.detach());
         assert(probe.cancel_count == 1);
-        assert(probe.last_cancel_reason ==
-               TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
+        assert(probe.last_cancel_reason == TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
         assert(tc_widget_handle_is_invalid(document.hovered_widget()));
         assert(tc_widget_handle_is_invalid(document.pointer_capture()));
         assert(tc_widget_handle_is_invalid(document.pressed_widget()));
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), outside.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), outside.handle()));
         assert(tc_ui_document_is_alive(document.get(), probe.handle()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_pointer_cancel_clears_controls_and_blocks_late_release()
-    {
+    void test_pointer_cancel_clears_controls_and_blocks_late_release() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1402,8 +1260,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_focus_and_key_text_dispatch_follow_focused_widget()
-    {
+    void test_focus_and_key_text_dispatch_follow_focused_widget() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1423,8 +1280,7 @@ namespace termin_gui_native_test
         pointer.x = 10.0f;
         pointer.y = 10.0f;
         document.dispatch_pointer_event(pointer);
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
 
         tc_ui_key_event key{};
         key.type = TC_UI_KEY_DOWN;
@@ -1447,8 +1303,7 @@ namespace termin_gui_native_test
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_focus_api_rejects_non_focusable_and_clears_on_destroy()
-    {
+    void test_focus_api_rejects_non_focusable_and_clears_on_destroy() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1458,24 +1313,20 @@ namespace termin_gui_native_test
         assert(!document.set_focus(panel));
         assert(tc_widget_handle_is_invalid(document.focused_widget()));
         assert(document.set_focus(focusable));
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
         assert(!document.clear_focus(panel));
-        assert(
-            tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
+        assert(tc_widget_handle_eq(document.focused_widget(), focusable.handle()));
         assert(document.clear_focus(focusable));
         assert(tc_widget_handle_is_invalid(document.focused_widget()));
 
         assert(document.set_focus(focusable));
-        assert(
-            tc_ui_document_destroy_widget(document.get(), focusable.handle()));
+        assert(tc_ui_document_destroy_widget(document.get(), focusable.handle()));
         assert(tc_widget_handle_is_invalid(document.focused_widget()));
 
         tc_ui_document_destroy(document_handle);
     }
 
-    void test_recursive_destroy_removes_container_children()
-    {
+    void test_recursive_destroy_removes_container_children() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
         DocumentBuilder ui(document);
@@ -1484,8 +1335,7 @@ namespace termin_gui_native_test
         root.add_child(child);
 
         assert(tc_ui_document_live_widget_count(document.get()) == 2);
-        assert(tc_ui_document_destroy_widget_recursive(document.get(),
-                                                       root.handle()));
+        assert(tc_ui_document_destroy_widget_recursive(document.get(), root.handle()));
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
         assert(!tc_ui_document_is_alive(document.get(), root.handle()));
         assert(!tc_ui_document_is_alive(document.get(), child.handle()));

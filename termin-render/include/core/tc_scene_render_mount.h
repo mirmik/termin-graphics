@@ -2,12 +2,12 @@
 #ifndef TC_SCENE_RENDER_MOUNT_H
 #define TC_SCENE_RENDER_MOUNT_H
 
-#include "core/tc_scene_pool.h"
-#include "core/tc_scene_extension.h"
 #include "core/tc_debug_geometry.h"
+#include "core/tc_scene_extension.h"
+#include "core/tc_scene_pool.h"
 #include "render/tc_pipeline_template.h"
-#include "tc_viewport_config.h"
 #include "tc_render_target_config.h"
+#include "tc_viewport_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,21 +55,10 @@ TC_API tc_scene_render_mount* tc_scene_render_mount_get(tc_scene_handle scene);
 
 // Ensure render-mount extension is attached to scene.
 TC_API bool tc_scene_render_mount_ensure(tc_scene_handle scene);
-TC_API const tc_render_attachment_context* tc_scene_render_mount_attachment_context(
-    tc_scene_handle scene
-);
-TC_API void tc_scene_render_mount_notify_attach(
-    tc_scene_handle scene,
-    const tc_render_attachment_context* context
-);
-TC_API void tc_scene_render_mount_prepare(
-    tc_scene_handle scene,
-    const tc_render_prepare_context* context
-);
-TC_API void tc_scene_render_mount_notify_detach(
-    tc_scene_handle scene,
-    const tc_render_attachment_context* context
-);
+TC_API const tc_render_attachment_context* tc_scene_render_mount_attachment_context(tc_scene_handle scene);
+TC_API void tc_scene_render_mount_notify_attach(tc_scene_handle scene, const tc_render_attachment_context* context);
+TC_API void tc_scene_render_mount_prepare(tc_scene_handle scene, const tc_render_prepare_context* context);
+TC_API void tc_scene_render_mount_notify_detach(tc_scene_handle scene, const tc_render_attachment_context* context);
 
 // Render-mount scene API (moved from tc_scene.h)
 TC_API void tc_scene_add_viewport_config(tc_scene_handle h, const tc_viewport_config* config);

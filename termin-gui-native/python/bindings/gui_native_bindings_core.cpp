@@ -10,19 +10,13 @@ void bind_gui_native_core(nb::module_& m) {
     nb::class_<WidgetHandle>(m, "WidgetHandle")
         .def_prop_ro("index", [](const WidgetHandle& handle) { return handle.handle.index; })
         .def_prop_ro("generation", [](const WidgetHandle& handle) { return handle.handle.generation; })
-        .def_prop_ro("valid", [](const WidgetHandle& handle) {
-            return tc_widget_handle_valid_value(handle.handle);
-        })
-        .def("__bool__", [](const WidgetHandle& handle) {
-            return tc_widget_handle_valid_value(handle.handle);
-        })
+        .def_prop_ro("valid", [](const WidgetHandle& handle) { return tc_widget_handle_valid_value(handle.handle); })
+        .def("__bool__", [](const WidgetHandle& handle) { return tc_widget_handle_valid_value(handle.handle); })
         .def("__eq__", [](const WidgetHandle& lhs, const WidgetHandle& rhs) {
             return tc_widget_handle_eq(lhs.handle, rhs.handle);
         });
 
-    m.def("invalid_widget_handle", []() {
-        return WidgetHandle {tc_widget_handle_invalid_value()};
-    });
+    m.def("invalid_widget_handle", []() { return WidgetHandle{tc_widget_handle_invalid_value()}; });
 
     nb::class_<tc_ui_size>(m, "Size")
         .def(nb::init<float, float>(), nb::arg("width") = 0.0f, nb::arg("height") = 0.0f)
@@ -31,8 +25,10 @@ void bind_gui_native_core(nb::module_& m) {
 
     nb::class_<tc_ui_rect>(m, "Rect")
         .def(nb::init<float, float, float, float>(),
-             nb::arg("x") = 0.0f, nb::arg("y") = 0.0f,
-             nb::arg("width") = 0.0f, nb::arg("height") = 0.0f)
+             nb::arg("x") = 0.0f,
+             nb::arg("y") = 0.0f,
+             nb::arg("width") = 0.0f,
+             nb::arg("height") = 0.0f)
         .def_rw("x", &tc_ui_rect::x)
         .def_rw("y", &tc_ui_rect::y)
         .def_rw("width", &tc_ui_rect::width)
@@ -45,8 +41,10 @@ void bind_gui_native_core(nb::module_& m) {
 
     nb::class_<tc_ui_insets>(m, "PhysicalInsets")
         .def(nb::init<float, float, float, float>(),
-             nb::arg("left") = 0.0f, nb::arg("top") = 0.0f,
-             nb::arg("right") = 0.0f, nb::arg("bottom") = 0.0f)
+             nb::arg("left") = 0.0f,
+             nb::arg("top") = 0.0f,
+             nb::arg("right") = 0.0f,
+             nb::arg("bottom") = 0.0f)
         .def_rw("left", &tc_ui_insets::left)
         .def_rw("top", &tc_ui_insets::top)
         .def_rw("right", &tc_ui_insets::right)
@@ -59,9 +57,7 @@ void bind_gui_native_core(nb::module_& m) {
         .value("Percent", TC_UI_LENGTH_PERCENT);
 
     nb::class_<tc_ui_length>(m, "LayoutLength")
-        .def(nb::init<tc_ui_length_mode, float>(),
-             nb::arg("mode") = TC_UI_LENGTH_AUTO,
-             nb::arg("value") = 0.0f)
+        .def(nb::init<tc_ui_length_mode, float>(), nb::arg("mode") = TC_UI_LENGTH_AUTO, nb::arg("value") = 0.0f)
         .def_rw("mode", &tc_ui_length::mode)
         .def_rw("value", &tc_ui_length::value);
 
@@ -70,9 +66,10 @@ void bind_gui_native_core(nb::module_& m) {
         .value("LayoutMinimum", TC_UI_TOUCH_TARGET_LAYOUT_MINIMUM);
 
     nb::class_<tc_ui_widget_layout_spec>(m, "WidgetLayoutSpec")
-        .def("__init__", [](tc_ui_widget_layout_spec* self) {
-            new (self) tc_ui_widget_layout_spec(tc_ui_widget_layout_spec_default());
-        })
+        .def("__init__",
+             [](tc_ui_widget_layout_spec* self) {
+                 new (self) tc_ui_widget_layout_spec(tc_ui_widget_layout_spec_default());
+             })
         .def_rw("width", &tc_ui_widget_layout_spec::width)
         .def_rw("height", &tc_ui_widget_layout_spec::height)
         .def_rw("min_width", &tc_ui_widget_layout_spec::min_width)
@@ -81,17 +78,16 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("max_height", &tc_ui_widget_layout_spec::max_height)
         .def_rw("margin", &tc_ui_widget_layout_spec::margin)
         .def_rw("aspect_ratio", &tc_ui_widget_layout_spec::aspect_ratio)
-        .def_rw("touch_target_policy",
-                &tc_ui_widget_layout_spec::touch_target_policy)
-        .def_rw("minimum_touch_target",
-                &tc_ui_widget_layout_spec::minimum_touch_target)
-        .def_prop_ro("normalized", [](const tc_ui_widget_layout_spec& self) {
-            tc_ui_widget_layout_spec normalized;
-            if (!tc_ui_widget_layout_spec_normalize(&self, &normalized)) {
-                throw std::invalid_argument("invalid native UI widget layout spec");
-            }
-            return normalized;
-        })
+        .def_rw("touch_target_policy", &tc_ui_widget_layout_spec::touch_target_policy)
+        .def_rw("minimum_touch_target", &tc_ui_widget_layout_spec::minimum_touch_target)
+        .def_prop_ro("normalized",
+                     [](const tc_ui_widget_layout_spec& self) {
+                         tc_ui_widget_layout_spec normalized;
+                         if (!tc_ui_widget_layout_spec_normalize(&self, &normalized)) {
+                             throw std::invalid_argument("invalid native UI widget layout spec");
+                         }
+                         return normalized;
+                     })
         .def(
             "resolve_size",
             [](const tc_ui_widget_layout_spec& self,
@@ -101,10 +97,8 @@ void bind_gui_native_core(nb::module_& m) {
                bool height_definite) {
                 tc_ui_size resolved;
                 if (!tc_ui_widget_layout_spec_resolve_size(
-                        &self, intrinsic, parent_extent,
-                        width_definite, height_definite, &resolved)) {
-                    throw std::invalid_argument(
-                        "invalid native UI widget layout size resolution");
+                        &self, intrinsic, parent_extent, width_definite, height_definite, &resolved)) {
+                    throw std::invalid_argument("invalid native UI widget layout size resolution");
                 }
                 return resolved;
             },
@@ -132,43 +126,36 @@ void bind_gui_native_core(nb::module_& m) {
             nb::arg("font_scale"),
             nb::arg("physical_extent"),
             nb::arg("physical_safe_insets") = tc_ui_insets{})
-        .def_static(
-            "identity",
-            &tc_ui_presentation_metrics_identity,
-            nb::arg("physical_extent"))
+        .def_static("identity", &tc_ui_presentation_metrics_identity, nb::arg("physical_extent"))
         .def_rw("density_scale", &tc_ui_presentation_metrics::density_scale)
         .def_rw("font_scale", &tc_ui_presentation_metrics::font_scale)
         .def_rw("physical_extent", &tc_ui_presentation_metrics::physical_extent)
-        .def_rw(
-            "physical_safe_insets",
-            &tc_ui_presentation_metrics::physical_safe_insets)
-        .def_prop_ro("valid", [](const tc_ui_presentation_metrics& self) {
-            return tc_ui_presentation_metrics_is_valid(&self);
-        })
-        .def_prop_ro("logical_viewport", [](const tc_ui_presentation_metrics& self) {
-            tc_ui_rect rect{};
-            if (!tc_ui_presentation_metrics_logical_viewport(&self, &rect)) {
-                throw std::invalid_argument("invalid native UI presentation metrics");
-            }
-            return rect;
-        })
-        .def_prop_ro("logical_safe_rect", [](const tc_ui_presentation_metrics& self) {
-            tc_ui_rect rect{};
-            if (!tc_ui_presentation_metrics_logical_safe_rect(&self, &rect)) {
-                throw std::invalid_argument("invalid native UI presentation metrics");
-            }
-            return rect;
-        })
-        .def_prop_ro("effective_font_scale",
-                     &tc_ui_presentation_metrics_effective_font_scale)
+        .def_rw("physical_safe_insets", &tc_ui_presentation_metrics::physical_safe_insets)
+        .def_prop_ro("valid",
+                     [](const tc_ui_presentation_metrics& self) { return tc_ui_presentation_metrics_is_valid(&self); })
+        .def_prop_ro("logical_viewport",
+                     [](const tc_ui_presentation_metrics& self) {
+                         tc_ui_rect rect{};
+                         if (!tc_ui_presentation_metrics_logical_viewport(&self, &rect)) {
+                             throw std::invalid_argument("invalid native UI presentation metrics");
+                         }
+                         return rect;
+                     })
+        .def_prop_ro("logical_safe_rect",
+                     [](const tc_ui_presentation_metrics& self) {
+                         tc_ui_rect rect{};
+                         if (!tc_ui_presentation_metrics_logical_safe_rect(&self, &rect)) {
+                             throw std::invalid_argument("invalid native UI presentation metrics");
+                         }
+                         return rect;
+                     })
+        .def_prop_ro("effective_font_scale", &tc_ui_presentation_metrics_effective_font_scale)
         .def(
             "physical_to_logical_point",
             [](const tc_ui_presentation_metrics& self, tc_ui_point physical) {
                 tc_ui_point logical{};
-                if (!tc_ui_presentation_metrics_physical_to_logical_point(
-                        &self, physical, &logical)) {
-                    throw std::invalid_argument(
-                        "invalid native UI presentation transform");
+                if (!tc_ui_presentation_metrics_physical_to_logical_point(&self, physical, &logical)) {
+                    throw std::invalid_argument("invalid native UI presentation transform");
                 }
                 return logical;
             },
@@ -179,16 +166,22 @@ void bind_gui_native_core(nb::module_& m) {
         .value("SafeArea", TC_UI_ROOT_LAYOUT_SAFE_AREA);
 
     nb::class_<tc_ui_color>(m, "Color")
-        .def(nb::init<float, float, float, float>(), nb::arg("r") = 0.0f, nb::arg("g") = 0.0f,
-             nb::arg("b") = 0.0f, nb::arg("a") = 1.0f)
+        .def(nb::init<float, float, float, float>(),
+             nb::arg("r") = 0.0f,
+             nb::arg("g") = 0.0f,
+             nb::arg("b") = 0.0f,
+             nb::arg("a") = 1.0f)
         .def_rw("r", &tc_ui_color::r)
         .def_rw("g", &tc_ui_color::g)
         .def_rw("b", &tc_ui_color::b)
         .def_rw("a", &tc_ui_color::a);
 
     nb::class_<termin::gui_native::EdgeInsets>(m, "EdgeInsets")
-        .def(nb::init<float, float, float, float>(), nb::arg("left") = 0.0f, nb::arg("top") = 0.0f,
-             nb::arg("right") = 0.0f, nb::arg("bottom") = 0.0f)
+        .def(nb::init<float, float, float, float>(),
+             nb::arg("left") = 0.0f,
+             nb::arg("top") = 0.0f,
+             nb::arg("right") = 0.0f,
+             nb::arg("bottom") = 0.0f)
         .def_rw("left", &termin::gui_native::EdgeInsets::left)
         .def_rw("top", &termin::gui_native::EdgeInsets::top)
         .def_rw("right", &termin::gui_native::EdgeInsets::right)
@@ -300,13 +293,10 @@ void bind_gui_native_core(nb::module_& m) {
     nb::class_<tc_ui_style_override>(m, "StyleOverride")
         .def(nb::init<>())
         .def_rw("value", &tc_ui_style_override::value)
-        .def_prop_rw("fields",
-            [](const tc_ui_style_override& self) {
-                return static_cast<StyleField>(self.fields);
-            },
-            [](tc_ui_style_override& self, uint64_t fields) {
-                self.fields = fields;
-            })
+        .def_prop_rw(
+            "fields",
+            [](const tc_ui_style_override& self) { return static_cast<StyleField>(self.fields); },
+            [](tc_ui_style_override& self, uint64_t fields) { self.fields = fields; })
         .def_rw("flags", &tc_ui_style_override::flags);
 
     nb::class_<tc_ui_role_style>(m, "RoleStyle")
@@ -321,19 +311,21 @@ void bind_gui_native_core(nb::module_& m) {
     nb::class_<Theme>(m, "Theme")
         .def(nb::init<>())
         .def("role", &Theme::role, nb::arg("role"), nb::rv_policy::reference_internal)
-        .def("set_role", [](Theme& self, tc_ui_style_role role, const tc_ui_role_style& value) {
-            self.role(role) = value;
-        }, nb::arg("role"), nb::arg("value"));
+        .def(
+            "set_role",
+            [](Theme& self, tc_ui_style_role role, const tc_ui_role_style& value) { self.role(role) = value; },
+            nb::arg("role"),
+            nb::arg("value"));
 
     nb::class_<tc_ui_constraints>(m, "Constraints")
-        .def("__init__", [](tc_ui_constraints* self,
-                             std::optional<tc_ui_size> min_size,
-                             std::optional<tc_ui_size> max_size) {
-            new (self) tc_ui_constraints{
-                min_size.value_or(tc_ui_size{0.0f, 0.0f}),
-                max_size.value_or(tc_ui_size{0.0f, 0.0f})};
-        }, nb::arg("min_size").none() = nb::none(),
-           nb::arg("max_size").none() = nb::none())
+        .def(
+            "__init__",
+            [](tc_ui_constraints* self, std::optional<tc_ui_size> min_size, std::optional<tc_ui_size> max_size) {
+                new (self) tc_ui_constraints{min_size.value_or(tc_ui_size{0.0f, 0.0f}),
+                                             max_size.value_or(tc_ui_size{0.0f, 0.0f})};
+            },
+            nb::arg("min_size").none() = nb::none(),
+            nb::arg("max_size").none() = nb::none())
         .def_rw("min_size", &tc_ui_constraints::min_size)
         .def_rw("max_size", &tc_ui_constraints::max_size);
 
@@ -407,17 +399,12 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("placement", &tc_ui_overlay_layout::placement)
         .def_prop_rw(
             "anchor",
-            [](const tc_ui_overlay_layout& layout) {
-                return WidgetHandle{layout.anchor};
-            },
-            [](tc_ui_overlay_layout& layout, WidgetHandle anchor) {
-                layout.anchor = anchor.handle;
-            })
+            [](const tc_ui_overlay_layout& layout) { return WidgetHandle{layout.anchor}; },
+            [](tc_ui_overlay_layout& layout, WidgetHandle anchor) { layout.anchor = anchor.handle; })
         .def_rw("point", &tc_ui_overlay_layout::point)
         .def_rw("offset", &tc_ui_overlay_layout::offset)
         .def_rw("margin", &tc_ui_overlay_layout::margin)
-        .def_rw("match_anchor_width",
-                &tc_ui_overlay_layout::match_anchor_width);
+        .def_rw("match_anchor_width", &tc_ui_overlay_layout::match_anchor_width);
 
     nb::class_<tc_ui_pointer_event>(m, "PointerEvent")
         .def(nb::init<>())
@@ -431,9 +418,7 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("wheel_y", &tc_ui_pointer_event::wheel_y)
         .def_rw("cancel_reason", &tc_ui_pointer_event::cancel_reason);
 
-    nb::enum_<tc_ui_key_event_type>(m, "KeyEventType")
-        .value("Down", TC_UI_KEY_DOWN)
-        .value("Up", TC_UI_KEY_UP);
+    nb::enum_<tc_ui_key_event_type>(m, "KeyEventType").value("Down", TC_UI_KEY_DOWN).value("Up", TC_UI_KEY_UP);
 
     nb::enum_<tc_ui_key_code>(m, "KeyCode")
         .value("Unknown", TC_UI_KEY_UNKNOWN)
@@ -504,25 +489,29 @@ void bind_gui_native_core(nb::module_& m) {
     nb::class_<tc_ui_key_event>(m, "KeyEvent")
         .def(nb::init<>())
         .def_rw("type", &tc_ui_key_event::type)
-        .def_prop_rw("key",
-            [](const tc_ui_key_event& event) {
-                return static_cast<tc_ui_key_code>(event.key);
-            },
-            [](tc_ui_key_event& event, tc_ui_key_code key) {
-                event.key = static_cast<int32_t>(key);
-            })
+        .def_prop_rw(
+            "key",
+            [](const tc_ui_key_event& event) { return static_cast<tc_ui_key_code>(event.key); },
+            [](tc_ui_key_event& event, tc_ui_key_code key) { event.key = static_cast<int32_t>(key); })
         .def_rw("scancode", &tc_ui_key_event::scancode)
         .def_rw("modifiers", &tc_ui_key_event::modifiers)
         .def_rw("repeat", &tc_ui_key_event::repeat);
 
-    m.def("tooltip_rect", [](tc_ui_rect viewport, tc_ui_point anchor,
-                              tc_ui_size preferred_size,
-                              std::optional<tc_ui_point> offset, float margin) {
-        return tc_ui_tooltip_rect(
-            viewport, anchor, preferred_size,
-            offset.value_or(tc_ui_point{12.0f, 18.0f}), margin);
-    }, nb::arg("viewport"), nb::arg("anchor"), nb::arg("preferred_size"),
-       nb::arg("offset").none() = nb::none(), nb::arg("margin") = 4.0f);
+    m.def(
+        "tooltip_rect",
+        [](tc_ui_rect viewport,
+           tc_ui_point anchor,
+           tc_ui_size preferred_size,
+           std::optional<tc_ui_point> offset,
+           float margin) {
+            return tc_ui_tooltip_rect(
+                viewport, anchor, preferred_size, offset.value_or(tc_ui_point{12.0f, 18.0f}), margin);
+        },
+        nb::arg("viewport"),
+        nb::arg("anchor"),
+        nb::arg("preferred_size"),
+        nb::arg("offset").none() = nb::none(),
+        nb::arg("margin") = 4.0f);
 
     nb::enum_<tc_widget_flag>(m, "WidgetFlag", nb::is_arithmetic())
         .value("Focusable", TC_WIDGET_FOCUSABLE)
@@ -549,16 +538,19 @@ void bind_gui_native_core(nb::module_& m) {
 
     m.def(
         "register_widget_type",
-        [](const std::string& type_name, nb::object factory, const std::string& owner,
-           const std::string& parent_type, const std::string& debug_name,
-           nb::object serialize_state, nb::object deserialize_state) {
+        [](const std::string& type_name,
+           nb::object factory,
+           const std::string& owner,
+           const std::string& parent_type,
+           const std::string& debug_name,
+           nb::object serialize_state,
+           nb::object deserialize_state) {
             if (!PyCallable_Check(factory.ptr()))
                 throw std::invalid_argument("widget factory must be callable");
             const bool has_serializer = !serialize_state.is_none();
             const bool has_deserializer = !deserialize_state.is_none();
             if (has_serializer != has_deserializer)
-                throw std::invalid_argument(
-                    "serialize_state and deserialize_state must be provided together");
+                throw std::invalid_argument("serialize_state and deserialize_state must be provided together");
             if ((has_serializer && !PyCallable_Check(serialize_state.ptr())) ||
                 (has_deserializer && !PyCallable_Check(deserialize_state.ptr())))
                 throw std::invalid_argument("widget state hooks must be callable");
@@ -578,22 +570,23 @@ void bind_gui_native_core(nb::module_& m) {
                 &serialize_python_registered_widget,
                 &deserialize_python_registered_widget,
             };
-            if (!tc_widget_registry_register(
-                    type_name.c_str(),
-                    owner.empty() ? nullptr : owner.c_str(),
-                    parent_type.empty() ? nullptr : parent_type.c_str(),
-                    &descriptor)) {
+            if (!tc_widget_registry_register(type_name.c_str(),
+                                             owner.empty() ? nullptr : owner.c_str(),
+                                             parent_type.empty() ? nullptr : parent_type.c_str(),
+                                             &descriptor)) {
                 throw std::runtime_error("failed to register widget type '" + type_name + "'");
             }
         },
-        nb::arg("type_name"), nb::arg("factory"), nb::arg("owner") = "python",
-        nb::arg("parent_type") = "termin.gui.Widget", nb::arg("debug_name") = "",
-        nb::arg("serialize_state") = nb::none(), nb::arg("deserialize_state") = nb::none());
+        nb::arg("type_name"),
+        nb::arg("factory"),
+        nb::arg("owner") = "python",
+        nb::arg("parent_type") = "termin.gui.Widget",
+        nb::arg("debug_name") = "",
+        nb::arg("serialize_state") = nb::none(),
+        nb::arg("deserialize_state") = nb::none());
     m.def(
         "unregister_widget_type",
-        [](const std::string& type_name) {
-            return tc_widget_registry_unregister(type_name.c_str());
-        },
+        [](const std::string& type_name) { return tc_widget_registry_unregister(type_name.c_str()); },
         nb::arg("type_name"));
     m.def(
         "unregister_widget_owner",
@@ -602,35 +595,29 @@ void bind_gui_native_core(nb::module_& m) {
         },
         nb::arg("owner"),
         nb::arg("policy") = TC_WIDGET_OWNER_RELOAD_INVALIDATE);
-    m.def("has_widget_type",
-          [](const std::string& type_name) {
-              return tc_widget_registry_has(type_name.c_str());
-          },
-          nb::arg("type_name"));
+    m.def(
+        "has_widget_type",
+        [](const std::string& type_name) { return tc_widget_registry_has(type_name.c_str()); },
+        nb::arg("type_name"));
     m.def(
         "widget_type_info",
         [](const std::string& type_name) {
             if (!termin::gui_native::register_builtin_widget_types()) {
-                throw std::runtime_error(
-                    "failed to register built-in native UI widget types");
+                throw std::runtime_error("failed to register built-in native UI widget types");
             }
             nb::dict result;
-            const bool registered =
-                tc_widget_registry_has(type_name.c_str());
+            const bool registered = tc_widget_registry_has(type_name.c_str());
             result["registered"] = registered;
             if (!registered) {
                 result["language"] = nb::none();
                 result["uiscript"] = false;
                 return result;
             }
-            const tc_language language =
-                tc_widget_registry_language(type_name.c_str());
-            result["language"] =
-                language == TC_LANGUAGE_CXX ? nb::str("cxx") :
-                language == TC_LANGUAGE_PYTHON ? nb::str("python") :
-                nb::str("other");
-            result["uiscript"] =
-                tc_widget_registry_has_uiscript(type_name.c_str());
+            const tc_language language = tc_widget_registry_language(type_name.c_str());
+            result["language"] = language == TC_LANGUAGE_CXX      ? nb::str("cxx")
+                                 : language == TC_LANGUAGE_PYTHON ? nb::str("python")
+                                                                  : nb::str("other");
+            result["uiscript"] = tc_widget_registry_has_uiscript(type_name.c_str());
             return result;
         },
         nb::arg("type_name"));
@@ -645,5 +632,4 @@ void bind_gui_native_core(nb::module_& m) {
         }
         return result;
     });
-
 }

@@ -1,388 +1,402 @@
 #pragma once
 
-#include <glad/glad.h>
 #include <array>
+#include <glad/glad.h>
 #include <map>
 #include <unordered_map>
 #include <vector>
 
-#include "tgfx2/tgfx2_api.h"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/tgfx2_api.h"
 
 namespace tgfx {
 
-// Internal GL resource types
+    // Internal GL resource types
 
-struct GLBuffer {
-    GLuint gl_id = 0;
-    BufferDesc desc;
-    GLenum target = GL_ARRAY_BUFFER;
-    // When true the GL buffer object is owned externally and must NOT be
-    // glDeleteBuffers'd when this handle is destroyed. Set by
-    // register_external_buffer() so tgfx2 passes can draw against
-    // externally owned VBOs/EBOs without taking ownership of them.
-    bool external = false;
-};
-
-struct GLTexture {
-    GLuint gl_id = 0;
-    TextureDesc desc;
-    GLenum target = GL_TEXTURE_2D;
-    // When true the GL texture object is owned externally (for example by
-    // the Termin C texture share-group cache) and must NOT be glDeleteTextures'd when this handle is
-    // destroyed. Used by register_external_texture() to wrap existing GL
-    // textures as tgfx2 handles for interop during the Phase 2 migration.
-    bool external = false;
-};
-
-struct GLSampler {
-    GLuint gl_id = 0;
-};
-
-struct GLShaderModule {
-    GLuint gl_shader = 0;
-    ShaderStage stage;
-};
-
-struct GLPipeline {
-    GLuint program = 0;
-    PipelineDesc desc;
-};
-
-struct GLProgramKey {
-    uint32_t vertex_shader = 0;
-    uint32_t fragment_shader = 0;
-    uint32_t geometry_shader = 0;
-
-    bool operator==(const GLProgramKey& o) const {
-        return vertex_shader == o.vertex_shader &&
-               fragment_shader == o.fragment_shader &&
-               geometry_shader == o.geometry_shader;
-    }
-};
-
-struct GLSharedProgram {
-    GLuint program = 0;
-    uint32_t ref_count = 0;
-};
-
-struct GLProgramKeyHash {
-    size_t operator()(const GLProgramKey& k) const noexcept {
-        size_t h = std::hash<uint32_t>{}(k.vertex_shader);
-        h ^= std::hash<uint32_t>{}(k.fragment_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<uint32_t>{}(k.geometry_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        return h;
-    }
-};
-
-struct GLResourceSet {
-    BoundResourceSetStorage bound_resources;
-};
-
-// Handle pool: maps uint32_t id -> T
-template<typename T>
-class HandlePool {
-private:
-    std::unordered_map<uint32_t, T> pool_;
-    uint32_t next_id_ = 1;
-
-public:
-    uint32_t add(T&& resource) {
-        uint32_t id = next_id_++;
-        pool_.emplace(id, std::move(resource));
-        return id;
-    }
-
-    T* get(uint32_t id) {
-        auto it = pool_.find(id);
-        return (it != pool_.end()) ? &it->second : nullptr;
-    }
-
-    const T* get_const(uint32_t id) const {
-        auto it = pool_.find(id);
-        return (it != pool_.end()) ? &it->second : nullptr;
-    }
-
-    bool remove(uint32_t id) {
-        return pool_.erase(id) > 0;
-    }
-
-    auto begin() { return pool_.begin(); }
-    auto end() { return pool_.end(); }
-};
-
-class TGFX2_TYPE_API OpenGLRenderDevice : public IRenderDevice {
-private:
-    // FBO cache key: sorted vector of (GL attachment enum, GL texture id).
-    using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
-
-    HandlePool<GLBuffer> buffers_;
-    HandlePool<GLTexture> textures_;
-    HandlePool<GLSampler> samplers_;
-    HandlePool<GLShaderModule> shaders_;
-    HandlePool<GLPipeline> pipelines_;
-    HandlePool<GLResourceSet> resource_sets_;
-
-    BackendCapabilities caps_;
-
-    std::map<FBOKey, GLuint> fbo_cache_;
-
-    // Push constants ring buffer state (see push_constants_write).
-    GLuint     push_ring_buf_       = 0;
-    GLsizeiptr push_ring_size_      = 1 << 20;   // 1 MB
-    GLintptr   push_ring_offset_    = 0;
-    GLint      push_ring_alignment_ = 256;       // queried from GL at first use
-    bool       push_ring_initialized_ = false;
-
-    std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
-    std::unordered_map<GLuint, GLProgramKey> program_to_key_;
-
-    struct CachedTcTextureEntry {
-        TextureHandle handle;
-        uint32_t version = 0;
+    struct GLBuffer {
+        GLuint gl_id = 0;
+        BufferDesc desc;
+        GLenum target = GL_ARRAY_BUFFER;
+        // When true the GL buffer object is owned externally and must NOT be
+        // glDeleteBuffers'd when this handle is destroyed. Set by
+        // register_external_buffer() so tgfx2 passes can draw against
+        // externally owned VBOs/EBOs without taking ownership of them.
+        bool external = false;
     };
-    std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
 
-    struct CachedTcMeshEntry {
-        BufferHandle vbo;
-        BufferHandle ebo;
-        uint32_t version = 0;
+    struct GLTexture {
+        GLuint gl_id = 0;
+        TextureDesc desc;
+        GLenum target = GL_TEXTURE_2D;
+        // When true the GL texture object is owned externally (for example by
+        // the Termin C texture share-group cache) and must NOT be glDeleteTextures'd when this handle is
+        // destroyed. Used by register_external_texture() to wrap existing GL
+        // textures as tgfx2 handles for interop during the Phase 2 migration.
+        bool external = false;
     };
-    std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
 
-    struct CachedTcShaderEntry {
-        ShaderHandle vs;
-        ShaderHandle fs;
-        uint32_t version = 0;
-        uint64_t resolver_revision = 0;
-        bool has_vs = false;
+    struct GLSampler {
+        GLuint gl_id = 0;
     };
-    std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
 
-    // Transient vertex ring state (see transient_vertex_write).
-    BufferHandle transient_vb_handle_;
-    GLuint       transient_vb_gl_         = 0;
-    GLsizeiptr   transient_vb_size_       = 2 << 20;   // 2 MB
-    GLintptr     transient_vb_offset_     = 0;
-    bool         transient_vb_initialized_ = false;
-
-    // Dynamic uniform ring state used by RenderContext2::bind_uniform_data().
-    BufferHandle ring_ubo_handle_;
-    GLuint       ring_ubo_gl_          = 0;
-    GLsizeiptr   ring_ubo_size_        = 4 << 20;   // 4 MB
-    GLintptr     ring_ubo_offset_      = 0;
-    GLint        ring_ubo_alignment_   = 256;
-    bool         ring_ubo_initialized_ = false;
-
-public:
-    OpenGLRenderDevice();
-    ~OpenGLRenderDevice() override;
-
-    BackendType backend_type() const override { return BackendType::OpenGL; }
-    BackendCapabilities capabilities() const override;
-    void wait_idle() override;
-
-    BufferHandle create_buffer(const BufferDesc& desc) override;
-    TextureHandle create_texture(const TextureDesc& desc) override;
-    SamplerHandle create_sampler(const SamplerDesc& desc) override;
-    ShaderHandle create_shader(const ShaderDesc& desc) override;
-    PipelineHandle create_pipeline(const PipelineDesc& desc) override;
-    ResourceSetHandle create_bound_resource_set(
-        const BoundResourceSetDesc& desc) override;
-    uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
-    uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
-
-    void destroy(BufferHandle handle) override;
-    void destroy(TextureHandle handle) override;
-    void destroy(SamplerHandle handle) override;
-    void destroy(ShaderHandle handle) override;
-    void destroy(PipelineHandle handle) override;
-    void destroy(ResourceSetHandle handle) override;
-
-    void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
-    void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
-    void upload_texture_region(TextureHandle dst,
-                               uint32_t x, uint32_t y,
-                               uint32_t w, uint32_t h,
-                               std::span<const uint8_t> data,
-                               uint32_t mip = 0) override;
-    void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
-
-    TextureDesc texture_desc(TextureHandle handle) const override;
-
-    std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
-    void submit(ICommandList& cmd) override;
-    void present() override;
-
-    // Establish and validate Termin's OpenGL clip-space contract. Called
-    // during device construction and at each render-pass boundary because
-    // embedding hosts may modify global GL state between passes.
-    void enforce_clip_space_contract();
-
-    // Internal access for command list
-    GLBuffer* get_buffer(BufferHandle h) { return buffers_.get(h.id); }
-    GLTexture* get_texture(TextureHandle h) { return textures_.get(h.id); }
-    GLSampler* get_sampler(SamplerHandle h) { return samplers_.get(h.id); }
-    GLShaderModule* get_shader(ShaderHandle h) { return shaders_.get(h.id); }
-    GLPipeline* get_pipeline(PipelineHandle h) { return pipelines_.get(h.id); }
-    GLResourceSet* get_resource_set(ResourceSetHandle h) { return resource_sets_.get(h.id); }
-
-    // Get or create an FBO for the given attachment combination.
-    // Key: sorted list of (attachment_point, texture_gl_id).
-    // Returns GL FBO id. FBO 0 = default framebuffer (when no textures specified).
-    GLuint get_or_create_fbo(const RenderPassDesc& pass);
-
-    // Drop every cached GL FBO.
-    //
-    // TEMPORARY — exists for the duration of the tgfx2 migration only.
-    // It papers over an ownership inconsistency: during Phase 2, render
-    // targets are owned by the legacy FBOPool, and tgfx2 passes borrow
-    // them for the duration of a single frame via register_external_texture
-    // (see termin-render/src/tgfx2_bridge.cpp::wrap_fbo_color_as_tgfx2).
-    // At end-of-frame those borrows are released; the fbo_cache_ entries
-    // built around them are no longer safe because legacy code is free
-    // to mutate the underlying GL attachment state between frames without
-    // going through tgfx2. Rebuilding FBOs each frame costs 1–3 FBO
-    // allocations per frame — negligible.
-    //
-    // Remove this once Phase 3 of migration-tgfx2.md (FBOPool moves to
-    // tgfx2-backed allocation) ships: render targets will then be tgfx2
-    // resources from birth, there is no bridge, cache entries live as
-    // long as their texture handles live, and FBOs can be cached safely
-    // across frames.
-    //
-    // Called from RenderContext2::end_frame() and exposed on the base
-    // IRenderDevice as invalidate_render_target_cache() so callers can
-    // drop the OpenGL-specific dynamic_cast.
-    void invalidate_fbo_cache();
-
-    void invalidate_render_target_cache() override { invalidate_fbo_cache(); }
-
-    // IRenderDevice readback / external-target / interop overrides.
-    // Documentation lives on the base class — these are the OpenGL
-    // implementations of the backend-neutral virtual interface.
-    bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
-    bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
-    uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
-    bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
-    uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
-    bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
-    bool read_texture_rgba_float(TextureHandle tex, float* out) override;
-    bool read_texture_depth_float(TextureHandle tex, float* out) override;
-
-    void blit_to_texture(
-        TextureHandle dst,
-        TextureHandle src,
-        termin::Bounds2i src_rect,
-        termin::Bounds2i dst_rect) override;
-
-    void clear_texture(
-        TextureHandle dst,
-        termin::Color4 color,
-        termin::Bounds2i viewport) override;
-
-    // Backend-local window presentation. Kept off IRenderDevice so raw
-    // OpenGL framebuffer semantics do not leak into the tgfx2 public API.
-    void present_to_default_framebuffer(TextureHandle src_color,
-                                        int dst_w,
-                                        int dst_h);
-
-    void reset_state() override;
-    void flush() override;
-    void finish() override;
-
-    TextureHandle register_external_texture(
-        uintptr_t native_handle, const TextureDesc& desc) override;
-    BufferHandle register_external_buffer(
-        uintptr_t native_handle, const BufferDesc& desc) override;
-    TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc) {
-        return register_external_texture(static_cast<uintptr_t>(gl_id), desc);
-    }
-    BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc) {
-        return register_external_buffer(static_cast<uintptr_t>(gl_id), desc);
-    }
-
-    // --- Push constants ring buffer ---
-    //
-    // OpenGL has no push constants; we emulate them via a single large
-    // GL_UNIFORM_BUFFER used as a ring. Each set_push_constants() writes
-    // a new aligned chunk and the next draw_indexed() binds it with
-    // glBindBufferRange at TGFX2_PUSH_CONSTANTS_BINDING.
-    //
-    // The ring is reset once per frame when OpenGLCommandList::begin()
-    // is called. On overflow within a single frame we orphan the
-    // storage (glBufferData NULL) and restart — simple and stall-free
-    // under normal draw counts. Max ~4096 pushes per frame at 256-byte
-    // alignment, 1 MB ring. Larger scenes will wrap and re-orphan.
-
-    // Allocate a push-constants slot and copy `size` bytes from `data`
-    // into it. Returns the byte offset inside the ring buffer. The
-    // caller must bind the range at offset [offset, size] to
-    // TGFX2_PUSH_CONSTANTS_BINDING before the next draw. Returns 0 and
-    // logs on failure (caller should skip the draw).
-    GLintptr push_constants_write(const void* data, uint32_t size);
-
-    // Current ring buffer object (0 if not yet allocated).
-    GLuint push_constants_ring_buffer() const { return push_ring_buf_; }
-
-    // Reset the ring offset to 0. Called once per frame from
-    // OpenGLCommandList::begin().
-    void push_constants_reset_frame();
-
-    // --- Transient vertex ring (IRenderDevice override) ---
-    // Persistent VBO the Python/C++ immediate-mode draw paths sub-
-    // upload small vertex streams into, so each rect / debug line
-    // doesn't pay glGenBuffers+glBufferData+glDeleteBuffers. Wraps
-    // with orphaning on overflow (same pattern as push_ring).
-    void transient_vertex_reset_frame();
-    BufferHandle transient_vertex_buffer() override;
-    uint64_t transient_vertex_write(const void* data, uint32_t size) override;
-
-    BufferHandle ring_ubo_handle() const override { return ring_ubo_handle_; }
-    bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
-    uint32_t ubo_alignment() const override {
-        return static_cast<uint32_t>(ring_ubo_alignment_ > 0 ? ring_ubo_alignment_ : 1);
-    }
-    void ring_ubo_reset_frame();
-
-    TextureHandle ensure_tc_texture(tc_texture* tex) override;
-    void invalidate_tc_texture_cache(uint32_t pool_index) override;
-    std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
-    void invalidate_tc_mesh_cache(uint32_t pool_index) override;
-    bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
-    void invalidate_tc_shader_cache(uint32_t pool_index) override;
-
-private:
-    enum class PixelReadbackKind : uint8_t {
-        Rgba8,
-        DepthF32,
+    struct GLShaderModule {
+        GLuint gl_shader = 0;
+        ShaderStage stage;
     };
-    struct PixelReadbackSlot {
-        GLuint pbo = 0;
-        GLsync fence = nullptr;
-        uint64_t request_id = 0;
-        uint64_t issue_sequence = 0;
-        PixelReadbackKind kind = PixelReadbackKind::Rgba8;
-        bool active = false;
+
+    struct GLPipeline {
+        GLuint program = 0;
+        PipelineDesc desc;
     };
-    static constexpr size_t kPixelReadbackSlotCount = 16;
-    uint64_t request_pixel_readback(
-        TextureHandle tex, int x, int y, PixelReadbackKind kind);
-    PixelReadbackSlot* acquire_pixel_readback_slot(PixelReadbackKind kind);
-    PixelReadbackSlot* find_pixel_readback_slot(uint64_t request_id);
-    bool pixel_readback_ready(PixelReadbackSlot& slot, bool log_failure);
-    void release_pixel_readback_slot(PixelReadbackSlot& slot);
-    void destroy_pixel_readback_resources();
-    GLuint acquire_program(const PipelineDesc& desc);
-    void release_program(GLuint program);
-    void query_capabilities();
-    void ensure_push_ring();
-    void ensure_transient_vb();
-    void ensure_ring_ubo();
-    std::array<PixelReadbackSlot, kPixelReadbackSlotCount> pixel_readback_slots_{};
-    GLuint pixel_readback_fbo_ = 0;
-    uint64_t next_pixel_readback_id_ = 1;
-    uint64_t pixel_readback_issue_sequence_ = 1;
-};
+
+    struct GLProgramKey {
+        uint32_t vertex_shader = 0;
+        uint32_t fragment_shader = 0;
+        uint32_t geometry_shader = 0;
+
+        bool operator==(const GLProgramKey& o) const {
+            return vertex_shader == o.vertex_shader && fragment_shader == o.fragment_shader &&
+                   geometry_shader == o.geometry_shader;
+        }
+    };
+
+    struct GLSharedProgram {
+        GLuint program = 0;
+        uint32_t ref_count = 0;
+    };
+
+    struct GLProgramKeyHash {
+        size_t operator()(const GLProgramKey& k) const noexcept {
+            size_t h = std::hash<uint32_t>{}(k.vertex_shader);
+            h ^= std::hash<uint32_t>{}(k.fragment_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<uint32_t>{}(k.geometry_shader) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    struct GLResourceSet {
+        BoundResourceSetStorage bound_resources;
+    };
+
+    // Handle pool: maps uint32_t id -> T
+    template <typename T> class HandlePool {
+    private:
+        std::unordered_map<uint32_t, T> pool_;
+        uint32_t next_id_ = 1;
+
+    public:
+        uint32_t add(T&& resource) {
+            uint32_t id = next_id_++;
+            pool_.emplace(id, std::move(resource));
+            return id;
+        }
+
+        T* get(uint32_t id) {
+            auto it = pool_.find(id);
+            return (it != pool_.end()) ? &it->second : nullptr;
+        }
+
+        const T* get_const(uint32_t id) const {
+            auto it = pool_.find(id);
+            return (it != pool_.end()) ? &it->second : nullptr;
+        }
+
+        bool remove(uint32_t id) {
+            return pool_.erase(id) > 0;
+        }
+
+        auto begin() {
+            return pool_.begin();
+        }
+        auto end() {
+            return pool_.end();
+        }
+    };
+
+    class TGFX2_TYPE_API OpenGLRenderDevice : public IRenderDevice {
+    private:
+        // FBO cache key: sorted vector of (GL attachment enum, GL texture id).
+        using FBOKey = std::vector<std::pair<GLenum, GLuint>>;
+
+        HandlePool<GLBuffer> buffers_;
+        HandlePool<GLTexture> textures_;
+        HandlePool<GLSampler> samplers_;
+        HandlePool<GLShaderModule> shaders_;
+        HandlePool<GLPipeline> pipelines_;
+        HandlePool<GLResourceSet> resource_sets_;
+
+        BackendCapabilities caps_;
+
+        std::map<FBOKey, GLuint> fbo_cache_;
+
+        // Push constants ring buffer state (see push_constants_write).
+        GLuint push_ring_buf_ = 0;
+        GLsizeiptr push_ring_size_ = 1 << 20; // 1 MB
+        GLintptr push_ring_offset_ = 0;
+        GLint push_ring_alignment_ = 256; // queried from GL at first use
+        bool push_ring_initialized_ = false;
+
+        std::unordered_map<GLProgramKey, GLSharedProgram, GLProgramKeyHash> program_cache_;
+        std::unordered_map<GLuint, GLProgramKey> program_to_key_;
+
+        struct CachedTcTextureEntry {
+            TextureHandle handle;
+            uint32_t version = 0;
+        };
+        std::unordered_map<uint32_t, CachedTcTextureEntry> tc_texture_cache_;
+
+        struct CachedTcMeshEntry {
+            BufferHandle vbo;
+            BufferHandle ebo;
+            uint32_t version = 0;
+        };
+        std::unordered_map<uint32_t, CachedTcMeshEntry> tc_mesh_cache_;
+
+        struct CachedTcShaderEntry {
+            ShaderHandle vs;
+            ShaderHandle fs;
+            uint32_t version = 0;
+            uint64_t resolver_revision = 0;
+            bool has_vs = false;
+        };
+        std::unordered_map<uint32_t, CachedTcShaderEntry> tc_shader_cache_;
+
+        // Transient vertex ring state (see transient_vertex_write).
+        BufferHandle transient_vb_handle_;
+        GLuint transient_vb_gl_ = 0;
+        GLsizeiptr transient_vb_size_ = 2 << 20; // 2 MB
+        GLintptr transient_vb_offset_ = 0;
+        bool transient_vb_initialized_ = false;
+
+        // Dynamic uniform ring state used by RenderContext2::bind_uniform_data().
+        BufferHandle ring_ubo_handle_;
+        GLuint ring_ubo_gl_ = 0;
+        GLsizeiptr ring_ubo_size_ = 4 << 20; // 4 MB
+        GLintptr ring_ubo_offset_ = 0;
+        GLint ring_ubo_alignment_ = 256;
+        bool ring_ubo_initialized_ = false;
+
+    public:
+        OpenGLRenderDevice();
+        ~OpenGLRenderDevice() override;
+
+        BackendType backend_type() const override {
+            return BackendType::OpenGL;
+        }
+        BackendCapabilities capabilities() const override;
+        void wait_idle() override;
+
+        BufferHandle create_buffer(const BufferDesc& desc) override;
+        TextureHandle create_texture(const TextureDesc& desc) override;
+        SamplerHandle create_sampler(const SamplerDesc& desc) override;
+        ShaderHandle create_shader(const ShaderDesc& desc) override;
+        PipelineHandle create_pipeline(const PipelineDesc& desc) override;
+        ResourceSetHandle create_bound_resource_set(const BoundResourceSetDesc& desc) override;
+        uintptr_t pipeline_resource_layout_token(PipelineHandle pipeline) const override;
+        uintptr_t pipeline_descriptor_set_layout(PipelineHandle pipeline) const override;
+
+        void destroy(BufferHandle handle) override;
+        void destroy(TextureHandle handle) override;
+        void destroy(SamplerHandle handle) override;
+        void destroy(ShaderHandle handle) override;
+        void destroy(PipelineHandle handle) override;
+        void destroy(ResourceSetHandle handle) override;
+
+        void upload_buffer(BufferHandle dst, std::span<const uint8_t> data, uint64_t offset = 0) override;
+        void upload_texture(TextureHandle dst, std::span<const uint8_t> data, uint32_t mip = 0) override;
+        void upload_texture_region(TextureHandle dst,
+                                   uint32_t x,
+                                   uint32_t y,
+                                   uint32_t w,
+                                   uint32_t h,
+                                   std::span<const uint8_t> data,
+                                   uint32_t mip = 0) override;
+        void read_buffer(BufferHandle src, std::span<uint8_t> data, uint64_t offset = 0) override;
+
+        TextureDesc texture_desc(TextureHandle handle) const override;
+
+        std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
+        void submit(ICommandList& cmd) override;
+        void present() override;
+
+        // Establish and validate Termin's OpenGL clip-space contract. Called
+        // during device construction and at each render-pass boundary because
+        // embedding hosts may modify global GL state between passes.
+        void enforce_clip_space_contract();
+
+        // Internal access for command list
+        GLBuffer* get_buffer(BufferHandle h) {
+            return buffers_.get(h.id);
+        }
+        GLTexture* get_texture(TextureHandle h) {
+            return textures_.get(h.id);
+        }
+        GLSampler* get_sampler(SamplerHandle h) {
+            return samplers_.get(h.id);
+        }
+        GLShaderModule* get_shader(ShaderHandle h) {
+            return shaders_.get(h.id);
+        }
+        GLPipeline* get_pipeline(PipelineHandle h) {
+            return pipelines_.get(h.id);
+        }
+        GLResourceSet* get_resource_set(ResourceSetHandle h) {
+            return resource_sets_.get(h.id);
+        }
+
+        // Get or create an FBO for the given attachment combination.
+        // Key: sorted list of (attachment_point, texture_gl_id).
+        // Returns GL FBO id. FBO 0 = default framebuffer (when no textures specified).
+        GLuint get_or_create_fbo(const RenderPassDesc& pass);
+
+        // Drop every cached GL FBO.
+        //
+        // TEMPORARY — exists for the duration of the tgfx2 migration only.
+        // It papers over an ownership inconsistency: during Phase 2, render
+        // targets are owned by the legacy FBOPool, and tgfx2 passes borrow
+        // them for the duration of a single frame via register_external_texture
+        // (see termin-render/src/tgfx2_bridge.cpp::wrap_fbo_color_as_tgfx2).
+        // At end-of-frame those borrows are released; the fbo_cache_ entries
+        // built around them are no longer safe because legacy code is free
+        // to mutate the underlying GL attachment state between frames without
+        // going through tgfx2. Rebuilding FBOs each frame costs 1–3 FBO
+        // allocations per frame — negligible.
+        //
+        // Remove this once Phase 3 of migration-tgfx2.md (FBOPool moves to
+        // tgfx2-backed allocation) ships: render targets will then be tgfx2
+        // resources from birth, there is no bridge, cache entries live as
+        // long as their texture handles live, and FBOs can be cached safely
+        // across frames.
+        //
+        // Called from RenderContext2::end_frame() and exposed on the base
+        // IRenderDevice as invalidate_render_target_cache() so callers can
+        // drop the OpenGL-specific dynamic_cast.
+        void invalidate_fbo_cache();
+
+        void invalidate_render_target_cache() override {
+            invalidate_fbo_cache();
+        }
+
+        // IRenderDevice readback / external-target / interop overrides.
+        // Documentation lives on the base class — these are the OpenGL
+        // implementations of the backend-neutral virtual interface.
+        bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
+        bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;
+        uint64_t request_pixel_rgba8(TextureHandle tex, int x, int y) override;
+        bool poll_pixel_rgba8(uint64_t request_id, float out_rgba[4]) override;
+        uint64_t request_pixel_depth_float(TextureHandle tex, int x, int y) override;
+        bool poll_pixel_depth_float(uint64_t request_id, float* out_depth) override;
+        bool read_texture_rgba_float(TextureHandle tex, float* out) override;
+        bool read_texture_depth_float(TextureHandle tex, float* out) override;
+
+        void blit_to_texture(TextureHandle dst,
+                             TextureHandle src,
+                             termin::Bounds2i src_rect,
+                             termin::Bounds2i dst_rect) override;
+
+        void clear_texture(TextureHandle dst, termin::Color4 color, termin::Bounds2i viewport) override;
+
+        // Backend-local window presentation. Kept off IRenderDevice so raw
+        // OpenGL framebuffer semantics do not leak into the tgfx2 public API.
+        void present_to_default_framebuffer(TextureHandle src_color, int dst_w, int dst_h);
+
+        void reset_state() override;
+        void flush() override;
+        void finish() override;
+
+        TextureHandle register_external_texture(uintptr_t native_handle, const TextureDesc& desc) override;
+        BufferHandle register_external_buffer(uintptr_t native_handle, const BufferDesc& desc) override;
+        TextureHandle register_external_texture(GLuint gl_id, const TextureDesc& desc) {
+            return register_external_texture(static_cast<uintptr_t>(gl_id), desc);
+        }
+        BufferHandle register_external_buffer(GLuint gl_id, const BufferDesc& desc) {
+            return register_external_buffer(static_cast<uintptr_t>(gl_id), desc);
+        }
+
+        // --- Push constants ring buffer ---
+        //
+        // OpenGL has no push constants; we emulate them via a single large
+        // GL_UNIFORM_BUFFER used as a ring. Each set_push_constants() writes
+        // a new aligned chunk and the next draw_indexed() binds it with
+        // glBindBufferRange at TGFX2_PUSH_CONSTANTS_BINDING.
+        //
+        // The ring is reset once per frame when OpenGLCommandList::begin()
+        // is called. On overflow within a single frame we orphan the
+        // storage (glBufferData NULL) and restart — simple and stall-free
+        // under normal draw counts. Max ~4096 pushes per frame at 256-byte
+        // alignment, 1 MB ring. Larger scenes will wrap and re-orphan.
+
+        // Allocate a push-constants slot and copy `size` bytes from `data`
+        // into it. Returns the byte offset inside the ring buffer. The
+        // caller must bind the range at offset [offset, size] to
+        // TGFX2_PUSH_CONSTANTS_BINDING before the next draw. Returns 0 and
+        // logs on failure (caller should skip the draw).
+        GLintptr push_constants_write(const void* data, uint32_t size);
+
+        // Current ring buffer object (0 if not yet allocated).
+        GLuint push_constants_ring_buffer() const {
+            return push_ring_buf_;
+        }
+
+        // Reset the ring offset to 0. Called once per frame from
+        // OpenGLCommandList::begin().
+        void push_constants_reset_frame();
+
+        // --- Transient vertex ring (IRenderDevice override) ---
+        // Persistent VBO the Python/C++ immediate-mode draw paths sub-
+        // upload small vertex streams into, so each rect / debug line
+        // doesn't pay glGenBuffers+glBufferData+glDeleteBuffers. Wraps
+        // with orphaning on overflow (same pattern as push_ring).
+        void transient_vertex_reset_frame();
+        BufferHandle transient_vertex_buffer() override;
+        uint64_t transient_vertex_write(const void* data, uint32_t size) override;
+
+        BufferHandle ring_ubo_handle() const override {
+            return ring_ubo_handle_;
+        }
+        bool ring_ubo_write(const void* data, uint32_t size, uint32_t& offset) override;
+        uint32_t ubo_alignment() const override {
+            return static_cast<uint32_t>(ring_ubo_alignment_ > 0 ? ring_ubo_alignment_ : 1);
+        }
+        void ring_ubo_reset_frame();
+
+        TextureHandle ensure_tc_texture(tc_texture* tex) override;
+        void invalidate_tc_texture_cache(uint32_t pool_index) override;
+        std::pair<BufferHandle, BufferHandle> ensure_tc_mesh(tc_mesh* mesh) override;
+        void invalidate_tc_mesh_cache(uint32_t pool_index) override;
+        bool ensure_tc_shader(tc_shader* shader, ShaderHandle* out_vs, ShaderHandle* out_fs) override;
+        void invalidate_tc_shader_cache(uint32_t pool_index) override;
+
+    private:
+        enum class PixelReadbackKind : uint8_t {
+            Rgba8,
+            DepthF32,
+        };
+        struct PixelReadbackSlot {
+            GLuint pbo = 0;
+            GLsync fence = nullptr;
+            uint64_t request_id = 0;
+            uint64_t issue_sequence = 0;
+            PixelReadbackKind kind = PixelReadbackKind::Rgba8;
+            bool active = false;
+        };
+        static constexpr size_t kPixelReadbackSlotCount = 16;
+        uint64_t request_pixel_readback(TextureHandle tex, int x, int y, PixelReadbackKind kind);
+        PixelReadbackSlot* acquire_pixel_readback_slot(PixelReadbackKind kind);
+        PixelReadbackSlot* find_pixel_readback_slot(uint64_t request_id);
+        bool pixel_readback_ready(PixelReadbackSlot& slot, bool log_failure);
+        void release_pixel_readback_slot(PixelReadbackSlot& slot);
+        void destroy_pixel_readback_resources();
+        GLuint acquire_program(const PipelineDesc& desc);
+        void release_program(GLuint program);
+        void query_capabilities();
+        void ensure_push_ring();
+        void ensure_transient_vb();
+        void ensure_ring_ubo();
+        std::array<PixelReadbackSlot, kPixelReadbackSlotCount> pixel_readback_slots_{};
+        GLuint pixel_readback_fbo_ = 0;
+        uint64_t next_pixel_readback_id_ = 1;
+        uint64_t pixel_readback_issue_sequence_ = 1;
+    };
 
 } // namespace tgfx

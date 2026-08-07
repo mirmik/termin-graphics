@@ -33,87 +33,89 @@ extern "C" {
 
 namespace tgfx {
 
-class RenderContext2;
-class IRenderDevice;
-class FontAtlas;
+    class RenderContext2;
+    class IRenderDevice;
+    class FontAtlas;
 
-struct Text2DVertex {
-    termin::Vec2f position{};
-    termin::Vec2f uv{};
-};
-
-class TGFX2_TYPE_API Text2DRenderer {
-public:
-    enum class Anchor : uint8_t { Left, Center, Right };
-
-    struct DrawOptions {
-        float x = 0.0f;
-        float y = 0.0f;
-        termin::Color4 color = termin::Color4::white();
-        float size = 14.0f;
-        Anchor anchor = Anchor::Left;
+    struct Text2DVertex {
+        termin::Vec2f position{};
+        termin::Vec2f uv{};
     };
 
-private:
-    // Shader lives on the tc_shader registry — shared across
-    // Text2DRenderer instances so Play/Stop doesn't re-run shaderc.
-    // vs_/fs_ are per-frame cached views into the slot's current ids.
-    IRenderDevice* compiled_on_ = nullptr;
-    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
-    ShaderHandle vs_{};
-    ShaderHandle fs_{};
-    // SDF shader pair uses extended push constants.
-    tc_shader_handle sdf_shader_handle_ = tc_shader_handle_invalid();
-    ShaderHandle vs_sdf_{};
-    ShaderHandle fs_sdf_{};
+    class TGFX2_TYPE_API Text2DRenderer {
+    public:
+        enum class Anchor : uint8_t {
+            Left,
+            Center,
+            Right
+        };
 
-    // Active frame state (valid between begin() and end()).
-    RenderContext2* ctx_ = nullptr;
-    FontAtlas* font_ = nullptr;
-    float proj_[16]{};
+        struct DrawOptions {
+            float x = 0.0f;
+            float y = 0.0f;
+            termin::Color4 color = termin::Color4::white();
+            float size = 14.0f;
+            Anchor anchor = Anchor::Left;
+        };
 
-public:
-    explicit Text2DRenderer(FontAtlas* font = nullptr);
-    ~Text2DRenderer();
+    private:
+        // Shader lives on the tc_shader registry — shared across
+        // Text2DRenderer instances so Play/Stop doesn't re-run shaderc.
+        // vs_/fs_ are per-frame cached views into the slot's current ids.
+        IRenderDevice* compiled_on_ = nullptr;
+        tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
+        ShaderHandle vs_{};
+        ShaderHandle fs_{};
+        // SDF shader pair uses extended push constants.
+        tc_shader_handle sdf_shader_handle_ = tc_shader_handle_invalid();
+        ShaderHandle vs_sdf_{};
+        ShaderHandle fs_sdf_{};
 
-    Text2DRenderer(const Text2DRenderer&) = delete;
-    Text2DRenderer& operator=(const Text2DRenderer&) = delete;
+        // Active frame state (valid between begin() and end()).
+        RenderContext2* ctx_ = nullptr;
+        FontAtlas* font_ = nullptr;
+        float proj_[16]{};
 
-    // Set up a frame. Compiles the shader on first call or when the
-    // underlying IRenderDevice changes (caller re-created its context).
-    // If `font` is non-null it replaces any earlier font; the caller
-    // retains ownership.
-    void begin(RenderContext2* ctx, int viewport_w, int viewport_h,
-               FontAtlas* font = nullptr);
+    public:
+        explicit Text2DRenderer(FontAtlas* font = nullptr);
+        ~Text2DRenderer();
 
-    // Draw a UTF-8 string anchored at pixel (x, y). Color components
-    // in [0, 1]. `size` is the display pixel height (glyphs are
-    // scaled from the atlas rasterise size). Anchor selects whether
-    // (x, y) is the left, centre or right of the text box (top-aligned
-    // on Y for Left/Right, center for Center).
-    void draw(std::string_view text_utf8, const DrawOptions& options);
+        Text2DRenderer(const Text2DRenderer&) = delete;
+        Text2DRenderer& operator=(const Text2DRenderer&) = delete;
 
-    // Draw caller-prepared glyph triangles. This is used by DrawList2D after
-    // affine transformation and CPU geometric clipping. The caller must have
-    // populated glyphs on `font` for `display_px`; the atlas remains borrowed.
-    void draw_mesh(std::span<const Text2DVertex> vertices,
-                   termin::Color4 color,
-                   float display_px,
-                   FontAtlas* font);
+        // Set up a frame. Compiles the shader on first call or when the
+        // underlying IRenderDevice changes (caller re-created its context).
+        // If `font` is non-null it replaces any earlier font; the caller
+        // retains ownership.
+        void begin(RenderContext2* ctx, int viewport_w, int viewport_h, FontAtlas* font = nullptr);
 
-    // End batch. Currently a no-op — shader/state stays bound on ctx
-    // until the caller rebinds or ends its pass.
-    void end();
+        // Draw a UTF-8 string anchored at pixel (x, y). Color components
+        // in [0, 1]. `size` is the display pixel height (glyphs are
+        // scaled from the atlas rasterise size). Anchor selects whether
+        // (x, y) is the left, centre or right of the text box (top-aligned
+        // on Y for Left/Right, center for Center).
+        void draw(std::string_view text_utf8, const DrawOptions& options);
 
-    // Drop the compiled shader. Call when the GL context is torn down
-    // so the destructor does not reach into a dead device.
-    void release_gpu();
+        // Draw caller-prepared glyph triangles. This is used by DrawList2D after
+        // affine transformation and CPU geometric clipping. The caller must have
+        // populated glyphs on `font` for `display_px`; the atlas remains borrowed.
+        void draw_mesh(std::span<const Text2DVertex> vertices, termin::Color4 color, float display_px, FontAtlas* font);
 
-    // Current font atlas (may be null).
-    FontAtlas* font() const { return font_; }
+        // End batch. Currently a no-op — shader/state stays bound on ctx
+        // until the caller rebinds or ends its pass.
+        void end();
 
-private:
-    void ensure_shader_(IRenderDevice& device);
-};
+        // Drop the compiled shader. Call when the GL context is torn down
+        // so the destructor does not reach into a dead device.
+        void release_gpu();
 
-}  // namespace tgfx
+        // Current font atlas (may be null).
+        FontAtlas* font() const {
+            return font_;
+        }
+
+    private:
+        void ensure_shader_(IRenderDevice& device);
+    };
+
+} // namespace tgfx

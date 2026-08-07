@@ -15,38 +15,41 @@ extern "C" {
 
 namespace {
 
-constexpr const char* kProbeType = "UnknownPassProbe";
+    constexpr const char* kProbeType = "UnknownPassProbe";
 
-class UnknownPassProbe final : public termin::CxxFramePass {
-public:
-    int exposure = 0;
+    class UnknownPassProbe final : public termin::CxxFramePass {
+    public:
+        int exposure = 0;
 
-    UnknownPassProbe() {
-        link_to_type_registry(kProbeType);
-    }
+        UnknownPassProbe() {
+            link_to_type_registry(kProbeType);
+        }
 
-    std::set<const char*> compute_reads() const override { return {"scene_color"}; }
-    std::set<const char*> compute_writes() const override { return {"post_color"}; }
-    std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
-        return {{"scene_color", "post_color"}};
-    }
-    std::vector<termin::ResourceSpec> get_resource_specs() const override {
-        return {termin::ResourceSpec("post_color", "color_texture")};
-    }
-    std::vector<std::string> get_internal_symbols() const override {
-        return {"histogram"};
-    }
-};
+        std::set<const char*> compute_reads() const override {
+            return {"scene_color"};
+        }
+        std::set<const char*> compute_writes() const override {
+            return {"post_color"};
+        }
+        std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
+            return {{"scene_color", "post_color"}};
+        }
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec("post_color", "color_texture")};
+        }
+        std::vector<std::string> get_internal_symbols() const override {
+            return {"histogram"};
+        }
+    };
 
-void register_probe() {
-    termin::register_builtin_render_pass_types();
-    auto descriptor = termin::FramePassTypeDescriptorBuilder::native<UnknownPassProbe>(
-        kProbeType, "termin-render-test");
-    (void)descriptor.inspect().add<UnknownPassProbe, int>(
-        &UnknownPassProbe::exposure,
-        tc::InspectFieldSpec{kProbeType, "exposure", "Exposure", "int"});
-    REQUIRE(descriptor.commit());
-}
+    void register_probe() {
+        termin::register_builtin_render_pass_types();
+        auto descriptor =
+            termin::FramePassTypeDescriptorBuilder::native<UnknownPassProbe>(kProbeType, "termin-render-test");
+        (void)descriptor.inspect().add<UnknownPassProbe, int>(
+            &UnknownPassProbe::exposure, tc::InspectFieldSpec{kProbeType, "exposure", "Exposure", "int"});
+        REQUIRE(descriptor.commit());
+    }
 
 } // namespace
 
@@ -68,8 +71,7 @@ TEST_CASE("UnknownPass preserves pipeline slot payload and graph contract") {
     tc_pass_set_viewport_name(raw, "main");
     REQUIRE(tc_pipeline_adopt_pass(pipeline, raw, raw->deleter));
 
-    const termin::UnknownPassStats degraded =
-        termin::degrade_passes_to_unknown({kProbeType});
+    const termin::UnknownPassStats degraded = termin::degrade_passes_to_unknown({kProbeType});
     REQUIRE_EQ(degraded.degraded, 1u);
     REQUIRE_EQ(degraded.failed, 0u);
     REQUIRE_EQ(tc_pipeline_pass_count(pipeline), 1u);
@@ -78,8 +80,7 @@ TEST_CASE("UnknownPass preserves pipeline slot payload and graph contract") {
     tc_pass* placeholder_raw = tc_pipeline_get_pass_at(pipeline, 0);
     REQUIRE(placeholder_raw != nullptr);
     CHECK_EQ(std::string(tc_pass_type_name(placeholder_raw)), "UnknownPass");
-    auto* placeholder = dynamic_cast<termin::UnknownPass*>(
-        termin::CxxFramePass::from_tc(placeholder_raw));
+    auto* placeholder = dynamic_cast<termin::UnknownPass*>(termin::CxxFramePass::from_tc(placeholder_raw));
     REQUIRE(placeholder != nullptr);
     CHECK_EQ(placeholder->original_type, kProbeType);
     REQUIRE_EQ(placeholder->original_reads.size(), 1u);
@@ -113,8 +114,7 @@ TEST_CASE("UnknownPass preserves pipeline slot payload and graph contract") {
     tc_pass* restored_raw = tc_pipeline_get_pass_at(pipeline, 0);
     REQUIRE(restored_raw != nullptr);
     CHECK_EQ(std::string(tc_pass_type_name(restored_raw)), kProbeType);
-    auto* restored = dynamic_cast<UnknownPassProbe*>(
-        termin::CxxFramePass::from_tc(restored_raw));
+    auto* restored = dynamic_cast<UnknownPassProbe*>(termin::CxxFramePass::from_tc(restored_raw));
     REQUIRE(restored != nullptr);
     CHECK_EQ(restored->exposure, 17);
     CHECK_EQ(std::string(restored_raw->pass_name), "post");
@@ -141,14 +141,12 @@ TEST_CASE("UnknownPass keeps placeholder on schema drift") {
     REQUIRE_EQ(termin::degrade_passes_to_unknown({kProbeType}).degraded, 1u);
 
     tc_pass* placeholder_raw = tc_pipeline_get_pass_at(pipeline, 0);
-    auto* placeholder = dynamic_cast<termin::UnknownPass*>(
-        termin::CxxFramePass::from_tc(placeholder_raw));
+    auto* placeholder = dynamic_cast<termin::UnknownPass*>(termin::CxxFramePass::from_tc(placeholder_raw));
     REQUIRE(placeholder != nullptr);
     tc_value_dict_set(&placeholder->original_data, "removed_field", tc_value_int(9));
     tc_value payload_copy = tc_value_copy(&placeholder->original_data);
 
-    const termin::UnknownPassStats upgraded =
-        termin::upgrade_unknown_passes({kProbeType});
+    const termin::UnknownPassStats upgraded = termin::upgrade_unknown_passes({kProbeType});
     CHECK_EQ(upgraded.upgraded, 0u);
     CHECK_EQ(upgraded.failed, 1u);
     CHECK_EQ(tc_pipeline_get_pass_at(pipeline, 0), placeholder_raw);
@@ -181,14 +179,14 @@ TEST_CASE("UnknownPass preparation failures leave every pipeline unchanged") {
         size_t serialize_call = 0;
         termin::UnknownPassPreparationHooks hooks;
         hooks.serialize = [&](void* object, const char* type_name) {
-            if (serialize_call++ == failure_index) return tc_value_nil();
+            if (serialize_call++ == failure_index)
+                return tc_value_nil();
             return tc_inspect_serialize(object, type_name);
         };
 
         termin::UnknownPassDegradationPlan plan;
         std::string error;
-        CHECK(!termin::prepare_passes_to_unknown(
-            {kProbeType}, plan, &error, hooks));
+        CHECK(!termin::prepare_passes_to_unknown({kProbeType}, plan, &error, hooks));
         CHECK_EQ(tc_pipeline_get_pass_at(first_pipeline, 0), first);
         CHECK_EQ(tc_pipeline_get_pass_at(first_pipeline, 1), middle);
         CHECK_EQ(tc_pipeline_get_pass_at(second_pipeline, 0), last);
@@ -268,12 +266,9 @@ TEST_CASE("Frame pass descriptor failure publishes neither pass nor inspect face
     tc_runtime_type_registry_unregister_type(rejected_type);
 
     auto descriptor = termin::FramePassTypeDescriptorBuilder::native<UnknownPassProbe>(
-        rejected_type,
-        "termin-render-test",
-        "MissingFramePassParent");
+        rejected_type, "termin-render-test", "MissingFramePassParent");
     (void)descriptor.inspect().add<UnknownPassProbe, int>(
-        &UnknownPassProbe::exposure,
-        tc::InspectFieldSpec{rejected_type, "exposure", "Exposure", "int"});
+        &UnknownPassProbe::exposure, tc::InspectFieldSpec{rejected_type, "exposure", "Exposure", "int"});
 
     CHECK(!descriptor.commit());
     CHECK(!tc_runtime_type_registry_has_type(rejected_type));

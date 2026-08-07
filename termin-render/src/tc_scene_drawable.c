@@ -24,22 +24,19 @@ static bool drawable_callback_adapter(tc_component* c, void* user_data) {
 }
 
 void tc_scene_foreach_drawable(
-    tc_scene_handle h,
-    tc_component_iter_fn callback,
-    void* user_data,
-    int filter_flags,
-    uint64_t layer_mask
-) {
+    tc_scene_handle h, tc_component_iter_fn callback, void* user_data, int filter_flags, uint64_t layer_mask) {
     drawable_callback_context ctx;
 
-    if (!callback) return;
+    if (!callback)
+        return;
 
     ctx.callback = callback;
     ctx.user_data = user_data;
     ctx.layer_mask = layer_mask;
 
     tc_component_cap_id drawable_cap = tc_drawable_capability_id();
-    if (drawable_cap == TC_COMPONENT_CAPABILITY_INVALID_ID) return;
+    if (drawable_cap == TC_COMPONENT_CAPABILITY_INVALID_ID)
+        return;
 
     tc_scene_foreach_with_capability(h, drawable_cap, drawable_callback_adapter, &ctx, filter_flags);
 }

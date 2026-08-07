@@ -53,13 +53,11 @@ typedef struct tc_ui_document_inspect_snapshot {
 } tc_ui_document_inspect_snapshot;
 
 /* Captures a point-in-time copy. On failure out_snapshot is unchanged. */
-TERMIN_GUI_NATIVE_API bool
-tc_ui_document_capture_snapshot(tc_ui_document_handle document,
-                                tc_ui_document_inspect_snapshot* out_snapshot);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_capture_snapshot(tc_ui_document_handle document,
+                                                           tc_ui_document_inspect_snapshot* out_snapshot);
 
 /* Releases every allocation and resets the snapshot to its zero state. */
-TERMIN_GUI_NATIVE_API void
-tc_ui_document_snapshot_destroy(tc_ui_document_inspect_snapshot* snapshot);
+TERMIN_GUI_NATIVE_API void tc_ui_document_snapshot_destroy(tc_ui_document_inspect_snapshot* snapshot);
 
 #ifdef __cplusplus
 }

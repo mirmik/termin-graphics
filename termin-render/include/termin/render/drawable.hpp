@@ -24,67 +24,67 @@ struct tc_mesh;
 #include <termin/render/render_export.hpp>
 #include <termin/render/render_item_collection.hpp>
 
-namespace tgfx { class RenderContext2; }
+namespace tgfx {
+    class RenderContext2;
+}
 
 namespace termin {
 
-class RENDER_API Drawable {
-public:
-    virtual ~Drawable() = default;
+    class RENDER_API Drawable {
+    public:
+        virtual ~Drawable() = default;
 
-    virtual tc_phase_mask get_phase_mask() const = 0;
+        virtual tc_phase_mask get_phase_mask() const = 0;
 
-    virtual bool collect_render_items(
-        const tc_render_item_collect_context& context,
-        tc_render_item_sink& sink
-    );
+        virtual bool collect_render_items(const tc_render_item_collect_context& context, tc_render_item_sink& sink);
 
-    virtual Mat44f get_model_matrix(const Entity& entity) const;
+        virtual Mat44f get_model_matrix(const Entity& entity) const;
 
-    bool has_phase(tc_phase_mask phase) const {
-        return tc_phase_mask_contains(get_phase_mask(), phase);
-    }
-
-    static const tc_drawable_vtable& cxx_drawable_vtable();
-
-protected:
-    void install_drawable_vtable(tc_component* c) {
-        if (c) {
-            tc_drawable_capability_attach(c, &cxx_drawable_vtable(), this);
+        bool has_phase(tc_phase_mask phase) const {
+            return tc_phase_mask_contains(get_phase_mask(), phase);
         }
-    }
 
-private:
-    static tc_phase_mask _cb_phase_mask(tc_component* c);
-    static bool _cb_collect_render_items(tc_component* c, const tc_render_item_collect_context* context, tc_render_item_sink* sink);
-};
+        static const tc_drawable_vtable& cxx_drawable_vtable();
 
-RENDER_API bool collect_drawable_render_items(
-    tc_component* component,
-    const tc_render_item_collect_context& context,
-    RenderItemCollection& out_collection);
-
-struct PhaseDrawCall {
-    Entity entity;
-    tc_component* component = nullptr;
-    tc_material_phase* phase = nullptr;
-    TcShader final_shader;
-    int priority = 0;
-    int geometry_id = 0;
-    size_t item_index = SIZE_MAX;
-    tc_render_item item{};
-    tc_material_handle material = tc_material_handle_invalid();
-    size_t phase_index = SIZE_MAX;
-
-    tc_material_phase* resolve_phase() const {
-        if (!tc_material_handle_is_invalid(material) && phase_index != SIZE_MAX) {
-            tc_material* mat = tc_material_get(material);
-            if (mat && phase_index < mat->phase_count) {
-                return &mat->phases[phase_index];
+    protected:
+        void install_drawable_vtable(tc_component* c) {
+            if (c) {
+                tc_drawable_capability_attach(c, &cxx_drawable_vtable(), this);
             }
         }
-        return phase;
-    }
-};
+
+    private:
+        static tc_phase_mask _cb_phase_mask(tc_component* c);
+        static bool _cb_collect_render_items(tc_component* c,
+                                             const tc_render_item_collect_context* context,
+                                             tc_render_item_sink* sink);
+    };
+
+    RENDER_API bool collect_drawable_render_items(tc_component* component,
+                                                  const tc_render_item_collect_context& context,
+                                                  RenderItemCollection& out_collection);
+
+    struct PhaseDrawCall {
+        Entity entity;
+        tc_component* component = nullptr;
+        tc_material_phase* phase = nullptr;
+        TcShader final_shader;
+        int priority = 0;
+        int geometry_id = 0;
+        size_t item_index = SIZE_MAX;
+        tc_render_item item{};
+        tc_material_handle material = tc_material_handle_invalid();
+        size_t phase_index = SIZE_MAX;
+
+        tc_material_phase* resolve_phase() const {
+            if (!tc_material_handle_is_invalid(material) && phase_index != SIZE_MAX) {
+                tc_material* mat = tc_material_get(material);
+                if (mat && phase_index < mat->phase_count) {
+                    return &mat->phases[phase_index];
+                }
+            }
+            return phase;
+        }
+    };
 
 } // namespace termin

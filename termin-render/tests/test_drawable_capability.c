@@ -3,11 +3,11 @@
 #include "guard_c.h"
 
 #include "core/tc_component.h"
+#include "core/tc_drawable_capability.h"
+#include "core/tc_drawable_protocol.h"
 #include "core/tc_entity_pool.h"
 #include "core/tc_scene.h"
 #include "core/tc_scene_drawable.h"
-#include "core/tc_drawable_capability.h"
-#include "core/tc_drawable_protocol.h"
 
 static int g_render_item_emit_count = 0;
 
@@ -16,7 +16,9 @@ static tc_phase_mask test_drawable_phase_mask(tc_component* self) {
     return TC_PHASE_OPAQUE;
 }
 
-static bool test_drawable_collect_render_items(tc_component* self, const tc_render_item_collect_context* context, tc_render_item_sink* sink) {
+static bool test_drawable_collect_render_items(tc_component* self,
+                                               const tc_render_item_collect_context* context,
+                                               tc_render_item_sink* sink) {
     (void)self;
     if (!context || !sink || !sink->emit) {
         return false;

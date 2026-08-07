@@ -4,20 +4,19 @@
 
 namespace termin {
 
-enum class AttachmentKind {
-    Color,
-    Depth,
-};
+    enum class AttachmentKind {
+        Color,
+        Depth,
+    };
 
-struct ResourceView {
-    std::string parent;
-    AttachmentKind attachment = AttachmentKind::Color;
-};
+    struct ResourceView {
+        std::string parent;
+        AttachmentKind attachment = AttachmentKind::Color;
+    };
 
-struct FboComposition {
-    std::string color;
-    std::string depth;
-};
+    struct FboComposition {
+        std::string color;
+        std::string depth;
+    };
 
 } // namespace termin
-

@@ -6,8 +6,7 @@
 #include <cstring>
 #include <iterator>
 
-TEST_CASE("fixed C string copy preserves short strings and clears the tail")
-{
+TEST_CASE("fixed C string copy preserves short strings and clears the tail") {
     char destination[8];
     std::fill(std::begin(destination), std::end(destination), '\x7f');
 
@@ -19,8 +18,7 @@ TEST_CASE("fixed C string copy preserves short strings and clears the tail")
     }
 }
 
-TEST_CASE("fixed C string copy accepts the exact payload capacity")
-{
+TEST_CASE("fixed C string copy accepts the exact payload capacity") {
     char destination[8] = {};
 
     termin::detail::copy_c_string_truncated(destination, "1234567");
@@ -29,8 +27,7 @@ TEST_CASE("fixed C string copy accepts the exact payload capacity")
     CHECK_EQ(destination[7], '\0');
 }
 
-TEST_CASE("fixed C string copy truncates oversize input and terminates it")
-{
+TEST_CASE("fixed C string copy truncates oversize input and terminates it") {
     char destination[8] = {};
 
     termin::detail::copy_c_string_truncated(destination, "123456789");
@@ -39,8 +36,7 @@ TEST_CASE("fixed C string copy truncates oversize input and terminates it")
     CHECK_EQ(destination[7], '\0');
 }
 
-TEST_CASE("fixed C string copy treats null input as an empty string")
-{
+TEST_CASE("fixed C string copy treats null input as an empty string") {
     char destination[8];
     std::fill(std::begin(destination), std::end(destination), '\x7f');
 

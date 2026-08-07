@@ -2,10 +2,8 @@
 
 namespace termin {
 
-void RenderExecutionCapabilities::add(
-    const RenderExecutionCapability& capability)
-{
-    values_.push_back(&capability);
-}
+    void RenderExecutionCapabilities::add(const RenderExecutionCapability& capability) {
+        values_.push_back(&capability);
+    }
 
 } // namespace termin

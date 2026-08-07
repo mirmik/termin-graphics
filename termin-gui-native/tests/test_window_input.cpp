@@ -10,8 +10,7 @@ int main() {
     pointer.pointer.framebuffer_position = {18.0f, 30.0f};
     pointer.pointer.button = tcbase::MouseButton::RIGHT;
     pointer.pointer.clicks = 2;
-    pointer.pointer.modifiers =
-        termin::WindowModifierShift | termin::WindowModifierControl;
+    pointer.pointer.modifiers = termin::WindowModifierShift | termin::WindowModifierControl;
 
     const auto gui_pointer = termin::gui_native::make_pointer_event(pointer);
     assert(gui_pointer.has_value());

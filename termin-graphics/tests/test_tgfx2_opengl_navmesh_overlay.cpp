@@ -15,132 +15,129 @@
 
 namespace {
 
-constexpr int kWidth = 64;
-constexpr int kHeight = 64;
+    constexpr int kWidth = 64;
+    constexpr int kHeight = 64;
 
-constexpr const char* kVertexSource = R"(
+    constexpr const char* kVertexSource = R"(
 #version 420 core
 layout(location = 0) in vec3 aPos;
 void main() { gl_Position = vec4(aPos, 1.0); }
 )";
 
-constexpr const char* kBlackFragmentSource = R"(
+    constexpr const char* kBlackFragmentSource = R"(
 #version 420 core
 out vec4 FragColor;
 void main() { FragColor = vec4(0.0, 0.0, 0.0, 1.0); }
 )";
 
-constexpr const char* kBlueFragmentSource = R"(
+    constexpr const char* kBlueFragmentSource = R"(
 #version 420 core
 out vec4 FragColor;
 void main() { FragColor = vec4(0.0, 0.0, 1.0, 1.0); }
 )";
 
-constexpr const char* kNavmeshSurfaceFragmentSource = R"(
+    constexpr const char* kNavmeshSurfaceFragmentSource = R"(
 #version 420 core
 out vec4 FragColor;
 void main() { FragColor = vec4(0.0, 1.0, 0.0, 0.5); }
 )";
 
-constexpr const char* kNavmeshContourFragmentSource = R"(
+    constexpr const char* kNavmeshContourFragmentSource = R"(
 #version 420 core
 out vec4 FragColor;
 void main() { FragColor = vec4(1.0, 1.0, 0.0, 1.0); }
 )";
 
-constexpr const char* kTransparentForegroundFragmentSource = R"(
+    constexpr const char* kTransparentForegroundFragmentSource = R"(
 #version 420 core
 out vec4 FragColor;
 void main() { FragColor = vec4(1.0, 0.0, 0.0, 1.0); }
 )";
 
-struct SDLGLContext {
-    SDL_Window* window = nullptr;
-    SDL_GLContext context = nullptr;
+    struct SDLGLContext {
+        SDL_Window* window = nullptr;
+        SDL_GLContext context = nullptr;
 
-    ~SDLGLContext() {
-        if (context) SDL_GL_DeleteContext(context);
-        if (window) SDL_DestroyWindow(window);
-        SDL_Quit();
+        ~SDLGLContext() {
+            if (context)
+                SDL_GL_DeleteContext(context);
+            if (window)
+                SDL_DestroyWindow(window);
+            SDL_Quit();
+        }
+    };
+
+    bool create_context(SDLGLContext& out) {
+        SDL_SetMainReady();
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+            std::fprintf(stderr, "Navmesh overlay smoke: SDL_Init failed: %s\n", SDL_GetError());
+            return false;
+        }
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        out.window = SDL_CreateWindow("tgfx2 navmesh overlay smoke",
+                                      SDL_WINDOWPOS_UNDEFINED,
+                                      SDL_WINDOWPOS_UNDEFINED,
+                                      kWidth,
+                                      kHeight,
+                                      SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+        if (!out.window) {
+            std::fprintf(stderr, "Navmesh overlay smoke: window creation failed: %s\n", SDL_GetError());
+            return false;
+        }
+        out.context = SDL_GL_CreateContext(out.window);
+        if (!out.context || SDL_GL_MakeCurrent(out.window, out.context) != 0) {
+            std::fprintf(stderr, "Navmesh overlay smoke: OpenGL context creation failed: %s\n", SDL_GetError());
+            return false;
+        }
+        // glad is linked statically into both this executable and termin_graphics2.
+        // The device initializes its own function table; direct GL calls below use
+        // the executable's separate table and therefore must initialize it too.
+        if (!gladLoaderLoadGL()) {
+            std::fprintf(stderr, "Navmesh overlay smoke: glad initialization failed\n");
+            return false;
+        }
+        return true;
     }
-};
 
-bool create_context(SDLGLContext& out) {
-    SDL_SetMainReady();
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::fprintf(stderr, "Navmesh overlay smoke: SDL_Init failed: %s\n", SDL_GetError());
-        return false;
+    tgfx::BufferHandle make_vertex_buffer(tgfx::IRenderDevice& device, const float* data, size_t size) {
+        tgfx::BufferDesc desc;
+        desc.size = size;
+        desc.usage = tgfx::BufferUsage::Vertex;
+        const tgfx::BufferHandle buffer = device.create_buffer(desc);
+        device.upload_buffer(buffer,
+                             {
+                                 reinterpret_cast<const uint8_t*>(data),
+                                 size,
+                             });
+        return buffer;
     }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    out.window = SDL_CreateWindow(
-        "tgfx2 navmesh overlay smoke",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
-        kWidth,
-        kHeight,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
-    if (!out.window) {
-        std::fprintf(stderr, "Navmesh overlay smoke: window creation failed: %s\n", SDL_GetError());
-        return false;
+
+    tgfx::ShaderHandle
+    make_shader(tgfx::IRenderDevice& device, tgfx::ShaderStage stage, const char* source, const char* name) {
+        tgfx::ShaderDesc desc;
+        desc.stage = stage;
+        desc.source = source;
+        desc.debug_name = name;
+        return device.create_shader(desc);
     }
-    out.context = SDL_GL_CreateContext(out.window);
-    if (!out.context || SDL_GL_MakeCurrent(out.window, out.context) != 0) {
-        std::fprintf(stderr, "Navmesh overlay smoke: OpenGL context creation failed: %s\n", SDL_GetError());
-        return false;
+
+    bool is_blue(const float* pixel) {
+        return pixel[2] > 0.75f && pixel[0] < 0.20f && pixel[1] < 0.20f;
     }
-    // glad is linked statically into both this executable and termin_graphics2.
-    // The device initializes its own function table; direct GL calls below use
-    // the executable's separate table and therefore must initialize it too.
-    if (!gladLoaderLoadGL()) {
-        std::fprintf(stderr, "Navmesh overlay smoke: glad initialization failed\n");
-        return false;
+
+    bool is_red(const float* pixel) {
+        return pixel[0] > 0.75f && pixel[1] < 0.20f && pixel[2] < 0.20f;
     }
-    return true;
-}
-
-tgfx::BufferHandle make_vertex_buffer(
-    tgfx::IRenderDevice& device,
-    const float* data,
-    size_t size) {
-    tgfx::BufferDesc desc;
-    desc.size = size;
-    desc.usage = tgfx::BufferUsage::Vertex;
-    const tgfx::BufferHandle buffer = device.create_buffer(desc);
-    device.upload_buffer(buffer, {
-        reinterpret_cast<const uint8_t*>(data),
-        size,
-    });
-    return buffer;
-}
-
-tgfx::ShaderHandle make_shader(
-    tgfx::IRenderDevice& device,
-    tgfx::ShaderStage stage,
-    const char* source,
-    const char* name) {
-    tgfx::ShaderDesc desc;
-    desc.stage = stage;
-    desc.source = source;
-    desc.debug_name = name;
-    return device.create_shader(desc);
-}
-
-bool is_blue(const float* pixel) {
-    return pixel[2] > 0.75f && pixel[0] < 0.20f && pixel[1] < 0.20f;
-}
-
-bool is_red(const float* pixel) {
-    return pixel[0] > 0.75f && pixel[1] < 0.20f && pixel[2] < 0.20f;
-}
 
 } // namespace
 
 int main() {
     SDLGLContext gl;
-    if (!create_context(gl)) return 1;
+    if (!create_context(gl))
+        return 1;
 
     std::unique_ptr<tgfx::IRenderDevice> device;
     try {
@@ -151,31 +148,74 @@ int main() {
     }
 
     const float far_scene[] = {
-        -1.0f, -1.0f, 0.8f, 3.0f, -1.0f, 0.8f, -1.0f, 3.0f, 0.8f,
+        -1.0f,
+        -1.0f,
+        0.8f,
+        3.0f,
+        -1.0f,
+        0.8f,
+        -1.0f,
+        3.0f,
+        0.8f,
     };
     const float left_occluder[] = {
-        -1.0f, -1.0f, 0.1f, 0.0f, -1.0f, 0.1f, -1.0f, 1.0f, 0.1f,
-         0.0f, -1.0f, 0.1f, 0.0f, 1.0f, 0.1f, -1.0f, 1.0f, 0.1f,
+        -1.0f,
+        -1.0f,
+        0.1f,
+        0.0f,
+        -1.0f,
+        0.1f,
+        -1.0f,
+        1.0f,
+        0.1f,
+        0.0f,
+        -1.0f,
+        0.1f,
+        0.0f,
+        1.0f,
+        0.1f,
+        -1.0f,
+        1.0f,
+        0.1f,
     };
     const float navmesh_overlay[] = {
-        -1.0f, -1.0f, 0.3f, 3.0f, -1.0f, 0.3f, -1.0f, 3.0f, 0.3f,
+        -1.0f,
+        -1.0f,
+        0.3f,
+        3.0f,
+        -1.0f,
+        0.3f,
+        -1.0f,
+        3.0f,
+        0.3f,
     };
     const float transparent_foreground[] = {
-        -1.0f, -1.0f, 0.4f, 3.0f, -1.0f, 0.4f, -1.0f, 3.0f, 0.4f,
+        -1.0f,
+        -1.0f,
+        0.4f,
+        3.0f,
+        -1.0f,
+        0.4f,
+        -1.0f,
+        3.0f,
+        0.4f,
     };
 
     const auto far_vbo = make_vertex_buffer(*device, far_scene, sizeof(far_scene));
     const auto occluder_vbo = make_vertex_buffer(*device, left_occluder, sizeof(left_occluder));
     const auto navmesh_vbo = make_vertex_buffer(*device, navmesh_overlay, sizeof(navmesh_overlay));
-    const auto transparent_vbo = make_vertex_buffer(
-        *device, transparent_foreground, sizeof(transparent_foreground));
+    const auto transparent_vbo = make_vertex_buffer(*device, transparent_foreground, sizeof(transparent_foreground));
 
     const auto vs = make_shader(*device, tgfx::ShaderStage::Vertex, kVertexSource, "navmesh-overlay-vs");
-    const auto black_fs = make_shader(*device, tgfx::ShaderStage::Fragment, kBlackFragmentSource, "navmesh-overlay-black");
+    const auto black_fs =
+        make_shader(*device, tgfx::ShaderStage::Fragment, kBlackFragmentSource, "navmesh-overlay-black");
     const auto blue_fs = make_shader(*device, tgfx::ShaderStage::Fragment, kBlueFragmentSource, "navmesh-overlay-blue");
-    const auto surface_fs = make_shader(*device, tgfx::ShaderStage::Fragment, kNavmeshSurfaceFragmentSource, "navmesh-overlay-surface");
-    const auto contour_fs = make_shader(*device, tgfx::ShaderStage::Fragment, kNavmeshContourFragmentSource, "navmesh-overlay-contour");
-    const auto transparent_fs = make_shader(*device, tgfx::ShaderStage::Fragment, kTransparentForegroundFragmentSource, "navmesh-overlay-transparent");
+    const auto surface_fs =
+        make_shader(*device, tgfx::ShaderStage::Fragment, kNavmeshSurfaceFragmentSource, "navmesh-overlay-surface");
+    const auto contour_fs =
+        make_shader(*device, tgfx::ShaderStage::Fragment, kNavmeshContourFragmentSource, "navmesh-overlay-contour");
+    const auto transparent_fs = make_shader(
+        *device, tgfx::ShaderStage::Fragment, kTransparentForegroundFragmentSource, "navmesh-overlay-transparent");
 
     tgfx::TextureDesc color_desc;
     color_desc.width = kWidth;
@@ -201,9 +241,7 @@ int main() {
         layout.stride = 3 * sizeof(float);
         layout.attributes = {{0, tgfx::VertexFormat::Float3, 0}};
 
-        const auto make_pipeline = [&](tgfx::ShaderHandle fragment_shader,
-                                       bool depth_write,
-                                       bool blend) {
+        const auto make_pipeline = [&](tgfx::ShaderHandle fragment_shader, bool depth_write, bool blend) {
             tgfx::PipelineDesc desc;
             desc.vertex_shader = vs;
             desc.fragment_shader = fragment_shader;
@@ -222,15 +260,13 @@ int main() {
         surface_pipeline = make_pipeline(surface_fs, false, true);
         contour_pipeline = make_pipeline(contour_fs, false, false);
         transparent_pipeline = make_pipeline(transparent_fs, false, true);
-        std::printf(
-            "Navmesh overlay pipelines: %u %u %u %u %u\n",
-            black_pipeline.id,
-            blue_pipeline.id,
-            surface_pipeline.id,
-            contour_pipeline.id,
-            transparent_pipeline.id);
-        pass = black_pipeline && blue_pipeline && surface_pipeline && contour_pipeline &&
-            transparent_pipeline;
+        std::printf("Navmesh overlay pipelines: %u %u %u %u %u\n",
+                    black_pipeline.id,
+                    blue_pipeline.id,
+                    surface_pipeline.id,
+                    contour_pipeline.id,
+                    transparent_pipeline.id);
+        pass = black_pipeline && blue_pipeline && surface_pipeline && contour_pipeline && transparent_pipeline;
 
         if (pass) {
             auto cmd = device->create_command_list();
@@ -281,11 +317,14 @@ int main() {
         float left[4] = {};
         float right[4] = {};
         pass = device->read_pixel_rgba8(color, kWidth / 4, kHeight / 2, left) &&
-            device->read_pixel_rgba8(color, 3 * kWidth / 4, kHeight / 2, right) &&
-            is_blue(left) && is_red(right);
-        std::printf(
-            "Navmesh overlay pixels: left=(%.2f %.2f %.2f) right=(%.2f %.2f %.2f)\n",
-            left[0], left[1], left[2], right[0], right[1], right[2]);
+               device->read_pixel_rgba8(color, 3 * kWidth / 4, kHeight / 2, right) && is_blue(left) && is_red(right);
+        std::printf("Navmesh overlay pixels: left=(%.2f %.2f %.2f) right=(%.2f %.2f %.2f)\n",
+                    left[0],
+                    left[1],
+                    left[2],
+                    right[0],
+                    right[1],
+                    right[2]);
     }
 
     device->destroy(far_vbo);

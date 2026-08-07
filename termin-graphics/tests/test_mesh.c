@@ -4,13 +4,13 @@
 #include <tgfx/resources/tc_mesh.h>
 #include <tgfx/resources/tc_mesh_registry.h>
 
-#define TEST_ASSERT(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            printf("FAIL: %s (line %d)\n", msg, __LINE__); \
-            return 1; \
-        } \
-    } while(0)
+#define TEST_ASSERT(cond, msg)                                                                                         \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            printf("FAIL: %s (line %d)\n", msg, __LINE__);                                                             \
+            return 1;                                                                                                  \
+        }                                                                                                              \
+    } while (0)
 
 static int test_vertex_layout(void) {
     printf("Testing Vertex Layout...\n");
@@ -90,11 +90,9 @@ static int test_mesh_data(void) {
 
     tc_vertex_layout layout = tc_vertex_layout_pos_normal_uv();
     float verts[] = {
-        0, 0, 0,  0, 1, 0,  0, 0,
-        1, 0, 0,  0, 1, 0,  1, 0,
-        0, 0, 1,  0, 1, 0,  0, 1,
+        0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1,
     };
-    uint32_t idx[] = { 0, 1, 2 };
+    uint32_t idx[] = {0, 1, 2};
 
     tc_mesh_set_data(mesh, verts, 3, &layout, idx, 3, "data-test");
 
@@ -166,8 +164,7 @@ static int test_mesh_handle_rebootstrap(void) {
     tc_mesh_handle replacement = tc_mesh_create("mesh-after-rebootstrap");
     TEST_ASSERT(tc_mesh_is_valid(replacement), "replacement handle is valid");
     TEST_ASSERT(stale.index == replacement.index, "slot index is reused");
-    TEST_ASSERT(stale.generation != replacement.generation,
-                "generation advances across rebootstrap");
+    TEST_ASSERT(stale.generation != replacement.generation, "generation advances across rebootstrap");
     TEST_ASSERT(!tc_mesh_is_valid(stale), "stale handle stays invalid");
     tc_mesh_shutdown();
 

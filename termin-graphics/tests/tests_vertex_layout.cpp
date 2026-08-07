@@ -32,7 +32,7 @@ TEST_CASE("vertex_layout_add single attribute") {
     bool ok = tgfx_vertex_layout_add(&layout, "position", 3, TGFX_ATTRIB_FLOAT32, 0);
     CHECK(ok);
     CHECK_EQ(layout.attrib_count, 1);
-    CHECK_EQ(layout.stride, 12);  // 3 * 4 bytes
+    CHECK_EQ(layout.stride, 12); // 3 * 4 bytes
 
     CHECK_EQ(layout.attribs[0].size, 3);
     CHECK_EQ(layout.attribs[0].type, (uint8_t)TGFX_ATTRIB_FLOAT32);
@@ -50,11 +50,11 @@ TEST_CASE("vertex_layout_add multiple attributes compute correct offsets") {
     tgfx_vertex_layout_add(&layout, "uv", 2, TGFX_ATTRIB_FLOAT32, 2);
 
     CHECK_EQ(layout.attrib_count, 3);
-    CHECK_EQ(layout.stride, 32);  // (3+3+2) * 4
+    CHECK_EQ(layout.stride, 32); // (3+3+2) * 4
 
-    CHECK_EQ(layout.attribs[0].offset, 0);   // position at 0
-    CHECK_EQ(layout.attribs[1].offset, 12);  // normal at 12
-    CHECK_EQ(layout.attribs[2].offset, 24);  // uv at 24
+    CHECK_EQ(layout.attribs[0].offset, 0);  // position at 0
+    CHECK_EQ(layout.attribs[1].offset, 12); // normal at 12
+    CHECK_EQ(layout.attribs[2].offset, 24); // uv at 24
 }
 
 TEST_CASE("vertex_layout_add mixed types compute correct stride") {

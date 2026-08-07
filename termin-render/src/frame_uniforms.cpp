@@ -14,106 +14,95 @@ extern "C" {
 
 namespace termin {
 
-EnginePerFrameStd140 make_engine_per_frame_uniforms(
-    const Mat44f& view,
-    const Mat44f& projection,
-    const Vec3& camera_position,
-    float width,
-    float height,
-    float near_clip,
-    float far_clip)
-{
-    EnginePerFrameStd140 pf{};
-    Mat44f vp = projection * view;
-    Mat44f inv_view = view.inverse();
-    Mat44f inv_proj = projection.inverse();
+    EnginePerFrameStd140 make_engine_per_frame_uniforms(const Mat44f& view,
+                                                        const Mat44f& projection,
+                                                        const Vec3& camera_position,
+                                                        float width,
+                                                        float height,
+                                                        float near_clip,
+                                                        float far_clip) {
+        EnginePerFrameStd140 pf{};
+        Mat44f vp = projection * view;
+        Mat44f inv_view = view.inverse();
+        Mat44f inv_proj = projection.inverse();
 
-    std::memcpy(pf.u_view, view.data, sizeof(pf.u_view));
-    std::memcpy(pf.u_projection, projection.data, sizeof(pf.u_projection));
-    std::memcpy(pf.u_view_projection, vp.data, sizeof(pf.u_view_projection));
-    std::memcpy(pf.u_inv_view, inv_view.data, sizeof(pf.u_inv_view));
-    std::memcpy(pf.u_inv_proj, inv_proj.data, sizeof(pf.u_inv_proj));
+        std::memcpy(pf.u_view, view.data, sizeof(pf.u_view));
+        std::memcpy(pf.u_projection, projection.data, sizeof(pf.u_projection));
+        std::memcpy(pf.u_view_projection, vp.data, sizeof(pf.u_view_projection));
+        std::memcpy(pf.u_inv_view, inv_view.data, sizeof(pf.u_inv_view));
+        std::memcpy(pf.u_inv_proj, inv_proj.data, sizeof(pf.u_inv_proj));
 
-    pf.u_camera_position[0] = static_cast<float>(camera_position.x);
-    pf.u_camera_position[1] = static_cast<float>(camera_position.y);
-    pf.u_camera_position[2] = static_cast<float>(camera_position.z);
-    pf.u_camera_position[3] = 1.0f;
-    pf.u_resolution[0] = width;
-    pf.u_resolution[1] = height;
-    pf.u_near = near_clip;
-    pf.u_far = far_clip;
-    return pf;
-}
-
-EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
-    Mat44f view = Mat44f::identity();
-    Mat44f projection = Mat44f::identity();
-    Vec3 camera_position = Vec3::zero();
-    float near_clip = 0.1f;
-    float far_clip = 100.0f;
-
-    if (const RenderCamera* primary = ctx.view.primary_view()) {
-        view = primary->get_view_matrix().to_float();
-        projection = primary->get_projection_matrix().to_float();
-        camera_position = primary->get_position();
-        near_clip = static_cast<float>(primary->near_clip);
-        far_clip = static_cast<float>(primary->far_clip);
+        pf.u_camera_position[0] = static_cast<float>(camera_position.x);
+        pf.u_camera_position[1] = static_cast<float>(camera_position.y);
+        pf.u_camera_position[2] = static_cast<float>(camera_position.z);
+        pf.u_camera_position[3] = 1.0f;
+        pf.u_resolution[0] = width;
+        pf.u_resolution[1] = height;
+        pf.u_near = near_clip;
+        pf.u_far = far_clip;
+        return pf;
     }
 
-    return make_engine_per_frame_uniforms(
-        view,
-        projection,
-        camera_position,
-        static_cast<float>(ctx.render_rect.width),
-        static_cast<float>(ctx.render_rect.height),
-        near_clip,
-        far_clip);
-}
+    EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx) {
+        Mat44f view = Mat44f::identity();
+        Mat44f projection = Mat44f::identity();
+        Vec3 camera_position = Vec3::zero();
+        float near_clip = 0.1f;
+        float far_clip = 100.0f;
 
-StereoPerFrameStd140 make_stereo_per_frame_uniforms(
-    const StereoRenderViews& views,
-    float width,
-    float height)
-{
-    StereoPerFrameStd140 result{};
-    const RenderCamera* cameras[2] = {&views.left, &views.right};
-    for (size_t i = 0; i < 2; ++i) {
-        const RenderCamera& camera = *cameras[i];
-        result.views[i] = make_engine_per_frame_uniforms(
-            camera.view.to_float(), camera.projection.to_float(), camera.position,
-            width, height, static_cast<float>(camera.near_clip),
-            static_cast<float>(camera.far_clip));
-    }
-    return result;
-}
+        if (const RenderCamera* primary = ctx.view.primary_view()) {
+            view = primary->get_view_matrix().to_float();
+            projection = primary->get_projection_matrix().to_float();
+            camera_position = primary->get_position();
+            near_clip = static_cast<float>(primary->near_clip);
+            far_clip = static_cast<float>(primary->far_clip);
+        }
 
-void bind_engine_frame_uniform_data(
-    tgfx::RenderContext2& ctx2,
-    const void* data,
-    uint32_t size,
-    const tc_shader* shader)
-{
-    const tc_shader_resource_binding* rb =
-        find_shader_abi_resource_binding(shader, ShaderAbiResourceId::PerFrame);
-    if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
-        ctx2.bind_uniform_data(rb, data, size);
-        return;
+        return make_engine_per_frame_uniforms(view,
+                                              projection,
+                                              camera_position,
+                                              static_cast<float>(ctx.render_rect.width),
+                                              static_cast<float>(ctx.render_rect.height),
+                                              near_clip,
+                                              far_clip);
     }
-    if (shader && tc_shader_has_resource_layout(shader)) {
-        return;
-    }
-    tc::Log::error(
-        "[FrameUniforms] shader '%s' has no per_frame constant-buffer resource layout entry",
-        shader && shader->name ? shader->name : "<unnamed>");
-}
 
-void bind_engine_per_frame_uniforms(
-    tgfx::RenderContext2& ctx2,
-    const EnginePerFrameStd140& uniforms,
-    const tc_shader* shader)
-{
-    bind_engine_frame_uniform_data(
-        ctx2, &uniforms, static_cast<uint32_t>(sizeof(uniforms)), shader);
-}
+    StereoPerFrameStd140 make_stereo_per_frame_uniforms(const StereoRenderViews& views, float width, float height) {
+        StereoPerFrameStd140 result{};
+        const RenderCamera* cameras[2] = {&views.left, &views.right};
+        for (size_t i = 0; i < 2; ++i) {
+            const RenderCamera& camera = *cameras[i];
+            result.views[i] = make_engine_per_frame_uniforms(camera.view.to_float(),
+                                                             camera.projection.to_float(),
+                                                             camera.position,
+                                                             width,
+                                                             height,
+                                                             static_cast<float>(camera.near_clip),
+                                                             static_cast<float>(camera.far_clip));
+        }
+        return result;
+    }
+
+    void bind_engine_frame_uniform_data(tgfx::RenderContext2& ctx2,
+                                        const void* data,
+                                        uint32_t size,
+                                        const tc_shader* shader) {
+        const tc_shader_resource_binding* rb = find_shader_abi_resource_binding(shader, ShaderAbiResourceId::PerFrame);
+        if (rb && rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+            ctx2.bind_uniform_data(rb, data, size);
+            return;
+        }
+        if (shader && tc_shader_has_resource_layout(shader)) {
+            return;
+        }
+        tc::Log::error("[FrameUniforms] shader '%s' has no per_frame constant-buffer resource layout entry",
+                       shader && shader->name ? shader->name : "<unnamed>");
+    }
+
+    void bind_engine_per_frame_uniforms(tgfx::RenderContext2& ctx2,
+                                        const EnginePerFrameStd140& uniforms,
+                                        const tc_shader* shader) {
+        bind_engine_frame_uniform_data(ctx2, &uniforms, static_cast<uint32_t>(sizeof(uniforms)), shader);
+    }
 
 } // namespace termin

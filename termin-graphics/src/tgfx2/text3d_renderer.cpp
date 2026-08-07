@@ -37,212 +37,214 @@ extern "C" {
 
 namespace tgfx {
 
-namespace {
+    namespace {
 
-constexpr float kText3DRasterPx = 16.0f;
-constexpr const char* TEXT3D_SHADER_UUID = "termin-engine-text3d";
+        constexpr float kText3DRasterPx = 16.0f;
+        constexpr const char* TEXT3D_SHADER_UUID = "termin-engine-text3d";
 
-struct Text3DPushData {
-    float mvp[16];
-    float color[4];
-    float cam_right[4];
-    float cam_up[4];
-    float flags[4];
-};
-static_assert(sizeof(Text3DPushData) == 128,
-              "Text3DPushData layout drift - shader and C++ disagree");
-
-struct Text3DVertex {
-    termin::Vec3f world_pos;
-    float offset_uv[4];
-};
-static_assert(sizeof(Text3DVertex) == 7 * sizeof(float),
-              "Text3DVertex layout drift - shader and C++ disagree");
-
-VertexLayoutDesc text3d_vertex_layout() {
-    VertexLayoutDesc layout;
-    layout.stride = sizeof(Text3DVertex);
-    layout.attribute_count = 2;
-    layout.attributes[0] = {
-        0,
-        VertexFormat::Float3,
-        static_cast<uint32_t>(offsetof(Text3DVertex, world_pos)),
-        intern_vertex_semantic("position"),
-    };
-    layout.attributes[1] = {
-        1,
-        VertexFormat::Float4,
-        static_cast<uint32_t>(offsetof(Text3DVertex, offset_uv)),
-        intern_vertex_semantic("uv0"),
-    };
-    return layout;
-}
-}  // namespace
-
-// ---------------------------------------------------------------------------
-
-Text3DRenderer::Text3DRenderer(FontAtlas* font) : font_(font) {}
-
-Text3DRenderer::~Text3DRenderer() {
-    release_gpu();
-}
-
-void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
-    if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) {
-        return;
-    }
-    vs_ = ShaderHandle{};
-    fs_ = ShaderHandle{};
-
-    if (!tc_shader_is_valid(shader_handle_)) {
-        shader_handle_ = register_builtin_shader_from_catalog(TEXT3D_SHADER_UUID);
-    }
-
-    if (!tc_shader_handle_is_invalid(shader_handle_)) {
-        tc_shader* raw = tc_shader_get(shader_handle_);
-        if (raw && !termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
-            tc::Log::error("[Text3DRenderer] failed to create shader");
-        }
-    }
-
-    if (vs_.id == 0 || fs_.id == 0) {
-        tc::Log::error("[Text3DRenderer] shader is unavailable");
-    }
-
-    compiled_on_ = &device;
-}
-
-void Text3DRenderer::release_gpu() {
-    // Shaders live in the tc_shader registry and are shared across
-    // Text3DRenderer instances; cached handles are local views only.
-    vs_ = ShaderHandle{};
-    fs_ = ShaderHandle{};
-    compiled_on_ = nullptr;
-    ctx_ = nullptr;
-}
-
-void Text3DRenderer::begin(RenderContext2* ctx,
-                            const float mvp[16],
-                            const termin::Vec3f& cam_right,
-                            const termin::Vec3f& cam_up,
-                            FontAtlas* font) {
-    if (font != nullptr) font_ = font;
-    ctx_ = ctx;
-
-    if (ctx_ != nullptr) {
-        ensure_shader_(ctx_->device());
-    }
-
-    std::memcpy(mvp_, mvp, sizeof(mvp_));
-    cam_right_ = cam_right;
-    cam_up_ = cam_up;
-}
-
-void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
-    if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr) return;
-    const bool screen_aligned = expansion_mode_ == ExpansionMode::ScreenAligned;
-    const termin::Color4& color = options.color;
-
-    // `size` is world units for WorldPlane and display pixels for ScreenAligned.
-    const float metrics_size = screen_aligned ? options.size : kText3DRasterPx;
-    const bool use_sdf = screen_aligned && font_->is_sdf_size(metrics_size);
-    font_->ensure_glyphs(text_utf8, metrics_size, ctx_);
-
-    const float glyph_scale = screen_aligned
-        ? 1.0f
-        : options.size / std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
-    const float ascent = static_cast<float>(font_->ascent_px(metrics_size))
-                       * glyph_scale;
-
-    const float total_w = font_->measure_text(text_utf8, metrics_size).width
-                        * glyph_scale;
-
-    float start_x = 0.0f;
-    switch (options.anchor) {
-        case Anchor::Center: start_x = -total_w * 0.5f; break;
-        case Anchor::Right:  start_x = -total_w;        break;
-        case Anchor::Left:
-        default: break;
-    }
-
-    RenderContext2& ctx = *ctx_;
-    ctx.bind_shader(vs_, fs_);
-    tc_shader* raw = tc_shader_get(shader_handle_);
-    ctx.use_shader_resource_layout(raw);
-    ctx.set_cull(CullMode::None);
-
-    Text3DPushData push{};
-    std::memcpy(push.mvp, mvp_, sizeof(push.mvp));
-    push.color[0] = color.r;
-    push.color[1] = color.g;
-    push.color[2] = color.b;
-    push.color[3] = color.a;
-    push.cam_right[0] = cam_right_.x;
-    push.cam_right[1] = cam_right_.y;
-    push.cam_right[2] = cam_right_.z;
-    push.cam_up[0] = cam_up_.x;
-    push.cam_up[1] = cam_up_.y;
-    push.cam_up[2] = cam_up_.z;
-    push.flags[0] = screen_aligned ? 1.0f : 0.0f;
-    push.flags[1] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_width()) : 1.0f;
-    push.flags[2] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_height()) : 1.0f;
-    push.flags[3] = use_sdf
-        ? 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()))
-        : 0.0f;
-    ctx.bind_uniform_data("text3d_draw", &push, static_cast<uint32_t>(sizeof(push)));
-
-    TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx)
-                                  : font_->ensure_texture(&ctx);
-    ctx.bind_texture("u_font_atlas", atlas);
-
-    std::vector<Text3DVertex> verts;
-    verts.reserve(text_utf8.size() * 6);
-
-    float cursor_x = start_x;
-    size_t i = 0;
-    while (i < text_utf8.size()) {
-        uint32_t cp = internal::utf8_decode(text_utf8, i);
-        auto gi = font_->get_glyph(cp, metrics_size);
-        if (!gi) continue;
-
-        const float char_w = gi->width_px * glyph_scale;
-        const float char_h = gi->height_px * glyph_scale;
-
-        const float left   = cursor_x;
-        const float right  = cursor_x + char_w;
-        const float top    = ascent;
-        const float bottom = ascent - char_h;
-
-        const float u0 = gi->u0, v0 = gi->v0;
-        const float u1 = gi->u1, v1 = gi->v1;
-
-        const Text3DVertex quad[] = {
-            {options.position, {left,  bottom, u0, v1}},
-            {options.position, {right, bottom, u1, v1}},
-            {options.position, {left,  top,    u0, v0}},
-            {options.position, {right, bottom, u1, v1}},
-            {options.position, {right, top,    u1, v0}},
-            {options.position, {left,  top,    u0, v0}},
+        struct Text3DPushData {
+            float mvp[16];
+            float color[4];
+            float cam_right[4];
+            float cam_up[4];
+            float flags[4];
         };
-        verts.insert(verts.end(), std::begin(quad), std::end(quad));
+        static_assert(sizeof(Text3DPushData) == 128, "Text3DPushData layout drift - shader and C++ disagree");
 
-        cursor_x += gi->advance_px * glyph_scale;
+        struct Text3DVertex {
+            termin::Vec3f world_pos;
+            float offset_uv[4];
+        };
+        static_assert(sizeof(Text3DVertex) == 7 * sizeof(float), "Text3DVertex layout drift - shader and C++ disagree");
+
+        VertexLayoutDesc text3d_vertex_layout() {
+            VertexLayoutDesc layout;
+            layout.stride = sizeof(Text3DVertex);
+            layout.attribute_count = 2;
+            layout.attributes[0] = {
+                0,
+                VertexFormat::Float3,
+                static_cast<uint32_t>(offsetof(Text3DVertex, world_pos)),
+                intern_vertex_semantic("position"),
+            };
+            layout.attributes[1] = {
+                1,
+                VertexFormat::Float4,
+                static_cast<uint32_t>(offsetof(Text3DVertex, offset_uv)),
+                intern_vertex_semantic("uv0"),
+            };
+            return layout;
+        }
+    } // namespace
+
+    // ---------------------------------------------------------------------------
+
+    Text3DRenderer::Text3DRenderer(FontAtlas* font)
+        : font_(font) {}
+
+    Text3DRenderer::~Text3DRenderer() {
+        release_gpu();
     }
 
-    if (verts.empty()) return;
+    void Text3DRenderer::ensure_shader_(IRenderDevice& device) {
+        if (compiled_on_ == &device && vs_.id != 0 && fs_.id != 0) {
+            return;
+        }
+        vs_ = ShaderHandle{};
+        fs_ = ShaderHandle{};
 
-    const uint32_t vertex_count = static_cast<uint32_t>(verts.size());
-    const VertexLayoutDesc layout = text3d_vertex_layout();
-    ctx.draw_transient_arrays(
-        verts.data(),
-        static_cast<uint32_t>(verts.size() * sizeof(Text3DVertex)),
-        vertex_count,
-        layout,
-        PrimitiveTopology::TriangleList);
-}
+        if (!tc_shader_is_valid(shader_handle_)) {
+            shader_handle_ = register_builtin_shader_from_catalog(TEXT3D_SHADER_UUID);
+        }
 
-void Text3DRenderer::end() {
-    ctx_ = nullptr;
-}
+        if (!tc_shader_handle_is_invalid(shader_handle_)) {
+            tc_shader* raw = tc_shader_get(shader_handle_);
+            if (raw && !termin::tc_shader_ensure_tgfx2(raw, &device, &vs_, &fs_)) {
+                tc::Log::error("[Text3DRenderer] failed to create shader");
+            }
+        }
 
-}  // namespace tgfx
+        if (vs_.id == 0 || fs_.id == 0) {
+            tc::Log::error("[Text3DRenderer] shader is unavailable");
+        }
+
+        compiled_on_ = &device;
+    }
+
+    void Text3DRenderer::release_gpu() {
+        // Shaders live in the tc_shader registry and are shared across
+        // Text3DRenderer instances; cached handles are local views only.
+        vs_ = ShaderHandle{};
+        fs_ = ShaderHandle{};
+        compiled_on_ = nullptr;
+        ctx_ = nullptr;
+    }
+
+    void Text3DRenderer::begin(RenderContext2* ctx,
+                               const float mvp[16],
+                               const termin::Vec3f& cam_right,
+                               const termin::Vec3f& cam_up,
+                               FontAtlas* font) {
+        if (font != nullptr)
+            font_ = font;
+        ctx_ = ctx;
+
+        if (ctx_ != nullptr) {
+            ensure_shader_(ctx_->device());
+        }
+
+        std::memcpy(mvp_, mvp, sizeof(mvp_));
+        cam_right_ = cam_right;
+        cam_up_ = cam_up;
+    }
+
+    void Text3DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
+        if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr)
+            return;
+        const bool screen_aligned = expansion_mode_ == ExpansionMode::ScreenAligned;
+        const termin::Color4& color = options.color;
+
+        // `size` is world units for WorldPlane and display pixels for ScreenAligned.
+        const float metrics_size = screen_aligned ? options.size : kText3DRasterPx;
+        const bool use_sdf = screen_aligned && font_->is_sdf_size(metrics_size);
+        font_->ensure_glyphs(text_utf8, metrics_size, ctx_);
+
+        const float glyph_scale =
+            screen_aligned ? 1.0f
+                           : options.size / std::max(1.0f, static_cast<float>(font_->line_height_px(kText3DRasterPx)));
+        const float ascent = static_cast<float>(font_->ascent_px(metrics_size)) * glyph_scale;
+
+        const float total_w = font_->measure_text(text_utf8, metrics_size).width * glyph_scale;
+
+        float start_x = 0.0f;
+        switch (options.anchor) {
+        case Anchor::Center:
+            start_x = -total_w * 0.5f;
+            break;
+        case Anchor::Right:
+            start_x = -total_w;
+            break;
+        case Anchor::Left:
+        default:
+            break;
+        }
+
+        RenderContext2& ctx = *ctx_;
+        ctx.bind_shader(vs_, fs_);
+        tc_shader* raw = tc_shader_get(shader_handle_);
+        ctx.use_shader_resource_layout(raw);
+        ctx.set_cull(CullMode::None);
+
+        Text3DPushData push{};
+        std::memcpy(push.mvp, mvp_, sizeof(push.mvp));
+        push.color[0] = color.r;
+        push.color[1] = color.g;
+        push.color[2] = color.b;
+        push.color[3] = color.a;
+        push.cam_right[0] = cam_right_.x;
+        push.cam_right[1] = cam_right_.y;
+        push.cam_right[2] = cam_right_.z;
+        push.cam_up[0] = cam_up_.x;
+        push.cam_up[1] = cam_up_.y;
+        push.cam_up[2] = cam_up_.z;
+        push.flags[0] = screen_aligned ? 1.0f : 0.0f;
+        push.flags[1] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_width()) : 1.0f;
+        push.flags[2] = screen_aligned ? 2.0f / static_cast<float>(ctx.viewport_height()) : 1.0f;
+        push.flags[3] = use_sdf ? 1.0f / (2.0f * static_cast<float>(font_->sdf_spread())) : 0.0f;
+        ctx.bind_uniform_data("text3d_draw", &push, static_cast<uint32_t>(sizeof(push)));
+
+        TextureHandle atlas = use_sdf ? font_->sdf_atlas_texture(&ctx) : font_->ensure_texture(&ctx);
+        ctx.bind_texture("u_font_atlas", atlas);
+
+        std::vector<Text3DVertex> verts;
+        verts.reserve(text_utf8.size() * 6);
+
+        float cursor_x = start_x;
+        size_t i = 0;
+        while (i < text_utf8.size()) {
+            uint32_t cp = internal::utf8_decode(text_utf8, i);
+            auto gi = font_->get_glyph(cp, metrics_size);
+            if (!gi)
+                continue;
+
+            const float char_w = gi->width_px * glyph_scale;
+            const float char_h = gi->height_px * glyph_scale;
+
+            const float left = cursor_x;
+            const float right = cursor_x + char_w;
+            const float top = ascent;
+            const float bottom = ascent - char_h;
+
+            const float u0 = gi->u0, v0 = gi->v0;
+            const float u1 = gi->u1, v1 = gi->v1;
+
+            const Text3DVertex quad[] = {
+                {options.position, {left, bottom, u0, v1}},
+                {options.position, {right, bottom, u1, v1}},
+                {options.position, {left, top, u0, v0}},
+                {options.position, {right, bottom, u1, v1}},
+                {options.position, {right, top, u1, v0}},
+                {options.position, {left, top, u0, v0}},
+            };
+            verts.insert(verts.end(), std::begin(quad), std::end(quad));
+
+            cursor_x += gi->advance_px * glyph_scale;
+        }
+
+        if (verts.empty())
+            return;
+
+        const uint32_t vertex_count = static_cast<uint32_t>(verts.size());
+        const VertexLayoutDesc layout = text3d_vertex_layout();
+        ctx.draw_transient_arrays(verts.data(),
+                                  static_cast<uint32_t>(verts.size() * sizeof(Text3DVertex)),
+                                  vertex_count,
+                                  layout,
+                                  PrimitiveTopology::TriangleList);
+    }
+
+    void Text3DRenderer::end() {
+        ctx_ = nullptr;
+    }
+
+} // namespace tgfx

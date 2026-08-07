@@ -1,13 +1,13 @@
 // tc_mesh.c - Mesh reference counting and UUID computation
 #include "tgfx/resources/tc_mesh.h"
 #include "tgfx/resources/tc_mesh_registry.h"
-#include <tcbase/tc_log.h>
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <float.h>
-#include <stdlib.h>
+#include <math.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <tcbase/tc_log.h>
 
 // ============================================================================
 // Reference counting
@@ -24,8 +24,10 @@ bool tc_mesh_release(tc_mesh* mesh) {
         return false;
     }
     if (mesh->header.ref_count == 0) {
-        tc_log(TC_LOG_WARN, "[tc_mesh_release] uuid=%s name=%s refcount already zero!",
-               mesh->header.uuid, mesh->header.name ? mesh->header.name : "(null)");
+        tc_log(TC_LOG_WARN,
+               "[tc_mesh_release] uuid=%s name=%s refcount already zero!",
+               mesh->header.uuid,
+               mesh->header.name ? mesh->header.name : "(null)");
         return false;
     }
 
@@ -52,10 +54,7 @@ static uint64_t fnv1a_hash(const uint8_t* data, size_t len) {
 }
 
 void tc_mesh_compute_uuid(
-    const void* vertices, size_t vertex_size,
-    const uint32_t* indices, size_t index_count,
-    char* uuid_out
-) {
+    const void* vertices, size_t vertex_size, const uint32_t* indices, size_t index_count, char* uuid_out) {
     // Hash vertices
     uint64_t h1 = fnv1a_hash((const uint8_t*)vertices, vertex_size);
 
@@ -102,10 +101,7 @@ static tc_vec3f tc_mesh_vec3f_mul(tc_vec3f v, float k) {
 }
 
 static tc_vec3f tc_mesh_vec3f_cross(tc_vec3f a, tc_vec3f b) {
-    return tc_mesh_vec3f_make(
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x);
+    return tc_mesh_vec3f_make(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
 }
 
 static float tc_mesh_vec3f_dot(tc_vec3f a, tc_vec3f b) {
@@ -129,19 +125,16 @@ static bool tc_mesh_vec3f_normalize(tc_vec3f* v) {
 }
 
 static bool tc_mesh_vec3f_is_zero_metric(tc_vec3f metric) {
-    return fabsf(metric.x) <= 1e-8f &&
-           fabsf(metric.y) <= 1e-8f &&
-           fabsf(metric.z) <= 1e-8f;
+    return fabsf(metric.x) <= 1e-8f && fabsf(metric.y) <= 1e-8f && fabsf(metric.z) <= 1e-8f;
 }
 
 static tc_vec3f tc_mesh_make_metric(tc_vec3f metric) {
     if (tc_mesh_vec3f_is_zero_metric(metric)) {
         return tc_mesh_vec3f_one();
     }
-    return tc_mesh_vec3f_make(
-        fabsf(metric.x) > 1e-8f ? fabsf(metric.x) : 1e-8f,
-        fabsf(metric.y) > 1e-8f ? fabsf(metric.y) : 1e-8f,
-        fabsf(metric.z) > 1e-8f ? fabsf(metric.z) : 1e-8f);
+    return tc_mesh_vec3f_make(fabsf(metric.x) > 1e-8f ? fabsf(metric.x) : 1e-8f,
+                              fabsf(metric.y) > 1e-8f ? fabsf(metric.y) : 1e-8f,
+                              fabsf(metric.z) > 1e-8f ? fabsf(metric.z) : 1e-8f);
 }
 
 static tc_vec3f tc_mesh_vec3f_apply_metric(tc_vec3f v, tc_vec3f metric) {
@@ -154,21 +147,18 @@ static tc_vec3f tc_mesh_vec3f_abs_direction(tc_vec3f a, tc_vec3f b) {
     return out;
 }
 
-static void tc_mesh_closest_point_on_segment(
-    tc_vec3f point,
-    tc_vec3f a,
-    tc_vec3f b,
-    tc_vec3f* out_point,
-    float* out_distance
-) {
+static void
+tc_mesh_closest_point_on_segment(tc_vec3f point, tc_vec3f a, tc_vec3f b, tc_vec3f* out_point, float* out_distance) {
     tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
     tc_vec3f ap = tc_mesh_vec3f_sub(point, a);
     float denom = tc_mesh_vec3f_dot(ab, ab);
     float t = 0.0f;
     if (denom > 1e-12f) {
         t = tc_mesh_vec3f_dot(ap, ab) / denom;
-        if (t < 0.0f) t = 0.0f;
-        if (t > 1.0f) t = 1.0f;
+        if (t < 0.0f)
+            t = 0.0f;
+        if (t > 1.0f)
+            t = 1.0f;
     }
 
     *out_point = tc_mesh_vec3f_add(a, tc_mesh_vec3f_mul(ab, t));
@@ -177,13 +167,7 @@ static void tc_mesh_closest_point_on_segment(
 }
 
 static void tc_mesh_closest_point_on_segment_metric(
-    tc_vec3f point,
-    tc_vec3f a,
-    tc_vec3f b,
-    tc_vec3f metric,
-    tc_vec3f* out_point,
-    float* out_distance
-) {
+    tc_vec3f point, tc_vec3f a, tc_vec3f b, tc_vec3f metric, tc_vec3f* out_point, float* out_distance) {
     tc_vec3f point_m = tc_mesh_vec3f_apply_metric(point, metric);
     tc_vec3f a_m = tc_mesh_vec3f_apply_metric(a, metric);
     tc_vec3f b_m = tc_mesh_vec3f_apply_metric(b, metric);
@@ -193,8 +177,10 @@ static void tc_mesh_closest_point_on_segment_metric(
     float t = 0.0f;
     if (denom > 1e-12f) {
         t = tc_mesh_vec3f_dot(ap_m, ab_m) / denom;
-        if (t < 0.0f) t = 0.0f;
-        if (t > 1.0f) t = 1.0f;
+        if (t < 0.0f)
+            t = 0.0f;
+        if (t > 1.0f)
+            t = 1.0f;
     }
 
     tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
@@ -205,13 +191,7 @@ static void tc_mesh_closest_point_on_segment_metric(
 }
 
 static void tc_mesh_closest_point_on_triangle(
-    tc_vec3f point,
-    tc_vec3f a,
-    tc_vec3f b,
-    tc_vec3f c,
-    tc_vec3f* out_point,
-    float* out_distance
-) {
+    tc_vec3f point, tc_vec3f a, tc_vec3f b, tc_vec3f c, tc_vec3f* out_point, float* out_distance) {
     tc_vec3f ab = tc_mesh_vec3f_sub(b, a);
     tc_vec3f ac = tc_mesh_vec3f_sub(c, a);
     tc_vec3f ap = tc_mesh_vec3f_sub(point, a);
@@ -275,9 +255,7 @@ static bool tc_mesh_triangle_indices(const tc_mesh* mesh, uint32_t tri, uint32_t
     out[0] = mesh->indices[first];
     out[1] = mesh->indices[first + 1];
     out[2] = mesh->indices[first + 2];
-    return out[0] < mesh->vertex_count &&
-           out[1] < mesh->vertex_count &&
-           out[2] < mesh->vertex_count;
+    return out[0] < mesh->vertex_count && out[1] < mesh->vertex_count && out[2] < mesh->vertex_count;
 }
 
 static bool tc_mesh_triangle_normal(const tc_mesh* mesh, uint32_t tri, tc_vec3f* out) {
@@ -293,12 +271,7 @@ static bool tc_mesh_triangle_normal(const tc_mesh* mesh, uint32_t tri, tc_vec3f*
     return tc_mesh_vec3f_normalize(out);
 }
 
-static bool tc_mesh_triangle_normal_metric(
-    const tc_mesh* mesh,
-    uint32_t tri,
-    tc_vec3f metric,
-    tc_vec3f* out
-) {
+static bool tc_mesh_triangle_normal_metric(const tc_mesh* mesh, uint32_t tri, tc_vec3f metric, tc_vec3f* out) {
     tc_vec3f a;
     tc_vec3f b;
     tc_vec3f c;
@@ -329,8 +302,10 @@ static int64_t tc_mesh_quantize_coord(float value) {
 }
 
 static bool tc_mesh_endpoint_less(const int64_t a[3], const int64_t b[3]) {
-    if (a[0] != b[0]) return a[0] < b[0];
-    if (a[1] != b[1]) return a[1] < b[1];
+    if (a[0] != b[0])
+        return a[0] < b[0];
+    if (a[1] != b[1])
+        return a[1] < b[1];
     return a[2] < b[2];
 }
 
@@ -346,17 +321,11 @@ static uint64_t tc_mesh_hash_edge_key(const int64_t key[6]) {
     return hash;
 }
 
-static bool tc_mesh_make_geometric_edge_key(
-    const tc_mesh* mesh,
-    uint32_t a,
-    uint32_t b,
-    int64_t out_key[6],
-    uint64_t* out_hash
-) {
+static bool
+tc_mesh_make_geometric_edge_key(const tc_mesh* mesh, uint32_t a, uint32_t b, int64_t out_key[6], uint64_t* out_hash) {
     tc_vec3f pa;
     tc_vec3f pb;
-    if (!tc_mesh_get_position3f(mesh, a, &pa) ||
-        !tc_mesh_get_position3f(mesh, b, &pb)) {
+    if (!tc_mesh_get_position3f(mesh, a, &pa) || !tc_mesh_get_position3f(mesh, b, &pb)) {
         return false;
     }
 
@@ -387,12 +356,8 @@ static bool tc_mesh_make_geometric_edge_key(
     return true;
 }
 
-static tc_mesh_edge_adjacency* tc_mesh_find_edge_record(
-    tc_mesh_edge_adjacency* edges,
-    size_t edge_count,
-    const int64_t key[6],
-    uint64_t hash
-) {
+static tc_mesh_edge_adjacency*
+tc_mesh_find_edge_record(tc_mesh_edge_adjacency* edges, size_t edge_count, const int64_t key[6], uint64_t hash) {
     for (size_t i = 0; i < edge_count; ++i) {
         if (edges[i].hash == hash && memcmp(edges[i].key, key, sizeof(int64_t) * 6) == 0) {
             return &edges[i];
@@ -402,13 +367,7 @@ static tc_mesh_edge_adjacency* tc_mesh_find_edge_record(
 }
 
 static bool tc_mesh_add_edge_record(
-    const tc_mesh* mesh,
-    tc_mesh_edge_adjacency* edges,
-    size_t* edge_count,
-    uint32_t a,
-    uint32_t b,
-    uint32_t tri
-) {
+    const tc_mesh* mesh, tc_mesh_edge_adjacency* edges, size_t* edge_count, uint32_t a, uint32_t b, uint32_t tri) {
     int64_t key[6];
     uint64_t hash = 0;
     if (!tc_mesh_make_geometric_edge_key(mesh, a, b, key, &hash)) {
@@ -434,25 +393,20 @@ static bool tc_mesh_add_edge_record(
     return true;
 }
 
-static bool tc_mesh_is_boundary_edge(
-    const tc_mesh* mesh,
-    const tc_mesh_edge_adjacency* edges,
-    size_t edge_count,
-    const bool* accepted,
-    uint32_t tri,
-    uint32_t a,
-    uint32_t b
-) {
+static bool tc_mesh_is_boundary_edge(const tc_mesh* mesh,
+                                     const tc_mesh_edge_adjacency* edges,
+                                     size_t edge_count,
+                                     const bool* accepted,
+                                     uint32_t tri,
+                                     uint32_t a,
+                                     uint32_t b) {
     int64_t key[6];
     uint64_t hash = 0;
     if (!tc_mesh_make_geometric_edge_key(mesh, a, b, key, &hash)) {
         return true;
     }
-    const tc_mesh_edge_adjacency* edge = tc_mesh_find_edge_record(
-        (tc_mesh_edge_adjacency*)edges,
-        edge_count,
-        key,
-        hash);
+    const tc_mesh_edge_adjacency* edge =
+        tc_mesh_find_edge_record((tc_mesh_edge_adjacency*)edges, edge_count, key, hash);
     if (!edge) {
         return true;
     }
@@ -466,11 +420,7 @@ static bool tc_mesh_is_boundary_edge(
     return true;
 }
 
-bool tc_mesh_get_position3f(
-    const tc_mesh* mesh,
-    uint32_t vertex_index,
-    tc_vec3f* out_position
-) {
+bool tc_mesh_get_position3f(const tc_mesh* mesh, uint32_t vertex_index, tc_vec3f* out_position) {
     if (!mesh || !out_position || !mesh->vertices || vertex_index >= mesh->vertex_count) {
         return false;
     }
@@ -487,12 +437,7 @@ bool tc_mesh_get_position3f(
 }
 
 bool tc_mesh_get_triangle3f(
-    const tc_mesh* mesh,
-    uint32_t triangle_index,
-    tc_vec3f* out_a,
-    tc_vec3f* out_b,
-    tc_vec3f* out_c
-) {
+    const tc_mesh* mesh, uint32_t triangle_index, tc_vec3f* out_a, tc_vec3f* out_b, tc_vec3f* out_c) {
     if (!mesh || !out_a || !out_b || !out_c || !mesh->indices) {
         return false;
     }
@@ -509,16 +454,11 @@ bool tc_mesh_get_triangle3f(
     uint32_t i1 = mesh->indices[first_index + 1];
     uint32_t i2 = mesh->indices[first_index + 2];
 
-    return tc_mesh_get_position3f(mesh, i0, out_a) &&
-           tc_mesh_get_position3f(mesh, i1, out_b) &&
+    return tc_mesh_get_position3f(mesh, i0, out_a) && tc_mesh_get_position3f(mesh, i1, out_b) &&
            tc_mesh_get_position3f(mesh, i2, out_c);
 }
 
-bool tc_mesh_raycast(
-    const tc_mesh* mesh,
-    const tc_mesh_ray* ray,
-    tc_mesh_hit* out_hit
-) {
+bool tc_mesh_raycast(const tc_mesh* mesh, const tc_mesh_ray* ray, tc_mesh_hit* out_hit) {
     if (!mesh || !ray || !out_hit) {
         return false;
     }
@@ -564,8 +504,7 @@ bool tc_mesh_raycast(
         tc_vec3f v0;
         tc_vec3f v1;
         tc_vec3f v2;
-        if (!tc_mesh_get_position3f(mesh, i0, &v0) ||
-            !tc_mesh_get_position3f(mesh, i1, &v1) ||
+        if (!tc_mesh_get_position3f(mesh, i0, &v0) || !tc_mesh_get_position3f(mesh, i1, &v1) ||
             !tc_mesh_get_position3f(mesh, i2, &v2)) {
             continue;
         }
@@ -624,11 +563,9 @@ bool tc_mesh_raycast(
     return true;
 }
 
-static bool tc_mesh_find_surface_edge_filtered(
-    const tc_mesh* mesh,
-    const tc_mesh_surface_edge_query* query,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+static bool tc_mesh_find_surface_edge_filtered(const tc_mesh* mesh,
+                                               const tc_mesh_surface_edge_query* query,
+                                               tc_mesh_surface_edge_hit* out_hit) {
     if (!mesh || !query || !out_hit) {
         return false;
     }
@@ -654,8 +591,8 @@ static bool tc_mesh_find_surface_edge_filtered(
     tc_vec3f n0 = query->normal;
     tc_vec3f local_up_m = tc_mesh_vec3f_apply_metric(local_up, query_metric);
     tc_vec3f n0_m = tc_mesh_vec3f_apply_metric(n0, query_metric);
-    if (!tc_mesh_vec3f_normalize(&local_up) || !tc_mesh_vec3f_normalize(&n0) ||
-        !tc_mesh_vec3f_normalize(&local_up_m) || !tc_mesh_vec3f_normalize(&n0_m)) {
+    if (!tc_mesh_vec3f_normalize(&local_up) || !tc_mesh_vec3f_normalize(&n0) || !tc_mesh_vec3f_normalize(&local_up_m) ||
+        !tc_mesh_vec3f_normalize(&n0_m)) {
         return false;
     }
     tc_vec3f desired_edge_direction = tc_mesh_vec3f_zero();
@@ -803,8 +740,7 @@ static bool tc_mesh_find_surface_edge_filtered(
 
             tc_vec3f a;
             tc_vec3f b;
-            if (!tc_mesh_get_position3f(mesh, ia, &a) ||
-                !tc_mesh_get_position3f(mesh, ib, &b)) {
+            if (!tc_mesh_get_position3f(mesh, ia, &a) || !tc_mesh_get_position3f(mesh, ib, &b)) {
                 continue;
             }
             if (query->use_direction_filter) {
@@ -818,13 +754,7 @@ static bool tc_mesh_find_surface_edge_filtered(
 
             tc_vec3f candidate;
             float distance = FLT_MAX;
-            tc_mesh_closest_point_on_segment_metric(
-                query->point,
-                a,
-                b,
-                query_metric,
-                &candidate,
-                &distance);
+            tc_mesh_closest_point_on_segment_metric(query->point, a, b, query_metric, &candidate, &distance);
             if (distance < best_distance) {
                 best_distance = distance;
                 best_point = candidate;
@@ -862,14 +792,12 @@ static bool tc_mesh_find_surface_edge_filtered(
     return found;
 }
 
-bool tc_mesh_find_surface_edge(
-    const tc_mesh* mesh,
-    uint32_t start_triangle,
-    tc_vec3f point,
-    tc_vec3f normal,
-    tc_vec3f up,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+bool tc_mesh_find_surface_edge(const tc_mesh* mesh,
+                               uint32_t start_triangle,
+                               tc_vec3f point,
+                               tc_vec3f normal,
+                               tc_vec3f up,
+                               tc_mesh_surface_edge_hit* out_hit) {
     tc_mesh_surface_edge_query query = {0};
     query.start_triangle = start_triangle;
     query.point = point;
@@ -879,15 +807,13 @@ bool tc_mesh_find_surface_edge(
     return tc_mesh_find_surface_edge_query(mesh, &query, out_hit);
 }
 
-bool tc_mesh_find_surface_edge_metric(
-    const tc_mesh* mesh,
-    uint32_t start_triangle,
-    tc_vec3f point,
-    tc_vec3f normal,
-    tc_vec3f up,
-    tc_vec3f metric,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+bool tc_mesh_find_surface_edge_metric(const tc_mesh* mesh,
+                                      uint32_t start_triangle,
+                                      tc_vec3f point,
+                                      tc_vec3f normal,
+                                      tc_vec3f up,
+                                      tc_vec3f metric,
+                                      tc_mesh_surface_edge_hit* out_hit) {
     tc_mesh_surface_edge_query query = {0};
     query.start_triangle = start_triangle;
     query.point = point;
@@ -897,19 +823,15 @@ bool tc_mesh_find_surface_edge_metric(
     return tc_mesh_find_surface_edge_query(mesh, &query, out_hit);
 }
 
-bool tc_mesh_find_surface_edge_query(
-    const tc_mesh* mesh,
-    const tc_mesh_surface_edge_query* query,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+bool tc_mesh_find_surface_edge_query(const tc_mesh* mesh,
+                                     const tc_mesh_surface_edge_query* query,
+                                     tc_mesh_surface_edge_hit* out_hit) {
     return tc_mesh_find_surface_edge_filtered(mesh, query, out_hit);
 }
 
-bool tc_mesh_find_surface_edge_aligned(
-    const tc_mesh* mesh,
-    const tc_mesh_surface_edge_query* query,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+bool tc_mesh_find_surface_edge_aligned(const tc_mesh* mesh,
+                                       const tc_mesh_surface_edge_query* query,
+                                       tc_mesh_surface_edge_hit* out_hit) {
     if (!query) {
         return false;
     }
@@ -918,22 +840,15 @@ bool tc_mesh_find_surface_edge_aligned(
     return tc_mesh_find_surface_edge_query(mesh, &aligned_query, out_hit);
 }
 
-bool tc_mesh_find_nearest_surface_edge(
-    const tc_mesh* mesh,
-    tc_vec3f point,
-    tc_vec3f up,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+bool tc_mesh_find_nearest_surface_edge(const tc_mesh* mesh,
+                                       tc_vec3f point,
+                                       tc_vec3f up,
+                                       tc_mesh_surface_edge_hit* out_hit) {
     return tc_mesh_find_nearest_surface_edge_metric(mesh, point, up, tc_mesh_vec3f_one(), out_hit);
 }
 
 bool tc_mesh_find_nearest_surface_edge_metric(
-    const tc_mesh* mesh,
-    tc_vec3f point,
-    tc_vec3f up,
-    tc_vec3f metric,
-    tc_mesh_surface_edge_hit* out_hit
-) {
+    const tc_mesh* mesh, tc_vec3f point, tc_vec3f up, tc_vec3f metric, tc_mesh_surface_edge_hit* out_hit) {
     if (!mesh || !out_hit) {
         return false;
     }

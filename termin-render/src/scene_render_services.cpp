@@ -5,23 +5,19 @@
 
 namespace termin {
 
-const SceneRenderServices* require_scene_render_services(
-    const ExecuteContext& context,
-    const char* consumer)
-{
-    const char* name = consumer ? consumer : "SceneRenderServices";
-    const SceneRenderServices* services = context.capabilities
-        ? context.capabilities->find<SceneRenderServices>()
-        : nullptr;
-    if (!services) {
-        tc::Log::error("[%s] render execution has no SceneRenderServices capability", name);
-        return nullptr;
+    const SceneRenderServices* require_scene_render_services(const ExecuteContext& context, const char* consumer) {
+        const char* name = consumer ? consumer : "SceneRenderServices";
+        const SceneRenderServices* services =
+            context.capabilities ? context.capabilities->find<SceneRenderServices>() : nullptr;
+        if (!services) {
+            tc::Log::error("[%s] render execution has no SceneRenderServices capability", name);
+            return nullptr;
+        }
+        if (!services->scene.valid()) {
+            tc::Log::error("[%s] SceneRenderServices contains an invalid scene", name);
+            return nullptr;
+        }
+        return services;
     }
-    if (!services->scene.valid()) {
-        tc::Log::error("[%s] SceneRenderServices contains an invalid scene", name);
-        return nullptr;
-    }
-    return services;
-}
 
 } // namespace termin

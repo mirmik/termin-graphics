@@ -16,41 +16,54 @@
 #endif
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
 #include <stdexcept>
 #include <string>
 
 namespace tgfx {
 
-const char* backend_name(BackendType type) {
-    switch (type) {
-        case BackendType::OpenGL: return "opengl";
-        case BackendType::Vulkan: return "vulkan";
-        case BackendType::Metal: return "metal";
-        case BackendType::D3D11: return "d3d11";
-        case BackendType::WebGPU: return "webgpu";
-        case BackendType::Null: return "null";
+    const char* backend_name(BackendType type) {
+        switch (type) {
+        case BackendType::OpenGL:
+            return "opengl";
+        case BackendType::Vulkan:
+            return "vulkan";
+        case BackendType::Metal:
+            return "metal";
+        case BackendType::D3D11:
+            return "d3d11";
+        case BackendType::WebGPU:
+            return "webgpu";
+        case BackendType::Null:
+            return "null";
+        }
+        return "unknown";
     }
-    return "unknown";
-}
 
-BackendType backend_from_name(const std::string& name) {
-    std::string s(name);
-    for (auto& c : s) c = static_cast<char>(std::tolower(c));
+    BackendType backend_from_name(const std::string& name) {
+        std::string s(name);
+        for (auto& c : s)
+            c = static_cast<char>(std::tolower(c));
 
-    if (s == "opengl" || s == "gl") return BackendType::OpenGL;
-    if (s == "vulkan" || s == "vk") return BackendType::Vulkan;
-    if (s == "metal") return BackendType::Metal;
-    if (s == "d3d11" || s == "dx11") return BackendType::D3D11;
-    if (s == "webgpu" || s == "wgpu") return BackendType::WebGPU;
-    if (s == "null") return BackendType::Null;
-    return BackendType::Null;
-}
+        if (s == "opengl" || s == "gl")
+            return BackendType::OpenGL;
+        if (s == "vulkan" || s == "vk")
+            return BackendType::Vulkan;
+        if (s == "metal")
+            return BackendType::Metal;
+        if (s == "d3d11" || s == "dx11")
+            return BackendType::D3D11;
+        if (s == "webgpu" || s == "wgpu")
+            return BackendType::WebGPU;
+        if (s == "null")
+            return BackendType::Null;
+        return BackendType::Null;
+    }
 
-bool backend_is_compiled(BackendType type) {
-    switch (type) {
+    bool backend_is_compiled(BackendType type) {
+        switch (type) {
         case BackendType::OpenGL:
 #ifdef TGFX2_HAS_OPENGL
             return true;
@@ -78,46 +91,47 @@ bool backend_is_compiled(BackendType type) {
         case BackendType::Metal:
         case BackendType::Null:
             return false;
+        }
+        return false;
     }
-    return false;
-}
 
-BackendType compiled_default_backend() {
+    BackendType compiled_default_backend() {
 #if defined(_WIN32) && defined(TGFX2_HAS_D3D11)
-    return BackendType::D3D11;
+        return BackendType::D3D11;
 #elif defined(TGFX2_HAS_VULKAN)
-    return BackendType::Vulkan;
+        return BackendType::Vulkan;
 #elif defined(TGFX2_HAS_OPENGL)
-    return BackendType::OpenGL;
+        return BackendType::OpenGL;
 #elif defined(TGFX2_HAS_D3D11)
-    return BackendType::D3D11;
+        return BackendType::D3D11;
 #elif defined(TGFX2_HAS_WEBGPU)
-    return BackendType::WebGPU;
+        return BackendType::WebGPU;
 #else
-    return BackendType::Null;
+        return BackendType::Null;
 #endif
-}
+    }
 
+    BackendType default_backend_from_env() {
+        const char* env = std::getenv("TERMIN_BACKEND");
+        if (!env || !env[0])
+            return compiled_default_backend();
 
-BackendType default_backend_from_env() {
-    const char* env = std::getenv("TERMIN_BACKEND");
-    if (!env || !env[0]) return compiled_default_backend();
+        std::string s(env);
+        for (auto& c : s)
+            c = static_cast<char>(std::tolower(c));
+        if (s == "null")
+            return BackendType::Null;
 
-    std::string s(env);
-    for (auto& c : s) c = static_cast<char>(std::tolower(c));
-    if (s == "null") return BackendType::Null;
+        BackendType backend = backend_from_name(s);
+        if (backend != BackendType::Null)
+            return backend;
 
-    BackendType backend = backend_from_name(s);
-    if (backend != BackendType::Null) return backend;
+        std::fprintf(stderr, "[tgfx2] Unknown TERMIN_BACKEND='%s'; using compiled default backend\n", env);
+        return compiled_default_backend();
+    }
 
-    std::fprintf(stderr,
-                 "[tgfx2] Unknown TERMIN_BACKEND='%s'; using compiled default backend\n",
-                 env);
-    return compiled_default_backend();
-}
-
-std::unique_ptr<IRenderDevice> create_device(BackendType type) {
-    switch (type) {
+    std::unique_ptr<IRenderDevice> create_device(BackendType type) {
+        switch (type) {
         case BackendType::OpenGL:
 #ifdef TGFX2_HAS_OPENGL
             return std::make_unique<OpenGLRenderDevice>();
@@ -151,9 +165,8 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
 
         case BackendType::WebGPU:
 #ifdef TGFX2_HAS_WEBGPU
-            throw std::runtime_error(
-                "WebGPU device creation is asynchronous; use "
-                "WebGpuRenderDevice::request_async()");
+            throw std::runtime_error("WebGPU device creation is asynchronous; use "
+                                     "WebGpuRenderDevice::request_async()");
 #else
             throw std::runtime_error("WebGPU backend not compiled (set TGFX2_ENABLE_WEBGPU=ON)");
 #endif
@@ -163,9 +176,9 @@ std::unique_ptr<IRenderDevice> create_device(BackendType type) {
 
         case BackendType::Null:
             throw std::runtime_error("Null backend not yet implemented");
-    }
+        }
 
-    throw std::runtime_error("Unknown backend type");
-}
+        throw std::runtime_error("Unknown backend type");
+    }
 
 } // namespace tgfx

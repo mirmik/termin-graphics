@@ -54,23 +54,16 @@ typedef struct tc_shader_create_desc {
     const tc_shader_surface_producer_desc* surface_producer;
 } tc_shader_create_desc;
 
-TGFX_API bool tc_shader_set_sources(
-    tc_shader* shader,
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* source_path
-);
+TGFX_API bool tc_shader_set_sources(tc_shader* shader,
+                                    const char* vertex_source,
+                                    const char* fragment_source,
+                                    const char* geometry_source,
+                                    const char* name,
+                                    const char* source_path);
 
-TGFX_API bool tc_shader_set_sources_desc(
-    tc_shader* shader,
-    const tc_shader_source_desc* desc
-);
+TGFX_API bool tc_shader_set_sources_desc(tc_shader* shader, const tc_shader_source_desc* desc);
 
-TGFX_API tc_shader_handle tc_shader_from_sources_desc(
-    const tc_shader_create_desc* desc
-);
+TGFX_API tc_shader_handle tc_shader_from_sources_desc(const tc_shader_create_desc* desc);
 
 // Register a shader with process-lifetime ownership. The registry holds
 // a permanent ref on the returned handle — the shader will NOT be
@@ -88,15 +81,13 @@ TGFX_API tc_shader_handle tc_shader_from_sources_desc(
 // Register a process-lifetime shader with an explicit source language and
 // artifact policy. Authored and engine shaders must never infer GLSL merely
 // because language metadata was omitted.
-TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(
-    const char* vertex_source,
-    const char* fragment_source,
-    const char* geometry_source,
-    const char* name,
-    const char* uuid,
-    tc_shader_language language,
-    tc_shader_artifact_policy artifact_policy
-);
+TGFX_API tc_shader_handle tc_shader_register_static_uuid_ex(const char* vertex_source,
+                                                            const char* fragment_source,
+                                                            const char* geometry_source,
+                                                            const char* name,
+                                                            const char* uuid,
+                                                            tc_shader_language language,
+                                                            tc_shader_artifact_policy artifact_policy);
 
 // Same ownership semantics as tc_shader_register_static_uuid_ex(), with a
 // complete source descriptor including optional explicit stage entry points.
@@ -112,20 +103,12 @@ TGFX_API bool tc_shader_retain_static(tc_shader_handle handle);
 // Variant support
 // ============================================================================
 
-TGFX_API void tc_shader_set_variant_info(
-    tc_shader* shader,
-    tc_shader_handle original,
-    tc_shader_variant_op op
-);
+TGFX_API void tc_shader_set_variant_info(tc_shader* shader, tc_shader_handle original, tc_shader_variant_op op);
 
 TGFX_API bool tc_shader_variant_is_stale(tc_shader_handle variant);
 
-TGFX_API void tc_shader_make_variant_uuid(
-    char* out_uuid,
-    size_t out_size,
-    const char* base_uuid,
-    tc_shader_variant_op op
-);
+TGFX_API void
+tc_shader_make_variant_uuid(char* out_uuid, size_t out_size, const char* base_uuid, tc_shader_variant_op op);
 
 // ============================================================================
 // Shader info for debugging/inspection
@@ -170,17 +153,16 @@ TGFX_API void tc_shader_foreach(tc_shader_iter_fn callback, void* user_data);
 
 typedef void (*tc_shader_destroy_hook_fn)(uint32_t pool_index, void* user_data);
 
-TGFX_API void tc_shader_registry_add_destroy_hook(
-    tc_shader_destroy_hook_fn cb, void* user_data);
-TGFX_API void tc_shader_registry_remove_destroy_hook(
-    tc_shader_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_shader_registry_add_destroy_hook(tc_shader_destroy_hook_fn cb, void* user_data);
+TGFX_API void tc_shader_registry_remove_destroy_hook(tc_shader_destroy_hook_fn cb, void* user_data);
 
 // ============================================================================
 // Utility
 // ============================================================================
 
 static inline void tc_shader_bump_version(tc_shader* shader) {
-    if (shader) shader->version++;
+    if (shader)
+        shader->version++;
 }
 
 #ifdef __cplusplus

@@ -9,8 +9,7 @@ extern "C" {
 }
 
 TEST_CASE("shader ABI C API exposes canonical names and legacy aliases") {
-    const tc_shader_abi_resource_decl* draw =
-        tc_shader_abi_find_resource(TC_SHADER_RESOURCE_DRAW);
+    const tc_shader_abi_resource_decl* draw = tc_shader_abi_find_resource(TC_SHADER_RESOURCE_DRAW);
     REQUIRE(draw != nullptr);
     CHECK_EQ(draw->id, static_cast<uint32_t>(TC_SHADER_ABI_RESOURCE_DRAW_DATA));
     CHECK(std::strcmp(draw->canonical_name, TC_SHADER_RESOURCE_DRAW_DATA) == 0);
@@ -19,8 +18,7 @@ TEST_CASE("shader ABI C API exposes canonical names and legacy aliases") {
     CHECK(tc_shader_abi_name_is_legacy_alias(draw, TC_SHADER_RESOURCE_DRAW));
     CHECK(!tc_shader_abi_name_is_legacy_alias(draw, TC_SHADER_RESOURCE_DRAW_DATA));
 
-    const tc_shader_abi_resource_decl* bone =
-        tc_shader_abi_find_resource("BoneBlock");
+    const tc_shader_abi_resource_decl* bone = tc_shader_abi_find_resource("BoneBlock");
     REQUIRE(bone != nullptr);
     CHECK_EQ(bone->id, static_cast<uint32_t>(TC_SHADER_ABI_RESOURCE_BONE_BLOCK));
     CHECK(std::strcmp(bone->canonical_name, TC_SHADER_RESOURCE_BONE_BLOCK) == 0);
@@ -94,8 +92,7 @@ TEST_CASE("shader resource layout preserves D3D11 register placement") {
 
     tc_shader_set_resource_layout(shader, &binding, 1);
 
-    const tc_shader_resource_binding* stored =
-        tc_shader_find_resource_binding(shader, "material");
+    const tc_shader_resource_binding* stored = tc_shader_find_resource_binding(shader, "material");
     REQUIRE(stored != nullptr);
     CHECK_EQ(stored->has_d3d11_placement, 1u);
     CHECK_EQ(stored->d3d11.register_class, TC_SHADER_D3D11_REGISTER_B);
@@ -241,13 +238,8 @@ TEST_CASE("shader contract clears when shader sources change") {
     CHECK(tc_shader_has_contract(shader));
     REQUIRE(tc_shader_set_language(shader, TC_SHADER_LANGUAGE_GLSL));
 
-    REQUIRE(tc_shader_set_sources(
-        shader,
-        "void main() {}",
-        "void main() {}",
-        nullptr,
-        "contract reset shader",
-        nullptr));
+    REQUIRE(
+        tc_shader_set_sources(shader, "void main() {}", "void main() {}", nullptr, "contract reset shader", nullptr));
     CHECK(!tc_shader_has_contract(shader));
 
     tc_shader_destroy(handle);
@@ -260,9 +252,8 @@ TEST_CASE("surface producer metadata is owned and changes shader identity") {
     char contract_id[] = "game.surface.weathered";
     char surface_type[] = "GameWeatheredSurfaceV1";
     char evaluator_entry[] = "evaluate_surface";
-    char evaluator_source[] =
-        "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
-        "return GameWeatheredSurfaceV1(0.5); }";
+    char evaluator_source[] = "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
+                              "return GameWeatheredSurfaceV1(0.5); }";
     char source_identity[] = "weathered-evaluator-a";
 
     tc_shader_fragment_input inputs[2]{};
@@ -303,9 +294,7 @@ TEST_CASE("surface producer metadata is owned and changes shader identity") {
     REQUIRE(!tc_shader_handle_is_invalid(handle));
     tc_shader* shader = tc_shader_get(handle);
     REQUIRE(shader != nullptr);
-    CHECK_EQ(
-        tc_shader_get_program_role(shader),
-        TC_SHADER_PROGRAM_SURFACE_PRODUCER);
+    CHECK_EQ(tc_shader_get_program_role(shader), TC_SHADER_PROGRAM_SURFACE_PRODUCER);
     CHECK(!tc_shader_is_executable(shader));
     CHECK(!tc_shader_require_executable(shader, "unit-test compile"));
     CHECK(tc_shader_has_surface_producer(shader));
@@ -354,9 +343,8 @@ TEST_CASE("surface producer metadata is owned and changes shader identity") {
     different.contract_id = "game.surface.other";
     different.surface_type_name = "GameWeatheredSurfaceV1";
     different.evaluator_entry = "evaluate_surface";
-    different.evaluator_source =
-        "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
-        "return GameWeatheredSurfaceV1(0.5); }";
+    different.evaluator_source = "GameWeatheredSurfaceV1 evaluate_surface(FragmentInput input) { "
+                                 "return GameWeatheredSurfaceV1(0.5); }";
     different.source_identity = "weathered-evaluator-a";
     different.fragment_inputs = view.fragment_inputs;
     different.resources = view.resources;
@@ -365,21 +353,13 @@ TEST_CASE("surface producer metadata is owned and changes shader identity") {
     different_create.sources.fragment_source = different.evaluator_source;
     different_create.sources.fragment_entry = different.evaluator_entry;
     different_create.surface_producer = &different;
-    tc_shader_handle different_handle =
-        tc_shader_from_sources_desc(&different_create);
+    tc_shader_handle different_handle = tc_shader_from_sources_desc(&different_create);
     REQUIRE(!tc_shader_handle_is_invalid(different_handle));
     CHECK_FALSE(tc_shader_handle_eq(different_handle, handle));
-    CHECK(std::strcmp(
-        tc_shader_get(different_handle)->source_hash,
-        producer_hash.c_str()) != 0);
+    CHECK(std::strcmp(tc_shader_get(different_handle)->source_hash, producer_hash.c_str()) != 0);
 
     REQUIRE(tc_shader_set_sources(
-        shader,
-        "void vs_main() {}",
-        "float4 fs_main() : SV_Target0 { return 1.0; }",
-        nullptr,
-        "final color",
-        nullptr));
+        shader, "void vs_main() {}", "float4 fs_main() : SV_Target0 { return 1.0; }", nullptr, "final color", nullptr));
     CHECK(tc_shader_is_executable(shader));
     CHECK(!tc_shader_has_surface_producer(shader));
 
@@ -480,20 +460,12 @@ TEST_CASE("declared shader contract resources synchronize from compiler layout e
     REQUIRE(tc_shader_set_contract(shader, &desc));
 
     tc_shader_resource_binding fragment_resources[2]{};
-    std::snprintf(
-        fragment_resources[0].name,
-        sizeof(fragment_resources[0].name),
-        "%s",
-        "material");
+    std::snprintf(fragment_resources[0].name, sizeof(fragment_resources[0].name), "%s", "material");
     fragment_resources[0].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     fragment_resources[0].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     fragment_resources[0].stage_mask = TC_SHADER_STAGE_FRAGMENT;
     fragment_resources[0].size = 224;
-    std::snprintf(
-        fragment_resources[1].name,
-        sizeof(fragment_resources[1].name),
-        "%s",
-        "u_color_texture");
+    std::snprintf(fragment_resources[1].name, sizeof(fragment_resources[1].name), "%s", "u_color_texture");
     fragment_resources[1].kind = TC_SHADER_RESOURCE_TEXTURE;
     fragment_resources[1].scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     fragment_resources[1].stage_mask = TC_SHADER_STAGE_FRAGMENT;
@@ -512,11 +484,7 @@ TEST_CASE("declared shader contract resources synchronize from compiler layout e
     tc_shader_resource_binding merged_resources[3]{};
     merged_resources[0] = fragment_resources[0];
     merged_resources[1] = fragment_resources[1];
-    std::snprintf(
-        merged_resources[2].name,
-        sizeof(merged_resources[2].name),
-        "%s",
-        "draw_data");
+    std::snprintf(merged_resources[2].name, sizeof(merged_resources[2].name), "%s", "draw_data");
     merged_resources[2].kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     merged_resources[2].scope = TC_SHADER_RESOURCE_SCOPE_DRAW;
     merged_resources[2].stage_mask = TC_SHADER_STAGE_VERTEX;
@@ -605,8 +573,7 @@ TEST_CASE("material UBO layout update preserves D3D11 register placement") {
     entry.size = 4;
     tc_shader_set_material_ubo_layout(shader, &entry, 1, 192);
 
-    const tc_shader_resource_binding* stored =
-        tc_shader_find_resource_binding(shader, "material");
+    const tc_shader_resource_binding* stored = tc_shader_find_resource_binding(shader, "material");
     REQUIRE(stored != nullptr);
     CHECK_EQ(stored->has_d3d11_placement, 1u);
     CHECK_EQ(stored->d3d11.register_class, TC_SHADER_D3D11_REGISTER_B);
@@ -688,20 +655,10 @@ void main() {
 )";
 
     const tc_shader_create_desc shader_desc = {
-        {
-            vertex_source,
-            fragment_source,
-            nullptr,
-            "raw-glsl-engine-layout-test",
-            nullptr,
-            nullptr,
-            nullptr,
-            nullptr
-        },
+        {vertex_source, fragment_source, nullptr, "raw-glsl-engine-layout-test", nullptr, nullptr, nullptr, nullptr},
         "raw-glsl-engine-layout-test",
         TC_SHADER_LANGUAGE_GLSL,
-        TC_SHADER_ARTIFACT_OPTIONAL
-    };
+        TC_SHADER_ARTIFACT_OPTIONAL};
     tc_shader_handle handle = tc_shader_from_sources_desc(&shader_desc);
     REQUIRE(!tc_shader_handle_is_invalid(handle));
 
@@ -743,38 +700,24 @@ struct FragmentOutput { float4 color : SV_Target0; };
 )";
 
     const tc_shader_create_desc first_desc = {
-        {
-            vertex_source,
-            fragment_source,
-            nullptr,
-            "entry-point-identity-test",
-            nullptr,
-            "vs_main",
-            "fs_main",
-            nullptr
-        },
+        {vertex_source, fragment_source, nullptr, "entry-point-identity-test", nullptr, "vs_main", "fs_main", nullptr},
         nullptr,
         TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED
-    };
+        TC_SHADER_ARTIFACT_REQUIRED};
     tc_shader_handle first = tc_shader_from_sources_desc(&first_desc);
     REQUIRE(!tc_shader_handle_is_invalid(first));
 
-    const tc_shader_create_desc second_desc = {
-        {
-            vertex_source,
-            fragment_source,
-            nullptr,
-            "entry-point-identity-test-alt",
-            nullptr,
-            "vs_alt",
-            "fs_main",
-            nullptr
-        },
-        nullptr,
-        TC_SHADER_LANGUAGE_SLANG,
-        TC_SHADER_ARTIFACT_REQUIRED
-    };
+    const tc_shader_create_desc second_desc = {{vertex_source,
+                                                fragment_source,
+                                                nullptr,
+                                                "entry-point-identity-test-alt",
+                                                nullptr,
+                                                "vs_alt",
+                                                "fs_main",
+                                                nullptr},
+                                               nullptr,
+                                               TC_SHADER_LANGUAGE_SLANG,
+                                               TC_SHADER_ARTIFACT_REQUIRED};
     tc_shader_handle second = tc_shader_from_sources_desc(&second_desc);
     REQUIRE(!tc_shader_handle_is_invalid(second));
     CHECK(first.index != second.index);

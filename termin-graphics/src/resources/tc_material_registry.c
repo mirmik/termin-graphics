@@ -2,13 +2,13 @@
 #include "tgfx/resources/tc_material_registry.h"
 #include "tgfx/resources/tc_shader_registry.h"
 #include "tgfx/resources/tc_texture_registry.h"
-#include <tcbase/tc_pool.h>
-#include <tcbase/tc_resource_map.h>
-#include <tcbase/tc_registry_utils.h>
-#include <tcbase/tc_log.h>
-#include <tcbase/tc_string.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tcbase/tc_log.h>
+#include <tcbase/tc_pool.h>
+#include <tcbase/tc_registry_utils.h>
+#include <tcbase/tc_resource_map.h>
+#include <tcbase/tc_string.h>
 
 // ============================================================================
 // Global state
@@ -27,11 +27,7 @@ static bool g_material_initialized = false;
 void tc_material_init(void) {
     TC_REGISTRY_INIT_GUARD(g_material_initialized, "tc_material");
 
-    if (!tc_pool_init_rebootstrap(
-            &g_material_pool,
-            sizeof(tc_material),
-            64,
-            &g_material_generation_epoch)) {
+    if (!tc_pool_init_rebootstrap(&g_material_pool, sizeof(tc_material), 64, &g_material_generation_epoch)) {
         tc_log(TC_LOG_ERROR, "tc_material_init: failed to init pool");
         return;
     }
@@ -182,7 +178,8 @@ tc_material_handle tc_material_get_or_create(const char* uuid, const char* name)
 }
 
 tc_material* tc_material_get(tc_material_handle h) {
-    if (!g_material_initialized) return NULL;
+    if (!g_material_initialized)
+        return NULL;
     return (tc_material*)tc_pool_get_checked(&g_material_pool, h, "tc_material");
 }
 
@@ -195,7 +192,8 @@ bool tc_material_is_valid(tc_material_handle h) {
 
 // Helper to release all shader references in a material
 static void material_release_shaders(tc_material* mat) {
-    if (!mat) return;
+    if (!mat)
+        return;
     for (size_t i = 0; i < mat->phase_count; i++) {
         tc_shader* s = tc_shader_get(mat->phases[i].shader);
         if (s) {
@@ -205,10 +203,12 @@ static void material_release_shaders(tc_material* mat) {
 }
 
 bool tc_material_destroy(tc_material_handle h) {
-    if (!g_material_initialized) return false;
+    if (!g_material_initialized)
+        return false;
 
     tc_material* mat = tc_material_get(h);
-    if (!mat) return false;
+    if (!mat)
+        return false;
 
     // Release all shader references before destroying
     material_release_shaders(mat);
@@ -224,7 +224,8 @@ bool tc_material_contains(const char* uuid) {
 }
 
 size_t tc_material_count(void) {
-    if (!g_material_initialized) return 0;
+    if (!g_material_initialized)
+        return 0;
     return tc_pool_count(&g_material_pool);
 }
 
@@ -249,7 +250,8 @@ void tc_material_add_ref(tc_material* mat) {
 }
 
 bool tc_material_release(tc_material* mat) {
-    if (!mat || mat->header.ref_count == 0) return false;
+    if (!mat || mat->header.ref_count == 0)
+        return false;
 
     mat->header.ref_count--;
     if (mat->header.ref_count == 0) {
@@ -266,12 +268,8 @@ bool tc_material_release(tc_material* mat) {
 // Phase operations
 // ============================================================================
 
-tc_material_phase* tc_material_add_phase(
-    tc_material* mat,
-    tc_shader_handle shader,
-    const char* phase_mark,
-    int priority
-) {
+tc_material_phase*
+tc_material_add_phase(tc_material* mat, tc_shader_handle shader, const char* phase_mark, int priority) {
     if (!mat || mat->phase_count >= TC_MATERIAL_MAX_PHASES) {
         return NULL;
     }
@@ -279,9 +277,7 @@ tc_material_phase* tc_material_add_phase(
     const char* resolved_name = phase_mark ? phase_mark : "opaque";
     tc_phase_mask resolved_phase = tc_phase_find(resolved_name);
     if (resolved_phase == TC_PHASE_NONE) {
-        tc_log(TC_LOG_ERROR,
-               "tc_material_add_phase: phase '%s' is not present in the project registry",
-               resolved_name);
+        tc_log(TC_LOG_ERROR, "tc_material_add_phase: phase '%s' is not present in the project registry", resolved_name);
         return NULL;
     }
 
@@ -333,22 +329,15 @@ bool tc_material_remove_phase(tc_material* mat, size_t index) {
     return true;
 }
 
-size_t tc_material_get_phases_for_mark(
-    tc_material* mat,
-    const char* mark,
-    tc_material_phase** out_phases,
-    size_t max_count
-) {
-    return tc_material_get_phases_for_phase(
-        mat, tc_phase_find(mark), out_phases, max_count);
+size_t
+tc_material_get_phases_for_mark(tc_material* mat, const char* mark, tc_material_phase** out_phases, size_t max_count) {
+    return tc_material_get_phases_for_phase(mat, tc_phase_find(mark), out_phases, max_count);
 }
 
-size_t tc_material_get_phases_for_phase(
-    tc_material* mat,
-    tc_phase_mask phase,
-    tc_material_phase** out_phases,
-    size_t max_count
-) {
+size_t tc_material_get_phases_for_phase(tc_material* mat,
+                                        tc_phase_mask phase,
+                                        tc_material_phase** out_phases,
+                                        size_t max_count) {
     if (!mat || !tc_phase_is_single(phase) || !out_phases || max_count == 0) {
         return 0;
     }
@@ -374,19 +363,16 @@ size_t tc_material_get_phases_for_phase(
     return count;
 }
 
-bool tc_material_find_phase_ref(
-    const tc_material_phase* phase,
-    tc_material_handle* out_material,
-    size_t* out_phase_index
-) {
+bool tc_material_find_phase_ref(const tc_material_phase* phase,
+                                tc_material_handle* out_material,
+                                size_t* out_phase_index) {
     if (out_material) {
         *out_material = tc_material_handle_invalid();
     }
     if (out_phase_index) {
         *out_phase_index = 0;
     }
-    if (!g_material_initialized || !phase ||
-        tc_material_handle_is_invalid(phase->owner_material)) {
+    if (!g_material_initialized || !phase || tc_material_handle_is_invalid(phase->owner_material)) {
         return false;
     }
 
@@ -408,13 +394,12 @@ bool tc_material_find_phase_ref(
 // Phase uniform/texture operations
 // ============================================================================
 
-bool tc_material_phase_set_uniform(
-    tc_material_phase* phase,
-    const char* name,
-    tc_uniform_type type,
-    const void* value
-) {
-    if (!phase || !name || !value) return false;
+bool tc_material_phase_set_uniform(tc_material_phase* phase,
+                                   const char* name,
+                                   tc_uniform_type type,
+                                   const void* value) {
+    if (!phase || !name || !value)
+        return false;
 
     tc_uniform_value* uniform = tc_material_phase_find_uniform(phase, name);
     if (!uniform) {
@@ -428,40 +413,37 @@ bool tc_material_phase_set_uniform(
     uniform->type = (uint8_t)type;
 
     switch (type) {
-        case TC_UNIFORM_BOOL:
-            uniform->data.i = *(const int*)value ? 1 : 0;
-            break;
-        case TC_UNIFORM_INT:
-            uniform->data.i = *(const int*)value;
-            break;
-        case TC_UNIFORM_FLOAT:
-            uniform->data.f = *(const float*)value;
-            break;
-        case TC_UNIFORM_VEC2:
-            memcpy(uniform->data.v2, value, sizeof(float) * 2);
-            break;
-        case TC_UNIFORM_VEC3:
-            memcpy(uniform->data.v3, value, sizeof(float) * 3);
-            break;
-        case TC_UNIFORM_VEC4:
-            memcpy(uniform->data.v4, value, sizeof(float) * 4);
-            break;
-        case TC_UNIFORM_MAT4:
-            memcpy(uniform->data.m4, value, sizeof(float) * 16);
-            break;
-        default:
-            return false;
+    case TC_UNIFORM_BOOL:
+        uniform->data.i = *(const int*)value ? 1 : 0;
+        break;
+    case TC_UNIFORM_INT:
+        uniform->data.i = *(const int*)value;
+        break;
+    case TC_UNIFORM_FLOAT:
+        uniform->data.f = *(const float*)value;
+        break;
+    case TC_UNIFORM_VEC2:
+        memcpy(uniform->data.v2, value, sizeof(float) * 2);
+        break;
+    case TC_UNIFORM_VEC3:
+        memcpy(uniform->data.v3, value, sizeof(float) * 3);
+        break;
+    case TC_UNIFORM_VEC4:
+        memcpy(uniform->data.v4, value, sizeof(float) * 4);
+        break;
+    case TC_UNIFORM_MAT4:
+        memcpy(uniform->data.m4, value, sizeof(float) * 16);
+        break;
+    default:
+        return false;
     }
 
     return true;
 }
 
-bool tc_material_phase_set_texture(
-    tc_material_phase* phase,
-    const char* name,
-    tc_texture_handle texture
-) {
-    if (!phase || !name) return false;
+bool tc_material_phase_set_texture(tc_material_phase* phase, const char* name, tc_texture_handle texture) {
+    if (!phase || !name)
+        return false;
     if (!tc_material_phase_accepts_texture(phase, name, texture)) {
         return false;
     }
@@ -478,19 +460,14 @@ bool tc_material_phase_set_texture(
 
     if (tex->has_expected_encoding && !tc_texture_handle_is_invalid(texture)) {
         const tc_texture* candidate = tc_texture_get(texture);
-        if (candidate
-            && candidate->encoding != tex->expected_encoding) {
-            tc_log(
-                TC_LOG_WARN,
-                "tc_material_phase_set_texture: slot '%s' expects %s but "
-                "texture '%s' is %s; binding it unchanged",
-                name,
-                tex->expected_encoding == TC_TEXTURE_ENCODING_SRGB
-                    ? "sRGB" : "Linear",
-                candidate->header.name
-                    ? candidate->header.name : candidate->header.uuid,
-                candidate->encoding == TC_TEXTURE_ENCODING_SRGB
-                    ? "sRGB" : "Linear");
+        if (candidate && candidate->encoding != tex->expected_encoding) {
+            tc_log(TC_LOG_WARN,
+                   "tc_material_phase_set_texture: slot '%s' expects %s but "
+                   "texture '%s' is %s; binding it unchanged",
+                   name,
+                   tex->expected_encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear",
+                   candidate->header.name ? candidate->header.name : candidate->header.uuid,
+                   candidate->encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear");
         }
     }
 
@@ -498,55 +475,44 @@ bool tc_material_phase_set_texture(
     return true;
 }
 
-bool tc_material_phase_declare_texture(
-    tc_material_phase* phase,
-    const char* name,
-    tc_texture_encoding expected_encoding
-) {
+bool tc_material_phase_declare_texture(tc_material_phase* phase,
+                                       const char* name,
+                                       tc_texture_encoding expected_encoding) {
     if (!phase || !name || name[0] == '\0') {
         tc_log(TC_LOG_ERROR, "tc_material_phase_declare_texture: phase and name are required");
         return false;
     }
-    if (expected_encoding != TC_TEXTURE_ENCODING_LINEAR
-        && expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_phase_declare_texture: unsupported encoding %u for slot '%s'",
-            (unsigned)expected_encoding,
-            name);
+    if (expected_encoding != TC_TEXTURE_ENCODING_LINEAR && expected_encoding != TC_TEXTURE_ENCODING_SRGB) {
+        tc_log(TC_LOG_ERROR,
+               "tc_material_phase_declare_texture: unsupported encoding %u for slot '%s'",
+               (unsigned)expected_encoding,
+               name);
         return false;
     }
 
-    if (!tc_material_phase_declare_texture_slot(phase, name)) return false;
+    if (!tc_material_phase_declare_texture_slot(phase, name))
+        return false;
     tc_material_texture* slot = tc_material_phase_find_texture(phase, name);
-    if (
-        slot->has_expected_encoding
-        && slot->expected_encoding != (uint8_t)expected_encoding) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_phase_declare_texture: conflicting encoding contract for slot '%s'",
-            name);
+    if (slot->has_expected_encoding && slot->expected_encoding != (uint8_t)expected_encoding) {
+        tc_log(TC_LOG_ERROR, "tc_material_phase_declare_texture: conflicting encoding contract for slot '%s'", name);
         return false;
     }
 
     if (!tc_texture_handle_is_invalid(slot->texture)) {
         tc_texture* texture = tc_texture_get(slot->texture);
         if (!texture) {
-            tc_log(
-                TC_LOG_ERROR,
-                "tc_material_phase_declare_texture: stale existing texture "
-                "for slot '%s'",
-                name);
+            tc_log(TC_LOG_ERROR,
+                   "tc_material_phase_declare_texture: stale existing texture "
+                   "for slot '%s'",
+                   name);
             return false;
         }
         if (texture->encoding != (uint8_t)expected_encoding) {
-            tc_log(
-                TC_LOG_WARN,
-                "tc_material_phase_declare_texture: existing texture for slot '%s' "
-                "does not match %s encoding; keeping the binding unchanged",
-                name,
-                expected_encoding == TC_TEXTURE_ENCODING_SRGB
-                    ? "sRGB" : "Linear");
+            tc_log(TC_LOG_WARN,
+                   "tc_material_phase_declare_texture: existing texture for slot '%s' "
+                   "does not match %s encoding; keeping the binding unchanged",
+                   name,
+                   expected_encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "Linear");
         }
     }
 
@@ -555,23 +521,16 @@ bool tc_material_phase_declare_texture(
     return true;
 }
 
-bool tc_material_phase_declare_texture_slot(
-    tc_material_phase* phase,
-    const char* name
-) {
+bool tc_material_phase_declare_texture_slot(tc_material_phase* phase, const char* name) {
     if (!phase || !name || name[0] == '\0') {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_phase_declare_texture_slot: phase and name are required");
+        tc_log(TC_LOG_ERROR, "tc_material_phase_declare_texture_slot: phase and name are required");
         return false;
     }
     tc_material_texture* slot = tc_material_phase_find_texture(phase, name);
     if (!slot) {
         if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
             tc_log(
-                TC_LOG_ERROR,
-                "tc_material_phase_declare_texture_slot: texture slot capacity exceeded for '%s'",
-                name);
+                TC_LOG_ERROR, "tc_material_phase_declare_texture_slot: texture slot capacity exceeded for '%s'", name);
             return false;
         }
         slot = &phase->textures[phase->texture_count++];
@@ -584,12 +543,9 @@ bool tc_material_phase_declare_texture_slot(
     return true;
 }
 
-bool tc_material_phase_accepts_texture(
-    const tc_material_phase* phase,
-    const char* name,
-    tc_texture_handle texture
-) {
-    if (!phase || !name || name[0] == '\0') return false;
+bool tc_material_phase_accepts_texture(const tc_material_phase* phase, const char* name, tc_texture_handle texture) {
+    if (!phase || !name || name[0] == '\0')
+        return false;
     const tc_material_texture* slot = NULL;
     for (size_t i = 0; i < phase->texture_count; ++i) {
         if (strcmp(phase->textures[i].name, name) == 0) {
@@ -599,10 +555,7 @@ bool tc_material_phase_accepts_texture(
     }
     if (!slot) {
         if (phase->texture_count >= TC_MATERIAL_MAX_TEXTURES) {
-            tc_log(
-                TC_LOG_ERROR,
-                "tc_material_phase_set_texture: texture slot capacity exceeded for '%s'",
-                name);
+            tc_log(TC_LOG_ERROR, "tc_material_phase_set_texture: texture slot capacity exceeded for '%s'", name);
             return false;
         }
         return true;
@@ -613,10 +566,7 @@ bool tc_material_phase_accepts_texture(
 
     const tc_texture* candidate = tc_texture_get(texture);
     if (!candidate) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_phase_set_texture: stale texture handle for slot '%s'",
-            name);
+        tc_log(TC_LOG_ERROR, "tc_material_phase_set_texture: stale texture handle for slot '%s'", name);
         return false;
     }
     if (candidate->encoding != slot->expected_encoding) {
@@ -628,37 +578,37 @@ bool tc_material_phase_accepts_texture(
     return true;
 }
 
-bool tc_material_phase_get_color(
-    const tc_material_phase* phase,
-    float* r, float* g, float* b, float* a
-) {
-    if (!phase) return false;
+bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float* g, float* b, float* a) {
+    if (!phase)
+        return false;
 
     for (size_t i = 0; i < phase->uniform_count; i++) {
-        if (strcmp(phase->uniforms[i].name, "u_color") == 0 &&
-            phase->uniforms[i].type == TC_UNIFORM_VEC4) {
-            if (r) *r = phase->uniforms[i].data.v4[0];
-            if (g) *g = phase->uniforms[i].data.v4[1];
-            if (b) *b = phase->uniforms[i].data.v4[2];
-            if (a) *a = phase->uniforms[i].data.v4[3];
+        if (strcmp(phase->uniforms[i].name, "u_color") == 0 && phase->uniforms[i].type == TC_UNIFORM_VEC4) {
+            if (r)
+                *r = phase->uniforms[i].data.v4[0];
+            if (g)
+                *g = phase->uniforms[i].data.v4[1];
+            if (b)
+                *b = phase->uniforms[i].data.v4[2];
+            if (a)
+                *a = phase->uniforms[i].data.v4[3];
             return true;
         }
     }
     return false;
 }
 
-void tc_material_phase_set_color(
-    tc_material_phase* phase,
-    float r, float g, float b, float a
-) {
-    if (!phase) return;
+void tc_material_phase_set_color(tc_material_phase* phase, float r, float g, float b, float a) {
+    if (!phase)
+        return;
 
     float color[4] = {r, g, b, a};
     tc_material_phase_set_uniform(phase, "u_color", TC_UNIFORM_VEC4, color);
 }
 
 void tc_material_phase_make_transparent(tc_material_phase* phase) {
-    if (!phase) return;
+    if (!phase)
+        return;
     phase->state = tc_render_state_transparent();
 }
 
@@ -667,7 +617,8 @@ void tc_material_phase_make_transparent(tc_material_phase* phase) {
 // ============================================================================
 
 tc_material_phase* tc_material_find_phase(tc_material* mat, const char* mark) {
-    if (!mat || !mark) return NULL;
+    if (!mat || !mark)
+        return NULL;
 
     for (size_t i = 0; i < mat->phase_count; i++) {
         if (strcmp(mat->phases[i].phase_mark, mark) == 0) {
@@ -677,13 +628,9 @@ tc_material_phase* tc_material_find_phase(tc_material* mat, const char* mark) {
     return NULL;
 }
 
-void tc_material_set_uniform(
-    tc_material* mat,
-    const char* name,
-    tc_uniform_type type,
-    const void* value
-) {
-    if (!mat) return;
+void tc_material_set_uniform(tc_material* mat, const char* name, tc_uniform_type type, const void* value) {
+    if (!mat)
+        return;
 
     for (size_t i = 0; i < mat->phase_count; i++) {
         tc_material_phase_set_uniform(&mat->phases[i], name, type, value);
@@ -691,12 +638,9 @@ void tc_material_set_uniform(
     // Note: uniforms are per-frame values, don't bump version
 }
 
-size_t tc_material_set_texture(
-    tc_material* mat,
-    const char* name,
-    tc_texture_handle texture
-) {
-    if (!mat || !name || mat->phase_count == 0) return 0;
+size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_handle texture) {
+    if (!mat || !name || mat->phase_count == 0)
+        return 0;
 
     bool has_declared_schema = false;
     bool target_is_declared = false;
@@ -704,7 +648,8 @@ size_t tc_material_set_texture(
         const tc_material_phase* phase = &mat->phases[phase_index];
         for (size_t slot_index = 0; slot_index < phase->texture_count; ++slot_index) {
             const tc_material_texture* slot = &phase->textures[slot_index];
-            if (!slot->is_declared) continue;
+            if (!slot->is_declared)
+                continue;
             has_declared_schema = true;
             if (strcmp(slot->name, name) == 0) {
                 target_is_declared = true;
@@ -712,10 +657,7 @@ size_t tc_material_set_texture(
         }
     }
     if (has_declared_schema && !target_is_declared) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_set_texture: slot '%s' is not present in canonical schema",
-            name);
+        tc_log(TC_LOG_ERROR, "tc_material_set_texture: slot '%s' is not present in canonical schema", name);
         return 0;
     }
 
@@ -727,10 +669,7 @@ size_t tc_material_set_texture(
         }
     }
     if (!has_material_slot && mat->texture_handle_count >= TC_MATERIAL_MAX_TEXTURES) {
-        tc_log(
-            TC_LOG_ERROR,
-            "tc_material_set_texture: inspector texture slot capacity exceeded for '%s'",
-            name);
+        tc_log(TC_LOG_ERROR, "tc_material_set_texture: inspector texture slot capacity exceeded for '%s'", name);
         return 0;
     }
 
@@ -741,10 +680,7 @@ size_t tc_material_set_texture(
     }
     for (size_t i = 0; i < mat->phase_count; i++) {
         if (!tc_material_phase_set_texture(&mat->phases[i], name, texture)) {
-            tc_log(
-                TC_LOG_ERROR,
-                "tc_material_set_texture: failed to bind slot '%s' after validation",
-                name);
+            tc_log(TC_LOG_ERROR, "tc_material_set_texture: failed to bind slot '%s' after validation", name);
             return 0;
         }
     }
@@ -770,19 +706,15 @@ size_t tc_material_set_texture(
     return mat->phase_count;
 }
 
-bool tc_material_get_color(
-    const tc_material* mat,
-    float* r, float* g, float* b, float* a
-) {
-    if (!mat || mat->phase_count == 0) return false;
+bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a) {
+    if (!mat || mat->phase_count == 0)
+        return false;
     return tc_material_phase_get_color(&mat->phases[0], r, g, b, a);
 }
 
-void tc_material_set_color(
-    tc_material* mat,
-    float r, float g, float b, float a
-) {
-    if (!mat) return;
+void tc_material_set_color(tc_material* mat, float r, float g, float b, float a) {
+    if (!mat)
+        return;
 
     for (size_t i = 0; i < mat->phase_count; i++) {
         tc_material_phase_set_color(&mat->phases[i], r, g, b, a);
@@ -796,7 +728,8 @@ void tc_material_set_color(
 
 tc_material_info* tc_material_get_all_info(size_t* count) {
     if (!g_material_initialized || !count) {
-        if (count) *count = 0;
+        if (count)
+            *count = 0;
         return NULL;
     }
 
@@ -814,10 +747,12 @@ tc_material_info* tc_material_get_all_info(size_t* count) {
 
     size_t idx = 0;
     for (uint32_t i = 0; i < g_material_pool.capacity && idx < alive; i++) {
-        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED) continue;
+        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED)
+            continue;
 
         tc_material* mat = (tc_material*)tc_pool_get_unchecked(&g_material_pool, i);
-        if (!mat) continue;
+        if (!mat)
+            continue;
 
         infos[idx].handle.index = i;
         infos[idx].handle.generation = g_material_pool.generations[i];
@@ -840,13 +775,16 @@ tc_material_info* tc_material_get_all_info(size_t* count) {
 // ============================================================================
 
 void tc_material_foreach(tc_material_iter_fn callback, void* user_data) {
-    if (!g_material_initialized || !callback) return;
+    if (!g_material_initialized || !callback)
+        return;
 
     for (uint32_t i = 0; i < g_material_pool.capacity; i++) {
-        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED) continue;
+        if (g_material_pool.states[i] != TC_SLOT_OCCUPIED)
+            continue;
 
         tc_material* mat = (tc_material*)tc_pool_get_unchecked(&g_material_pool, i);
-        if (!mat) continue;
+        if (!mat)
+            continue;
 
         tc_material_handle h;
         h.index = i;
@@ -869,8 +807,7 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     }
 
     if (!src_mat->header.name) {
-        tc_log(TC_LOG_ERROR, "[tc_material_copy] source material '%s' has no name",
-            src_mat->header.uuid);
+        tc_log(TC_LOG_ERROR, "[tc_material_copy] source material '%s' has no name", src_mat->header.uuid);
         return tc_material_handle_invalid();
     }
 

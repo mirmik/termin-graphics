@@ -9,62 +9,53 @@
 struct tc_shader;
 
 namespace tgfx {
-class RenderContext2;
+    class RenderContext2;
 }
 
 namespace termin {
 
-struct EnginePerFrameStd140 {
-    float u_view[16];
-    float u_projection[16];
-    float u_view_projection[16];
-    float u_inv_view[16];
-    float u_inv_proj[16];
-    float u_camera_position[4];
-    float u_resolution[2];
-    float u_near;
-    float u_far;
-};
+    struct EnginePerFrameStd140 {
+        float u_view[16];
+        float u_projection[16];
+        float u_view_projection[16];
+        float u_inv_view[16];
+        float u_inv_proj[16];
+        float u_camera_position[4];
+        float u_resolution[2];
+        float u_near;
+        float u_far;
+    };
 
-static_assert(sizeof(EnginePerFrameStd140) == 352,
-              "EnginePerFrameStd140 layout must match shader_parser PerFrame");
+    static_assert(sizeof(EnginePerFrameStd140) == 352, "EnginePerFrameStd140 layout must match shader_parser PerFrame");
 
-struct StereoPerFrameStd140 {
-    EnginePerFrameStd140 views[2];
-};
+    struct StereoPerFrameStd140 {
+        EnginePerFrameStd140 views[2];
+    };
 
-static_assert(sizeof(StereoPerFrameStd140) == 704,
-              "StereoPerFrameStd140 must contain exactly two std140 view blocks");
+    static_assert(sizeof(StereoPerFrameStd140) == 704,
+                  "StereoPerFrameStd140 must contain exactly two std140 view blocks");
 
-RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
-    const Mat44f& view,
-    const Mat44f& projection,
-    const Vec3& camera_position,
-    float width,
-    float height,
-    float near_clip,
-    float far_clip
-);
+    RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(const Mat44f& view,
+                                                                        const Mat44f& projection,
+                                                                        const Vec3& camera_position,
+                                                                        float width,
+                                                                        float height,
+                                                                        float near_clip,
+                                                                        float far_clip);
 
-RENDER_CORE_API StereoPerFrameStd140 make_stereo_per_frame_uniforms(
-    const StereoRenderViews& views,
-    float width,
-    float height
-);
+    RENDER_CORE_API StereoPerFrameStd140 make_stereo_per_frame_uniforms(const StereoRenderViews& views,
+                                                                        float width,
+                                                                        float height);
 
-RENDER_CORE_API void bind_engine_frame_uniform_data(
-    tgfx::RenderContext2& ctx2,
-    const void* data,
-    uint32_t size,
-    const tc_shader* shader);
+    RENDER_CORE_API void bind_engine_frame_uniform_data(tgfx::RenderContext2& ctx2,
+                                                        const void* data,
+                                                        uint32_t size,
+                                                        const tc_shader* shader);
 
-RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(
-    const ExecuteContext& ctx
-);
+    RENDER_CORE_API EnginePerFrameStd140 make_engine_per_frame_uniforms(const ExecuteContext& ctx);
 
-RENDER_CORE_API void bind_engine_per_frame_uniforms(
-    tgfx::RenderContext2& ctx2,
-    const EnginePerFrameStd140& uniforms,
-    const tc_shader* shader);
+    RENDER_CORE_API void bind_engine_per_frame_uniforms(tgfx::RenderContext2& ctx2,
+                                                        const EnginePerFrameStd140& uniforms,
+                                                        const tc_shader* shader);
 
 } // namespace termin

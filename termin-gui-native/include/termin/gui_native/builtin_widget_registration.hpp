@@ -2,8 +2,7 @@
 
 #include <termin/gui_native/export.h>
 
-namespace termin::gui_native
-{
+namespace termin::gui_native {
 
     class TextArea;
     class TextInput;
@@ -21,73 +20,59 @@ namespace termin::gui_native
 
     TERMIN_GUI_NATIVE_API bool register_builtin_widget_types();
 
-    template <typename T> struct NativeWidgetRuntimeType
-    {
+    template <typename T> struct NativeWidgetRuntimeType {
         static constexpr const char* name = nullptr;
     };
 
-    template <> struct NativeWidgetRuntimeType<TextInput>
-    {
+    template <> struct NativeWidgetRuntimeType<TextInput> {
         static constexpr const char* name = "termin.gui.TextInput";
     };
 
-    template <> struct NativeWidgetRuntimeType<TextArea>
-    {
+    template <> struct NativeWidgetRuntimeType<TextArea> {
         static constexpr const char* name = "termin.gui.TextArea";
     };
 
-    template <> struct NativeWidgetRuntimeType<OverlayLayout>
-    {
+    template <> struct NativeWidgetRuntimeType<OverlayLayout> {
         static constexpr const char* name = "termin.gui.OverlayLayout";
     };
 
-    template <> struct NativeWidgetRuntimeType<Panel>
-    {
+    template <> struct NativeWidgetRuntimeType<Panel> {
         static constexpr const char* name = "termin.gui.Panel";
     };
 
-    template <> struct NativeWidgetRuntimeType<BoxLayout>
-    {
+    template <> struct NativeWidgetRuntimeType<BoxLayout> {
         static constexpr const char* name = "termin.gui.BoxLayout";
     };
 
-    template <> struct NativeWidgetRuntimeType<GridLayout>
-    {
+    template <> struct NativeWidgetRuntimeType<GridLayout> {
         static constexpr const char* name = "termin.gui.GridLayout";
     };
 
-    template <> struct NativeWidgetRuntimeType<WrapLayout>
-    {
+    template <> struct NativeWidgetRuntimeType<WrapLayout> {
         static constexpr const char* name = "termin.gui.WrapLayout";
     };
 
-    template <> struct NativeWidgetRuntimeType<ScrollArea>
-    {
+    template <> struct NativeWidgetRuntimeType<ScrollArea> {
         static constexpr const char* name = "termin.gui.ScrollArea";
     };
 
-    template <> struct NativeWidgetRuntimeType<HStack>
-    {
+    template <> struct NativeWidgetRuntimeType<HStack> {
         static constexpr const char* name = "termin.gui.HStack";
     };
 
-    template <> struct NativeWidgetRuntimeType<VStack>
-    {
+    template <> struct NativeWidgetRuntimeType<VStack> {
         static constexpr const char* name = "termin.gui.VStack";
     };
 
-    template <> struct NativeWidgetRuntimeType<IconButton>
-    {
+    template <> struct NativeWidgetRuntimeType<IconButton> {
         static constexpr const char* name = "termin.gui.IconButton";
     };
 
-    template <> struct NativeWidgetRuntimeType<Label>
-    {
+    template <> struct NativeWidgetRuntimeType<Label> {
         static constexpr const char* name = "termin.gui.Label";
     };
 
-    template <> struct NativeWidgetRuntimeType<Checkbox>
-    {
+    template <> struct NativeWidgetRuntimeType<Checkbox> {
         static constexpr const char* name = "termin.gui.Checkbox";
     };
 

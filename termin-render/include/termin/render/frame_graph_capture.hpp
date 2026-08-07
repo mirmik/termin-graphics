@@ -5,9 +5,9 @@
 #include <utility>
 #include <vector>
 
-#include <tcbase/tc_log.hpp>
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+#include <tcbase/tc_log.hpp>
 #include <termin/geom/rect2.hpp>
 #include <termin/render/render_export.hpp>
 extern "C" {
@@ -15,185 +15,175 @@ extern "C" {
 }
 
 namespace tgfx {
-class RenderContext2;
-class IRenderDevice;
-}
+    class RenderContext2;
+    class IRenderDevice;
+} // namespace tgfx
 
 namespace termin {
 
-RENDER_CORE_API std::pair<int, int> bounded_frame_graph_capture_dimensions(
-    int width, int height, std::uint32_t max_long_edge);
+    RENDER_CORE_API std::pair<int, int>
+    bounded_frame_graph_capture_dimensions(int width, int height, std::uint32_t max_long_edge);
 
-class CxxFramePass;
+    class CxxFramePass;
 
-struct HDRStats {
-    float min_r = 0;
-    float max_r = 0;
-    float avg_r = 0;
-    float min_g = 0;
-    float max_g = 0;
-    float avg_g = 0;
-    float min_b = 0;
-    float max_b = 0;
-    float avg_b = 0;
-    int hdr_pixel_count = 0;
-    int total_pixels = 0;
-    float hdr_percent = 0;
-    float max_value = 0;
-};
+    struct HDRStats {
+        float min_r = 0;
+        float max_r = 0;
+        float avg_r = 0;
+        float min_g = 0;
+        float max_g = 0;
+        float avg_g = 0;
+        float min_b = 0;
+        float max_b = 0;
+        float avg_b = 0;
+        int hdr_pixel_count = 0;
+        int total_pixels = 0;
+        float hdr_percent = 0;
+        float max_value = 0;
+    };
 
-// Lightweight descriptor shown in the debugger UI for a captured
-// tgfx2 texture. Fields match what the old FBOInfo exposed minus
-// anything that was FBO-specific (gl fbo id, filter state).
-struct TextureInfo {
-    int width = 0;
-    int height = 0;
-    int samples = 0;
-    bool is_msaa = false;
-    tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm;
-    std::string format_name;
-};
+    // Lightweight descriptor shown in the debugger UI for a captured
+    // tgfx2 texture. Fields match what the old FBOInfo exposed minus
+    // anything that was FBO-specific (gl fbo id, filter state).
+    struct TextureInfo {
+        int width = 0;
+        int height = 0;
+        int samples = 0;
+        bool is_msaa = false;
+        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm;
+        std::string format_name;
+    };
 
-// Owned tgfx2 color texture the debugger captures each frame; the
-// presenter samples it for its channel/HDR-highlight overlay and for
-// read_pixels-based stats. Created lazily through the same device
-// the host RenderContext2 draws with.
-class RENDER_CORE_API FrameGraphCapture {
-private:
-    tgfx::IRenderDevice* device_ = nullptr;
-    tgfx::TextureHandle capture_tex_;
-    int width_ = 0;
-    int height_ = 0;
-    tgfx::PixelFormat format_ = tgfx::PixelFormat::RGBA8_UNorm;
-    bool captured_ = false;
+    // Owned tgfx2 color texture the debugger captures each frame; the
+    // presenter samples it for its channel/HDR-highlight overlay and for
+    // read_pixels-based stats. Created lazily through the same device
+    // the host RenderContext2 draws with.
+    class RENDER_CORE_API FrameGraphCapture {
+    private:
+        tgfx::IRenderDevice* device_ = nullptr;
+        tgfx::TextureHandle capture_tex_;
+        int width_ = 0;
+        int height_ = 0;
+        tgfx::PixelFormat format_ = tgfx::PixelFormat::RGBA8_UNorm;
+        bool captured_ = false;
 
-public:
-    ~FrameGraphCapture();
+    public:
+        ~FrameGraphCapture();
 
-    // Capture `src_tex` into an internal owned tgfx2 texture. When width
-    // or height is non-positive, the source texture's real dimensions are
-    // used. Reallocates on size / format mismatch, re-uses the texture
-    // otherwise. `ctx2->blit` performs the copy.
-    void capture_direct_via_ctx2(
-        tgfx::RenderContext2* ctx2,
-        tgfx::TextureHandle src_tex,
-        int width,
-        int height,
-        tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm,
-        std::uint32_t max_long_edge = 0
-    );
+        // Capture `src_tex` into an internal owned tgfx2 texture. When width
+        // or height is non-positive, the source texture's real dimensions are
+        // used. Reallocates on size / format mismatch, re-uses the texture
+        // otherwise. `ctx2->blit` performs the copy.
+        void capture_direct_via_ctx2(tgfx::RenderContext2* ctx2,
+                                     tgfx::TextureHandle src_tex,
+                                     int width,
+                                     int height,
+                                     tgfx::PixelFormat format = tgfx::PixelFormat::RGBA8_UNorm,
+                                     std::uint32_t max_long_edge = 0);
 
-    tgfx::TextureHandle capture_tex() const { return capture_tex_; }
-    int width() const { return width_; }
-    int height() const { return height_; }
-    tgfx::PixelFormat format() const { return format_; }
-    bool is_depth() const;
-    bool has_capture() const { return captured_; }
-    void reset_capture() { captured_ = false; }
+        tgfx::TextureHandle capture_tex() const {
+            return capture_tex_;
+        }
+        int width() const {
+            return width_;
+        }
+        int height() const {
+            return height_;
+        }
+        tgfx::PixelFormat format() const {
+            return format_;
+        }
+        bool is_depth() const;
+        bool has_capture() const {
+            return captured_;
+        }
+        void reset_capture() {
+            captured_ = false;
+        }
 
-    // Exact CPU readback of the captured texture. Color is returned as
-    // top-down RGBA float32 values and depth as top-down float32 values. The
-    // caller owns the bounded CPU buffer; no graphics object crosses the
-    // render-thread boundary.
-    bool read_color_rgba_float(std::vector<float>& out) const;
-    bool read_depth_float(std::vector<float>& out) const;
+        // Exact CPU readback of the captured texture. Color is returned as
+        // top-down RGBA float32 values and depth as top-down float32 values. The
+        // caller owns the bounded CPU buffer; no graphics object crosses the
+        // render-thread boundary.
+        bool read_color_rgba_float(std::vector<float>& out) const;
+        bool read_depth_float(std::vector<float>& out) const;
 
-private:
-    void release();
-    void ensure_capture_tex(
-        tgfx::IRenderDevice& device,
-        int w, int h, tgfx::PixelFormat fmt
-    );
-};
+    private:
+        void release();
+        void ensure_capture_tex(tgfx::IRenderDevice& device, int w, int h, tgfx::PixelFormat fmt);
+    };
 
-enum class FrameGraphCaptureRequestStatus {
-    Pending,
-    Captured,
-    ResourceUnavailable,
-};
+    enum class FrameGraphCaptureRequestStatus {
+        Pending,
+        Captured,
+        ResourceUnavailable,
+    };
 
-enum class FrameGraphCaptureRequestKind {
-    Resource,
-    InternalSymbol,
-};
+    enum class FrameGraphCaptureRequestKind {
+        Resource,
+        InternalSymbol,
+    };
 
-// One frame-local request supplied by an execution instrumentation provider.
-// It is never stored by a pipeline or pass and is valid only for the duration
-// of one RenderEngine::execute_pipeline call.
-struct FrameGraphCaptureRequest {
-    FrameGraphCaptureRequestKind kind = FrameGraphCaptureRequestKind::Resource;
-    uint64_t generation = 0;
-    std::string resource;
-    size_t pass_index = static_cast<size_t>(-1);
-    std::string internal_symbol;
-    FrameGraphCapture* capture = nullptr;
-    FrameGraphCapture* depth_capture = nullptr;
-    // Zero keeps the source dimensions. A non-zero limit scales the owned
-    // capture texture before readback while preserving aspect ratio.
-    std::uint32_t max_long_edge = 0;
-    bool paused = false;
-    FrameGraphCaptureRequestStatus status = FrameGraphCaptureRequestStatus::Pending;
-};
+    // One frame-local request supplied by an execution instrumentation provider.
+    // It is never stored by a pipeline or pass and is valid only for the duration
+    // of one RenderEngine::execute_pipeline call.
+    struct FrameGraphCaptureRequest {
+        FrameGraphCaptureRequestKind kind = FrameGraphCaptureRequestKind::Resource;
+        uint64_t generation = 0;
+        std::string resource;
+        size_t pass_index = static_cast<size_t>(-1);
+        std::string internal_symbol;
+        FrameGraphCapture* capture = nullptr;
+        FrameGraphCapture* depth_capture = nullptr;
+        // Zero keeps the source dimensions. A non-zero limit scales the owned
+        // capture texture before readback while preserving aspect ratio.
+        std::uint32_t max_long_edge = 0;
+        bool paused = false;
+        FrameGraphCaptureRequestStatus status = FrameGraphCaptureRequestStatus::Pending;
+    };
 
-struct FrameGraphPresenterOptions {
-    int channel_mode = 0;
-    bool highlight_hdr = false;
-};
+    struct FrameGraphPresenterOptions {
+        int channel_mode = 0;
+        bool highlight_hdr = false;
+    };
 
-struct FrameGraphPresenterDraw {
-    tgfx::TextureHandle capture_tex;
-    Rect2i dst_rect;
-    FrameGraphPresenterOptions options;
-};
+    struct FrameGraphPresenterDraw {
+        tgfx::TextureHandle capture_tex;
+        Rect2i dst_rect;
+        FrameGraphPresenterOptions options;
+    };
 
-// Draws a captured tgfx2 texture into a target texture with a
-// channel-picker / HDR-highlight fragment shader. Target is a
-// tgfx::TextureHandle — either a native pool entry or an external
-// wrap of the debug window's default framebuffer.
-class RENDER_CORE_API FrameGraphPresenter {
-private:
-    tgfx::IRenderDevice* device2_ = nullptr;
-    // FS-only shader via tc_shader registry (VS comes from ctx2->fsq_vertex_shader()).
-    // Hash-based dedup keeps the VkShaderModule alive across presenter
-    // re-creations on Play/Stop — see GrayscalePass for the same pattern.
-    tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
+    // Draws a captured tgfx2 texture into a target texture with a
+    // channel-picker / HDR-highlight fragment shader. Target is a
+    // tgfx::TextureHandle — either a native pool entry or an external
+    // wrap of the debug window's default framebuffer.
+    class RENDER_CORE_API FrameGraphPresenter {
+    private:
+        tgfx::IRenderDevice* device2_ = nullptr;
+        // FS-only shader via tc_shader registry (VS comes from ctx2->fsq_vertex_shader()).
+        // Hash-based dedup keeps the VkShaderModule alive across presenter
+        // re-creations on Play/Stop — see GrayscalePass for the same pattern.
+        tc_shader_handle shader_handle_ = tc_shader_handle_invalid();
 
-public:
-    ~FrameGraphPresenter();
+    public:
+        ~FrameGraphPresenter();
 
-    void render(
-        tgfx::RenderContext2* ctx2,
-        tgfx::TextureHandle target_tex,
-        const FrameGraphPresenterDraw& draw
-    );
+        void render(tgfx::RenderContext2* ctx2, tgfx::TextureHandle target_tex, const FrameGraphPresenterDraw& draw);
 
-    void render_in_current_pass(
-        tgfx::RenderContext2* ctx2,
-        const FrameGraphPresenterDraw& draw
-    );
+        void render_in_current_pass(tgfx::RenderContext2* ctx2, const FrameGraphPresenterDraw& draw);
 
-    // HDR / depth readback helpers take a native tgfx2 texture and
-    // pull pixels through the device's read_texture_* primitives.
-    HDRStats compute_hdr_stats(
-        tgfx::IRenderDevice* device,
-        tgfx::TextureHandle tex
-    );
+        // HDR / depth readback helpers take a native tgfx2 texture and
+        // pull pixels through the device's read_texture_* primitives.
+        HDRStats compute_hdr_stats(tgfx::IRenderDevice* device, tgfx::TextureHandle tex);
 
-    std::vector<uint8_t> read_depth_normalized(
-        tgfx::IRenderDevice* device,
-        tgfx::TextureHandle tex,
-        int* out_w,
-        int* out_h
-    );
+        std::vector<uint8_t>
+        read_depth_normalized(tgfx::IRenderDevice* device, tgfx::TextureHandle tex, int* out_w, int* out_h);
 
-    static TextureInfo get_texture_info(
-        tgfx::IRenderDevice* device,
-        tgfx::TextureHandle tex
-    );
+        static TextureInfo get_texture_info(tgfx::IRenderDevice* device, tgfx::TextureHandle tex);
 
-private:
-    void ensure_fs(tgfx::IRenderDevice& device);
-    void release_tgfx2_resources();
-};
+    private:
+        void ensure_fs(tgfx::IRenderDevice& device);
+        void release_tgfx2_resources();
+    };
 
 } // namespace termin

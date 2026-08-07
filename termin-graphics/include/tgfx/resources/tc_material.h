@@ -1,15 +1,15 @@
 // tc_material.h - Material data structures
 #pragma once
 
-#include "tgfx/tgfx_api.h"
-#include "tgfx/tc_handle.h"
-#include <tcbase/tc_resource.h>
-#include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_phase.h"
+#include "tgfx/resources/tc_shader.h"
 #include "tgfx/resources/tc_texture.h"
-#include <stdint.h>
+#include "tgfx/tc_handle.h"
+#include "tgfx/tgfx_api.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
+#include <tcbase/tc_resource.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,14 +53,14 @@ typedef enum tc_depth_func {
 // ============================================================================
 
 typedef struct tc_render_state {
-    uint8_t polygon_mode;    // tc_polygon_mode
-    uint8_t cull;            // enable backface culling
-    uint8_t depth_test;      // enable depth testing
-    uint8_t depth_write;     // write to depth buffer
-    uint8_t blend;           // enable alpha blending
-    uint8_t blend_src;       // tc_blend_factor for source
-    uint8_t blend_dst;       // tc_blend_factor for destination
-    uint8_t depth_func;      // tc_depth_func
+    uint8_t polygon_mode; // tc_polygon_mode
+    uint8_t cull;         // enable backface culling
+    uint8_t depth_test;   // enable depth testing
+    uint8_t depth_write;  // write to depth buffer
+    uint8_t blend;        // enable alpha blending
+    uint8_t blend_src;    // tc_blend_factor for source
+    uint8_t blend_dst;    // tc_blend_factor for destination
+    uint8_t depth_func;   // tc_depth_func
 } tc_render_state;
 
 // Default render states
@@ -113,8 +113,8 @@ typedef enum tc_uniform_type {
 
 typedef struct tc_uniform_value {
     char name[TC_UNIFORM_NAME_MAX];
-    uint8_t type;           // tc_uniform_type
-    uint8_t array_size;     // for TC_UNIFORM_FLOAT_ARRAY
+    uint8_t type;       // tc_uniform_type
+    uint8_t array_size; // for TC_UNIFORM_FLOAT_ARRAY
     uint8_t _pad[2];
     union {
         int32_t i;
@@ -132,11 +132,11 @@ typedef struct tc_uniform_value {
 // ============================================================================
 
 typedef struct tc_material_texture {
-    char name[TC_UNIFORM_NAME_MAX];  // uniform name (e.g., "u_albedo")
+    char name[TC_UNIFORM_NAME_MAX]; // uniform name (e.g., "u_albedo")
     tc_texture_handle texture;
-    uint8_t is_declared;             // present in canonical property schema
+    uint8_t is_declared; // present in canonical property schema
     uint8_t has_expected_encoding;
-    uint8_t expected_encoding;       // tc_texture_encoding
+    uint8_t expected_encoding; // tc_texture_encoding
 } tc_material_texture;
 
 // ============================================================================
@@ -174,7 +174,7 @@ typedef struct tc_material_phase {
 
     // Per-mark render states (optional overrides)
     tc_render_state mark_states[TC_MATERIAL_MAX_MARKS];
-    uint8_t mark_state_valid[TC_MATERIAL_MAX_MARKS];  // which mark_states are set
+    uint8_t mark_state_valid[TC_MATERIAL_MAX_MARKS]; // which mark_states are set
 } tc_material_phase;
 
 // ============================================================================
@@ -196,8 +196,8 @@ typedef struct tc_material {
     char shader_name[TC_MATERIAL_NAME_MAX];
     char shader_program_uuid[TC_UUID_SIZE];
     uint32_t shader_program_version;
-    char active_phase_mark[TC_PHASE_MARK_MAX];  // force specific phase mark
-    const char* source_path;  // interned path to .material file (or NULL)
+    char active_phase_mark[TC_PHASE_MARK_MAX]; // force specific phase mark
+    const char* source_path;                   // interned path to .material file (or NULL)
 
     // Texture handles for inspector (asset references, separate from phase textures)
     tc_material_texture texture_handles[TC_MATERIAL_MAX_TEXTURES];
@@ -209,9 +209,7 @@ typedef struct tc_material {
 // ============================================================================
 
 // Find uniform by name in phase, returns NULL if not found
-static inline tc_uniform_value* tc_material_phase_find_uniform(
-    tc_material_phase* phase, const char* name
-) {
+static inline tc_uniform_value* tc_material_phase_find_uniform(tc_material_phase* phase, const char* name) {
     for (size_t i = 0; i < phase->uniform_count; i++) {
         if (strcmp(phase->uniforms[i].name, name) == 0) {
             return &phase->uniforms[i];
@@ -221,9 +219,7 @@ static inline tc_uniform_value* tc_material_phase_find_uniform(
 }
 
 // Find texture by name in phase, returns NULL if not found
-static inline tc_material_texture* tc_material_phase_find_texture(
-    tc_material_phase* phase, const char* name
-) {
+static inline tc_material_texture* tc_material_phase_find_texture(tc_material_phase* phase, const char* name) {
     for (size_t i = 0; i < phase->texture_count; i++) {
         if (strcmp(phase->textures[i].name, name) == 0) {
             return &phase->textures[i];
@@ -233,54 +229,31 @@ static inline tc_material_texture* tc_material_phase_find_texture(
 }
 
 // Add or update uniform in phase
-TGFX_API bool tc_material_phase_set_uniform(
-    tc_material_phase* phase,
-    const char* name,
-    tc_uniform_type type,
-    const void* value
-);
+TGFX_API bool
+tc_material_phase_set_uniform(tc_material_phase* phase, const char* name, tc_uniform_type type, const void* value);
 
 // Add or update texture in phase
-TGFX_API bool tc_material_phase_set_texture(
-    tc_material_phase* phase,
-    const char* name,
-    tc_texture_handle texture
-);
+TGFX_API bool tc_material_phase_set_texture(tc_material_phase* phase, const char* name, tc_texture_handle texture);
 
 // Declare a canonical texture slot without imposing an encoding constraint.
-TGFX_API bool tc_material_phase_declare_texture_slot(
-    tc_material_phase* phase,
-    const char* name
-);
+TGFX_API bool tc_material_phase_declare_texture_slot(tc_material_phase* phase, const char* name);
 
 // Add an encoding constraint to a canonical texture slot without assigning a
 // texture. Repeating the same declaration is idempotent and conflicting schema
 // is rejected. An already-bound encoding mismatch is retained with a warning.
-TGFX_API bool tc_material_phase_declare_texture(
-    tc_material_phase* phase,
-    const char* name,
-    tc_texture_encoding expected_encoding
-);
+TGFX_API bool
+tc_material_phase_declare_texture(tc_material_phase* phase, const char* name, tc_texture_encoding expected_encoding);
 
 // Check whether a prospective binding can be applied without mutating the
 // phase. Encoding mismatches are accepted; the mutating setter logs them.
-TGFX_API bool tc_material_phase_accepts_texture(
-    const tc_material_phase* phase,
-    const char* name,
-    tc_texture_handle texture
-);
+TGFX_API bool
+tc_material_phase_accepts_texture(const tc_material_phase* phase, const char* name, tc_texture_handle texture);
 
 // Get color (u_color uniform) from phase
-TGFX_API bool tc_material_phase_get_color(
-    const tc_material_phase* phase,
-    float* r, float* g, float* b, float* a
-);
+TGFX_API bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float* g, float* b, float* a);
 
 // Set color (u_color uniform) on phase
-TGFX_API void tc_material_phase_set_color(
-    tc_material_phase* phase,
-    float r, float g, float b, float a
-);
+TGFX_API void tc_material_phase_set_color(tc_material_phase* phase, float r, float g, float b, float a);
 
 // Set transparent render state (blend=ON, depth_write=OFF) on phase
 TGFX_API void tc_material_phase_make_transparent(tc_material_phase* phase);
@@ -298,33 +271,18 @@ static inline tc_material_phase* tc_material_default_phase(tc_material* mat) {
 TGFX_API tc_material_phase* tc_material_find_phase(tc_material* mat, const char* mark);
 
 // Set uniform on all phases
-TGFX_API void tc_material_set_uniform(
-    tc_material* mat,
-    const char* name,
-    tc_uniform_type type,
-    const void* value
-);
+TGFX_API void tc_material_set_uniform(tc_material* mat, const char* name, tc_uniform_type type, const void* value);
 
 // Set texture on all phases and store handle for inspector. Encoding mismatch
 // is accepted with a warning; zero is reserved for structural failure or no
 // phases, otherwise the return value is the number of updated phases.
-TGFX_API size_t tc_material_set_texture(
-    tc_material* mat,
-    const char* name,
-    tc_texture_handle texture
-);
+TGFX_API size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_handle texture);
 
 // Get color from default phase
-TGFX_API bool tc_material_get_color(
-    const tc_material* mat,
-    float* r, float* g, float* b, float* a
-);
+TGFX_API bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a);
 
 // Set color on all phases
-TGFX_API void tc_material_set_color(
-    tc_material* mat,
-    float r, float g, float b, float a
-);
+TGFX_API void tc_material_set_color(tc_material* mat, float r, float g, float b, float a);
 
 // ============================================================================
 // Reference counting

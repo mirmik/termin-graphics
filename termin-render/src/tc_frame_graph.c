@@ -57,17 +57,14 @@ static tc_fg_resource* find_resource(tc_frame_graph* fg, const char* name) {
 
 static tc_fg_resource* get_or_create_resource(tc_frame_graph* fg, const char* name) {
     tc_fg_resource* res = find_resource(fg, name);
-    if (res) return res;
+    if (res)
+        return res;
 
     if (fg->resource_count >= fg->resource_capacity) {
         size_t new_capacity = fg->resource_capacity ? fg->resource_capacity * 2 : 32;
-        tc_fg_resource* resources = (tc_fg_resource*)realloc(
-            fg->resources,
-            new_capacity * sizeof(*resources)
-        );
+        tc_fg_resource* resources = (tc_fg_resource*)realloc(fg->resources, new_capacity * sizeof(*resources));
         if (!resources) {
-            snprintf(fg->error_message, sizeof(fg->error_message),
-                     "Failed to grow frame graph resource storage");
+            snprintf(fg->error_message, sizeof(fg->error_message), "Failed to grow frame graph resource storage");
             fg->error = TC_FG_ERROR_ALLOCATION;
             tc_log(TC_LOG_ERROR, "[tc_frame_graph] %s", fg->error_message);
             return NULL;
@@ -83,8 +80,7 @@ static tc_fg_resource* get_or_create_resource(tc_frame_graph* fg, const char* na
         free(res->name);
         free(res->canonical);
         fg->resource_count--;
-        snprintf(fg->error_message, sizeof(fg->error_message),
-                 "Failed to copy frame graph resource name");
+        snprintf(fg->error_message, sizeof(fg->error_message), "Failed to copy frame graph resource name");
         fg->error = TC_FG_ERROR_ALLOCATION;
         return NULL;
     }
@@ -94,15 +90,15 @@ static tc_fg_resource* get_or_create_resource(tc_frame_graph* fg, const char* na
 
 static int add_dependent(tc_frame_graph* fg, tc_fg_node* node, int dep_index) {
     for (size_t i = 0; i < node->dependent_count; i++) {
-        if (node->dependents[i] == dep_index) return 0;
+        if (node->dependents[i] == dep_index)
+            return 0;
     }
 
     if (node->dependent_count >= node->dependent_capacity) {
         size_t new_cap = node->dependent_capacity ? node->dependent_capacity * 2 : 8;
         int* dependents = (int*)realloc(node->dependents, new_cap * sizeof(int));
         if (!dependents) {
-            snprintf(fg->error_message, sizeof(fg->error_message),
-                     "Failed to grow frame graph edge storage");
+            snprintf(fg->error_message, sizeof(fg->error_message), "Failed to grow frame graph edge storage");
             fg->error = TC_FG_ERROR_ALLOCATION;
             return -1;
         }
@@ -115,34 +111,26 @@ static int add_dependent(tc_frame_graph* fg, tc_fg_node* node, int dep_index) {
 
 typedef size_t (*tc_pass_dependency_fn)(tc_pass*, const char**, size_t);
 
-static bool collect_pass_dependencies(
-    tc_frame_graph* fg,
-    tc_pass* pass,
-    tc_pass_dependency_fn collect,
-    size_t values_per_item,
-    const char*** out_values,
-    size_t* out_count
-) {
+static bool collect_pass_dependencies(tc_frame_graph* fg,
+                                      tc_pass* pass,
+                                      tc_pass_dependency_fn collect,
+                                      size_t values_per_item,
+                                      const char*** out_values,
+                                      size_t* out_count) {
     size_t capacity = collect(pass, NULL, 0);
     const char** values = NULL;
 
     while (capacity > 0) {
-        if (capacity > SIZE_MAX / values_per_item ||
-            capacity * values_per_item > SIZE_MAX / sizeof(*values)) {
+        if (capacity > SIZE_MAX / values_per_item || capacity * values_per_item > SIZE_MAX / sizeof(*values)) {
             free(values);
-            snprintf(fg->error_message, sizeof(fg->error_message),
-                     "Pass dependency count overflow");
+            snprintf(fg->error_message, sizeof(fg->error_message), "Pass dependency count overflow");
             fg->error = TC_FG_ERROR_LIMIT;
             return false;
         }
-        const char** grown = (const char**)realloc(
-            values,
-            capacity * values_per_item * sizeof(*values)
-        );
+        const char** grown = (const char**)realloc(values, capacity * values_per_item * sizeof(*values));
         if (!grown) {
             free(values);
-            snprintf(fg->error_message, sizeof(fg->error_message),
-                     "Failed to allocate pass dependency storage");
+            snprintf(fg->error_message, sizeof(fg->error_message), "Failed to allocate pass dependency storage");
             fg->error = TC_FG_ERROR_ALLOCATION;
             return false;
         }
@@ -192,9 +180,7 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
         node->dependent_count = 0;
         node->dependent_capacity = 0;
 
-        if (!collect_pass_dependencies(
-                fg, pass, tc_pass_get_writes, 1,
-                &node->writes, &node->write_count)) {
+        if (!collect_pass_dependencies(fg, pass, tc_pass_get_writes, 1, &node->writes, &node->write_count)) {
             return false;
         }
 
@@ -205,22 +191,18 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
             }
 
             if (res->writer_index >= 0) {
-                snprintf(
-                    fg->error_message,
-                    sizeof(fg->error_message),
-                    "Resource '%s' written by multiple passes: '%s' and '%s'",
-                    node->writes[i],
-                    fg->nodes[res->writer_index].pass->pass_name,
-                    pass->pass_name
-                );
+                snprintf(fg->error_message,
+                         sizeof(fg->error_message),
+                         "Resource '%s' written by multiple passes: '%s' and '%s'",
+                         node->writes[i],
+                         fg->nodes[res->writer_index].pass->pass_name,
+                         pass->pass_name);
                 fg->error = TC_FG_ERROR_MULTI_WRITER;
                 return false;
             }
             res->writer_index = pass_index;
         }
-        if (!collect_pass_dependencies(
-                fg, pass, tc_pass_get_reads, 1,
-                &node->reads, &node->read_count)) {
+        if (!collect_pass_dependencies(fg, pass, tc_pass_get_reads, 1, &node->reads, &node->read_count)) {
             return false;
         }
         for (size_t i = 0; i < node->read_count; i++) {
@@ -229,9 +211,7 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
             }
         }
 
-        if (!collect_pass_dependencies(
-                fg, pass, tc_pass_get_inplace_aliases, 2,
-                &node->aliases, &node->alias_count)) {
+        if (!collect_pass_dependencies(fg, pass, tc_pass_get_inplace_aliases, 2, &node->aliases, &node->alias_count)) {
             return false;
         }
         node->is_inplace = node->alias_count > 0;
@@ -263,8 +243,8 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
                     if (strcmp(write_res->canonical, read_res->canonical) != 0) {
                         char* canonical = tc_strdup(read_res->canonical);
                         if (!canonical) {
-                            snprintf(fg->error_message, sizeof(fg->error_message),
-                                     "Failed to copy frame graph alias name");
+                            snprintf(
+                                fg->error_message, sizeof(fg->error_message), "Failed to copy frame graph alias name");
                             fg->error = TC_FG_ERROR_ALLOCATION;
                             return false;
                         }
@@ -278,7 +258,8 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
     }
 
     if (changed) {
-        snprintf(fg->error_message, sizeof(fg->error_message),
+        snprintf(fg->error_message,
+                 sizeof(fg->error_message),
                  "Inplace alias graph does not converge to one canonical mapping");
         fg->error = TC_FG_ERROR_INVALID_INPLACE;
         return false;
@@ -303,13 +284,15 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
 
     for (size_t i = 0; i < fg->node_count; i++) {
         tc_fg_node* node = &fg->nodes[i];
-        if (!node->is_inplace) continue;
+        if (!node->is_inplace)
+            continue;
 
         for (size_t j = 0; j < node->alias_count; j++) {
             const char* read_name = node->aliases[j * 2];
 
             for (size_t k = 0; k < fg->node_count; k++) {
-                if (k == i) continue;
+                if (k == i)
+                    continue;
 
                 tc_fg_node* other = &fg->nodes[k];
                 for (size_t r = 0; r < other->read_count; r++) {
@@ -332,27 +315,17 @@ static bool build_dependency_graph(tc_frame_graph* fg, tc_pipeline_handle pipeli
 }
 
 static bool topological_sort(tc_frame_graph* fg) {
-    fg->schedule = fg->node_count
-        ? (tc_pass**)malloc(fg->node_count * sizeof(tc_pass*))
-        : NULL;
+    fg->schedule = fg->node_count ? (tc_pass**)malloc(fg->node_count * sizeof(tc_pass*)) : NULL;
     fg->schedule_count = 0;
 
-    int* in_degree = fg->node_count
-        ? (int*)malloc(fg->node_count * sizeof(int))
-        : NULL;
-    int* queue_normal = fg->node_count
-        ? (int*)malloc(fg->node_count * sizeof(int))
-        : NULL;
-    int* queue_inplace = fg->node_count
-        ? (int*)malloc(fg->node_count * sizeof(int))
-        : NULL;
-    if (fg->node_count &&
-        (!fg->schedule || !in_degree || !queue_normal || !queue_inplace)) {
+    int* in_degree = fg->node_count ? (int*)malloc(fg->node_count * sizeof(int)) : NULL;
+    int* queue_normal = fg->node_count ? (int*)malloc(fg->node_count * sizeof(int)) : NULL;
+    int* queue_inplace = fg->node_count ? (int*)malloc(fg->node_count * sizeof(int)) : NULL;
+    if (fg->node_count && (!fg->schedule || !in_degree || !queue_normal || !queue_inplace)) {
         free(in_degree);
         free(queue_normal);
         free(queue_inplace);
-        snprintf(fg->error_message, sizeof(fg->error_message),
-                 "Failed to allocate frame graph schedule storage");
+        snprintf(fg->error_message, sizeof(fg->error_message), "Failed to allocate frame graph schedule storage");
         fg->error = TC_FG_ERROR_ALLOCATION;
         return false;
     }
@@ -411,10 +384,12 @@ static bool topological_sort(tc_frame_graph* fg) {
 }
 
 tc_frame_graph* tc_frame_graph_build(tc_pipeline_handle pipeline) {
-    if (!tc_pipeline_pool_alive(pipeline)) return NULL;
+    if (!tc_pipeline_pool_alive(pipeline))
+        return NULL;
 
     tc_frame_graph* fg = (tc_frame_graph*)calloc(1, sizeof(tc_frame_graph));
-    if (!fg) return NULL;
+    if (!fg)
+        return NULL;
 
     fg->error = TC_FG_OK;
     fg->error_message[0] = '\0';
@@ -429,7 +404,8 @@ tc_frame_graph* tc_frame_graph_build(tc_pipeline_handle pipeline) {
 }
 
 void tc_frame_graph_destroy(tc_frame_graph* fg) {
-    if (!fg) return;
+    if (!fg)
+        return;
 
     for (size_t i = 0; i < fg->resource_count; i++) {
         free(fg->resources[i].name);
@@ -451,12 +427,14 @@ tc_frame_graph_error tc_frame_graph_get_error(tc_frame_graph* fg) {
 }
 
 const char* tc_frame_graph_get_error_message(tc_frame_graph* fg) {
-    if (!fg || fg->error == TC_FG_OK) return NULL;
+    if (!fg || fg->error == TC_FG_OK)
+        return NULL;
     return fg->error_message;
 }
 
 size_t tc_frame_graph_get_schedule(tc_frame_graph* fg, tc_pass** out_passes, size_t max_count) {
-    if (!fg || !out_passes || fg->error != TC_FG_OK) return 0;
+    if (!fg || !out_passes || fg->error != TC_FG_OK)
+        return 0;
     size_t count = fg->schedule_count < max_count ? fg->schedule_count : max_count;
     memcpy(out_passes, fg->schedule, count * sizeof(tc_pass*));
     return count;
@@ -467,18 +445,24 @@ size_t tc_frame_graph_schedule_count(tc_frame_graph* fg) {
 }
 
 tc_pass* tc_frame_graph_schedule_at(tc_frame_graph* fg, size_t index) {
-    if (!fg || fg->error != TC_FG_OK || index >= fg->schedule_count) return NULL;
+    if (!fg || fg->error != TC_FG_OK || index >= fg->schedule_count)
+        return NULL;
     return fg->schedule[index];
 }
 
 const char* tc_frame_graph_canonical_resource(tc_frame_graph* fg, const char* name) {
-    if (!fg || !name) return name;
+    if (!fg || !name)
+        return name;
     tc_fg_resource* res = find_resource(fg, name);
     return res ? res->canonical : name;
 }
 
-size_t tc_frame_graph_get_alias_group(tc_frame_graph* fg, const char* canonical_name, const char** out_names, size_t max_count) {
-    if (!fg || !canonical_name) return 0;
+size_t tc_frame_graph_get_alias_group(tc_frame_graph* fg,
+                                      const char* canonical_name,
+                                      const char** out_names,
+                                      size_t max_count) {
+    if (!fg || !canonical_name)
+        return 0;
 
     size_t count = 0;
     for (size_t i = 0; i < fg->resource_count; i++) {
@@ -493,7 +477,8 @@ size_t tc_frame_graph_get_alias_group(tc_frame_graph* fg, const char* canonical_
 }
 
 size_t tc_frame_graph_get_canonical_resources(tc_frame_graph* fg, const char** out_names, size_t max_count) {
-    if (!fg) return 0;
+    if (!fg)
+        return 0;
 
     size_t count = 0;
     for (size_t i = 0; i < fg->resource_count; i++) {
@@ -528,8 +513,11 @@ void tc_frame_graph_dump(tc_frame_graph* fg) {
     tc_log(TC_LOG_INFO, "[tc_frame_graph] Schedule (%zu passes):", fg->schedule_count);
     for (size_t i = 0; i < fg->schedule_count; i++) {
         tc_pass* p = fg->schedule[i];
-        tc_log(TC_LOG_INFO, "  %zu: %s (%s)%s",
-               i, p->pass_name, tc_pass_type_name(p),
+        tc_log(TC_LOG_INFO,
+               "  %zu: %s (%s)%s",
+               i,
+               p->pass_name,
+               tc_pass_type_name(p),
                tc_pass_is_inplace(p) ? " [inplace]" : "");
     }
 

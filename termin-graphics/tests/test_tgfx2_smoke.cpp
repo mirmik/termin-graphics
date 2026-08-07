@@ -12,11 +12,11 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#include "tgfx2/device_factory.hpp"
-#include "tgfx2/i_render_device.hpp"
-#include "tgfx2/i_command_list.hpp"
 #include "tgfx2/descriptors.hpp"
+#include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/i_command_list.hpp"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 
@@ -130,28 +130,51 @@ int main() {
     readback_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
     auto readback_tex = device->create_texture(readback_desc);
     const uint8_t readback_rgba[] = {
-        255, 0, 0, 255,      0, 255, 0, 255,
-        0, 0, 255, 255,      255, 255, 255, 255,
+        255,
+        0,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        0,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
     };
-    device->upload_texture(
-        readback_tex,
-        std::span<const uint8_t>(readback_rgba, sizeof(readback_rgba)));
+    device->upload_texture(readback_tex, std::span<const uint8_t>(readback_rgba, sizeof(readback_rgba)));
     std::vector<float> readback_pixels(2 * 2 * 4, 0.0f);
     bool readback_ok = device->read_texture_rgba_float(readback_tex, readback_pixels.data());
-    bool readback_order_ok =
-        readback_ok &&
-        readback_pixels[0] > 0.9f && readback_pixels[1] < 0.1f &&
-        readback_pixels[4] < 0.1f && readback_pixels[5] > 0.9f &&
-        readback_pixels[8] < 0.1f && readback_pixels[9] < 0.1f && readback_pixels[10] > 0.9f &&
-        readback_pixels[12] > 0.9f && readback_pixels[13] > 0.9f && readback_pixels[14] > 0.9f;
+    bool readback_order_ok = readback_ok && readback_pixels[0] > 0.9f && readback_pixels[1] < 0.1f &&
+                             readback_pixels[4] < 0.1f && readback_pixels[5] > 0.9f && readback_pixels[8] < 0.1f &&
+                             readback_pixels[9] < 0.1f && readback_pixels[10] > 0.9f && readback_pixels[12] > 0.9f &&
+                             readback_pixels[13] > 0.9f && readback_pixels[14] > 0.9f;
     printf("OpenGL full color readback row order: %s\n", readback_order_ok ? "ok" : "failed");
     if (!readback_order_ok) {
         fprintf(stderr,
-                "OpenGL full color readback mismatch: first row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f), second row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f)\n",
-                readback_pixels[0], readback_pixels[1], readback_pixels[2], readback_pixels[3],
-                readback_pixels[4], readback_pixels[5], readback_pixels[6], readback_pixels[7],
-                readback_pixels[8], readback_pixels[9], readback_pixels[10], readback_pixels[11],
-                readback_pixels[12], readback_pixels[13], readback_pixels[14], readback_pixels[15]);
+                "OpenGL full color readback mismatch: first row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f), second "
+                "row=(%.2f %.2f %.2f %.2f) (%.2f %.2f %.2f %.2f)\n",
+                readback_pixels[0],
+                readback_pixels[1],
+                readback_pixels[2],
+                readback_pixels[3],
+                readback_pixels[4],
+                readback_pixels[5],
+                readback_pixels[6],
+                readback_pixels[7],
+                readback_pixels[8],
+                readback_pixels[9],
+                readback_pixels[10],
+                readback_pixels[11],
+                readback_pixels[12],
+                readback_pixels[13],
+                readback_pixels[14],
+                readback_pixels[15]);
         return 1;
     }
     device->destroy(readback_tex);
@@ -180,8 +203,8 @@ int main() {
     tgfx::VertexBufferLayout layout;
     layout.stride = 5 * sizeof(float); // x, y, r, g, b
     layout.attributes = {
-        {0, tgfx::VertexFormat::Float2, 0},                      // aPos
-        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)},      // aColor
+        {0, tgfx::VertexFormat::Float2, 0},                 // aPos
+        {1, tgfx::VertexFormat::Float3, 2 * sizeof(float)}, // aColor
     };
     pipe_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
@@ -194,9 +217,21 @@ int main() {
 
     // --- Create vertex buffer ---
     float vertices[] = {
-         0.0f,  0.5f,  1.f, 0.f, 0.f,  // top (red)
-        -0.5f, -0.5f,  0.f, 1.f, 0.f,  // left (green)
-         0.5f, -0.5f,  0.f, 0.f, 1.f,  // right (blue)
+        0.0f,
+        0.5f,
+        1.f,
+        0.f,
+        0.f, // top (red)
+        -0.5f,
+        -0.5f,
+        0.f,
+        1.f,
+        0.f, // left (green)
+        0.5f,
+        -0.5f,
+        0.f,
+        0.f,
+        1.f, // right (blue)
     };
 
     tgfx::BufferDesc vb_desc;
@@ -277,7 +312,7 @@ int main() {
     rt_color.load = tgfx::LoadOp::Clear;
     rt_color.clear_color[0] = 0.0f;
     rt_color.clear_color[1] = 0.0f;
-    rt_color.clear_color[2] = 0.2f;  // dark blue clear
+    rt_color.clear_color[2] = 0.2f; // dark blue clear
     rt_color.clear_color[3] = 1.0f;
     rt_pass.colors.push_back(rt_color);
 
@@ -298,18 +333,15 @@ int main() {
     auto* rt_gl = gl_device->get_texture(rt_tex);
     glGenFramebuffers(1, &readback_fbo);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, readback_fbo);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           rt_gl->target, rt_gl->gl_id, 0);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, rt_gl->target, rt_gl->gl_id, 0);
 
     float rt_center[4] = {0};
     glReadPixels(128, 128, 1, 1, GL_RGBA, GL_FLOAT, rt_center);
-    printf("RT center pixel: (%.2f, %.2f, %.2f, %.2f)\n",
-           rt_center[0], rt_center[1], rt_center[2], rt_center[3]);
+    printf("RT center pixel: (%.2f, %.2f, %.2f, %.2f)\n", rt_center[0], rt_center[1], rt_center[2], rt_center[3]);
 
     float rt_corner[4] = {0};
     glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, rt_corner);
-    printf("RT corner pixel: (%.2f, %.2f, %.2f, %.2f)\n",
-           rt_corner[0], rt_corner[1], rt_corner[2], rt_corner[3]);
+    printf("RT corner pixel: (%.2f, %.2f, %.2f, %.2f)\n", rt_corner[0], rt_corner[1], rt_corner[2], rt_corner[3]);
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glDeleteFramebuffers(1, &readback_fbo);
@@ -328,8 +360,7 @@ int main() {
     const char* artifact_uuid = "termin-artifact-smoke";
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     std::filesystem::path artifact_root =
-        std::filesystem::temp_directory_path() /
-        ("termin-tgfx2-artifact-smoke-" + std::to_string(now));
+        std::filesystem::temp_directory_path() / ("termin-tgfx2-artifact-smoke-" + std::to_string(now));
     std::filesystem::path artifact_dir = artifact_root / "shaders" / "opengl";
 
     tgfx::TextureHandle artifact_rt_tex;
@@ -338,29 +369,26 @@ int main() {
 
     std::error_code fs_ec;
     if (!std::filesystem::create_directories(artifact_dir, fs_ec) && fs_ec) {
-        fprintf(stderr, "Failed to create artifact directory: %s (%s)\n",
-                artifact_dir.string().c_str(), fs_ec.message().c_str());
-    } else if (
-        !write_text_file(artifact_dir / (std::string(artifact_uuid) + ".vert.glsl"), artifact_vertex_src) ||
-        !write_text_file(artifact_dir / (std::string(artifact_uuid) + ".frag.glsl"), artifact_fragment_src)) {
+        fprintf(stderr,
+                "Failed to create artifact directory: %s (%s)\n",
+                artifact_dir.string().c_str(),
+                fs_ec.message().c_str());
+    } else if (!write_text_file(artifact_dir / (std::string(artifact_uuid) + ".vert.glsl"), artifact_vertex_src) ||
+               !write_text_file(artifact_dir / (std::string(artifact_uuid) + ".frag.glsl"), artifact_fragment_src)) {
         fprintf(stderr, "Failed to write shader artifacts\n");
     } else {
         termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
-        const tc_shader_create_desc shader_desc = {
-            {
-                invalid_fallback_src,
-                invalid_fallback_src,
-                nullptr,
-                "tgfx2 artifact smoke",
-                nullptr,
-                nullptr,
-                nullptr,
-                nullptr
-            },
-            artifact_uuid,
-            TC_SHADER_LANGUAGE_SLANG,
-            TC_SHADER_ARTIFACT_REQUIRED
-        };
+        const tc_shader_create_desc shader_desc = {{invalid_fallback_src,
+                                                    invalid_fallback_src,
+                                                    nullptr,
+                                                    "tgfx2 artifact smoke",
+                                                    nullptr,
+                                                    nullptr,
+                                                    nullptr,
+                                                    nullptr},
+                                                   artifact_uuid,
+                                                   TC_SHADER_LANGUAGE_SLANG,
+                                                   TC_SHADER_ARTIFACT_REQUIRED};
         artifact_shader_handle = tc_shader_from_sources_desc(&shader_desc);
 
         tc_shader* artifact_shader = tc_shader_get(artifact_shader_handle);
@@ -419,13 +447,14 @@ int main() {
                 float artifact_center[4] = {0};
                 bool artifact_read_ok = device->read_pixel_rgba8(artifact_rt_tex, 32, 32, artifact_center);
                 printf("Artifact center pixel: (%.2f, %.2f, %.2f, %.2f), read_ok=%d\n",
-                       artifact_center[0], artifact_center[1], artifact_center[2], artifact_center[3],
+                       artifact_center[0],
+                       artifact_center[1],
+                       artifact_center[2],
+                       artifact_center[3],
                        artifact_read_ok ? 1 : 0);
 
-                artifact_test_ok = artifact_read_ok &&
-                    artifact_center[0] > 0.70f &&
-                    artifact_center[1] < 0.25f &&
-                    artifact_center[2] > 0.55f;
+                artifact_test_ok = artifact_read_ok && artifact_center[0] > 0.70f && artifact_center[1] < 0.25f &&
+                                   artifact_center[2] > 0.55f;
             }
         }
     }
@@ -433,8 +462,10 @@ int main() {
     termin::tgfx2_set_shader_artifact_root("");
     std::filesystem::remove_all(artifact_root, fs_ec);
     if (fs_ec) {
-        fprintf(stderr, "Failed to remove artifact temp root: %s (%s)\n",
-                artifact_root.string().c_str(), fs_ec.message().c_str());
+        fprintf(stderr,
+                "Failed to remove artifact temp root: %s (%s)\n",
+                artifact_root.string().c_str(),
+                fs_ec.message().c_str());
     }
     printf("Artifact test: artifact_loaded_and_drawn=%d\n", artifact_test_ok);
 
@@ -448,8 +479,10 @@ int main() {
 
     // --- Cleanup ---
     device->destroy(rt_tex);
-    if (artifact_rt_tex) device->destroy(artifact_rt_tex);
-    if (artifact_pipeline) device->destroy(artifact_pipeline);
+    if (artifact_rt_tex)
+        device->destroy(artifact_rt_tex);
+    if (artifact_pipeline)
+        device->destroy(artifact_pipeline);
     if (!tc_shader_handle_is_invalid(artifact_shader_handle)) {
         tc_shader_destroy(artifact_shader_handle);
     }

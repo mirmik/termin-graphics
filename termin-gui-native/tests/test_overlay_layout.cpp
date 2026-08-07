@@ -1,7 +1,7 @@
-#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/h_stack.hpp>
 #include <termin/gui_native/icon_button.hpp>
 #include <termin/gui_native/overlay_layout.hpp>
+#include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/viewport3d.hpp>
 
 #include <cassert>
@@ -25,8 +25,7 @@ int main() {
     assert(!tc_widget_handle_is_invalid(document.adopt(button)));
     assert(composition->add_child(viewport->handle(), OverlayAnchor::Fill));
     assert(composition->add_child(overlay->handle(), OverlayAnchor::Fill));
-    assert(overlay->add_child(
-        top_right->handle(), OverlayAnchor::TopRight, {-10.0f, 10.0f}));
+    assert(overlay->add_child(top_right->handle(), OverlayAnchor::TopRight, {-10.0f, 10.0f}));
     top_right->add_preferred_child(button->handle());
     assert(document.add_root(*composition));
 

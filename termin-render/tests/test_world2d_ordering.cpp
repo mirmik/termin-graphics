@@ -9,18 +9,13 @@
 
 namespace {
 
-termin::World2DOrderEntry entry(
-    size_t submission_index,
-    int32_t layer,
-    int32_t order,
-    double depth,
-    uint64_t stable_tie_breaker)
-{
-    return {
-        {layer, order, depth, stable_tie_breaker},
-        submission_index,
-    };
-}
+    termin::World2DOrderEntry
+    entry(size_t submission_index, int32_t layer, int32_t order, double depth, uint64_t stable_tie_breaker) {
+        return {
+            {layer, order, depth, stable_tie_breaker},
+            submission_index,
+        };
+    }
 
 } // namespace
 

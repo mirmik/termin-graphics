@@ -1,7 +1,7 @@
 #include "tgfx/resources/tc_primitive_mesh.h"
-#include <tgfx/resources/tc_mesh_registry.h>
 #include <math.h>
 #include <stdlib.h>
+#include <tgfx/resources/tc_mesh_registry.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -13,7 +13,8 @@
 
 static tc_mesh* alloc_mesh(size_t vertex_count, size_t index_count) {
     tc_mesh* mesh = (tc_mesh*)calloc(1, sizeof(tc_mesh));
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     mesh->layout = tc_vertex_layout_pos_normal_uv();
     mesh->vertex_count = vertex_count;
@@ -54,7 +55,8 @@ static void set_vertex(tc_mesh* mesh, size_t idx, tc_primitive_vertex vertex) {
 }
 
 static void free_temp_mesh(tc_mesh* mesh) {
-    if (!mesh) return;
+    if (!mesh)
+        return;
     free(mesh->vertices);
     free(mesh->indices);
     free(mesh);
@@ -62,14 +64,16 @@ static void free_temp_mesh(tc_mesh* mesh) {
 
 // Helper to create mesh in registry
 static tc_mesh_handle create_primitive_in_registry(const char* name, tc_mesh* temp_mesh) {
-    if (!temp_mesh) return tc_mesh_handle_invalid();
+    if (!temp_mesh)
+        return tc_mesh_handle_invalid();
 
     tc_mesh_handle h = tc_mesh_find_by_name(name);
     if (tc_mesh_is_valid(h)) {
         free_temp_mesh(temp_mesh);
 
         tc_mesh* existing = tc_mesh_get(h);
-        if (existing) tc_mesh_add_ref(existing);
+        if (existing)
+            tc_mesh_add_ref(existing);
         return h;
     }
 
@@ -85,15 +89,13 @@ static tc_mesh_handle create_primitive_in_registry(const char* name, tc_mesh* te
         return tc_mesh_handle_invalid();
     }
 
-    tc_mesh_set_data(
-        mesh,
-        temp_mesh->vertices,
-        temp_mesh->vertex_count,
-        &temp_mesh->layout,
-        temp_mesh->indices,
-        temp_mesh->index_count,
-        name
-    );
+    tc_mesh_set_data(mesh,
+                     temp_mesh->vertices,
+                     temp_mesh->vertex_count,
+                     &temp_mesh->layout,
+                     temp_mesh->indices,
+                     temp_mesh->index_count,
+                     name);
     mesh->draw_mode = temp_mesh->draw_mode;
 
     tc_mesh_add_ref(mesh);
@@ -108,7 +110,8 @@ static tc_mesh_handle create_primitive_in_registry(const char* name, tc_mesh* te
 
 tc_mesh* tc_primitive_cube_new(float size_x, float size_y, float size_z) {
     tc_mesh* mesh = alloc_mesh(24, 36);
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     float hx = size_x * 0.5f;
     float hy = size_y * 0.5f;
@@ -134,11 +137,11 @@ tc_mesh* tc_primitive_cube_new(float size_x, float size_y, float size_z) {
     for (int f = 0; f < 6; f++) {
         uint32_t base = (uint32_t)vi;
         for (int c = 0; c < 4; c++) {
-            set_vertex(mesh, vi++, (tc_primitive_vertex){
-                {faces[f].v[c][0], faces[f].v[c][1], faces[f].v[c][2]},
-                {faces[f].nx, faces[f].ny, faces[f].nz},
-                {uvs[c][0], uvs[c][1]}
-            });
+            set_vertex(mesh,
+                       vi++,
+                       (tc_primitive_vertex){{faces[f].v[c][0], faces[f].v[c][1], faces[f].v[c][2]},
+                                             {faces[f].nx, faces[f].ny, faces[f].nz},
+                                             {uvs[c][0], uvs[c][1]}});
         }
         mesh->indices[ii++] = base + 0;
         mesh->indices[ii++] = base + 1;
@@ -156,8 +159,10 @@ tc_mesh* tc_primitive_cube_new(float size_x, float size_y, float size_z) {
 // ============================================================================
 
 tc_mesh* tc_primitive_sphere_new(float radius, int meridians, int parallels) {
-    if (meridians < 3) meridians = 3;
-    if (parallels < 2) parallels = 2;
+    if (meridians < 3)
+        meridians = 3;
+    if (parallels < 2)
+        parallels = 2;
 
     int rings = parallels;
     int segments = meridians;
@@ -166,7 +171,8 @@ tc_mesh* tc_primitive_sphere_new(float radius, int meridians, int parallels) {
     size_t index_count = rings * segments * 6;
 
     tc_mesh* mesh = alloc_mesh(vertex_count, index_count);
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     size_t vi = 0;
     for (int r = 0; r <= rings; r++) {
@@ -190,11 +196,7 @@ tc_mesh* tc_primitive_sphere_new(float radius, int meridians, int parallels) {
 
             float u_coord = (float)s / (float)segments;
 
-            set_vertex(mesh, vi++, (tc_primitive_vertex){
-                {px, py, pz},
-                {nx, ny, nz},
-                {u_coord, v_coord}
-            });
+            set_vertex(mesh, vi++, (tc_primitive_vertex){{px, py, pz}, {nx, ny, nz}, {u_coord, v_coord}});
         }
     }
 
@@ -225,7 +227,8 @@ tc_mesh* tc_primitive_sphere_new(float radius, int meridians, int parallels) {
 // ============================================================================
 
 tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
-    if (segments < 3) segments = 3;
+    if (segments < 3)
+        segments = 3;
 
     size_t side_verts = segments * 2;
     size_t cap_verts = (segments + 1) * 2;
@@ -233,7 +236,8 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
     size_t index_count = segments * 6 + segments * 3 * 2;
 
     tc_mesh* mesh = alloc_mesh(vertex_count, index_count);
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     float half_h = height * 0.5f;
     size_t vi = 0;
@@ -250,11 +254,7 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
             float px = radius * c;
             float pz = radius * sn;
             float u_coord = (float)s / (float)segments;
-            set_vertex(mesh, vi++, (tc_primitive_vertex){
-                {px, y, pz},
-                {c, 0, sn},
-                {u_coord, v_coord}
-            });
+            set_vertex(mesh, vi++, (tc_primitive_vertex){{px, y, pz}, {c, 0, sn}, {u_coord, v_coord}});
         }
     }
 
@@ -278,18 +278,13 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, (tc_primitive_vertex){
-            {radius * c, -half_h, radius * sn},
-            {0, -1, 0},
-            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
-        });
+        set_vertex(
+            mesh,
+            vi++,
+            (tc_primitive_vertex){{radius * c, -half_h, radius * sn}, {0, -1, 0}, {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}});
     }
     uint32_t bottom_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, (tc_primitive_vertex){
-        {0, -half_h, 0},
-        {0, -1, 0},
-        {0.5f, 0.5f}
-    });
+    set_vertex(mesh, vi++, (tc_primitive_vertex){{0, -half_h, 0}, {0, -1, 0}, {0.5f, 0.5f}});
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -303,18 +298,13 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, (tc_primitive_vertex){
-            {radius * c, half_h, radius * sn},
-            {0, 1, 0},
-            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
-        });
+        set_vertex(
+            mesh,
+            vi++,
+            (tc_primitive_vertex){{radius * c, half_h, radius * sn}, {0, 1, 0}, {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}});
     }
     uint32_t top_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, (tc_primitive_vertex){
-        {0, half_h, 0},
-        {0, 1, 0},
-        {0.5f, 0.5f}
-    });
+    set_vertex(mesh, vi++, (tc_primitive_vertex){{0, half_h, 0}, {0, 1, 0}, {0.5f, 0.5f}});
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -331,24 +321,22 @@ tc_mesh* tc_primitive_cylinder_new(float radius, float height, int segments) {
 // ============================================================================
 
 tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
-    if (segments < 3) segments = 3;
+    if (segments < 3)
+        segments = 3;
 
     size_t vertex_count = 1 + segments + segments + 1;
     size_t index_count = segments * 3 + segments * 3;
 
     tc_mesh* mesh = alloc_mesh(vertex_count, index_count);
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     float half_h = height * 0.5f;
     size_t vi = 0;
     size_t ii = 0;
 
     uint32_t apex_idx = (uint32_t)vi;
-    set_vertex(mesh, vi++, (tc_primitive_vertex){
-        {0, half_h, 0},
-        {0, 1, 0},
-        {0.5f, 1.0f}
-    });
+    set_vertex(mesh, vi++, (tc_primitive_vertex){{0, half_h, 0}, {0, 1, 0}, {0.5f, 1.0f}});
 
     uint32_t base_start = (uint32_t)vi;
     float slope = radius / height;
@@ -359,11 +347,10 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, (tc_primitive_vertex){
-            {radius * c, -half_h, radius * sn},
-            {nr * c, ny, nr * sn},
-            {(float)s / (float)segments, 0.0f}
-        });
+        set_vertex(mesh,
+                   vi++,
+                   (tc_primitive_vertex){
+                       {radius * c, -half_h, radius * sn}, {nr * c, ny, nr * sn}, {(float)s / (float)segments, 0.0f}});
     }
 
     for (int s = 0; s < segments; s++) {
@@ -378,18 +365,13 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
         float angle = (float)s * 2.0f * (float)M_PI / (float)segments;
         float c = cosf(angle);
         float sn = sinf(angle);
-        set_vertex(mesh, vi++, (tc_primitive_vertex){
-            {radius * c, -half_h, radius * sn},
-            {0, -1, 0},
-            {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}
-        });
+        set_vertex(
+            mesh,
+            vi++,
+            (tc_primitive_vertex){{radius * c, -half_h, radius * sn}, {0, -1, 0}, {c * 0.5f + 0.5f, sn * 0.5f + 0.5f}});
     }
     uint32_t cap_center = (uint32_t)vi;
-    set_vertex(mesh, vi++, (tc_primitive_vertex){
-        {0, -half_h, 0},
-        {0, -1, 0},
-        {0.5f, 0.5f}
-    });
+    set_vertex(mesh, vi++, (tc_primitive_vertex){{0, -half_h, 0}, {0, -1, 0}, {0.5f, 0.5f}});
 
     for (int s = 0; s < segments; s++) {
         int next_s = (s + 1) % segments;
@@ -406,14 +388,17 @@ tc_mesh* tc_primitive_cone_new(float radius, float height, int segments) {
 // ============================================================================
 
 tc_mesh* tc_primitive_plane_new(float width, float height, int segments_w, int segments_h) {
-    if (segments_w < 1) segments_w = 1;
-    if (segments_h < 1) segments_h = 1;
+    if (segments_w < 1)
+        segments_w = 1;
+    if (segments_h < 1)
+        segments_h = 1;
 
     size_t vertex_count = (segments_w + 1) * (segments_h + 1);
     size_t index_count = segments_w * segments_h * 6;
 
     tc_mesh* mesh = alloc_mesh(vertex_count, index_count);
-    if (!mesh) return NULL;
+    if (!mesh)
+        return NULL;
 
     size_t vi = 0;
     for (int h = 0; h <= segments_h; h++) {
@@ -423,11 +408,7 @@ tc_mesh* tc_primitive_plane_new(float width, float height, int segments_w, int s
         for (int w = 0; w <= segments_w; w++) {
             float x = ((float)w / (float)segments_w - 0.5f) * width;
             float u_coord = (float)w / (float)segments_w;
-            set_vertex(mesh, vi++, (tc_primitive_vertex){
-                {x, y, 0},
-                {0, 0, 1},
-                {u_coord, v_coord}
-            });
+            set_vertex(mesh, vi++, (tc_primitive_vertex){{x, y, 0}, {0, 0, 1}, {u_coord, v_coord}});
         }
     }
 

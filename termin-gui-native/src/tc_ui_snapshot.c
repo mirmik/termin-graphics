@@ -27,8 +27,8 @@ static bool copy_widget_strings(tc_ui_widget_snapshot* snapshot, const tc_widget
     snapshot->stable_id = copy_optional_string(widget->stable_id);
     snapshot->name = copy_optional_string(widget->name);
     snapshot->debug_name = copy_optional_string(widget->debug_name);
-    return snapshot->type_name && (!widget->stable_id || snapshot->stable_id) &&
-           (!widget->name || snapshot->name) && (!widget->debug_name || snapshot->debug_name);
+    return snapshot->type_name && (!widget->stable_id || snapshot->stable_id) && (!widget->name || snapshot->name) &&
+           (!widget->debug_name || snapshot->debug_name);
 }
 
 static bool handle_is_coherent(tc_ui_document_handle document, tc_widget_handle handle) {
@@ -58,8 +58,8 @@ void tc_ui_document_snapshot_destroy(tc_ui_document_inspect_snapshot* snapshot) 
 bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
                                      tc_ui_document_inspect_snapshot* out_snapshot) {
     tc_ui_document_inspect_snapshot snapshot = {0};
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_capture_snapshot");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_capture_snapshot");
     size_t total_children = 0;
     size_t slot_index;
     size_t widget_index = 0;
@@ -85,23 +85,19 @@ bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
     snapshot.root_count = document->root_count;
     snapshot.overlay_count = document->overlay_count;
     if (snapshot.widget_count) {
-        snapshot.widgets =
-            (tc_ui_widget_snapshot*)calloc(snapshot.widget_count, sizeof(tc_ui_widget_snapshot));
+        snapshot.widgets = (tc_ui_widget_snapshot*)calloc(snapshot.widget_count, sizeof(tc_ui_widget_snapshot));
     }
     if (snapshot.child_count) {
-        snapshot.children =
-            (tc_widget_handle*)calloc(snapshot.child_count, sizeof(tc_widget_handle));
+        snapshot.children = (tc_widget_handle*)calloc(snapshot.child_count, sizeof(tc_widget_handle));
     }
     if (snapshot.root_count) {
         snapshot.roots = (tc_widget_handle*)malloc(snapshot.root_count * sizeof(tc_widget_handle));
     }
     if (snapshot.overlay_count) {
-        snapshot.overlays =
-            (tc_ui_overlay_snapshot*)calloc(snapshot.overlay_count, sizeof(tc_ui_overlay_snapshot));
+        snapshot.overlays = (tc_ui_overlay_snapshot*)calloc(snapshot.overlay_count, sizeof(tc_ui_overlay_snapshot));
     }
-    if ((snapshot.widget_count && !snapshot.widgets) ||
-        (snapshot.child_count && !snapshot.children) || (snapshot.root_count && !snapshot.roots) ||
-        (snapshot.overlay_count && !snapshot.overlays)) {
+    if ((snapshot.widget_count && !snapshot.widgets) || (snapshot.child_count && !snapshot.children) ||
+        (snapshot.root_count && !snapshot.roots) || (snapshot.overlay_count && !snapshot.overlays)) {
         tc_log_error("[termin-gui-native] failed to allocate document inspect snapshot");
         tc_ui_document_snapshot_destroy(&snapshot);
         return false;
@@ -122,8 +118,7 @@ bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
         }
         target = &snapshot.widgets[widget_index++];
         target->handle = widget->handle;
-        if (widget->parent && (!tc_ui_document_handle_eq(
-                                   widget->parent->document, document_handle) ||
+        if (widget->parent && (!tc_ui_document_handle_eq(widget->parent->document, document_handle) ||
                                tc_widget_handle_is_invalid(widget->parent->handle))) {
             tc_log_error("[termin-gui-native] invalid canonical parent during snapshot");
             tc_ui_document_snapshot_destroy(&snapshot);

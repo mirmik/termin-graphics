@@ -20,422 +20,451 @@ namespace nb = nanobind;
 
 namespace tcplot_bindings {
 
-void bind_engines(nb::module_& m) {
-    // tcbase::MouseButton comes from tcbase._tcbase_native — don't
-    // re-bind here. Importing it lazily below gives the engine's
-    // mouse-event signatures a nanobind type registration to cast
-    // against without forcing tcbase as a module-level dependency.
-    {
-        nb::module_ tcbase_native = nb::module_::import_("tcbase._tcbase_native");
-        // Re-export for caller convenience: `tcplot.MouseButton`.
-        m.attr("MouseButton") = tcbase_native.attr("MouseButton");
+    void bind_engines(nb::module_& m) {
+        // tcbase::MouseButton comes from tcbase._tcbase_native — don't
+        // re-bind here. Importing it lazily below gives the engine's
+        // mouse-event signatures a nanobind type registration to cast
+        // against without forcing tcbase as a module-level dependency.
+        {
+            nb::module_ tcbase_native = nb::module_::import_("tcbase._tcbase_native");
+            // Re-export for caller convenience: `tcplot.MouseButton`.
+            m.attr("MouseButton") = tcbase_native.attr("MouseButton");
+        }
+
+        // ---- PickResult3D ----
+        nb::class_<tcplot::PickResult3D>(m, "PickResult3D")
+            .def_ro("x", &tcplot::PickResult3D::x)
+            .def_ro("y", &tcplot::PickResult3D::y)
+            .def_ro("z", &tcplot::PickResult3D::z)
+            .def_ro("screen_dist_px", &tcplot::PickResult3D::screen_dist_px);
+
+        // ---- PlotEngine2D ----
+        nb::class_<tcplot::PlotEngine2D>(m, "PlotEngine2D")
+            .def(nb::init<>())
+
+            .def_rw("data", &tcplot::PlotEngine2D::data)
+
+            // Style / margins
+            .def_rw("margin_left", &tcplot::PlotEngine2D::margin_left)
+            .def_rw("margin_right", &tcplot::PlotEngine2D::margin_right)
+            .def_rw("margin_top", &tcplot::PlotEngine2D::margin_top)
+            .def_rw("margin_bottom", &tcplot::PlotEngine2D::margin_bottom)
+            .def_rw("show_grid", &tcplot::PlotEngine2D::show_grid)
+            .def_rw("grid_color", &tcplot::PlotEngine2D::grid_color)
+            .def_rw("axis_color", &tcplot::PlotEngine2D::axis_color)
+            .def_rw("label_color", &tcplot::PlotEngine2D::label_color)
+            .def_rw("bg_color", &tcplot::PlotEngine2D::bg_color)
+            .def_rw("plot_bg_color", &tcplot::PlotEngine2D::plot_bg_color)
+            .def_rw("font_size", &tcplot::PlotEngine2D::font_size)
+            .def_rw("title_font_size", &tcplot::PlotEngine2D::title_font_size)
+            .def_rw("title_pad", &tcplot::PlotEngine2D::title_pad)
+            // `title_color` is optional: None = fall back to label_color.
+            // Using a Python property so callers can set None to reset.
+            .def_prop_rw(
+                "title_color",
+                [](const tcplot::PlotEngine2D& self) -> nb::object {
+                    if (!self.title_color.has_value())
+                        return nb::none();
+                    return nb::cast(*self.title_color);
+                },
+                [](tcplot::PlotEngine2D& self, nb::object obj) { self.title_color = optional_color_from_obj(obj); })
+
+            .def("set_viewport",
+                 &tcplot::PlotEngine2D::set_viewport,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("width"),
+                 nb::arg("height"))
+
+            .def(
+                "plot",
+                [](tcplot::PlotEngine2D& self,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
+                   nb::object color,
+                   double thickness,
+                   const std::string& label) {
+                    tcplot::LinePlotOptions options;
+                    options.color = optional_color_from_obj(color);
+                    options.thickness = thickness;
+                    options.label = label;
+                    self.plot(vec_from_array(x), vec_from_array(y), std::move(options));
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("color") = nb::none(),
+                nb::arg("thickness") = 1.5,
+                nb::arg("label") = std::string())
+
+            .def(
+                "scatter",
+                [](tcplot::PlotEngine2D& self,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
+                   nb::object color,
+                   double size,
+                   const std::string& label) {
+                    tcplot::ScatterPlotOptions options;
+                    options.color = optional_color_from_obj(color);
+                    options.size = size;
+                    options.label = label;
+                    self.scatter(vec_from_array(x), vec_from_array(y), std::move(options));
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("color") = nb::none(),
+                nb::arg("size") = 4.0,
+                nb::arg("label") = std::string())
+
+            .def(
+                "set_line_color",
+                [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
+                    auto c = optional_color_from_obj(color);
+                    if (!c.has_value())
+                        return false;
+                    return self.set_line_color(idx, *c);
+                },
+                nb::arg("idx"),
+                nb::arg("color"))
+            .def(
+                "set_scatter_color",
+                [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
+                    auto c = optional_color_from_obj(color);
+                    if (!c.has_value())
+                        return false;
+                    return self.set_scatter_color(idx, *c);
+                },
+                nb::arg("idx"),
+                nb::arg("color"))
+
+            .def("clear", &tcplot::PlotEngine2D::clear)
+            .def("fit", &tcplot::PlotEngine2D::fit)
+            .def("set_view",
+                 &tcplot::PlotEngine2D::set_view,
+                 nb::arg("x_min"),
+                 nb::arg("x_max"),
+                 nb::arg("y_min"),
+                 nb::arg("y_max"))
+
+            .def(
+                "render",
+                [](tcplot::PlotEngine2D& self, tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
+                    self.render(ctx, font);
+                },
+                nb::arg("ctx"),
+                nb::arg("font").none() = nb::none())
+
+            .def("release_gpu_resources", &tcplot::PlotEngine2D::release_gpu_resources)
+
+            // --- Input handlers ---
+            .def(
+                "on_mouse_down",
+                [](tcplot::PlotEngine2D& self, float x, float y, nb::object btn) {
+                    tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
+                    return self.on_mouse_down(x, y, b);
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("button"))
+            .def("on_mouse_move", &tcplot::PlotEngine2D::on_mouse_move, nb::arg("x"), nb::arg("y"))
+            .def(
+                "on_mouse_up",
+                [](tcplot::PlotEngine2D& self, float x, float y, nb::object btn) {
+                    tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
+                    self.on_mouse_up(x, y, b);
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("button"))
+            .def("on_mouse_wheel", &tcplot::PlotEngine2D::on_mouse_wheel, nb::arg("x"), nb::arg("y"), nb::arg("dy"))
+
+            // Handles are complete layer/index/generation values. They never own
+            // an annotation or retain the engine.
+            .def(
+                "create_data_marker",
+                [](tcplot::PlotEngine2D& self, tcplot::PlotDataMarker2D marker) {
+                    const auto handle = self.annotations().create_data_marker(std::move(marker));
+                    if (handle) {
+                        self.annotations().project(self.plot_frame(), self.data);
+                    }
+                    return handle;
+                },
+                nb::arg("marker"))
+            .def(
+                "update_data_marker",
+                [](tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle, tcplot::PlotDataMarker2D marker) {
+                    const bool updated = self.annotations().update_data_marker(handle, std::move(marker));
+                    if (updated) {
+                        self.annotations().project(self.plot_frame(), self.data);
+                    }
+                    return updated;
+                },
+                nb::arg("handle"),
+                nb::arg("marker"))
+            .def(
+                "data_marker_snapshot",
+                [](const tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle) {
+                    return self.annotations().data_marker_snapshot(handle);
+                },
+                nb::arg("handle"))
+            .def(
+                "annotation_anchor_pixel",
+                [](const tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle) -> nb::object {
+                    const auto snapshot = self.annotations().snapshot(handle);
+                    if (!snapshot || !snapshot->projected_anchor) {
+                        return nb::none();
+                    }
+                    return nb::make_tuple(snapshot->projected_anchor->x, snapshot->projected_anchor->y);
+                },
+                nb::arg("handle"))
+            .def(
+                "destroy_annotation",
+                [](tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle) {
+                    return self.annotations().destroy(handle);
+                },
+                nb::arg("handle"))
+            .def(
+                "set_marker_snap_handler",
+                [](tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle, nb::object callback) {
+                    if (callback.is_none()) {
+                        return self.annotations().set_snap_hook(handle, {});
+                    }
+                    return self.annotations().set_snap_hook(
+                        handle, [callback = std::move(callback)](const tcplot::PlotPoint2D& point) {
+                            nb::gil_scoped_acquire gil;
+                            nb::object value = callback(point.x, point.y);
+                            nb::tuple pair = nb::cast<nb::tuple>(value);
+                            if (pair.size() != 2) {
+                                throw nb::value_error("marker snap handler must return (x, y)");
+                            }
+                            return tcplot::PlotPoint2D{
+                                nb::cast<double>(pair[0]),
+                                nb::cast<double>(pair[1]),
+                            };
+                        });
+                },
+                nb::arg("handle"),
+                nb::arg("callback").none())
+            .def(
+                "set_marker_action_handler",
+                [](tcplot::PlotEngine2D& self, tcplot::PlotAnnotationHandle handle, nb::object callback) {
+                    if (callback.is_none()) {
+                        return self.annotations().set_action_handler(handle, {});
+                    }
+                    return self.annotations().set_action_handler(
+                        handle, [callback = std::move(callback)](const tcplot::PlotAnnotationAction2D& action) {
+                            nb::gil_scoped_acquire gil;
+                            callback(action.annotation, action.action);
+                        });
+                },
+                nb::arg("handle"),
+                nb::arg("callback").none())
+            .def("take_annotation_action", [](tcplot::PlotEngine2D& self) { return self.annotations().take_action(); })
+            .def("annotation_count", [](const tcplot::PlotEngine2D& self) { return self.annotations().size(); });
+
+        // ---- PlotEngine3D ----
+        nb::enum_<tcplot::SurfaceColorMap>(m, "SurfaceColorMap")
+            .value("Jet", tcplot::SurfaceColorMap::Jet)
+            .value("Viridis", tcplot::SurfaceColorMap::Viridis)
+            .value("Plasma", tcplot::SurfaceColorMap::Plasma)
+            .value("Grayscale", tcplot::SurfaceColorMap::Grayscale)
+            .value("CoolWarm", tcplot::SurfaceColorMap::CoolWarm)
+            .value("Solid", tcplot::SurfaceColorMap::Solid);
+
+        nb::class_<tcplot::PlotEngine3D>(m, "PlotEngine3D")
+            .def(nb::init<>())
+
+            .def_rw("data", &tcplot::PlotEngine3D::data)
+            .def_rw("camera", &tcplot::PlotEngine3D::camera)
+            .def_rw("show_grid", &tcplot::PlotEngine3D::show_grid)
+            .def_rw("show_wireframe", &tcplot::PlotEngine3D::show_wireframe)
+            .def_rw("x_scale", &tcplot::PlotEngine3D::x_scale)
+            .def_rw("y_scale", &tcplot::PlotEngine3D::y_scale)
+            .def_rw("z_scale", &tcplot::PlotEngine3D::z_scale)
+            .def_rw("surface_shading", &tcplot::PlotEngine3D::surface_shading)
+            .def_rw("surface_shading_strength", &tcplot::PlotEngine3D::surface_shading_strength)
+            .def("set_surface_shading",
+                 &tcplot::PlotEngine3D::set_surface_shading,
+                 nb::arg("enabled"),
+                 nb::arg("strength") = 0.35f)
+            .def("set_surface_light_dir",
+                 &tcplot::PlotEngine3D::set_surface_light_dir,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("z"))
+            .def_rw("marker_mode", &tcplot::PlotEngine3D::marker_mode)
+
+            .def("set_viewport",
+                 &tcplot::PlotEngine3D::set_viewport,
+                 nb::arg("x"),
+                 nb::arg("y"),
+                 nb::arg("width"),
+                 nb::arg("height"))
+
+            .def(
+                "plot",
+                [](tcplot::PlotEngine3D& self,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
+                   nb::object color,
+                   double thickness,
+                   const std::string& label) {
+                    tcplot::LinePlotOptions options;
+                    options.color = optional_color_from_obj(color);
+                    options.thickness = thickness;
+                    options.label = label;
+                    self.plot(vec_from_array(x), vec_from_array(y), vec_from_array(z), std::move(options));
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("z"),
+                nb::arg("color") = nb::none(),
+                nb::arg("thickness") = 1.5,
+                nb::arg("label") = std::string())
+
+            .def(
+                "scatter",
+                [](tcplot::PlotEngine3D& self,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
+                   nb::object color,
+                   double size,
+                   const std::string& label) {
+                    tcplot::ScatterPlotOptions options;
+                    options.color = optional_color_from_obj(color);
+                    options.size = size;
+                    options.label = label;
+                    self.scatter(vec_from_array(x), vec_from_array(y), vec_from_array(z), std::move(options));
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("z"),
+                nb::arg("color") = nb::none(),
+                nb::arg("size") = 4.0,
+                nb::arg("label") = std::string())
+
+            // Surface takes flat X/Y/Z arrays plus explicit rows/cols.
+            // The Python wrapper in tcplot/plot3d.py accepts 2D numpy
+            // arrays, ravels them to 1D, and reads rows/cols from .shape
+            // — that keeps ndarray-shape manipulation out of C++.
+            .def(
+                "surface",
+                [](tcplot::PlotEngine3D& self,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> X,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> Y,
+                   nb::ndarray<double, nb::c_contig, nb::device::cpu> Z,
+                   uint32_t rows,
+                   uint32_t cols,
+                   nb::object color,
+                   tcplot::SurfaceColorMap colormap,
+                   bool wireframe,
+                   const std::string& label) {
+                    tcplot::SurfacePlotOptions options;
+                    options.color = optional_color_from_obj(color);
+                    options.colormap = colormap;
+                    options.wireframe = wireframe;
+                    options.label = label;
+                    self.surface(
+                        vec_from_array(X), vec_from_array(Y), vec_from_array(Z), rows, cols, std::move(options));
+                },
+                nb::arg("X"),
+                nb::arg("Y"),
+                nb::arg("Z"),
+                nb::arg("rows"),
+                nb::arg("cols"),
+                nb::arg("color") = nb::none(),
+                nb::arg("colormap") = tcplot::SurfaceColorMap::Jet,
+                nb::arg("wireframe") = false,
+                nb::arg("label") = std::string())
+
+            .def("set_surface_colormap",
+                 &tcplot::PlotEngine3D::set_surface_colormap,
+                 nb::arg("idx"),
+                 nb::arg("colormap"))
+            .def(
+                "set_surface_color",
+                [](tcplot::PlotEngine3D& self, size_t idx, nb::object color) {
+                    auto c = optional_color_from_obj(color);
+                    if (!c.has_value())
+                        return false;
+                    return self.set_surface_color(idx, *c);
+                },
+                nb::arg("idx"),
+                nb::arg("color"))
+            .def(
+                "set_surface_grid",
+                [](tcplot::PlotEngine3D& self,
+                   size_t idx,
+                   bool visible,
+                   uint32_t row_step,
+                   uint32_t col_step,
+                   nb::object color,
+                   float width_px) {
+                    auto c = optional_color_from_obj(color);
+                    if (!c.has_value())
+                        return false;
+                    tcplot::SurfaceGridOptions options;
+                    options.visible = visible;
+                    options.row_step = row_step;
+                    options.col_step = col_step;
+                    options.color = *c;
+                    options.width_px = width_px;
+                    return self.set_surface_grid(idx, options);
+                },
+                nb::arg("idx"),
+                nb::arg("visible"),
+                nb::arg("row_step"),
+                nb::arg("col_step"),
+                nb::arg("color"),
+                nb::arg("width_px") = 1.5f)
+
+            .def("clear", &tcplot::PlotEngine3D::clear)
+            .def("toggle_wireframe", &tcplot::PlotEngine3D::toggle_wireframe)
+            .def("toggle_marker_mode", &tcplot::PlotEngine3D::toggle_marker_mode)
+
+            .def(
+                "render",
+                [](tcplot::PlotEngine3D& self, tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
+                    self.render(ctx, font);
+                },
+                nb::arg("ctx"),
+                nb::arg("font").none() = nb::none())
+
+            .def("release_gpu_resources", &tcplot::PlotEngine3D::release_gpu_resources)
+
+            .def(
+                "pick",
+                [](const tcplot::PlotEngine3D& self, float mx, float my) -> nb::object {
+                    auto r = self.pick(mx, my);
+                    if (!r.has_value())
+                        return nb::none();
+                    return nb::make_tuple(r->x, r->y, r->z, r->screen_dist_px);
+                },
+                nb::arg("mx"),
+                nb::arg("my"))
+
+            .def(
+                "on_mouse_down",
+                [](tcplot::PlotEngine3D& self, float x, float y, nb::object btn) {
+                    tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
+                    return self.on_mouse_down(x, y, b);
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("button"))
+            .def("on_mouse_move", &tcplot::PlotEngine3D::on_mouse_move, nb::arg("x"), nb::arg("y"))
+            .def(
+                "on_mouse_up",
+                [](tcplot::PlotEngine3D& self, float x, float y, nb::object btn) {
+                    tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
+                    self.on_mouse_up(x, y, b);
+                },
+                nb::arg("x"),
+                nb::arg("y"),
+                nb::arg("button"))
+            .def("on_mouse_wheel", &tcplot::PlotEngine3D::on_mouse_wheel, nb::arg("x"), nb::arg("y"), nb::arg("dy"));
     }
 
-    // ---- PickResult3D ----
-    nb::class_<tcplot::PickResult3D>(m, "PickResult3D")
-        .def_ro("x", &tcplot::PickResult3D::x)
-        .def_ro("y", &tcplot::PickResult3D::y)
-        .def_ro("z", &tcplot::PickResult3D::z)
-        .def_ro("screen_dist_px", &tcplot::PickResult3D::screen_dist_px);
-
-    // ---- PlotEngine2D ----
-    nb::class_<tcplot::PlotEngine2D>(m, "PlotEngine2D")
-        .def(nb::init<>())
-
-        .def_rw("data", &tcplot::PlotEngine2D::data)
-
-        // Style / margins
-        .def_rw("margin_left",   &tcplot::PlotEngine2D::margin_left)
-        .def_rw("margin_right",  &tcplot::PlotEngine2D::margin_right)
-        .def_rw("margin_top",    &tcplot::PlotEngine2D::margin_top)
-        .def_rw("margin_bottom", &tcplot::PlotEngine2D::margin_bottom)
-        .def_rw("show_grid",     &tcplot::PlotEngine2D::show_grid)
-        .def_rw("grid_color",    &tcplot::PlotEngine2D::grid_color)
-        .def_rw("axis_color",    &tcplot::PlotEngine2D::axis_color)
-        .def_rw("label_color",   &tcplot::PlotEngine2D::label_color)
-        .def_rw("bg_color",      &tcplot::PlotEngine2D::bg_color)
-        .def_rw("plot_bg_color", &tcplot::PlotEngine2D::plot_bg_color)
-        .def_rw("font_size",       &tcplot::PlotEngine2D::font_size)
-        .def_rw("title_font_size", &tcplot::PlotEngine2D::title_font_size)
-        .def_rw("title_pad",       &tcplot::PlotEngine2D::title_pad)
-        // `title_color` is optional: None = fall back to label_color.
-        // Using a Python property so callers can set None to reset.
-        .def_prop_rw("title_color",
-            [](const tcplot::PlotEngine2D& self) -> nb::object {
-                if (!self.title_color.has_value()) return nb::none();
-                return nb::cast(*self.title_color);
-            },
-            [](tcplot::PlotEngine2D& self, nb::object obj) {
-                self.title_color = optional_color_from_obj(obj);
-            })
-
-        .def("set_viewport", &tcplot::PlotEngine2D::set_viewport,
-             nb::arg("x"), nb::arg("y"), nb::arg("width"), nb::arg("height"))
-
-        .def("plot",
-             [](tcplot::PlotEngine2D& self,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
-                 nb::object color, double thickness, const std::string& label) {
-                 tcplot::LinePlotOptions options;
-                 options.color = optional_color_from_obj(color);
-                 options.thickness = thickness;
-                 options.label = label;
-                 self.plot(vec_from_array(x), vec_from_array(y), std::move(options));
-             },
-             nb::arg("x"), nb::arg("y"),
-             nb::arg("color") = nb::none(),
-             nb::arg("thickness") = 1.5,
-             nb::arg("label") = std::string())
-
-        .def("scatter",
-             [](tcplot::PlotEngine2D& self,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
-                nb::object color, double size, const std::string& label) {
-                 tcplot::ScatterPlotOptions options;
-                 options.color = optional_color_from_obj(color);
-                 options.size = size;
-                 options.label = label;
-                 self.scatter(vec_from_array(x), vec_from_array(y), std::move(options));
-             },
-             nb::arg("x"), nb::arg("y"),
-             nb::arg("color") = nb::none(),
-             nb::arg("size") = 4.0,
-             nb::arg("label") = std::string())
-
-        .def("set_line_color",
-             [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
-                 auto c = optional_color_from_obj(color);
-                 if (!c.has_value()) return false;
-                 return self.set_line_color(idx, *c);
-             },
-             nb::arg("idx"), nb::arg("color"))
-        .def("set_scatter_color",
-             [](tcplot::PlotEngine2D& self, size_t idx, nb::object color) {
-                 auto c = optional_color_from_obj(color);
-                 if (!c.has_value()) return false;
-                 return self.set_scatter_color(idx, *c);
-             },
-             nb::arg("idx"), nb::arg("color"))
-
-        .def("clear",   &tcplot::PlotEngine2D::clear)
-        .def("fit",     &tcplot::PlotEngine2D::fit)
-        .def("set_view", &tcplot::PlotEngine2D::set_view,
-             nb::arg("x_min"), nb::arg("x_max"),
-             nb::arg("y_min"), nb::arg("y_max"))
-
-        .def("render",
-             [](tcplot::PlotEngine2D& self,
-                tgfx::RenderContext2* ctx,
-                tgfx::FontAtlas* font) {
-                 self.render(ctx, font);
-             },
-             nb::arg("ctx"), nb::arg("font").none() = nb::none())
-
-        .def("release_gpu_resources", &tcplot::PlotEngine2D::release_gpu_resources)
-
-        // --- Input handlers ---
-        .def("on_mouse_down",
-             [](tcplot::PlotEngine2D& self, float x, float y, nb::object btn) {
-                 tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
-                 return self.on_mouse_down(x, y, b);
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("button"))
-        .def("on_mouse_move", &tcplot::PlotEngine2D::on_mouse_move,
-             nb::arg("x"), nb::arg("y"))
-        .def("on_mouse_up",
-             [](tcplot::PlotEngine2D& self, float x, float y, nb::object btn) {
-                 tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
-                 self.on_mouse_up(x, y, b);
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("button"))
-        .def("on_mouse_wheel", &tcplot::PlotEngine2D::on_mouse_wheel,
-             nb::arg("x"), nb::arg("y"), nb::arg("dy"))
-
-        // Handles are complete layer/index/generation values. They never own
-        // an annotation or retain the engine.
-        .def(
-            "create_data_marker",
-            [](tcplot::PlotEngine2D& self,
-               tcplot::PlotDataMarker2D marker) {
-                const auto handle = self.annotations().create_data_marker(
-                    std::move(marker));
-                if (handle) {
-                    self.annotations().project(self.plot_frame(), self.data);
-                }
-                return handle;
-            },
-            nb::arg("marker"))
-        .def(
-            "update_data_marker",
-            [](tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle,
-               tcplot::PlotDataMarker2D marker) {
-                const bool updated =
-                    self.annotations().update_data_marker(
-                    handle, std::move(marker));
-                if (updated) {
-                    self.annotations().project(self.plot_frame(), self.data);
-                }
-                return updated;
-            },
-            nb::arg("handle"),
-            nb::arg("marker"))
-        .def(
-            "data_marker_snapshot",
-            [](const tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle) {
-                return self.annotations().data_marker_snapshot(handle);
-            },
-            nb::arg("handle"))
-        .def(
-            "annotation_anchor_pixel",
-            [](const tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle) -> nb::object {
-                const auto snapshot = self.annotations().snapshot(handle);
-                if (!snapshot || !snapshot->projected_anchor) {
-                    return nb::none();
-                }
-                return nb::make_tuple(
-                    snapshot->projected_anchor->x,
-                    snapshot->projected_anchor->y);
-            },
-            nb::arg("handle"))
-        .def(
-            "destroy_annotation",
-            [](tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle) {
-                return self.annotations().destroy(handle);
-            },
-            nb::arg("handle"))
-        .def(
-            "set_marker_snap_handler",
-            [](tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle,
-               nb::object callback) {
-                if (callback.is_none()) {
-                    return self.annotations().set_snap_hook(handle, {});
-                }
-                return self.annotations().set_snap_hook(
-                    handle,
-                    [callback = std::move(callback)](
-                        const tcplot::PlotPoint2D& point) {
-                        nb::gil_scoped_acquire gil;
-                        nb::object value = callback(point.x, point.y);
-                        nb::tuple pair = nb::cast<nb::tuple>(value);
-                        if (pair.size() != 2) {
-                            throw nb::value_error(
-                                "marker snap handler must return (x, y)");
-                        }
-                        return tcplot::PlotPoint2D{
-                            nb::cast<double>(pair[0]),
-                            nb::cast<double>(pair[1]),
-                        };
-                    });
-            },
-            nb::arg("handle"),
-            nb::arg("callback").none())
-        .def(
-            "set_marker_action_handler",
-            [](tcplot::PlotEngine2D& self,
-               tcplot::PlotAnnotationHandle handle,
-               nb::object callback) {
-                if (callback.is_none()) {
-                    return self.annotations().set_action_handler(handle, {});
-                }
-                return self.annotations().set_action_handler(
-                    handle,
-                    [callback = std::move(callback)](
-                        const tcplot::PlotAnnotationAction2D& action) {
-                        nb::gil_scoped_acquire gil;
-                        callback(action.annotation, action.action);
-                    });
-            },
-            nb::arg("handle"),
-            nb::arg("callback").none())
-        .def(
-            "take_annotation_action",
-            [](tcplot::PlotEngine2D& self) {
-                return self.annotations().take_action();
-            })
-        .def(
-            "annotation_count",
-            [](const tcplot::PlotEngine2D& self) {
-                return self.annotations().size();
-            });
-
-    // ---- PlotEngine3D ----
-    nb::enum_<tcplot::SurfaceColorMap>(m, "SurfaceColorMap")
-        .value("Jet", tcplot::SurfaceColorMap::Jet)
-        .value("Viridis", tcplot::SurfaceColorMap::Viridis)
-        .value("Plasma", tcplot::SurfaceColorMap::Plasma)
-        .value("Grayscale", tcplot::SurfaceColorMap::Grayscale)
-        .value("CoolWarm", tcplot::SurfaceColorMap::CoolWarm)
-        .value("Solid", tcplot::SurfaceColorMap::Solid);
-
-    nb::class_<tcplot::PlotEngine3D>(m, "PlotEngine3D")
-        .def(nb::init<>())
-
-        .def_rw("data",   &tcplot::PlotEngine3D::data)
-        .def_rw("camera", &tcplot::PlotEngine3D::camera)
-        .def_rw("show_grid",      &tcplot::PlotEngine3D::show_grid)
-        .def_rw("show_wireframe", &tcplot::PlotEngine3D::show_wireframe)
-        .def_rw("x_scale",        &tcplot::PlotEngine3D::x_scale)
-        .def_rw("y_scale",        &tcplot::PlotEngine3D::y_scale)
-        .def_rw("z_scale",        &tcplot::PlotEngine3D::z_scale)
-        .def_rw("surface_shading", &tcplot::PlotEngine3D::surface_shading)
-        .def_rw("surface_shading_strength",
-                 &tcplot::PlotEngine3D::surface_shading_strength)
-        .def("set_surface_shading", &tcplot::PlotEngine3D::set_surface_shading,
-             nb::arg("enabled"), nb::arg("strength") = 0.35f)
-        .def("set_surface_light_dir", &tcplot::PlotEngine3D::set_surface_light_dir,
-             nb::arg("x"), nb::arg("y"), nb::arg("z"))
-        .def_rw("marker_mode",    &tcplot::PlotEngine3D::marker_mode)
-
-        .def("set_viewport", &tcplot::PlotEngine3D::set_viewport,
-             nb::arg("x"), nb::arg("y"), nb::arg("width"), nb::arg("height"))
-
-        .def("plot",
-             [](tcplot::PlotEngine3D& self,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
-                nb::object color, double thickness, const std::string& label) {
-                 tcplot::LinePlotOptions options;
-                 options.color = optional_color_from_obj(color);
-                 options.thickness = thickness;
-                 options.label = label;
-                 self.plot(
-                     vec_from_array(x),
-                     vec_from_array(y),
-                     vec_from_array(z),
-                     std::move(options));
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("z"),
-             nb::arg("color") = nb::none(),
-             nb::arg("thickness") = 1.5,
-             nb::arg("label") = std::string())
-
-        .def("scatter",
-             [](tcplot::PlotEngine3D& self,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> x,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> y,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> z,
-                nb::object color, double size, const std::string& label) {
-                 tcplot::ScatterPlotOptions options;
-                 options.color = optional_color_from_obj(color);
-                 options.size = size;
-                 options.label = label;
-                 self.scatter(
-                     vec_from_array(x),
-                     vec_from_array(y),
-                     vec_from_array(z),
-                     std::move(options));
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("z"),
-             nb::arg("color") = nb::none(),
-             nb::arg("size") = 4.0,
-             nb::arg("label") = std::string())
-
-        // Surface takes flat X/Y/Z arrays plus explicit rows/cols.
-        // The Python wrapper in tcplot/plot3d.py accepts 2D numpy
-        // arrays, ravels them to 1D, and reads rows/cols from .shape
-        // — that keeps ndarray-shape manipulation out of C++.
-        .def("surface",
-             [](tcplot::PlotEngine3D& self,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> X,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> Y,
-                nb::ndarray<double, nb::c_contig, nb::device::cpu> Z,
-                uint32_t rows, uint32_t cols,
-                nb::object color, tcplot::SurfaceColorMap colormap,
-                bool wireframe, const std::string& label) {
-                 tcplot::SurfacePlotOptions options;
-                 options.color = optional_color_from_obj(color);
-                 options.colormap = colormap;
-                 options.wireframe = wireframe;
-                 options.label = label;
-                 self.surface(
-                     vec_from_array(X),
-                     vec_from_array(Y),
-                     vec_from_array(Z),
-                     rows,
-                     cols,
-                     std::move(options));
-             },
-             nb::arg("X"), nb::arg("Y"), nb::arg("Z"),
-             nb::arg("rows"), nb::arg("cols"),
-             nb::arg("color") = nb::none(),
-             nb::arg("colormap") = tcplot::SurfaceColorMap::Jet,
-             nb::arg("wireframe") = false,
-             nb::arg("label") = std::string())
-
-        .def("set_surface_colormap", &tcplot::PlotEngine3D::set_surface_colormap,
-             nb::arg("idx"), nb::arg("colormap"))
-        .def("set_surface_color",
-             [](tcplot::PlotEngine3D& self, size_t idx, nb::object color) {
-                 auto c = optional_color_from_obj(color);
-                 if (!c.has_value()) return false;
-                 return self.set_surface_color(idx, *c);
-             },
-             nb::arg("idx"), nb::arg("color"))
-        .def("set_surface_grid",
-             [](tcplot::PlotEngine3D& self, size_t idx, bool visible,
-                uint32_t row_step, uint32_t col_step, nb::object color,
-                float width_px) {
-                 auto c = optional_color_from_obj(color);
-                 if (!c.has_value()) return false;
-                 tcplot::SurfaceGridOptions options;
-                 options.visible = visible;
-                 options.row_step = row_step;
-                 options.col_step = col_step;
-                 options.color = *c;
-                 options.width_px = width_px;
-                 return self.set_surface_grid(idx, options);
-             },
-             nb::arg("idx"), nb::arg("visible"),
-             nb::arg("row_step"), nb::arg("col_step"),
-             nb::arg("color"),
-             nb::arg("width_px") = 1.5f)
-
-        .def("clear",              &tcplot::PlotEngine3D::clear)
-        .def("toggle_wireframe",   &tcplot::PlotEngine3D::toggle_wireframe)
-        .def("toggle_marker_mode", &tcplot::PlotEngine3D::toggle_marker_mode)
-
-        .def("render",
-             [](tcplot::PlotEngine3D& self,
-                tgfx::RenderContext2* ctx,
-                tgfx::FontAtlas* font) {
-                 self.render(ctx, font);
-             },
-             nb::arg("ctx"), nb::arg("font").none() = nb::none())
-
-        .def("release_gpu_resources", &tcplot::PlotEngine3D::release_gpu_resources)
-
-        .def("pick",
-             [](const tcplot::PlotEngine3D& self, float mx, float my) -> nb::object {
-                 auto r = self.pick(mx, my);
-                 if (!r.has_value()) return nb::none();
-                 return nb::make_tuple(r->x, r->y, r->z, r->screen_dist_px);
-             },
-             nb::arg("mx"), nb::arg("my"))
-
-        .def("on_mouse_down",
-             [](tcplot::PlotEngine3D& self, float x, float y, nb::object btn) {
-                 tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
-                 return self.on_mouse_down(x, y, b);
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("button"))
-        .def("on_mouse_move", &tcplot::PlotEngine3D::on_mouse_move,
-             nb::arg("x"), nb::arg("y"))
-        .def("on_mouse_up",
-             [](tcplot::PlotEngine3D& self, float x, float y, nb::object btn) {
-                 tcbase::MouseButton b = nb::cast<tcbase::MouseButton>(btn);
-                 self.on_mouse_up(x, y, b);
-             },
-             nb::arg("x"), nb::arg("y"), nb::arg("button"))
-        .def("on_mouse_wheel", &tcplot::PlotEngine3D::on_mouse_wheel,
-             nb::arg("x"), nb::arg("y"), nb::arg("dy"));
-}
-
-}  // namespace tcplot_bindings
+} // namespace tcplot_bindings

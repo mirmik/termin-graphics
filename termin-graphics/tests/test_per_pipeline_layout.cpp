@@ -2,19 +2,19 @@
 // Creates a Vulkan device, a simple shader with one UBO, and checks the
 // reflected bindings.
 #include <array>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <stdexcept>
-#include <memory>
 #include <vector>
 
 #include "tgfx/resources/tc_shader.h"
-#include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
-#include "tgfx2/i_render_device.hpp"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 
@@ -79,13 +79,11 @@ int main() {
 
     printf("VS bindings: %zu\n", vk_vs->descriptor_bindings.size());
     for (const auto& b : vk_vs->descriptor_bindings) {
-        printf("  binding=%u type=%u count=%u\n", b.binding,
-               static_cast<unsigned>(b.descriptor_type), b.count);
+        printf("  binding=%u type=%u count=%u\n", b.binding, static_cast<unsigned>(b.descriptor_type), b.count);
     }
     printf("FS bindings: %zu\n", vk_fs->descriptor_bindings.size());
     for (const auto& b : vk_fs->descriptor_bindings) {
-        printf("  binding=%u type=%u count=%u\n", b.binding,
-               static_cast<unsigned>(b.descriptor_type), b.count);
+        printf("  binding=%u type=%u count=%u\n", b.binding, static_cast<unsigned>(b.descriptor_type), b.count);
     }
 
     // Create pipeline — descriptor set layout is built from reflection
@@ -108,8 +106,7 @@ int main() {
 
     // Verify the pipeline got a descriptor set layout
     auto* vk_pipe = vk_dev->get_pipeline(pipeline);
-    printf("Pipeline descriptor_set_layout: %s\n",
-           vk_pipe->descriptor_set_layout != VK_NULL_HANDLE ? "valid" : "NULL");
+    printf("Pipeline descriptor_set_layout: %s\n", vk_pipe->descriptor_set_layout != VK_NULL_HANDLE ? "valid" : "NULL");
 
     // Create a resource set against the pipeline's layout
     tgfx::BufferDesc ubo_desc;
@@ -118,14 +115,26 @@ int main() {
     ubo_desc.cpu_visible = true;
     auto ubo = device->create_buffer(ubo_desc);
     const std::array<float, 16> identity_mvp = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f,
     };
-    device->upload_buffer(ubo, std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(identity_mvp.data()),
-        sizeof(float) * identity_mvp.size()));
+    device->upload_buffer(ubo,
+                          std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(identity_mvp.data()),
+                                                   sizeof(float) * identity_mvp.size()));
 
     tgfx::BoundResourceBinding rb;
     rb.slot.kind = tgfx::ShaderResourceKind::ConstantBuffer;
@@ -140,8 +149,7 @@ int main() {
     rb.value.buffer = ubo;
     rb.value.range = 64;
     tgfx::BoundResourceSetStorage rs_storage;
-    rs_storage.set_resource_layout_token(
-        device->pipeline_resource_layout_token(pipeline));
+    rs_storage.set_resource_layout_token(device->pipeline_resource_layout_token(pipeline));
     rs_storage.append_group(tgfx::ShaderResourceScope::Draw, true, &rb, 1);
     const tgfx::BoundResourceSetDesc rs_desc = rs_storage.view();
 
@@ -163,8 +171,7 @@ int main() {
     vb_desc.usage = tgfx::BufferUsage::Vertex;
     vb_desc.cpu_visible = true;
     auto vb = device->create_buffer(vb_desc);
-    device->upload_buffer(vb, std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+    device->upload_buffer(vb, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
 
     auto cmd = device->create_command_list();
     cmd->begin();
@@ -173,8 +180,10 @@ int main() {
     tgfx::ColorAttachmentDesc ca;
     ca.texture = rt;
     ca.load = tgfx::LoadOp::Clear;
-    ca.clear_color[0] = 0.0f; ca.clear_color[1] = 0.0f;
-    ca.clear_color[2] = 0.0f; ca.clear_color[3] = 1.0f;
+    ca.clear_color[0] = 0.0f;
+    ca.clear_color[1] = 0.0f;
+    ca.clear_color[2] = 0.0f;
+    ca.clear_color[3] = 1.0f;
     pass.colors.push_back(ca);
 
     cmd->begin_render_pass(pass);
@@ -189,10 +198,9 @@ int main() {
 
     float pixel[4] = {};
     bool ok = device->read_pixel_rgba8(rt, 32, 32, pixel);
-    printf("Center pixel read: %s (%.2f %.2f %.2f %.2f)\n",
-           ok ? "ok" : "fail", pixel[0], pixel[1], pixel[2], pixel[3]);
+    printf("Center pixel read: %s (%.2f %.2f %.2f %.2f)\n", ok ? "ok" : "fail", pixel[0], pixel[1], pixel[2], pixel[3]);
 
-    bool test_passed = ok && pixel[0] > 0.5f && pixel[1] < 0.2f;  // red
+    bool test_passed = ok && pixel[0] > 0.5f && pixel[1] < 0.2f; // red
 
     // Cleanup
     device->destroy(rset);

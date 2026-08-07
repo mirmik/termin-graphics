@@ -16,10 +16,10 @@
 #define SDL_MAIN_HANDLED
 #endif
 
-#include <cstdio>
-#include <cstdlib>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -59,10 +59,12 @@ int main(int argc, char** argv) {
     constexpr int kWidth = 800;
     constexpr int kHeight = 600;
 
-    SDL_Window* window = SDL_CreateWindow(
-        "tgfx2 Vulkan — triangle smoke",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        kWidth, kHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN);
+    SDL_Window* window = SDL_CreateWindow("tgfx2 Vulkan — triangle smoke",
+                                          SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED,
+                                          kWidth,
+                                          kHeight,
+                                          SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN);
     if (!window) {
         const char* error = SDL_GetError();
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", error);
@@ -108,8 +110,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    printf("Swapchain: %ux%u, %u images, format=%d\n",
-           sc->width(), sc->height(), sc->image_count(), sc->format());
+    printf("Swapchain: %ux%u, %u images, format=%d\n", sc->width(), sc->height(), sc->image_count(), sc->format());
 
     // ------------------------------------------------------------------
     // Shaders: simple per-vertex-colour triangle (Vulkan-style GLSL 450).
@@ -157,9 +158,7 @@ void main() {
     rt_desc.width = static_cast<uint32_t>(kWidth);
     rt_desc.height = static_cast<uint32_t>(kHeight);
     rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    rt_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                    tgfx::TextureUsage::CopySrc |
-                    tgfx::TextureUsage::Sampled;
+    rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::Sampled;
     tgfx::TextureHandle rt_tex = device->create_texture(rt_desc);
 
     // ------------------------------------------------------------------
@@ -187,9 +186,21 @@ void main() {
 
     // Vertex + index buffers. CPU-visible for trivial upload.
     float vertices[] = {
-         0.0f,  0.6f,   1.f, 0.f, 0.f,
-        -0.6f, -0.6f,   0.f, 1.f, 0.f,
-         0.6f, -0.6f,   0.f, 0.f, 1.f,
+        0.0f,
+        0.6f,
+        1.f,
+        0.f,
+        0.f,
+        -0.6f,
+        -0.6f,
+        0.f,
+        1.f,
+        0.f,
+        0.6f,
+        -0.6f,
+        0.f,
+        0.f,
+        1.f,
     };
     tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
@@ -213,11 +224,13 @@ void main() {
 
     while (running) {
         while (SDL_PollEvent(&ev)) {
-            if (ev.type == SDL_QUIT) running = false;
+            if (ev.type == SDL_QUIT)
+                running = false;
         }
         auto now = std::chrono::steady_clock::now();
         float t = std::chrono::duration<float>(now - start).count();
-        if (t > 3.0f) running = false;
+        if (t > 3.0f)
+            running = false;
 
         // ------------------------------------------------------------
         // Draw the triangle into rt_tex via the tgfx2 API.
@@ -273,8 +286,7 @@ void main() {
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    printf("Frames rendered: %llu. TRIANGLE OK.\n",
-           static_cast<unsigned long long>(frame_index));
+    printf("Frames rendered: %llu. TRIANGLE OK.\n", static_cast<unsigned long long>(frame_index));
     return 0;
 #endif
 }

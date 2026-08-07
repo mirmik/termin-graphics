@@ -14,14 +14,13 @@ extern "C" {
 
 namespace {
 
-std::string captured_scene_service_log;
+    std::string captured_scene_service_log;
 
-void capture_scene_service_log(tc_log_level level, const char* message)
-{
-    if (level >= TC_LOG_ERROR && message) {
-        captured_scene_service_log = message;
+    void capture_scene_service_log(tc_log_level level, const char* message) {
+        if (level >= TC_LOG_ERROR && message) {
+            captured_scene_service_log = message;
+        }
     }
-}
 
 } // namespace
 
@@ -35,8 +34,7 @@ TEST_CASE("missing SceneRenderServices is an observable error") {
     termin::ExecuteContext context;
     captured_scene_service_log.clear();
     tc_log_set_callback(capture_scene_service_log);
-    const auto* services =
-        termin::require_scene_render_services(context, "SceneOnlyTestPass");
+    const auto* services = termin::require_scene_render_services(context, "SceneOnlyTestPass");
     tc_log_set_callback(nullptr);
 
     CHECK(services == nullptr);

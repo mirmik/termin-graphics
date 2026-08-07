@@ -12,108 +12,96 @@
 
 namespace tgfx {
 
-inline constexpr uint32_t TGFX2_VERTEX_ATTRIBUTE_MAX = 8;
+    inline constexpr uint32_t TGFX2_VERTEX_ATTRIBUTE_MAX = 8;
 
-enum class VertexFormat {
-    // Floating point (glVertexAttribPointer)
-    Float,    // 1x float
-    Float2,   // 2x float
-    Float3,   // 3x float
-    Float4,   // 4x float
+    enum class VertexFormat {
+        // Floating point (glVertexAttribPointer)
+        Float,  // 1x float
+        Float2, // 2x float
+        Float3, // 3x float
+        Float4, // 4x float
 
-    // 32-bit integer (glVertexAttribIPointer)
-    Int,      // 1x int32
-    Int2,     // 2x int32
-    Int3,     // 3x int32
-    Int4,     // 4x int32
-    UInt,     // 1x uint32
-    UInt2,    // 2x uint32
-    UInt3,    // 3x uint32
-    UInt4,    // 4x uint32
+        // 32-bit integer (glVertexAttribIPointer)
+        Int,   // 1x int32
+        Int2,  // 2x int32
+        Int3,  // 3x int32
+        Int4,  // 4x int32
+        UInt,  // 1x uint32
+        UInt2, // 2x uint32
+        UInt3, // 3x uint32
+        UInt4, // 4x uint32
 
-    // 16-bit integer (glVertexAttribIPointer)
-    Short,    // 1x int16
-    Short2,   // 2x int16
-    Short3,   // 3x int16
-    Short4,   // 4x int16
-    UShort,   // 1x uint16
-    UShort2,  // 2x uint16
-    UShort3,  // 3x uint16
-    UShort4,  // 4x uint16
+        // 16-bit integer (glVertexAttribIPointer)
+        Short,   // 1x int16
+        Short2,  // 2x int16
+        Short3,  // 3x int16
+        Short4,  // 4x int16
+        UShort,  // 1x uint16
+        UShort2, // 2x uint16
+        UShort3, // 3x uint16
+        UShort4, // 4x uint16
 
-    // 8-bit integer (glVertexAttribIPointer)
-    Byte4,    // 4x int8 (raw integer input to shader)
-    UByte4,   // 4x uint8 raw (e.g. integer joint indices)
-    UByte4N,  // 4x uint8 normalized (e.g. vertex color)
-};
+        // 8-bit integer (glVertexAttribIPointer)
+        Byte4,   // 4x int8 (raw integer input to shader)
+        UByte4,  // 4x uint8 raw (e.g. integer joint indices)
+        UByte4N, // 4x uint8 normalized (e.g. vertex color)
+    };
 
-struct VertexAttribute {
-    uint32_t location = 0;
-    VertexFormat format = VertexFormat::Float3;
-    uint32_t offset = 0;
-    // Logical mesh/input name, e.g. POSITION, TEXCOORD, NORMAL. Backends
-    // with semantic-based input layouts (D3D11) use this when creating
-    // the pipeline, so it is part of pipeline cache identity.
-    std::string semantic;
+    struct VertexAttribute {
+        uint32_t location = 0;
+        VertexFormat format = VertexFormat::Float3;
+        uint32_t offset = 0;
+        // Logical mesh/input name, e.g. POSITION, TEXCOORD, NORMAL. Backends
+        // with semantic-based input layouts (D3D11) use this when creating
+        // the pipeline, so it is part of pipeline cache identity.
+        std::string semantic;
 
-    VertexAttribute() = default;
-    VertexAttribute(
-        uint32_t location_,
-        VertexFormat format_,
-        uint32_t offset_,
-        std::string semantic_ = {}
-    )
-        : location(location_)
-        , format(format_)
-        , offset(offset_)
-        , semantic(std::move(semantic_))
-    {}
-};
+        VertexAttribute() = default;
+        VertexAttribute(uint32_t location_, VertexFormat format_, uint32_t offset_, std::string semantic_ = {})
+            : location(location_),
+              format(format_),
+              offset(offset_),
+              semantic(std::move(semantic_)) {}
+    };
 
-struct VertexBufferLayout {
-    uint32_t stride = 0;
-    std::vector<VertexAttribute> attributes;
-    bool per_instance = false;
-    // When true, VertexAttribute::location is treated as a fallback only.
-    // Vulkan maps attributes by order to the reflected vertex input locations
-    // of the compiled shader entry point. This is for renderer-owned transient
-    // streams where the shader compiler owns the final location assignment.
-    bool use_shader_input_locations = false;
-};
+    struct VertexBufferLayout {
+        uint32_t stride = 0;
+        std::vector<VertexAttribute> attributes;
+        bool per_instance = false;
+        // When true, VertexAttribute::location is treated as a fallback only.
+        // Vulkan maps attributes by order to the reflected vertex input locations
+        // of the compiled shader entry point. This is for renderer-owned transient
+        // streams where the shader compiler owns the final location assignment.
+        bool use_shader_input_locations = false;
+    };
 
-struct VertexAttributeDesc {
-    uint32_t location = 0;
-    VertexFormat format = VertexFormat::Float3;
-    uint32_t offset = 0;
-    // Interned semantic name. Null means "use the legacy location fallback".
-    const char* semantic = nullptr;
-};
+    struct VertexAttributeDesc {
+        uint32_t location = 0;
+        VertexFormat format = VertexFormat::Float3;
+        uint32_t offset = 0;
+        // Interned semantic name. Null means "use the legacy location fallback".
+        const char* semantic = nullptr;
+    };
 
-struct VertexLayoutDesc {
-    uint32_t stride = 0;
-    uint32_t attribute_count = 0;
-    VertexAttributeDesc attributes[TGFX2_VERTEX_ATTRIBUTE_MAX]{};
-    bool per_instance = false;
-    bool use_shader_input_locations = false;
-};
+    struct VertexLayoutDesc {
+        uint32_t stride = 0;
+        uint32_t attribute_count = 0;
+        VertexAttributeDesc attributes[TGFX2_VERTEX_ATTRIBUTE_MAX]{};
+        bool per_instance = false;
+        bool use_shader_input_locations = false;
+    };
 
-static_assert(std::is_standard_layout_v<VertexAttributeDesc>);
-static_assert(std::is_trivially_copyable_v<VertexAttributeDesc>);
-static_assert(std::is_standard_layout_v<VertexLayoutDesc>);
-static_assert(std::is_trivially_copyable_v<VertexLayoutDesc>);
+    static_assert(std::is_standard_layout_v<VertexAttributeDesc>);
+    static_assert(std::is_trivially_copyable_v<VertexAttributeDesc>);
+    static_assert(std::is_standard_layout_v<VertexLayoutDesc>);
+    static_assert(std::is_trivially_copyable_v<VertexLayoutDesc>);
 
-TGFX2_API const char* intern_vertex_semantic(const char* semantic);
-TGFX2_API const char* intern_vertex_semantic(std::string_view semantic);
-TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexBufferLayout& layout);
-TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexLayoutDesc& layout);
-TGFX2_API bool vertex_layout_desc_equal(
-    const VertexLayoutDesc& a,
-    const VertexLayoutDesc& b
-);
-TGFX2_API size_t hash_vertex_layout_desc(const VertexLayoutDesc& layout);
-TGFX2_API size_t hash_vertex_layout_descs(
-    const VertexLayoutDesc* layouts,
-    uint32_t count
-);
+    TGFX2_API const char* intern_vertex_semantic(const char* semantic);
+    TGFX2_API const char* intern_vertex_semantic(std::string_view semantic);
+    TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexBufferLayout& layout);
+    TGFX2_API VertexLayoutDesc make_vertex_layout_desc(const VertexLayoutDesc& layout);
+    TGFX2_API bool vertex_layout_desc_equal(const VertexLayoutDesc& a, const VertexLayoutDesc& b);
+    TGFX2_API size_t hash_vertex_layout_desc(const VertexLayoutDesc& layout);
+    TGFX2_API size_t hash_vertex_layout_descs(const VertexLayoutDesc* layouts, uint32_t count);
 
 } // namespace tgfx

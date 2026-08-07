@@ -10,7 +10,7 @@ namespace tcplot_bindings {
     void bind_annotations(nb::module_& m);
     void bind_engines(nb::module_& m);
     void bind_retained_chart3d(nb::module_& m);
-}
+} // namespace tcplot_bindings
 
 NB_MODULE(_tcplot_native, m) {
     m.doc() = "tcplot native Python bindings";

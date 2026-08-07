@@ -5,37 +5,31 @@
 #include <cstdint>
 #include <span>
 
-#include <termin/render/render_export.hpp>
 #include "tgfx2/handles.hpp"
+#include <termin/render/render_export.hpp>
 
 extern "C" {
 #include "tgfx/resources/tc_shader.h"
 }
 
 namespace tgfx {
-class RenderContext2;
+    class RenderContext2;
 }
 
 namespace termin {
 
-RENDER_CORE_API bool shader_layout_present(const tc_shader* shader);
+    RENDER_CORE_API bool shader_layout_present(const tc_shader* shader);
 
-RENDER_CORE_API bool bind_lighting_ubo_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    tgfx::BufferHandle lighting_ubo);
+    RENDER_CORE_API bool
+    bind_lighting_ubo_for_shader(tgfx::RenderContext2& ctx, const tc_shader* shader, tgfx::BufferHandle lighting_ubo);
 
-RENDER_CORE_API bool bind_shadow_block_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    const void* data,
-    uint32_t size);
+    RENDER_CORE_API bool
+    bind_shadow_block_for_shader(tgfx::RenderContext2& ctx, const tc_shader* shader, const void* data, uint32_t size);
 
-RENDER_CORE_API bool bind_shadow_maps_for_shader(
-    tgfx::RenderContext2& ctx,
-    const tc_shader* shader,
-    std::span<const tgfx::TextureHandle> shadow_maps,
-    tgfx::SamplerHandle sampler,
-    size_t max_count);
+    RENDER_CORE_API bool bind_shadow_maps_for_shader(tgfx::RenderContext2& ctx,
+                                                     const tc_shader* shader,
+                                                     std::span<const tgfx::TextureHandle> shadow_maps,
+                                                     tgfx::SamplerHandle sampler,
+                                                     size_t max_count);
 
 } // namespace termin

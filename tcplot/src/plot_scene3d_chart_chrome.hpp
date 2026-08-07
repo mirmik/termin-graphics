@@ -4,26 +4,21 @@
 
 #include "tcplot/plot_scene3d_render_item_source.hpp"
 
-namespace tgfx
-{
+namespace tgfx {
     class FontAtlas;
     class RenderContext2;
     class Text3DRenderer;
-}
+} // namespace tgfx
 
-namespace tcplot
-{
+namespace tcplot {
 
-    class PlotScene3DChartChromeRenderer
-    {
+    class PlotScene3DChartChromeRenderer {
     public:
         PlotScene3DChartChromeRenderer();
         ~PlotScene3DChartChromeRenderer();
 
-        PlotScene3DChartChromeRenderer(const PlotScene3DChartChromeRenderer&) =
-            delete;
-        PlotScene3DChartChromeRenderer&
-        operator=(const PlotScene3DChartChromeRenderer&) = delete;
+        PlotScene3DChartChromeRenderer(const PlotScene3DChartChromeRenderer&) = delete;
+        PlotScene3DChartChromeRenderer& operator=(const PlotScene3DChartChromeRenderer&) = delete;
 
         void draw_grid_labels(tgfx::RenderContext2& context,
                               tgfx::FontAtlas& font,

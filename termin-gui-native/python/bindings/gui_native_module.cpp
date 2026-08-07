@@ -8,9 +8,7 @@ NB_MODULE(_gui_native, m) {
     try {
         nb::module_::import_("tgfx._tgfx_native");
     } catch (const std::exception& error) {
-        tc_log_error(
-            "[termin-gui-native/python] failed to import tgfx._tgfx_native: %s",
-            error.what());
+        tc_log_error("[termin-gui-native/python] failed to import tgfx._tgfx_native: %s", error.what());
         throw;
     }
 

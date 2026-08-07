@@ -16,7 +16,8 @@ typedef struct tc_drawable_capability {
 } tc_drawable_capability;
 
 TC_API tc_component_cap_id tc_drawable_capability_id(void);
-TC_API bool tc_drawable_capability_attach(struct tc_component* c, const struct tc_drawable_vtable* vtable, void* userdata);
+TC_API bool
+tc_drawable_capability_attach(struct tc_component* c, const struct tc_drawable_vtable* vtable, void* userdata);
 TC_API const tc_drawable_capability* tc_drawable_capability_get(const struct tc_component* c);
 
 #ifdef __cplusplus

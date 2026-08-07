@@ -1,9 +1,9 @@
 // tc_skeleton.h - Skeleton data structures for skeletal animation
 #pragma once
 
-#include <tcbase/tc_types.h>
 #include <tcbase/tc_binding_types.h>
 #include <tcbase/tc_resource.h>
+#include <tcbase/tc_types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,14 +24,14 @@ TC_DEFINE_HANDLE(tc_skeleton_handle)
 typedef struct tc_bone {
     char name[TC_BONE_NAME_MAX];
     int32_t index;
-    int32_t parent_index;  // -1 for root bones
+    int32_t parent_index; // -1 for root bones
 
     // 4x4 inverse bind matrix (column-major)
     double inverse_bind_matrix[16];
 
     // Bind pose local transform
     double bind_translation[3];
-    double bind_rotation[4];  // quaternion [x, y, z, w]
+    double bind_rotation[4]; // quaternion [x, y, z, w]
     double bind_scale[3];
 } tc_bone;
 
@@ -40,12 +40,12 @@ typedef struct tc_bone {
 // ============================================================================
 
 typedef struct tc_skeleton {
-    tc_resource_header header;  // common resource fields
+    tc_resource_header header; // common resource fields
 
-    tc_bone* bones;             // array of bones (owned, malloc'd)
+    tc_bone* bones; // array of bones (owned, malloc'd)
     size_t bone_count;
 
-    int32_t* root_indices;      // indices of root bones (owned, malloc'd)
+    int32_t* root_indices; // indices of root bones (owned, malloc'd)
     size_t root_count;
 } tc_skeleton;
 
@@ -55,13 +55,15 @@ typedef struct tc_skeleton {
 
 // Initialize bone to identity
 static inline void tc_bone_init(tc_bone* bone) {
-    if (!bone) return;
+    if (!bone)
+        return;
     bone->name[0] = '\0';
     bone->index = 0;
     bone->parent_index = -1;
 
     // Identity matrix
-    for (int i = 0; i < 16; i++) bone->inverse_bind_matrix[i] = 0.0;
+    for (int i = 0; i < 16; i++)
+        bone->inverse_bind_matrix[i] = 0.0;
     bone->inverse_bind_matrix[0] = 1.0;
     bone->inverse_bind_matrix[5] = 1.0;
     bone->inverse_bind_matrix[10] = 1.0;

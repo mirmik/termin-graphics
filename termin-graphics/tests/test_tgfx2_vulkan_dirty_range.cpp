@@ -6,13 +6,13 @@ using tgfx::vulkan_detail::NonCoherentDirtyRange;
 
 namespace {
 
-bool expect(bool condition, const char* message) {
-    if (!condition) {
-        std::cerr << "FAILED: " << message << '\n';
-        return false;
+    bool expect(bool condition, const char* message) {
+        if (!condition) {
+            std::cerr << "FAILED: " << message << '\n';
+            return false;
+        }
+        return true;
     }
-    return true;
-}
 
 } // namespace
 

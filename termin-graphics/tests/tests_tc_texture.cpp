@@ -13,15 +13,15 @@ extern "C" {
 
 namespace {
 
-tc_log_level g_encoding_log_level = TC_LOG_DEBUG;
-std::string g_encoding_log_message;
+    tc_log_level g_encoding_log_level = TC_LOG_DEBUG;
+    std::string g_encoding_log_message;
 
-void capture_encoding_log(tc_log_level level, const char* message) {
-    if (message && std::strstr(message, "expects sRGB")) {
-        g_encoding_log_level = level;
-        g_encoding_log_message = message;
+    void capture_encoding_log(tc_log_level level, const char* message) {
+        if (message && std::strstr(message, "expects sRGB")) {
+            g_encoding_log_level = level;
+            g_encoding_log_message = message;
+        }
     }
-}
 
 } // namespace
 
@@ -84,8 +84,7 @@ TEST_CASE("tc_texture encoding changes are validated and versioned") {
     CHECK(tc_texture_set_encoding(texture, TC_TEXTURE_ENCODING_SRGB));
     CHECK_EQ(texture->header.version, initial_version + 1u);
 
-    CHECK_FALSE(tc_texture_set_encoding(
-        texture, static_cast<tc_texture_encoding>(255)));
+    CHECK_FALSE(tc_texture_set_encoding(texture, static_cast<tc_texture_encoding>(255)));
     CHECK_EQ(texture->encoding, TC_TEXTURE_ENCODING_SRGB);
     CHECK_EQ(texture->header.version, initial_version + 1u);
     tc_texture_shutdown();
@@ -178,8 +177,7 @@ TEST_CASE("material texture slots warn and bind encoding mismatches") {
     const tc_texture_handle srgb = tc_texture_get_white_1x1_srgb();
 
     tc_material_phase phase{};
-    REQUIRE(tc_material_phase_declare_texture(
-        &phase, "albedo", TC_TEXTURE_ENCODING_SRGB));
+    REQUIRE(tc_material_phase_declare_texture(&phase, "albedo", TC_TEXTURE_ENCODING_SRGB));
     CHECK_EQ(phase.texture_count, 1u);
     CHECK(phase.textures[0].is_declared != 0);
     CHECK(phase.textures[0].has_expected_encoding != 0);

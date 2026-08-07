@@ -13,167 +13,155 @@
 
 namespace {
 
-class RecordingCommandList final : public tgfx::ICommandList {
-public:
-    void begin() override { ++begin_count; }
-    void end() override { ++end_count; }
-    void begin_render_pass(const tgfx::RenderPassDesc& pass) override {
-        ++begin_render_pass_count;
-        last_render_pass = pass;
-    }
-    void end_render_pass() override { ++end_render_pass_count; }
-    void framebuffer_local_barrier() override {
-        ++framebuffer_local_barrier_count;
-    }
-    void bind_pipeline(tgfx::PipelineHandle) override {}
-    void bind_resource_set(
-        tgfx::ResourceSetHandle,
-        uint32_t = 0,
-        const uint32_t* = nullptr,
-        uint32_t = 0) override {}
-    void set_push_constants(const void*, uint32_t) override {}
-    void bind_vertex_buffer(uint32_t, tgfx::BufferHandle, uint64_t = 0) override {}
-    void bind_index_buffer(
-        tgfx::BufferHandle,
-        tgfx::IndexType,
-        uint64_t = 0) override {}
-    void draw(uint32_t, uint32_t = 0) override {}
-    void draw_instanced(uint32_t, uint32_t, uint32_t = 0, uint32_t = 0) override {}
-    void draw_indexed(uint32_t, uint32_t = 0, int32_t = 0) override {}
-    void draw_indexed_instanced(
-        uint32_t,
-        uint32_t,
-        uint32_t = 0,
-        int32_t = 0,
-        uint32_t = 0) override {}
-    void dispatch(uint32_t, uint32_t, uint32_t) override {}
-    void copy_buffer(
-        tgfx::BufferHandle,
-        tgfx::BufferHandle,
-        uint64_t,
-        uint64_t = 0,
-        uint64_t = 0) override {}
-    void copy_texture(tgfx::TextureHandle, tgfx::TextureHandle) override {}
-    void set_viewport(int, int, int, int) override {}
-    void set_scissor(int, int, int, int) override {}
+    class RecordingCommandList final : public tgfx::ICommandList {
+    public:
+        void begin() override {
+            ++begin_count;
+        }
+        void end() override {
+            ++end_count;
+        }
+        void begin_render_pass(const tgfx::RenderPassDesc& pass) override {
+            ++begin_render_pass_count;
+            last_render_pass = pass;
+        }
+        void end_render_pass() override {
+            ++end_render_pass_count;
+        }
+        void framebuffer_local_barrier() override {
+            ++framebuffer_local_barrier_count;
+        }
+        void bind_pipeline(tgfx::PipelineHandle) override {}
+        void
+        bind_resource_set(tgfx::ResourceSetHandle, uint32_t = 0, const uint32_t* = nullptr, uint32_t = 0) override {}
+        void set_push_constants(const void*, uint32_t) override {}
+        void bind_vertex_buffer(uint32_t, tgfx::BufferHandle, uint64_t = 0) override {}
+        void bind_index_buffer(tgfx::BufferHandle, tgfx::IndexType, uint64_t = 0) override {}
+        void draw(uint32_t, uint32_t = 0) override {}
+        void draw_instanced(uint32_t, uint32_t, uint32_t = 0, uint32_t = 0) override {}
+        void draw_indexed(uint32_t, uint32_t = 0, int32_t = 0) override {}
+        void draw_indexed_instanced(uint32_t, uint32_t, uint32_t = 0, int32_t = 0, uint32_t = 0) override {}
+        void dispatch(uint32_t, uint32_t, uint32_t) override {}
+        void copy_buffer(tgfx::BufferHandle, tgfx::BufferHandle, uint64_t, uint64_t = 0, uint64_t = 0) override {}
+        void copy_texture(tgfx::TextureHandle, tgfx::TextureHandle) override {}
+        void set_viewport(int, int, int, int) override {}
+        void set_scissor(int, int, int, int) override {}
 
-    uint32_t begin_count = 0;
-    uint32_t end_count = 0;
-    uint32_t begin_render_pass_count = 0;
-    uint32_t end_render_pass_count = 0;
-    uint32_t framebuffer_local_barrier_count = 0;
-    tgfx::RenderPassDesc last_render_pass;
-};
+        uint32_t begin_count = 0;
+        uint32_t end_count = 0;
+        uint32_t begin_render_pass_count = 0;
+        uint32_t end_render_pass_count = 0;
+        uint32_t framebuffer_local_barrier_count = 0;
+        tgfx::RenderPassDesc last_render_pass;
+    };
 
-class PipelineCacheStatsDevice final : public tgfx::IRenderDevice {
-public:
-    tgfx::BackendType backend_type() const override {
-        return tgfx::BackendType::OpenGL;
-    }
+    class PipelineCacheStatsDevice final : public tgfx::IRenderDevice {
+    public:
+        tgfx::BackendType backend_type() const override {
+            return tgfx::BackendType::OpenGL;
+        }
 
-    tgfx::BackendCapabilities capabilities() const override {
-        return {};
-    }
-
-    void wait_idle() override {}
-
-    tgfx::BufferHandle create_buffer(const tgfx::BufferDesc&) override {
-        return {};
-    }
-
-    tgfx::TextureHandle create_texture(const tgfx::TextureDesc& desc) override {
-        ++create_texture_count;
-        if (texture_failures_remaining > 0) {
-            --texture_failures_remaining;
+        tgfx::BackendCapabilities capabilities() const override {
             return {};
         }
-        const tgfx::TextureHandle handle{next_texture_id_++};
-        texture_descs_[handle.id] = desc;
-        return handle;
-    }
 
-    tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
-        return {};
-    }
+        void wait_idle() override {}
 
-    tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override {
-        return {};
-    }
-
-    tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc& desc) override {
-        ++create_pipeline_count;
-        created_pipeline_descs.push_back(desc);
-        if (pipeline_failures_remaining > 0) {
-            --pipeline_failures_remaining;
+        tgfx::BufferHandle create_buffer(const tgfx::BufferDesc&) override {
             return {};
         }
-        return tgfx::PipelineHandle{next_pipeline_id_++};
+
+        tgfx::TextureHandle create_texture(const tgfx::TextureDesc& desc) override {
+            ++create_texture_count;
+            if (texture_failures_remaining > 0) {
+                --texture_failures_remaining;
+                return {};
+            }
+            const tgfx::TextureHandle handle{next_texture_id_++};
+            texture_descs_[handle.id] = desc;
+            return handle;
+        }
+
+        tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
+            return {};
+        }
+
+        tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override {
+            return {};
+        }
+
+        tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc& desc) override {
+            ++create_pipeline_count;
+            created_pipeline_descs.push_back(desc);
+            if (pipeline_failures_remaining > 0) {
+                --pipeline_failures_remaining;
+                return {};
+            }
+            return tgfx::PipelineHandle{next_pipeline_id_++};
+        }
+
+        tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override {
+            return {};
+        }
+
+        void destroy(tgfx::BufferHandle) override {}
+        void destroy(tgfx::TextureHandle handle) override {
+            texture_descs_.erase(handle.id);
+        }
+        void destroy(tgfx::SamplerHandle) override {}
+        void destroy(tgfx::ShaderHandle) override {}
+        void destroy(tgfx::PipelineHandle) override {}
+        void destroy(tgfx::ResourceSetHandle) override {}
+
+        void upload_buffer(tgfx::BufferHandle, std::span<const uint8_t>, uint64_t = 0) override {}
+        void upload_texture(tgfx::TextureHandle, std::span<const uint8_t>, uint32_t = 0) override {}
+        void upload_texture_region(tgfx::TextureHandle,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   std::span<const uint8_t>,
+                                   uint32_t = 0) override {}
+        void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
+
+        tgfx::TextureDesc texture_desc(tgfx::TextureHandle handle) const override {
+            const auto it = texture_descs_.find(handle.id);
+            return it == texture_descs_.end() ? tgfx::TextureDesc{} : it->second;
+        }
+
+        std::unique_ptr<tgfx::ICommandList> create_command_list(tgfx::QueueType = tgfx::QueueType::Graphics) override {
+            auto command_list = std::make_unique<RecordingCommandList>();
+            last_command_list = command_list.get();
+            return command_list;
+        }
+
+        void submit(tgfx::ICommandList&) override {}
+        void present() override {}
+
+        int texture_failures_remaining = 0;
+        int pipeline_failures_remaining = 0;
+        uint32_t create_texture_count = 0;
+        uint32_t create_pipeline_count = 0;
+        std::vector<tgfx::PipelineDesc> created_pipeline_descs;
+        RecordingCommandList* last_command_list = nullptr;
+
+    private:
+        uint32_t next_texture_id_ = 1;
+        uint32_t next_pipeline_id_ = 1;
+        std::unordered_map<uint32_t, tgfx::TextureDesc> texture_descs_;
+    };
+
+    tgfx::VertexLayoutDesc make_layout(uint32_t stride, const char* semantic) {
+        tgfx::VertexBufferLayout layout;
+        layout.stride = stride;
+        layout.attributes.push_back({
+            0,
+            tgfx::VertexFormat::Float3,
+            0,
+            semantic,
+        });
+        return tgfx::make_vertex_layout_desc(layout);
     }
-
-    tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override {
-        return {};
-    }
-
-    void destroy(tgfx::BufferHandle) override {}
-    void destroy(tgfx::TextureHandle handle) override {
-        texture_descs_.erase(handle.id);
-    }
-    void destroy(tgfx::SamplerHandle) override {}
-    void destroy(tgfx::ShaderHandle) override {}
-    void destroy(tgfx::PipelineHandle) override {}
-    void destroy(tgfx::ResourceSetHandle) override {}
-
-    void upload_buffer(tgfx::BufferHandle, std::span<const uint8_t>, uint64_t = 0) override {}
-    void upload_texture(tgfx::TextureHandle, std::span<const uint8_t>, uint32_t = 0) override {}
-    void upload_texture_region(
-        tgfx::TextureHandle,
-        uint32_t,
-        uint32_t,
-        uint32_t,
-        uint32_t,
-        std::span<const uint8_t>,
-        uint32_t = 0) override {}
-    void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
-
-    tgfx::TextureDesc texture_desc(tgfx::TextureHandle handle) const override {
-        const auto it = texture_descs_.find(handle.id);
-        return it == texture_descs_.end() ? tgfx::TextureDesc{} : it->second;
-    }
-
-    std::unique_ptr<tgfx::ICommandList> create_command_list(
-        tgfx::QueueType = tgfx::QueueType::Graphics) override {
-        auto command_list = std::make_unique<RecordingCommandList>();
-        last_command_list = command_list.get();
-        return command_list;
-    }
-
-    void submit(tgfx::ICommandList&) override {}
-    void present() override {}
-
-    int texture_failures_remaining = 0;
-    int pipeline_failures_remaining = 0;
-    uint32_t create_texture_count = 0;
-    uint32_t create_pipeline_count = 0;
-    std::vector<tgfx::PipelineDesc> created_pipeline_descs;
-    RecordingCommandList* last_command_list = nullptr;
-
-private:
-    uint32_t next_texture_id_ = 1;
-    uint32_t next_pipeline_id_ = 1;
-    std::unordered_map<uint32_t, tgfx::TextureDesc> texture_descs_;
-};
-
-tgfx::VertexLayoutDesc make_layout(uint32_t stride, const char* semantic) {
-    tgfx::VertexBufferLayout layout;
-    layout.stride = stride;
-    layout.attributes.push_back({
-        0,
-        tgfx::VertexFormat::Float3,
-        0,
-        semantic,
-    });
-    return tgfx::make_vertex_layout_desc(layout);
-}
 
 } // namespace
 

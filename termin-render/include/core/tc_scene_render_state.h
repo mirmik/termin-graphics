@@ -2,9 +2,9 @@
 #ifndef TC_SCENE_RENDER_STATE_H
 #define TC_SCENE_RENDER_STATE_H
 
-#include "core/tc_scene_pool.h"
 #include "core/tc_scene_extension.h"
 #include "core/tc_scene_lighting.h"
+#include "core/tc_scene_pool.h"
 #include "core/tc_scene_skybox.h"
 
 #ifdef __cplusplus

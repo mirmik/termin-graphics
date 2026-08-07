@@ -174,9 +174,7 @@ typedef struct tc_render_item_collect_context {
     void* user_context;
 } tc_render_item_collect_context;
 
-typedef bool (*tc_render_item_emit_fn)(
-    const tc_render_item* item,
-    void* user_data);
+typedef bool (*tc_render_item_emit_fn)(const tc_render_item* item, void* user_data);
 
 typedef struct tc_render_item_sink {
     tc_render_item_emit_fn emit;

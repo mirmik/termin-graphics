@@ -1,10 +1,11 @@
 // tc_render_target_config.c - Render target configuration implementation
 #include "tc_render_target_config.h"
-#include <tcbase/tc_string.h>
 #include <string.h>
+#include <tcbase/tc_string.h>
 
 void tc_render_target_config_init(tc_render_target_config* config) {
-    if (!config) return;
+    if (!config)
+        return;
     memset(config, 0, sizeof(tc_render_target_config));
     config->kind = tc_intern_string("texture_2d");
     config->width = 512;
@@ -17,13 +18,15 @@ void tc_render_target_config_init(tc_render_target_config* config) {
 }
 
 void tc_render_target_config_free(tc_render_target_config* config) {
-    if (!config) return;
+    if (!config)
+        return;
     tc_value_free(&config->pipeline_params);
     config->pipeline_params = tc_value_nil();
 }
 
 void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_target_config* src) {
-    if (!dst || !src) return;
+    if (!dst || !src)
+        return;
     dst->name = src->name ? tc_intern_string(src->name) : NULL;
     dst->kind = src->kind ? tc_intern_string(src->kind) : tc_intern_string("texture_2d");
     dst->camera_uuid = src->camera_uuid ? tc_intern_string(src->camera_uuid) : NULL;
@@ -41,7 +44,6 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->pipeline_name = src->pipeline_name ? tc_intern_string(src->pipeline_name) : NULL;
     dst->layer_mask = src->layer_mask;
     dst->enabled = src->enabled;
-    dst->pipeline_params = (src->pipeline_params.type == TC_VALUE_DICT)
-        ? tc_value_copy(&src->pipeline_params)
-        : tc_value_nil();
+    dst->pipeline_params =
+        (src->pipeline_params.type == TC_VALUE_DICT) ? tc_value_copy(&src->pipeline_params) : tc_value_nil();
 }

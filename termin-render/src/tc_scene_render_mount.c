@@ -1,98 +1,134 @@
 // tc_scene_render_mount.c - Render mount extension implementation
 #include "core/tc_scene_render_mount.h"
+#include "core/tc_render_lifecycle.h"
 #include "core/tc_scene.h"
 #include "core/tc_scene_extension.h"
-#include "core/tc_render_lifecycle.h"
 #include "render/tc_pipeline_template_registry.h"
-#include <tcbase/tc_log.h>
 #include "tc_value.h"
 #include <stdlib.h>
 #include <string.h>
+#include <tcbase/tc_log.h>
 
 static bool value_to_float(const tc_value* v, float* out) {
-    if (!v || !out) return false;
+    if (!v || !out)
+        return false;
     switch (v->type) {
-        case TC_VALUE_INT: *out = (float)v->data.i; return true;
-        case TC_VALUE_FLOAT: *out = v->data.f; return true;
-        case TC_VALUE_DOUBLE: *out = (float)v->data.d; return true;
-        default: return false;
+    case TC_VALUE_INT:
+        *out = (float)v->data.i;
+        return true;
+    case TC_VALUE_FLOAT:
+        *out = v->data.f;
+        return true;
+    case TC_VALUE_DOUBLE:
+        *out = (float)v->data.d;
+        return true;
+    default:
+        return false;
     }
 }
 
 static bool value_to_int(const tc_value* v, int* out) {
-    if (!v || !out) return false;
+    if (!v || !out)
+        return false;
     switch (v->type) {
-        case TC_VALUE_INT: *out = (int)v->data.i; return true;
-        case TC_VALUE_FLOAT: *out = (int)v->data.f; return true;
-        case TC_VALUE_DOUBLE: *out = (int)v->data.d; return true;
-        default: return false;
+    case TC_VALUE_INT:
+        *out = (int)v->data.i;
+        return true;
+    case TC_VALUE_FLOAT:
+        *out = (int)v->data.f;
+        return true;
+    case TC_VALUE_DOUBLE:
+        *out = (int)v->data.d;
+        return true;
+    default:
+        return false;
     }
 }
 
 static bool value_to_uint64(const tc_value* v, uint64_t* out) {
-    if (!v || !out) return false;
+    if (!v || !out)
+        return false;
     switch (v->type) {
-        case TC_VALUE_INT: *out = (uint64_t)v->data.i; return true;
-        case TC_VALUE_FLOAT: *out = (uint64_t)v->data.f; return true;
-        case TC_VALUE_DOUBLE: *out = (uint64_t)v->data.d; return true;
-        default: return false;
+    case TC_VALUE_INT:
+        *out = (uint64_t)v->data.i;
+        return true;
+    case TC_VALUE_FLOAT:
+        *out = (uint64_t)v->data.f;
+        return true;
+    case TC_VALUE_DOUBLE:
+        *out = (uint64_t)v->data.d;
+        return true;
+    default:
+        return false;
     }
 }
 
 static void render_mount_ensure_pipeline_template_capacity(tc_scene_render_mount* mount, size_t needed) {
-    if (!mount) return;
-    if (mount->pipeline_template_capacity >= needed) return;
+    if (!mount)
+        return;
+    if (mount->pipeline_template_capacity >= needed)
+        return;
     size_t new_cap = (mount->pipeline_template_capacity == 0) ? 4 : mount->pipeline_template_capacity * 2;
-    while (new_cap < needed) new_cap *= 2;
-    tc_pipeline_template_handle* p = (tc_pipeline_template_handle*)realloc(
-        mount->pipeline_templates, new_cap * sizeof(tc_pipeline_template_handle));
-    if (!p) return;
+    while (new_cap < needed)
+        new_cap *= 2;
+    tc_pipeline_template_handle* p =
+        (tc_pipeline_template_handle*)realloc(mount->pipeline_templates, new_cap * sizeof(tc_pipeline_template_handle));
+    if (!p)
+        return;
     mount->pipeline_templates = p;
     mount->pipeline_template_capacity = new_cap;
 }
 
 static void render_mount_ensure_viewport_capacity(tc_scene_render_mount* mount, size_t needed) {
-    if (!mount) return;
-    if (mount->viewport_config_capacity >= needed) return;
+    if (!mount)
+        return;
+    if (mount->viewport_config_capacity >= needed)
+        return;
     size_t new_cap = (mount->viewport_config_capacity == 0) ? 4 : mount->viewport_config_capacity * 2;
-    while (new_cap < needed) new_cap *= 2;
+    while (new_cap < needed)
+        new_cap *= 2;
     tc_viewport_config* p = (tc_viewport_config*)realloc(mount->viewport_configs, new_cap * sizeof(tc_viewport_config));
-    if (!p) return;
+    if (!p)
+        return;
     mount->viewport_configs = p;
     mount->viewport_config_capacity = new_cap;
 }
 
 static void render_mount_ensure_render_target_capacity(tc_scene_render_mount* mount, size_t needed) {
-    if (!mount) return;
-    if (mount->render_target_config_capacity >= needed) return;
+    if (!mount)
+        return;
+    if (mount->render_target_config_capacity >= needed)
+        return;
     size_t new_cap = (mount->render_target_config_capacity == 0) ? 4 : mount->render_target_config_capacity * 2;
-    while (new_cap < needed) new_cap *= 2;
-    tc_render_target_config* p = (tc_render_target_config*)realloc(mount->render_target_configs, new_cap * sizeof(tc_render_target_config));
-    if (!p) return;
+    while (new_cap < needed)
+        new_cap *= 2;
+    tc_render_target_config* p =
+        (tc_render_target_config*)realloc(mount->render_target_configs, new_cap * sizeof(tc_render_target_config));
+    if (!p)
+        return;
     mount->render_target_configs = p;
     mount->render_target_config_capacity = new_cap;
 }
 
 static void* render_mount_create(tc_scene_handle scene, void* type_userdata) {
     (void)type_userdata;
-    tc_scene_render_mount* mount = (tc_scene_render_mount*)calloc(
-        1, sizeof(tc_scene_render_mount));
-    if (mount) mount->scene = scene;
+    tc_scene_render_mount* mount = (tc_scene_render_mount*)calloc(1, sizeof(tc_scene_render_mount));
+    if (mount)
+        mount->scene = scene;
     return mount;
 }
 
 static void render_mount_destroy(void* ext, void* type_userdata) {
     (void)type_userdata;
-    if (!ext) return;
+    if (!ext)
+        return;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
     if (mount->attachment_context) {
-        tc_render_lifecycle_notify_scene_detach(
-            mount->scene, mount->attachment_context);
+        tc_render_lifecycle_notify_scene_detach(mount->scene, mount->attachment_context);
         mount->attachment_context = NULL;
     }
     for (size_t i = 0; i < mount->pipeline_template_count; ++i) {
-        tc_pipeline_template* pipeline_template =
-            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        tc_pipeline_template* pipeline_template = tc_pipeline_template_get(mount->pipeline_templates[i]);
         if (pipeline_template) {
             tc_pipeline_template_release(pipeline_template);
         } else {
@@ -112,10 +148,13 @@ static void render_mount_destroy(void* ext, void* type_userdata) {
 
 static tc_value serialize_viewport_config(const tc_viewport_config* vc) {
     tc_value v = tc_value_dict_new();
-    if (!vc) return v;
+    if (!vc)
+        return v;
 
-    if (vc->name && vc->name[0]) tc_value_dict_set(&v, "name", tc_value_string(vc->name));
-    if (vc->display_name && vc->display_name[0]) tc_value_dict_set(&v, "display_name", tc_value_string(vc->display_name));
+    if (vc->name && vc->name[0])
+        tc_value_dict_set(&v, "name", tc_value_string(vc->name));
+    if (vc->display_name && vc->display_name[0])
+        tc_value_dict_set(&v, "display_name", tc_value_string(vc->display_name));
 
     if (vc->render_target_name && vc->render_target_name[0]) {
         tc_value render_target = tc_value_dict_new();
@@ -131,28 +170,34 @@ static tc_value serialize_viewport_config(const tc_viewport_config* vc) {
     tc_value_dict_set(&v, "region", region);
 
     tc_value_dict_set(&v, "depth", tc_value_int((int64_t)vc->depth));
-    if (vc->input_mode && vc->input_mode[0]) tc_value_dict_set(&v, "input_mode", tc_value_string(vc->input_mode));
+    if (vc->input_mode && vc->input_mode[0])
+        tc_value_dict_set(&v, "input_mode", tc_value_string(vc->input_mode));
     tc_value_dict_set(&v, "block_input_in_editor", tc_value_bool(vc->block_input_in_editor));
     tc_value_dict_set(&v, "enabled", tc_value_bool(vc->enabled));
     return v;
 }
 
 static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config* out) {
-    if (!data || !out) return false;
-    if (data->type != TC_VALUE_DICT) return false;
+    if (!data || !out)
+        return false;
+    if (data->type != TC_VALUE_DICT)
+        return false;
 
     tc_viewport_config_init(out);
 
     tc_value* name = tc_value_dict_get((tc_value*)data, "name");
-    if (name && name->type == TC_VALUE_STRING) out->name = name->data.s;
+    if (name && name->type == TC_VALUE_STRING)
+        out->name = name->data.s;
 
     tc_value* display_name = tc_value_dict_get((tc_value*)data, "display_name");
-    if (display_name && display_name->type == TC_VALUE_STRING) out->display_name = display_name->data.s;
+    if (display_name && display_name->type == TC_VALUE_STRING)
+        out->display_name = display_name->data.s;
 
     tc_value* render_target = tc_value_dict_get((tc_value*)data, "render_target");
     if (render_target && render_target->type == TC_VALUE_DICT) {
         tc_value* rt_name = tc_value_dict_get(render_target, "name");
-        if (rt_name && rt_name->type == TC_VALUE_STRING) out->render_target_name = rt_name->data.s;
+        if (rt_name && rt_name->type == TC_VALUE_STRING)
+            out->render_target_name = rt_name->data.s;
     }
 
     tc_value* region = tc_value_dict_get((tc_value*)data, "region");
@@ -168,29 +213,36 @@ static bool deserialize_viewport_config(const tc_value* data, tc_viewport_config
     }
 
     tc_value* depth = tc_value_dict_get((tc_value*)data, "depth");
-    if (depth) value_to_int(depth, &out->depth);
+    if (depth)
+        value_to_int(depth, &out->depth);
 
     tc_value* input_mode = tc_value_dict_get((tc_value*)data, "input_mode");
-    if (input_mode && input_mode->type == TC_VALUE_STRING) out->input_mode = input_mode->data.s;
+    if (input_mode && input_mode->type == TC_VALUE_STRING)
+        out->input_mode = input_mode->data.s;
 
     tc_value* block_input = tc_value_dict_get((tc_value*)data, "block_input_in_editor");
-    if (block_input && block_input->type == TC_VALUE_BOOL) out->block_input_in_editor = block_input->data.b;
+    if (block_input && block_input->type == TC_VALUE_BOOL)
+        out->block_input_in_editor = block_input->data.b;
 
     tc_value* enabled = tc_value_dict_get((tc_value*)data, "enabled");
-    if (enabled && enabled->type == TC_VALUE_BOOL) out->enabled = enabled->data.b;
+    if (enabled && enabled->type == TC_VALUE_BOOL)
+        out->enabled = enabled->data.b;
 
     return true;
 }
 
 static tc_value serialize_render_target_config(const tc_render_target_config* rtc) {
     tc_value v = tc_value_dict_new();
-    if (!rtc) return v;
+    if (!rtc)
+        return v;
 
-    if (rtc->name && rtc->name[0]) tc_value_dict_set(&v, "name", tc_value_string(rtc->name));
+    if (rtc->name && rtc->name[0])
+        tc_value_dict_set(&v, "name", tc_value_string(rtc->name));
     if (rtc->kind && rtc->kind[0] && strcmp(rtc->kind, "texture_2d") != 0) {
         tc_value_dict_set(&v, "kind", tc_value_string(rtc->kind));
     }
-    if (rtc->camera_uuid && rtc->camera_uuid[0]) tc_value_dict_set(&v, "camera_uuid", tc_value_string(rtc->camera_uuid));
+    if (rtc->camera_uuid && rtc->camera_uuid[0])
+        tc_value_dict_set(&v, "camera_uuid", tc_value_string(rtc->camera_uuid));
     if (rtc->xr_origin_uuid && rtc->xr_origin_uuid[0]) {
         tc_value_dict_set(&v, "xr_origin_uuid", tc_value_string(rtc->xr_origin_uuid));
     }
@@ -200,8 +252,10 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
         tc_value_dict_set(&v, "width", tc_value_int((int64_t)rtc->width));
         tc_value_dict_set(&v, "height", tc_value_int((int64_t)rtc->height));
     }
-    if (rtc->color_format && rtc->color_format[0]) tc_value_dict_set(&v, "color_format", tc_value_string(rtc->color_format));
-    if (rtc->depth_format && rtc->depth_format[0]) tc_value_dict_set(&v, "depth_format", tc_value_string(rtc->depth_format));
+    if (rtc->color_format && rtc->color_format[0])
+        tc_value_dict_set(&v, "color_format", tc_value_string(rtc->color_format));
+    if (rtc->depth_format && rtc->depth_format[0])
+        tc_value_dict_set(&v, "depth_format", tc_value_string(rtc->depth_format));
     if (rtc->clear_color) {
         tc_value color = tc_value_list_new();
         for (size_t i = 0; i < 4; i++) {
@@ -212,8 +266,10 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     if (rtc->clear_depth) {
         tc_value_dict_set(&v, "clear_depth", tc_value_float(rtc->clear_depth_value));
     }
-    if (rtc->pipeline_uuid && rtc->pipeline_uuid[0]) tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(rtc->pipeline_uuid));
-    if (rtc->pipeline_name && rtc->pipeline_name[0]) tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));
+    if (rtc->pipeline_uuid && rtc->pipeline_uuid[0])
+        tc_value_dict_set(&v, "pipeline_uuid", tc_value_string(rtc->pipeline_uuid));
+    if (rtc->pipeline_name && rtc->pipeline_name[0])
+        tc_value_dict_set(&v, "pipeline_name", tc_value_string(rtc->pipeline_name));
     tc_value_dict_set(&v, "layer_mask", tc_value_int((int64_t)rtc->layer_mask));
     tc_value_dict_set(&v, "enabled", tc_value_bool(rtc->enabled));
     if (rtc->pipeline_params.type == TC_VALUE_DICT && tc_value_dict_size(&rtc->pipeline_params) > 0) {
@@ -223,37 +279,48 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
 }
 
 static bool deserialize_render_target_config(const tc_value* data, tc_render_target_config* out) {
-    if (!data || !out) return false;
-    if (data->type != TC_VALUE_DICT) return false;
+    if (!data || !out)
+        return false;
+    if (data->type != TC_VALUE_DICT)
+        return false;
 
     tc_render_target_config_init(out);
 
     tc_value* name = tc_value_dict_get((tc_value*)data, "name");
-    if (name && name->type == TC_VALUE_STRING) out->name = name->data.s;
+    if (name && name->type == TC_VALUE_STRING)
+        out->name = name->data.s;
 
     tc_value* kind = tc_value_dict_get((tc_value*)data, "kind");
-    if (kind && kind->type == TC_VALUE_STRING) out->kind = kind->data.s;
+    if (kind && kind->type == TC_VALUE_STRING)
+        out->kind = kind->data.s;
 
     tc_value* camera_uuid = tc_value_dict_get((tc_value*)data, "camera_uuid");
-    if (camera_uuid && camera_uuid->type == TC_VALUE_STRING) out->camera_uuid = camera_uuid->data.s;
+    if (camera_uuid && camera_uuid->type == TC_VALUE_STRING)
+        out->camera_uuid = camera_uuid->data.s;
 
     tc_value* xr_origin_uuid = tc_value_dict_get((tc_value*)data, "xr_origin_uuid");
-    if (xr_origin_uuid && xr_origin_uuid->type == TC_VALUE_STRING) out->xr_origin_uuid = xr_origin_uuid->data.s;
+    if (xr_origin_uuid && xr_origin_uuid->type == TC_VALUE_STRING)
+        out->xr_origin_uuid = xr_origin_uuid->data.s;
 
     tc_value* width = tc_value_dict_get((tc_value*)data, "width");
-    if (width) value_to_int(width, &out->width);
+    if (width)
+        value_to_int(width, &out->width);
 
     tc_value* height = tc_value_dict_get((tc_value*)data, "height");
-    if (height) value_to_int(height, &out->height);
+    if (height)
+        value_to_int(height, &out->height);
 
     tc_value* dynamic_resolution = tc_value_dict_get((tc_value*)data, "dynamic_resolution");
-    if (dynamic_resolution && dynamic_resolution->type == TC_VALUE_BOOL) out->dynamic_resolution = dynamic_resolution->data.b;
+    if (dynamic_resolution && dynamic_resolution->type == TC_VALUE_BOOL)
+        out->dynamic_resolution = dynamic_resolution->data.b;
 
     tc_value* color_format = tc_value_dict_get((tc_value*)data, "color_format");
-    if (color_format && color_format->type == TC_VALUE_STRING) out->color_format = color_format->data.s;
+    if (color_format && color_format->type == TC_VALUE_STRING)
+        out->color_format = color_format->data.s;
 
     tc_value* depth_format = tc_value_dict_get((tc_value*)data, "depth_format");
-    if (depth_format && depth_format->type == TC_VALUE_STRING) out->depth_format = depth_format->data.s;
+    if (depth_format && depth_format->type == TC_VALUE_STRING)
+        out->depth_format = depth_format->data.s;
 
     tc_value* clear_color = tc_value_dict_get((tc_value*)data, "clear_color");
     if (clear_color && clear_color->type == TC_VALUE_LIST && tc_value_list_size(clear_color) >= 4) {
@@ -276,16 +343,20 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
     }
 
     tc_value* pipeline_uuid = tc_value_dict_get((tc_value*)data, "pipeline_uuid");
-    if (pipeline_uuid && pipeline_uuid->type == TC_VALUE_STRING) out->pipeline_uuid = pipeline_uuid->data.s;
+    if (pipeline_uuid && pipeline_uuid->type == TC_VALUE_STRING)
+        out->pipeline_uuid = pipeline_uuid->data.s;
 
     tc_value* pipeline_name = tc_value_dict_get((tc_value*)data, "pipeline_name");
-    if (pipeline_name && pipeline_name->type == TC_VALUE_STRING) out->pipeline_name = pipeline_name->data.s;
+    if (pipeline_name && pipeline_name->type == TC_VALUE_STRING)
+        out->pipeline_name = pipeline_name->data.s;
 
     tc_value* layer_mask = tc_value_dict_get((tc_value*)data, "layer_mask");
-    if (layer_mask) value_to_uint64(layer_mask, &out->layer_mask);
+    if (layer_mask)
+        value_to_uint64(layer_mask, &out->layer_mask);
 
     tc_value* enabled = tc_value_dict_get((tc_value*)data, "enabled");
-    if (enabled && enabled->type == TC_VALUE_BOOL) out->enabled = enabled->data.b;
+    if (enabled && enabled->type == TC_VALUE_BOOL)
+        out->enabled = enabled->data.b;
 
     tc_value* pipeline_params = tc_value_dict_get((tc_value*)data, "pipeline_params");
     if (pipeline_params && pipeline_params->type == TC_VALUE_DICT) {
@@ -297,21 +368,23 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
 
 static bool render_mount_serialize(void* ext, tc_value* out_data, void* type_userdata) {
     (void)type_userdata;
-    if (!ext || !out_data) return false;
-    if (out_data->type != TC_VALUE_DICT) return false;
+    if (!ext || !out_data)
+        return false;
+    if (out_data->type != TC_VALUE_DICT)
+        return false;
 
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
 
     tc_value pipeline_templates = tc_value_list_new();
     for (size_t i = 0; i < mount->pipeline_template_count; i++) {
-        tc_pipeline_template* pipeline_template =
-            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        tc_pipeline_template* pipeline_template = tc_pipeline_template_get(mount->pipeline_templates[i]);
         if (!pipeline_template) {
             tc_log_error("[tc_scene_render_mount] stale pipeline template handle during serialization");
             continue;
         }
         const char* uuid = pipeline_template->header.uuid;
-        if (!uuid || !uuid[0]) continue;
+        if (!uuid || !uuid[0])
+            continue;
         tc_value p = tc_value_dict_new();
         tc_value_dict_set(&p, "uuid", tc_value_string(uuid));
         tc_value_list_push(&pipeline_templates, p);
@@ -334,8 +407,10 @@ static bool render_mount_serialize(void* ext, tc_value* out_data, void* type_use
 
 static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* type_userdata) {
     (void)type_userdata;
-    if (!ext || !in_data) return false;
-    if (in_data->type != TC_VALUE_DICT) return false;
+    if (!ext || !in_data)
+        return false;
+    if (in_data->type != TC_VALUE_DICT)
+        return false;
 
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
     for (size_t i = 0; i < mount->render_target_config_count; i++) {
@@ -343,9 +418,9 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
     }
     tc_scene_render_mount* existing_mount = mount;
     for (size_t i = 0; i < existing_mount->pipeline_template_count; ++i) {
-        tc_pipeline_template* pipeline_template =
-            tc_pipeline_template_get(existing_mount->pipeline_templates[i]);
-        if (pipeline_template) tc_pipeline_template_release(pipeline_template);
+        tc_pipeline_template* pipeline_template = tc_pipeline_template_get(existing_mount->pipeline_templates[i]);
+        if (pipeline_template)
+            tc_pipeline_template_release(pipeline_template);
     }
     mount->pipeline_template_count = 0;
     mount->viewport_config_count = 0;
@@ -357,15 +432,16 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
         render_mount_ensure_pipeline_template_capacity(mount, n);
         for (size_t i = 0; i < n; i++) {
             tc_value* item = tc_value_list_get(pipeline_templates, i);
-            if (!item || item->type != TC_VALUE_DICT) continue;
+            if (!item || item->type != TC_VALUE_DICT)
+                continue;
             tc_value* uuid = tc_value_dict_get(item, "uuid");
-            if (!uuid || uuid->type != TC_VALUE_STRING || !uuid->data.s || !uuid->data.s[0]) continue;
+            if (!uuid || uuid->type != TC_VALUE_STRING || !uuid->data.s || !uuid->data.s[0])
+                continue;
             tc_pipeline_template_handle h = tc_pipeline_template_find(uuid->data.s);
             tc_pipeline_template* pipeline_template = tc_pipeline_template_get(h);
             if (!pipeline_template) {
-                tc_log_error(
-                    "[tc_scene_render_mount] canonical pipeline template '%s' is not registered",
-                    uuid->data.s);
+                tc_log_error("[tc_scene_render_mount] canonical pipeline template '%s' is not registered",
+                             uuid->data.s);
                 return false;
             }
             tc_pipeline_template_retain(pipeline_template);
@@ -379,9 +455,11 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
         render_mount_ensure_viewport_capacity(mount, n);
         for (size_t i = 0; i < n; i++) {
             tc_value* item = tc_value_list_get(viewports, i);
-            if (!item) continue;
+            if (!item)
+                continue;
             tc_viewport_config cfg;
-            if (!deserialize_viewport_config(item, &cfg)) continue;
+            if (!deserialize_viewport_config(item, &cfg))
+                continue;
             tc_viewport_config_copy(&mount->viewport_configs[mount->viewport_config_count], &cfg);
             mount->viewport_config_count++;
         }
@@ -393,9 +471,11 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
         render_mount_ensure_render_target_capacity(mount, n);
         for (size_t i = 0; i < n; i++) {
             tc_value* item = tc_value_list_get(render_targets, i);
-            if (!item) continue;
+            if (!item)
+                continue;
             tc_render_target_config cfg;
-            if (!deserialize_render_target_config(item, &cfg)) continue;
+            if (!deserialize_render_target_config(item, &cfg))
+                continue;
             tc_render_target_config_copy(&mount->render_target_configs[mount->render_target_config_count], &cfg);
             tc_render_target_config_free(&cfg);
             mount->render_target_config_count++;
@@ -405,32 +485,25 @@ static bool render_mount_deserialize(void* ext, const tc_value* in_data, void* t
     return true;
 }
 
-static void render_mount_component_registered(
-    void* ext,
-    tc_component* component,
-    void* type_userdata
-) {
+static void render_mount_component_registered(void* ext, tc_component* component, void* type_userdata) {
     (void)type_userdata;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
-    if (!mount || !mount->attachment_context) return;
-    tc_render_lifecycle_notify_component_registered(
-        component, mount->attachment_context);
+    if (!mount || !mount->attachment_context)
+        return;
+    tc_render_lifecycle_notify_component_registered(component, mount->attachment_context);
 }
 
-static void render_mount_component_unregistering(
-    void* ext,
-    tc_component* component,
-    void* type_userdata
-) {
+static void render_mount_component_unregistering(void* ext, tc_component* component, void* type_userdata) {
     (void)type_userdata;
     tc_scene_render_mount* mount = (tc_scene_render_mount*)ext;
-    if (!mount || !mount->attachment_context) return;
-    tc_render_lifecycle_notify_component_unregistering(
-        component, mount->attachment_context);
+    if (!mount || !mount->attachment_context)
+        return;
+    tc_render_lifecycle_notify_component_unregistering(component, mount->attachment_context);
 }
 
 void tc_scene_render_mount_extension_init(void) {
-    if (tc_scene_ext_is_registered(TC_SCENE_EXT_TYPE_RENDER_MOUNT)) return;
+    if (tc_scene_ext_is_registered(TC_SCENE_EXT_TYPE_RENDER_MOUNT))
+        return;
 
     tc_scene_ext_vtable vtable = {
         .create = render_mount_create,
@@ -441,13 +514,7 @@ void tc_scene_render_mount_extension_init(void) {
         .deserialize = render_mount_deserialize,
     };
 
-    if (!tc_scene_ext_register(
-            TC_SCENE_EXT_TYPE_RENDER_MOUNT,
-            "render_mount",
-            "render_mount",
-            &vtable,
-            NULL
-        )) {
+    if (!tc_scene_ext_register(TC_SCENE_EXT_TYPE_RENDER_MOUNT, "render_mount", "render_mount", &vtable, NULL)) {
         return;
     }
 }
@@ -457,23 +524,20 @@ tc_scene_render_mount* tc_scene_render_mount_get(tc_scene_handle scene) {
 }
 
 bool tc_scene_render_mount_ensure(tc_scene_handle scene) {
-    if (tc_scene_ext_has(scene, TC_SCENE_EXT_TYPE_RENDER_MOUNT)) return true;
+    if (tc_scene_ext_has(scene, TC_SCENE_EXT_TYPE_RENDER_MOUNT))
+        return true;
     return tc_scene_ext_attach(scene, TC_SCENE_EXT_TYPE_RENDER_MOUNT);
 }
 
-const tc_render_attachment_context* tc_scene_render_mount_attachment_context(
-    tc_scene_handle scene
-) {
+const tc_render_attachment_context* tc_scene_render_mount_attachment_context(tc_scene_handle scene) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
     return mount ? mount->attachment_context : NULL;
 }
 
-void tc_scene_render_mount_notify_attach(
-    tc_scene_handle scene,
-    const tc_render_attachment_context* context
-) {
+void tc_scene_render_mount_notify_attach(tc_scene_handle scene, const tc_render_attachment_context* context) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
-    if (!mount || !context) return;
+    if (!mount || !context)
+        return;
     if (mount->attachment_context) {
         tc_log_error("[tc_scene_render_mount] duplicate render attach");
         return;
@@ -482,23 +546,19 @@ void tc_scene_render_mount_notify_attach(
     tc_render_lifecycle_notify_scene_attach(scene, context);
 }
 
-void tc_scene_render_mount_prepare(
-    tc_scene_handle scene,
-    const tc_render_prepare_context* context
-) {
+void tc_scene_render_mount_prepare(tc_scene_handle scene, const tc_render_prepare_context* context) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
-    if (!mount || !mount->attachment_context || !context) return;
+    if (!mount || !mount->attachment_context || !context)
+        return;
     tc_scene_debug_geometry_begin_collection(scene);
     tc_render_lifecycle_prepare_scene(scene, context);
     tc_scene_debug_geometry_end_collection(scene);
 }
 
-void tc_scene_render_mount_notify_detach(
-    tc_scene_handle scene,
-    const tc_render_attachment_context* context
-) {
+void tc_scene_render_mount_notify_detach(tc_scene_handle scene, const tc_render_attachment_context* context) {
     tc_scene_render_mount* mount = tc_scene_render_mount_get(scene);
-    if (!mount || !context) return;
+    if (!mount || !context)
+        return;
     if (mount->attachment_context != context) {
         tc_log_error("[tc_scene_render_mount] render detach context mismatch");
         return;
@@ -509,10 +569,13 @@ void tc_scene_render_mount_notify_detach(
 }
 
 void tc_scene_add_viewport_config(tc_scene_handle h, const tc_viewport_config* config) {
-    if (!tc_scene_alive(h) || !config) return;
-    if (!tc_scene_render_mount_ensure(h)) return;
+    if (!tc_scene_alive(h) || !config)
+        return;
+    if (!tc_scene_render_mount_ensure(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount)
+        return;
 
     render_mount_ensure_viewport_capacity(mount, mount->viewport_config_count + 1);
     tc_viewport_config_copy(&mount->viewport_configs[mount->viewport_config_count], config);
@@ -520,10 +583,13 @@ void tc_scene_add_viewport_config(tc_scene_handle h, const tc_viewport_config* c
 }
 
 void tc_scene_remove_viewport_config(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return;
+    if (!tc_scene_alive(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
-    if (index >= mount->viewport_config_count) return;
+    if (!mount)
+        return;
+    if (index >= mount->viewport_config_count)
+        return;
 
     if (index < mount->viewport_config_count - 1) {
         mount->viewport_configs[index] = mount->viewport_configs[mount->viewport_config_count - 1];
@@ -532,36 +598,45 @@ void tc_scene_remove_viewport_config(tc_scene_handle h, size_t index) {
 }
 
 void tc_scene_clear_viewport_configs(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return;
+    if (!tc_scene_alive(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount)
+        return;
     mount->viewport_config_count = 0;
 }
 
 size_t tc_scene_viewport_config_count(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return 0;
+    if (!tc_scene_alive(h))
+        return 0;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     return mount ? mount->viewport_config_count : 0;
 }
 
 tc_viewport_config* tc_scene_viewport_config_at(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return NULL;
+    if (!tc_scene_alive(h))
+        return NULL;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return NULL;
-    if (index >= mount->viewport_config_count) return NULL;
+    if (!mount)
+        return NULL;
+    if (index >= mount->viewport_config_count)
+        return NULL;
     return &mount->viewport_configs[index];
 }
 
 bool tc_scene_add_pipeline_template(tc_scene_handle h, tc_pipeline_template_handle template_handle) {
-    if (!tc_scene_alive(h)) return false;
+    if (!tc_scene_alive(h))
+        return false;
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(template_handle);
     if (!pipeline_template) {
         tc_log_error("[tc_scene_render_mount] cannot add stale pipeline template handle");
         return false;
     }
-    if (!tc_scene_render_mount_ensure(h)) return false;
+    if (!tc_scene_render_mount_ensure(h))
+        return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return false;
+    if (!mount)
+        return false;
 
     render_mount_ensure_pipeline_template_capacity(mount, mount->pipeline_template_count + 1);
     if (mount->pipeline_template_capacity < mount->pipeline_template_count + 1) {
@@ -574,9 +649,11 @@ bool tc_scene_add_pipeline_template(tc_scene_handle h, tc_pipeline_template_hand
 }
 
 bool tc_scene_remove_pipeline_template(tc_scene_handle h, tc_pipeline_template_handle template_handle) {
-    if (!tc_scene_alive(h)) return false;
+    if (!tc_scene_alive(h))
+        return false;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return false;
+    if (!mount)
+        return false;
 
     for (size_t i = 0; i < mount->pipeline_template_count; i++) {
         if (tc_pipeline_template_handle_eq(mount->pipeline_templates[i], template_handle)) {
@@ -594,12 +671,13 @@ bool tc_scene_remove_pipeline_template(tc_scene_handle h, tc_pipeline_template_h
 }
 
 void tc_scene_clear_pipeline_templates(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return;
+    if (!tc_scene_alive(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount)
+        return;
     for (size_t i = 0; i < mount->pipeline_template_count; ++i) {
-        tc_pipeline_template* pipeline_template =
-            tc_pipeline_template_get(mount->pipeline_templates[i]);
+        tc_pipeline_template* pipeline_template = tc_pipeline_template_get(mount->pipeline_templates[i]);
         if (pipeline_template) {
             tc_pipeline_template_release(pipeline_template);
         } else {
@@ -610,24 +688,31 @@ void tc_scene_clear_pipeline_templates(tc_scene_handle h) {
 }
 
 size_t tc_scene_pipeline_template_count(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return 0;
+    if (!tc_scene_alive(h))
+        return 0;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     return mount ? mount->pipeline_template_count : 0;
 }
 
 tc_pipeline_template_handle tc_scene_pipeline_template_at(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return tc_pipeline_template_handle_invalid();
+    if (!tc_scene_alive(h))
+        return tc_pipeline_template_handle_invalid();
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return tc_pipeline_template_handle_invalid();
-    if (index >= mount->pipeline_template_count) return tc_pipeline_template_handle_invalid();
+    if (!mount)
+        return tc_pipeline_template_handle_invalid();
+    if (index >= mount->pipeline_template_count)
+        return tc_pipeline_template_handle_invalid();
     return mount->pipeline_templates[index];
 }
 
 void tc_scene_add_render_target_config(tc_scene_handle h, const tc_render_target_config* config) {
-    if (!tc_scene_alive(h) || !config) return;
-    if (!tc_scene_render_mount_ensure(h)) return;
+    if (!tc_scene_alive(h) || !config)
+        return;
+    if (!tc_scene_render_mount_ensure(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount)
+        return;
 
     render_mount_ensure_render_target_capacity(mount, mount->render_target_config_count + 1);
     tc_render_target_config_copy(&mount->render_target_configs[mount->render_target_config_count], config);
@@ -635,10 +720,13 @@ void tc_scene_add_render_target_config(tc_scene_handle h, const tc_render_target
 }
 
 void tc_scene_remove_render_target_config(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return;
+    if (!tc_scene_alive(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
-    if (index >= mount->render_target_config_count) return;
+    if (!mount)
+        return;
+    if (index >= mount->render_target_config_count)
+        return;
 
     tc_render_target_config_free(&mount->render_target_configs[index]);
     if (index < mount->render_target_config_count - 1) {
@@ -649,9 +737,11 @@ void tc_scene_remove_render_target_config(tc_scene_handle h, size_t index) {
 }
 
 void tc_scene_clear_render_target_configs(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return;
+    if (!tc_scene_alive(h))
+        return;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return;
+    if (!mount)
+        return;
     for (size_t i = 0; i < mount->render_target_config_count; i++) {
         tc_render_target_config_free(&mount->render_target_configs[i]);
     }
@@ -659,15 +749,19 @@ void tc_scene_clear_render_target_configs(tc_scene_handle h) {
 }
 
 size_t tc_scene_render_target_config_count(tc_scene_handle h) {
-    if (!tc_scene_alive(h)) return 0;
+    if (!tc_scene_alive(h))
+        return 0;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
     return mount ? mount->render_target_config_count : 0;
 }
 
 tc_render_target_config* tc_scene_render_target_config_at(tc_scene_handle h, size_t index) {
-    if (!tc_scene_alive(h)) return NULL;
+    if (!tc_scene_alive(h))
+        return NULL;
     tc_scene_render_mount* mount = tc_scene_render_mount_get(h);
-    if (!mount) return NULL;
-    if (index >= mount->render_target_config_count) return NULL;
+    if (!mount)
+        return NULL;
+    if (index >= mount->render_target_config_count)
+        return NULL;
     return &mount->render_target_configs[index];
 }

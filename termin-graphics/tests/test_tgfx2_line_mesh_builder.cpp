@@ -11,9 +11,9 @@ static_assert(std::is_same_v<tgfx::LinePoint3, termin::Vec3f>,
 
 namespace {
 
-bool close_to(float a, float b, float eps = 1.0e-5f) {
-    return std::fabs(a - b) <= eps;
-}
+    bool close_to(float a, float b, float eps = 1.0e-5f) {
+        return std::fabs(a - b) <= eps;
+    }
 
 } // namespace
 

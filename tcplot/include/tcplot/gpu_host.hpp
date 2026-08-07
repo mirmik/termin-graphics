@@ -19,48 +19,51 @@
 #include "tcplot/tcplot_api.h"
 
 namespace tgfx {
-class IRenderDevice;
-class PipelineCache;
-class RenderContext2;
-class GraphicsHost;
-class FontAtlas;
-}
+    class IRenderDevice;
+    class PipelineCache;
+    class RenderContext2;
+    class GraphicsHost;
+    class FontAtlas;
+} // namespace tgfx
 
 namespace tcplot {
 
-class TCPLOT_API GpuHost {
-private:
-    std::unique_ptr<tgfx::GraphicsHost> owned_graphics_;
-    tgfx::GraphicsHost* graphics_ = nullptr;
-    std::unique_ptr<tgfx::FontAtlas> owned_font_;
-    tgfx::FontAtlas* font_ = nullptr;
+    class TCPLOT_API GpuHost {
+    private:
+        std::unique_ptr<tgfx::GraphicsHost> owned_graphics_;
+        tgfx::GraphicsHost* graphics_ = nullptr;
+        std::unique_ptr<tgfx::FontAtlas> owned_font_;
+        tgfx::FontAtlas* font_ = nullptr;
 
-public:
-    // Create the full tgfx2 stack. Backend is picked by env
-    // TERMIN_BACKEND (same rules as `tgfx::default_backend_from_env`).
-    explicit GpuHost(const std::string& ttf_path);
+    public:
+        // Create the full tgfx2 stack. Backend is picked by env
+        // TERMIN_BACKEND (same rules as `tgfx::default_backend_from_env`).
+        explicit GpuHost(const std::string& ttf_path);
 
-    // Explicit backend override — mostly for the Vulkan path.
-    GpuHost(const std::string& ttf_path, tgfx::BackendType backend);
+        // Explicit backend override — mostly for the Vulkan path.
+        GpuHost(const std::string& ttf_path, tgfx::BackendType backend);
 
-    // Embedded plots borrow the application's canonical graphics domain.
-    GpuHost(const std::string& ttf_path, tgfx::GraphicsHost& graphics);
+        // Embedded plots borrow the application's canonical graphics domain.
+        GpuHost(const std::string& ttf_path, tgfx::GraphicsHost& graphics);
 
-    // Embedded adapters may borrow the application's existing font atlas as
-    // well as its graphics domain. Both objects must outlive this GpuHost.
-    GpuHost(tgfx::GraphicsHost& graphics, tgfx::FontAtlas& font);
+        // Embedded adapters may borrow the application's existing font atlas as
+        // well as its graphics domain. Both objects must outlive this GpuHost.
+        GpuHost(tgfx::GraphicsHost& graphics, tgfx::FontAtlas& font);
 
-    ~GpuHost();
+        ~GpuHost();
 
-    GpuHost(const GpuHost&) = delete;
-    GpuHost& operator=(const GpuHost&) = delete;
+        GpuHost(const GpuHost&) = delete;
+        GpuHost& operator=(const GpuHost&) = delete;
 
-    tgfx::IRenderDevice&  device();
-    tgfx::PipelineCache&  cache();
-    tgfx::RenderContext2& ctx();
-    tgfx::GraphicsHost&   graphics() { return *graphics_; }
-    tgfx::FontAtlas&      font()   { return *font_;   }
+        tgfx::IRenderDevice& device();
+        tgfx::PipelineCache& cache();
+        tgfx::RenderContext2& ctx();
+        tgfx::GraphicsHost& graphics() {
+            return *graphics_;
+        }
+        tgfx::FontAtlas& font() {
+            return *font_;
+        }
+    };
 
-};
-
-}  // namespace tcplot
+} // namespace tcplot

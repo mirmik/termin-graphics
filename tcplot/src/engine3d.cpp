@@ -42,1138 +42,1136 @@ extern "C" {
 
 namespace tcplot {
 
-namespace {
+    namespace {
 
-struct Plot3DPushData {
-    float mvp[16];
-    float params[4];  // z_min, z_max, surface_mode, colormap_id
-    float surface_color[4];
-    float axis_shading[4];    // axis_scale.xyz, shading_enabled
-    float light_strength[4];  // light_dir.xyz, shading_strength
-};
-static_assert(sizeof(Plot3DPushData) == 128,
-              "Plot3DPushData layout drift - shader + C++ disagree");
+        struct Plot3DPushData {
+            float mvp[16];
+            float params[4]; // z_min, z_max, surface_mode, colormap_id
+            float surface_color[4];
+            float axis_shading[4];   // axis_scale.xyz, shading_enabled
+            float light_strength[4]; // light_dir.xyz, shading_strength
+        };
+        static_assert(sizeof(Plot3DPushData) == 128, "Plot3DPushData layout drift - shader + C++ disagree");
 
-struct Plot3DDrawParams {
-    const float* mvp = nullptr;
-    float z_min = 0.0f;
-    float z_max = 1.0f;
-    bool surface_mode = false;
-    SurfaceColorMap colormap = SurfaceColorMap::Jet;
-    bool colormap_reversed = false;
-    Color4 surface_color{1.0f, 1.0f, 1.0f, 1.0f};
-};
+        struct Plot3DDrawParams {
+            const float* mvp = nullptr;
+            float z_min = 0.0f;
+            float z_max = 1.0f;
+            bool surface_mode = false;
+            SurfaceColorMap colormap = SurfaceColorMap::Jet;
+            bool colormap_reversed = false;
+            Color4 surface_color{1.0f, 1.0f, 1.0f, 1.0f};
+        };
 
-constexpr const char* TCPLOT_3D_SHADER_UUID = "termin-engine-tcplot-3d";
-constexpr const char* IMMEDIATE_ENGINE_SHADER_UUID = "termin-engine-immediate";
+        constexpr const char* TCPLOT_3D_SHADER_UUID = "termin-engine-tcplot-3d";
+        constexpr const char* IMMEDIATE_ENGINE_SHADER_UUID = "termin-engine-immediate";
 
-tc_shader_handle tcplot3d_shader_handle() {
-    static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (!tc_shader_is_valid(handle)) {
-        handle = tgfx::register_builtin_shader_from_catalog(TCPLOT_3D_SHADER_UUID);
-    }
-    return handle;
-}
-
-tc_shader_handle immediate_shader_handle() {
-    static tc_shader_handle handle = tc_shader_handle_invalid();
-    if (!tc_shader_is_valid(handle)) {
-        handle = tgfx::register_builtin_shader_from_catalog(IMMEDIATE_ENGINE_SHADER_UUID);
-    }
-    return handle;
-}
-
-constexpr uint32_t kFloatsPerVertex = 19;
-constexpr uint32_t kVertexStride = kFloatsPerVertex * sizeof(float);
-
-tgfx::VertexBufferLayout pos_color_layout() {
-    tgfx::VertexBufferLayout layout;
-    layout.stride = kVertexStride;
-    layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0, "POSITION"});
-    layout.attributes.push_back({1, tgfx::VertexFormat::Float4, 3 * sizeof(float), "COLOR0"});
-    layout.attributes.push_back({2, tgfx::VertexFormat::Float4, 7 * sizeof(float), "SURFGRID"});
-    layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 11 * sizeof(float), "SURFGRIDCOLOR"});
-    layout.attributes.push_back({4, tgfx::VertexFormat::Float4, 15 * sizeof(float), "SURFGRIDOPTS"});
-    return layout;
-}
-
-void bind_plot3d_draw_data(
-    tgfx::RenderContext2& ctx,
-    const PlotEngine3D& engine,
-    const Plot3DDrawParams& params
-) {
-    Plot3DPushData pc{};
-    std::memcpy(pc.mvp, params.mvp, sizeof(pc.mvp));
-    pc.params[0] = params.z_min;
-    pc.params[1] = params.z_max;
-    pc.params[2] = params.surface_mode ? 1.0f : 0.0f;
-    pc.params[3] = static_cast<float>(params.colormap)
-                 + (params.colormap_reversed ? 100.0f : 0.0f);
-    pc.surface_color[0] = params.surface_color.r;
-    pc.surface_color[1] = params.surface_color.g;
-    pc.surface_color[2] = params.surface_color.b;
-    pc.surface_color[3] = params.surface_color.a;
-    pc.axis_shading[0] = engine.x_scale;
-    pc.axis_shading[1] = engine.y_scale;
-    pc.axis_shading[2] = engine.z_scale;
-    pc.axis_shading[3] = (params.surface_mode && engine.surface_shading) ? 1.0f : 0.0f;
-    pc.light_strength[0] = engine.surface_light_dir.x;
-    pc.light_strength[1] = engine.surface_light_dir.y;
-    pc.light_strength[2] = engine.surface_light_dir.z;
-    pc.light_strength[3] = std::clamp(engine.surface_shading_strength, 0.0f, 1.0f);
-    ctx.bind_uniform_data("tcplot3d_draw", &pc, static_cast<uint32_t>(sizeof(pc)));
-}
-
-}  // namespace
-
-std::optional<PlotEngine3D::MeshGpu> PlotEngine3D::make_mesh_(
-    tgfx::IRenderDevice& device,
-    const std::vector<float>& verts,
-    const std::vector<uint32_t>& indices,
-    tgfx::PrimitiveTopology topology
-) {
-    if (verts.empty() || indices.empty()) return std::nullopt;
-    tgfx::BufferDesc vb_desc;
-    vb_desc.size = static_cast<uint64_t>(verts.size()) * sizeof(float);
-    vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
-    tgfx::BufferHandle vbo = device.create_buffer(vb_desc);
-    device.upload_buffer(
-        vbo,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(verts.data()),
-            verts.size() * sizeof(float)));
-
-    tgfx::BufferDesc ib_desc;
-    ib_desc.size = static_cast<uint64_t>(indices.size()) * sizeof(uint32_t);
-    ib_desc.usage = tgfx::BufferUsage::Index | tgfx::BufferUsage::CopyDst;
-    tgfx::BufferHandle ibo = device.create_buffer(ib_desc);
-    device.upload_buffer(
-        ibo,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(indices.data()),
-            indices.size() * sizeof(uint32_t)));
-
-    return PlotEngine3D::MeshGpu{
-        vbo,
-        ibo,
-        static_cast<uint32_t>(indices.size()),
-        topology,
-    };
-}
-
-void PlotEngine3D::draw_mesh_(tgfx::RenderContext2& ctx, const MeshGpu& mesh) {
-    if (mesh.vbo.id == 0 || mesh.ibo.id == 0 || mesh.index_count == 0) return;
-    ctx.set_vertex_layout(pos_color_layout());
-    ctx.set_topology(mesh.topology);
-    ctx.draw(mesh.vbo, mesh.ibo, mesh.index_count, tgfx::IndexType::Uint32);
-}
-
-namespace {
-
-struct SurfaceVertexGrid {
-    float col = 0.0f;
-    float row = 0.0f;
-    float row_step = 1.0f;
-    float col_step = 1.0f;
-    Color4 color = styles::grid_color();
-    bool visible = false;
-    float width_px = 1.5f;
-    float max_col = 0.0f;
-    float max_row = 0.0f;
-};
-
-struct SurfaceVertexData {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    Color4 color;
-    SurfaceVertexGrid grid;
-};
-
-// Push the 7-float (pos+color) vertex for a single point.
-inline void push_vertex(std::vector<float>& verts,
-                        float x, float y, float z, const Color4& c) {
-    verts.push_back(x);
-    verts.push_back(y);
-    verts.push_back(z);
-    verts.push_back(c.r);
-    verts.push_back(c.g);
-    verts.push_back(c.b);
-    verts.push_back(c.a);
-    for (int i = 0; i < 12; ++i) verts.push_back(0.0f);
-}
-
-inline void push_surface_vertex(std::vector<float>& verts, const SurfaceVertexData& vertex) {
-    verts.push_back(vertex.x);
-    verts.push_back(vertex.y);
-    verts.push_back(vertex.z);
-    verts.push_back(vertex.color.r);
-    verts.push_back(vertex.color.g);
-    verts.push_back(vertex.color.b);
-    verts.push_back(vertex.color.a);
-    verts.push_back(vertex.grid.col);
-    verts.push_back(vertex.grid.row);
-    verts.push_back(vertex.grid.col_step);
-    verts.push_back(vertex.grid.row_step);
-    verts.push_back(vertex.grid.color.r);
-    verts.push_back(vertex.grid.color.g);
-    verts.push_back(vertex.grid.color.b);
-    verts.push_back(vertex.grid.color.a);
-    verts.push_back(vertex.grid.visible ? 1.0f : 0.0f);
-    verts.push_back(vertex.grid.width_px);
-    verts.push_back(vertex.grid.max_col);
-    verts.push_back(vertex.grid.max_row);
-}
-
-// Resolve a possibly-missing Color4 against a series index. Matches
-// Python behaviour of "no color → palette cycle by index".
-Color4 resolve_color(const std::optional<Color4>& c, uint32_t palette_idx,
-                     Color4 fallback) {
-    if (c.has_value()) return *c;
-    if (palette_idx != UINT32_MAX) return styles::cycle_color(palette_idx);
-    return fallback;
-}
-
-}  // namespace
-
-// ---------------------------------------------------------------------------
-// Construction / destruction
-// ---------------------------------------------------------------------------
-
-PlotEngine3D::PlotEngine3D()
-    : text3d_(std::make_unique<tgfx::Text3DRenderer>()) {}
-
-PlotEngine3D::~PlotEngine3D() {
-    release_gpu_resources();
-}
-
-void PlotEngine3D::set_viewport(float x, float y, float width, float height) {
-    vx_ = x;
-    vy_ = y;
-    vw_ = width;
-    vh_ = height;
-}
-
-// ---------------------------------------------------------------------------
-// Public add-series
-// ---------------------------------------------------------------------------
-
-void PlotEngine3D::plot(std::vector<double> x, std::vector<double> y,
-                         std::vector<double> z,
-                         LinePlotOptions options) {
-    data.add_line(std::move(x), std::move(y), std::move(z),
-                  options.color, options.thickness, std::move(options.label));
-    dirty_ = true;
-
-    double lo[3], hi[3];
-    data.data_bounds_3d(lo, hi);
-    camera.fit_bounds(
-        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
-        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
-}
-
-void PlotEngine3D::scatter(std::vector<double> x, std::vector<double> y,
-                            std::vector<double> z,
-                            ScatterPlotOptions options) {
-    data.add_scatter(std::move(x), std::move(y), std::move(z),
-                     options.color, options.size, std::move(options.label));
-    dirty_ = true;
-
-    double lo[3], hi[3];
-    data.data_bounds_3d(lo, hi);
-    camera.fit_bounds(
-        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
-        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
-}
-
-void PlotEngine3D::surface(std::vector<double> X, std::vector<double> Y,
-                            std::vector<double> Z,
-                            uint32_t rows, uint32_t cols,
-                            SurfacePlotOptions options) {
-    SurfaceSeries s;
-    s.X = std::move(X);
-    s.Y = std::move(Y);
-    s.Z = std::move(Z);
-    s.rows = rows;
-    s.cols = cols;
-    if (options.color.has_value()) {
-        s.color = *options.color;
-    } else {
-        const uint32_t idx = static_cast<uint32_t>(
-            data.lines.size() + data.scatters.size() + data.surfaces.size());
-        s.color = styles::cycle_color(idx);
-    }
-    s.colormap = options.colormap;
-    s.colormap_reversed = options.colormap_reversed;
-    s.wireframe = options.wireframe;
-    s.label = std::move(options.label);
-    data.surfaces.push_back(std::move(s));
-    dirty_ = true;
-
-    double lo[3], hi[3];
-    data.data_bounds_3d(lo, hi);
-    camera.fit_bounds(
-        termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
-        termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
-}
-
-void PlotEngine3D::clear() {
-    data = PlotData{};
-    release_meshes_();
-    dirty_ = true;
-}
-
-bool PlotEngine3D::set_surface_colormap(size_t idx, SurfaceColorMap colormap) {
-    if (idx >= data.surfaces.size()) return false;
-    data.surfaces[idx].colormap = colormap;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_surface_colormap_reversed(size_t idx, bool reversed) {
-    if (idx >= data.surfaces.size()) return false;
-    data.surfaces[idx].colormap_reversed = reversed;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
-    if (idx >= data.surfaces.size()) return false;
-    data.surfaces[idx].color = color;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_surface_wireframe(size_t idx, bool wireframe) {
-    if (idx >= data.surfaces.size()) return false;
-    data.surfaces[idx].wireframe = wireframe;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
-    if (idx >= data.surfaces.size()) return false;
-    SurfaceSeries& surf = data.surfaces[idx];
-    surf.grid_visible = options.visible;
-    surf.grid_row_step = std::max<uint32_t>(1, options.row_step);
-    surf.grid_col_step = std::max<uint32_t>(1, options.col_step);
-    surf.grid_width_px = std::max(options.width_px, 0.1f);
-    surf.grid_color = options.color;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_surface_data(
-    size_t idx,
-    std::vector<double> x,
-    std::vector<double> y,
-    std::vector<double> z,
-    uint32_t rows,
-    uint32_t cols) {
-    if (idx >= data.surfaces.size() || rows < 2 || cols < 2) return false;
-    const std::size_t count = static_cast<std::size_t>(rows) * cols;
-    if (x.size() != count || y.size() != count || z.size() != count) {
-        return false;
-    }
-    SurfaceSeries& surface = data.surfaces[idx];
-    surface.X = std::move(x);
-    surface.Y = std::move(y);
-    surface.Z = std::move(z);
-    surface.rows = rows;
-    surface.cols = cols;
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_scatter_data(
-    size_t idx,
-    std::vector<double> x,
-    std::vector<double> y,
-    std::vector<double> z) {
-    if (idx >= data.scatters.size() || x.empty() ||
-        x.size() != y.size() || x.size() != z.size()) {
-        return false;
-    }
-    ScatterSeries& scatter = data.scatters[idx];
-    scatter.x = std::move(x);
-    scatter.y = std::move(y);
-    scatter.z = std::move(z);
-    dirty_ = true;
-    return true;
-}
-
-bool PlotEngine3D::set_scatter_style(
-    size_t idx,
-    Color4 color,
-    double size) {
-    if (idx >= data.scatters.size()) return false;
-    ScatterSeries& scatter = data.scatters[idx];
-    scatter.color = color;
-    scatter.size = size;
-    dirty_ = true;
-    return true;
-}
-
-void PlotEngine3D::set_grid_style(
-    Color4 color,
-    const std::array<Color4, 3>& colors) {
-    grid_color = color;
-    axis_colors = colors;
-    dirty_ = true;
-}
-
-void PlotEngine3D::toggle_marker_mode() {
-    marker_mode = !marker_mode;
-    if (!marker_mode) {
-        has_marker_ = false;
-    }
-}
-
-void PlotEngine3D::set_surface_shading(bool enabled, float strength) {
-    surface_shading = enabled;
-    surface_shading_strength = std::clamp(strength, 0.0f, 1.0f);
-}
-
-void PlotEngine3D::set_surface_light_dir(float x, float y, float z) {
-    const float len = std::sqrt(x * x + y * y + z * z);
-    if (len <= 1e-6f) return;
-    surface_light_dir = termin::Vec3f{x / len, y / len, z / len};
-}
-
-// ---------------------------------------------------------------------------
-// GPU resource management
-// ---------------------------------------------------------------------------
-
-void PlotEngine3D::release_meshes_() {
-    auto drop = [this](std::optional<MeshGpu>& m) {
-        if (m.has_value()) {
-            if (mesh_device_) {
-                if (m->vbo.id != 0) mesh_device_->destroy(m->vbo);
-                if (m->ibo.id != 0) mesh_device_->destroy(m->ibo);
+        tc_shader_handle tcplot3d_shader_handle() {
+            static tc_shader_handle handle = tc_shader_handle_invalid();
+            if (!tc_shader_is_valid(handle)) {
+                handle = tgfx::register_builtin_shader_from_catalog(TCPLOT_3D_SHADER_UUID);
             }
-            m.reset();
+            return handle;
         }
-    };
-    drop(lines_mesh_);
-    drop(scatter_mesh_);
-    drop(grid_mesh_);
-    if (mesh_device_) {
-        for (auto& m : surface_meshes_) {
-            if (m.vbo.id != 0) mesh_device_->destroy(m.vbo);
-            if (m.ibo.id != 0) mesh_device_->destroy(m.ibo);
+
+        tc_shader_handle immediate_shader_handle() {
+            static tc_shader_handle handle = tc_shader_handle_invalid();
+            if (!tc_shader_is_valid(handle)) {
+                handle = tgfx::register_builtin_shader_from_catalog(IMMEDIATE_ENGINE_SHADER_UUID);
+            }
+            return handle;
         }
-        for (auto& m : wireframe_meshes_) {
-            if (m.vbo.id != 0) mesh_device_->destroy(m.vbo);
-            if (m.ibo.id != 0) mesh_device_->destroy(m.ibo);
+
+        constexpr uint32_t kFloatsPerVertex = 19;
+        constexpr uint32_t kVertexStride = kFloatsPerVertex * sizeof(float);
+
+        tgfx::VertexBufferLayout pos_color_layout() {
+            tgfx::VertexBufferLayout layout;
+            layout.stride = kVertexStride;
+            layout.attributes.push_back({0, tgfx::VertexFormat::Float3, 0, "POSITION"});
+            layout.attributes.push_back({1, tgfx::VertexFormat::Float4, 3 * sizeof(float), "COLOR0"});
+            layout.attributes.push_back({2, tgfx::VertexFormat::Float4, 7 * sizeof(float), "SURFGRID"});
+            layout.attributes.push_back({3, tgfx::VertexFormat::Float4, 11 * sizeof(float), "SURFGRIDCOLOR"});
+            layout.attributes.push_back({4, tgfx::VertexFormat::Float4, 15 * sizeof(float), "SURFGRIDOPTS"});
+            return layout;
+        }
+
+        void
+        bind_plot3d_draw_data(tgfx::RenderContext2& ctx, const PlotEngine3D& engine, const Plot3DDrawParams& params) {
+            Plot3DPushData pc{};
+            std::memcpy(pc.mvp, params.mvp, sizeof(pc.mvp));
+            pc.params[0] = params.z_min;
+            pc.params[1] = params.z_max;
+            pc.params[2] = params.surface_mode ? 1.0f : 0.0f;
+            pc.params[3] = static_cast<float>(params.colormap) + (params.colormap_reversed ? 100.0f : 0.0f);
+            pc.surface_color[0] = params.surface_color.r;
+            pc.surface_color[1] = params.surface_color.g;
+            pc.surface_color[2] = params.surface_color.b;
+            pc.surface_color[3] = params.surface_color.a;
+            pc.axis_shading[0] = engine.x_scale;
+            pc.axis_shading[1] = engine.y_scale;
+            pc.axis_shading[2] = engine.z_scale;
+            pc.axis_shading[3] = (params.surface_mode && engine.surface_shading) ? 1.0f : 0.0f;
+            pc.light_strength[0] = engine.surface_light_dir.x;
+            pc.light_strength[1] = engine.surface_light_dir.y;
+            pc.light_strength[2] = engine.surface_light_dir.z;
+            pc.light_strength[3] = std::clamp(engine.surface_shading_strength, 0.0f, 1.0f);
+            ctx.bind_uniform_data("tcplot3d_draw", &pc, static_cast<uint32_t>(sizeof(pc)));
+        }
+
+    } // namespace
+
+    std::optional<PlotEngine3D::MeshGpu> PlotEngine3D::make_mesh_(tgfx::IRenderDevice& device,
+                                                                  const std::vector<float>& verts,
+                                                                  const std::vector<uint32_t>& indices,
+                                                                  tgfx::PrimitiveTopology topology) {
+        if (verts.empty() || indices.empty())
+            return std::nullopt;
+        tgfx::BufferDesc vb_desc;
+        vb_desc.size = static_cast<uint64_t>(verts.size()) * sizeof(float);
+        vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+        tgfx::BufferHandle vbo = device.create_buffer(vb_desc);
+        device.upload_buffer(
+            vbo,
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(verts.data()), verts.size() * sizeof(float)));
+
+        tgfx::BufferDesc ib_desc;
+        ib_desc.size = static_cast<uint64_t>(indices.size()) * sizeof(uint32_t);
+        ib_desc.usage = tgfx::BufferUsage::Index | tgfx::BufferUsage::CopyDst;
+        tgfx::BufferHandle ibo = device.create_buffer(ib_desc);
+        device.upload_buffer(ibo,
+                             std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(indices.data()),
+                                                      indices.size() * sizeof(uint32_t)));
+
+        return PlotEngine3D::MeshGpu{
+            vbo,
+            ibo,
+            static_cast<uint32_t>(indices.size()),
+            topology,
+        };
+    }
+
+    void PlotEngine3D::draw_mesh_(tgfx::RenderContext2& ctx, const MeshGpu& mesh) {
+        if (mesh.vbo.id == 0 || mesh.ibo.id == 0 || mesh.index_count == 0)
+            return;
+        ctx.set_vertex_layout(pos_color_layout());
+        ctx.set_topology(mesh.topology);
+        ctx.draw(mesh.vbo, mesh.ibo, mesh.index_count, tgfx::IndexType::Uint32);
+    }
+
+    namespace {
+
+        struct SurfaceVertexGrid {
+            float col = 0.0f;
+            float row = 0.0f;
+            float row_step = 1.0f;
+            float col_step = 1.0f;
+            Color4 color = styles::grid_color();
+            bool visible = false;
+            float width_px = 1.5f;
+            float max_col = 0.0f;
+            float max_row = 0.0f;
+        };
+
+        struct SurfaceVertexData {
+            float x = 0.0f;
+            float y = 0.0f;
+            float z = 0.0f;
+            Color4 color;
+            SurfaceVertexGrid grid;
+        };
+
+        // Push the 7-float (pos+color) vertex for a single point.
+        inline void push_vertex(std::vector<float>& verts, float x, float y, float z, const Color4& c) {
+            verts.push_back(x);
+            verts.push_back(y);
+            verts.push_back(z);
+            verts.push_back(c.r);
+            verts.push_back(c.g);
+            verts.push_back(c.b);
+            verts.push_back(c.a);
+            for (int i = 0; i < 12; ++i)
+                verts.push_back(0.0f);
+        }
+
+        inline void push_surface_vertex(std::vector<float>& verts, const SurfaceVertexData& vertex) {
+            verts.push_back(vertex.x);
+            verts.push_back(vertex.y);
+            verts.push_back(vertex.z);
+            verts.push_back(vertex.color.r);
+            verts.push_back(vertex.color.g);
+            verts.push_back(vertex.color.b);
+            verts.push_back(vertex.color.a);
+            verts.push_back(vertex.grid.col);
+            verts.push_back(vertex.grid.row);
+            verts.push_back(vertex.grid.col_step);
+            verts.push_back(vertex.grid.row_step);
+            verts.push_back(vertex.grid.color.r);
+            verts.push_back(vertex.grid.color.g);
+            verts.push_back(vertex.grid.color.b);
+            verts.push_back(vertex.grid.color.a);
+            verts.push_back(vertex.grid.visible ? 1.0f : 0.0f);
+            verts.push_back(vertex.grid.width_px);
+            verts.push_back(vertex.grid.max_col);
+            verts.push_back(vertex.grid.max_row);
+        }
+
+        // Resolve a possibly-missing Color4 against a series index. Matches
+        // Python behaviour of "no color → palette cycle by index".
+        Color4 resolve_color(const std::optional<Color4>& c, uint32_t palette_idx, Color4 fallback) {
+            if (c.has_value())
+                return *c;
+            if (palette_idx != UINT32_MAX)
+                return styles::cycle_color(palette_idx);
+            return fallback;
+        }
+
+    } // namespace
+
+    // ---------------------------------------------------------------------------
+    // Construction / destruction
+    // ---------------------------------------------------------------------------
+
+    PlotEngine3D::PlotEngine3D()
+        : text3d_(std::make_unique<tgfx::Text3DRenderer>()) {}
+
+    PlotEngine3D::~PlotEngine3D() {
+        release_gpu_resources();
+    }
+
+    void PlotEngine3D::set_viewport(float x, float y, float width, float height) {
+        vx_ = x;
+        vy_ = y;
+        vw_ = width;
+        vh_ = height;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Public add-series
+    // ---------------------------------------------------------------------------
+
+    void
+    PlotEngine3D::plot(std::vector<double> x, std::vector<double> y, std::vector<double> z, LinePlotOptions options) {
+        data.add_line(
+            std::move(x), std::move(y), std::move(z), options.color, options.thickness, std::move(options.label));
+        dirty_ = true;
+
+        double lo[3], hi[3];
+        data.data_bounds_3d(lo, hi);
+        camera.fit_bounds(
+            termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+            termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
+    }
+
+    void PlotEngine3D::scatter(std::vector<double> x,
+                               std::vector<double> y,
+                               std::vector<double> z,
+                               ScatterPlotOptions options) {
+        data.add_scatter(
+            std::move(x), std::move(y), std::move(z), options.color, options.size, std::move(options.label));
+        dirty_ = true;
+
+        double lo[3], hi[3];
+        data.data_bounds_3d(lo, hi);
+        camera.fit_bounds(
+            termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+            termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
+    }
+
+    void PlotEngine3D::surface(std::vector<double> X,
+                               std::vector<double> Y,
+                               std::vector<double> Z,
+                               uint32_t rows,
+                               uint32_t cols,
+                               SurfacePlotOptions options) {
+        SurfaceSeries s;
+        s.X = std::move(X);
+        s.Y = std::move(Y);
+        s.Z = std::move(Z);
+        s.rows = rows;
+        s.cols = cols;
+        if (options.color.has_value()) {
+            s.color = *options.color;
+        } else {
+            const uint32_t idx = static_cast<uint32_t>(data.lines.size() + data.scatters.size() + data.surfaces.size());
+            s.color = styles::cycle_color(idx);
+        }
+        s.colormap = options.colormap;
+        s.colormap_reversed = options.colormap_reversed;
+        s.wireframe = options.wireframe;
+        s.label = std::move(options.label);
+        data.surfaces.push_back(std::move(s));
+        dirty_ = true;
+
+        double lo[3], hi[3];
+        data.data_bounds_3d(lo, hi);
+        camera.fit_bounds(
+            termin::Vec3f{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+            termin::Vec3f{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])});
+    }
+
+    void PlotEngine3D::clear() {
+        data = PlotData{};
+        release_meshes_();
+        dirty_ = true;
+    }
+
+    bool PlotEngine3D::set_surface_colormap(size_t idx, SurfaceColorMap colormap) {
+        if (idx >= data.surfaces.size())
+            return false;
+        data.surfaces[idx].colormap = colormap;
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_surface_colormap_reversed(size_t idx, bool reversed) {
+        if (idx >= data.surfaces.size())
+            return false;
+        data.surfaces[idx].colormap_reversed = reversed;
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
+        if (idx >= data.surfaces.size())
+            return false;
+        data.surfaces[idx].color = color;
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_surface_wireframe(size_t idx, bool wireframe) {
+        if (idx >= data.surfaces.size())
+            return false;
+        data.surfaces[idx].wireframe = wireframe;
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_surface_grid(size_t idx, SurfaceGridOptions options) {
+        if (idx >= data.surfaces.size())
+            return false;
+        SurfaceSeries& surf = data.surfaces[idx];
+        surf.grid_visible = options.visible;
+        surf.grid_row_step = std::max<uint32_t>(1, options.row_step);
+        surf.grid_col_step = std::max<uint32_t>(1, options.col_step);
+        surf.grid_width_px = std::max(options.width_px, 0.1f);
+        surf.grid_color = options.color;
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_surface_data(
+        size_t idx, std::vector<double> x, std::vector<double> y, std::vector<double> z, uint32_t rows, uint32_t cols) {
+        if (idx >= data.surfaces.size() || rows < 2 || cols < 2)
+            return false;
+        const std::size_t count = static_cast<std::size_t>(rows) * cols;
+        if (x.size() != count || y.size() != count || z.size() != count) {
+            return false;
+        }
+        SurfaceSeries& surface = data.surfaces[idx];
+        surface.X = std::move(x);
+        surface.Y = std::move(y);
+        surface.Z = std::move(z);
+        surface.rows = rows;
+        surface.cols = cols;
+        dirty_ = true;
+        return true;
+    }
+
+    bool
+    PlotEngine3D::set_scatter_data(size_t idx, std::vector<double> x, std::vector<double> y, std::vector<double> z) {
+        if (idx >= data.scatters.size() || x.empty() || x.size() != y.size() || x.size() != z.size()) {
+            return false;
+        }
+        ScatterSeries& scatter = data.scatters[idx];
+        scatter.x = std::move(x);
+        scatter.y = std::move(y);
+        scatter.z = std::move(z);
+        dirty_ = true;
+        return true;
+    }
+
+    bool PlotEngine3D::set_scatter_style(size_t idx, Color4 color, double size) {
+        if (idx >= data.scatters.size())
+            return false;
+        ScatterSeries& scatter = data.scatters[idx];
+        scatter.color = color;
+        scatter.size = size;
+        dirty_ = true;
+        return true;
+    }
+
+    void PlotEngine3D::set_grid_style(Color4 color, const std::array<Color4, 3>& colors) {
+        grid_color = color;
+        axis_colors = colors;
+        dirty_ = true;
+    }
+
+    void PlotEngine3D::toggle_marker_mode() {
+        marker_mode = !marker_mode;
+        if (!marker_mode) {
+            has_marker_ = false;
         }
     }
-    surface_meshes_.clear();
-    surface_mesh_styles_.clear();
-    wireframe_meshes_.clear();
-    mesh_device_ = nullptr;
-    dirty_ = true;
-}
 
-void PlotEngine3D::release_gpu_resources() {
-    release_meshes_();
-    shader_vs_id_ = 0;
-    shader_fs_id_ = 0;
-    shader_device_ = nullptr;
-    if (text3d_) text3d_->release_gpu();
-}
-
-void PlotEngine3D::ensure_shader_(tgfx::IRenderDevice& device) {
-    if (shader_device_ == &device && shader_vs_id_ != 0 && shader_fs_id_ != 0) {
-        return;
+    void PlotEngine3D::set_surface_shading(bool enabled, float strength) {
+        surface_shading = enabled;
+        surface_shading_strength = std::clamp(strength, 0.0f, 1.0f);
     }
 
-    tgfx::ShaderHandle vs{};
-    tgfx::ShaderHandle fs{};
-    tc_shader* raw = tc_shader_get(tcplot3d_shader_handle());
-    if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vs, &fs)) {
-        tc::Log::error("PlotEngine3D: failed to prepare builtin shader %s", TCPLOT_3D_SHADER_UUID);
+    void PlotEngine3D::set_surface_light_dir(float x, float y, float z) {
+        const float len = std::sqrt(x * x + y * y + z * z);
+        if (len <= 1e-6f)
+            return;
+        surface_light_dir = termin::Vec3f{x / len, y / len, z / len};
+    }
+
+    // ---------------------------------------------------------------------------
+    // GPU resource management
+    // ---------------------------------------------------------------------------
+
+    void PlotEngine3D::release_meshes_() {
+        auto drop = [this](std::optional<MeshGpu>& m) {
+            if (m.has_value()) {
+                if (mesh_device_) {
+                    if (m->vbo.id != 0)
+                        mesh_device_->destroy(m->vbo);
+                    if (m->ibo.id != 0)
+                        mesh_device_->destroy(m->ibo);
+                }
+                m.reset();
+            }
+        };
+        drop(lines_mesh_);
+        drop(scatter_mesh_);
+        drop(grid_mesh_);
+        if (mesh_device_) {
+            for (auto& m : surface_meshes_) {
+                if (m.vbo.id != 0)
+                    mesh_device_->destroy(m.vbo);
+                if (m.ibo.id != 0)
+                    mesh_device_->destroy(m.ibo);
+            }
+            for (auto& m : wireframe_meshes_) {
+                if (m.vbo.id != 0)
+                    mesh_device_->destroy(m.vbo);
+                if (m.ibo.id != 0)
+                    mesh_device_->destroy(m.ibo);
+            }
+        }
+        surface_meshes_.clear();
+        surface_mesh_styles_.clear();
+        wireframe_meshes_.clear();
+        mesh_device_ = nullptr;
+        dirty_ = true;
+    }
+
+    void PlotEngine3D::release_gpu_resources() {
+        release_meshes_();
         shader_vs_id_ = 0;
         shader_fs_id_ = 0;
         shader_device_ = nullptr;
-        return;
+        if (text3d_)
+            text3d_->release_gpu();
     }
 
-    shader_vs_id_ = vs.id;
-    shader_fs_id_ = fs.id;
-    shader_device_ = &device;
-}
-
-// ---------------------------------------------------------------------------
-// Mesh building
-// ---------------------------------------------------------------------------
-
-void PlotEngine3D::rebuild_meshes_(tgfx::IRenderDevice& device) {
-    release_meshes_();
-    mesh_device_ = &device;
-
-    // --- Lines ---
-    {
-        std::vector<float> verts;
-        std::vector<uint32_t> indices;
-        uint32_t idx = 0;
-        uint32_t palette_i = 0;
-        for (const auto& s : data.lines) {
-            if (s.z.empty() || s.x.size() < 2) {
-                palette_i++;
-                continue;
-            }
-            const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
-            for (size_t i = 0; i < s.x.size(); i++) {
-                push_vertex(verts, (float)s.x[i], (float)s.y[i], (float)s.z[i], c);
-            }
-            for (size_t i = 0; i + 1 < s.x.size(); i++) {
-                indices.push_back(idx + (uint32_t)i);
-                indices.push_back(idx + (uint32_t)i + 1);
-            }
-            idx += (uint32_t)s.x.size();
-            palette_i++;
+    void PlotEngine3D::ensure_shader_(tgfx::IRenderDevice& device) {
+        if (shader_device_ == &device && shader_vs_id_ != 0 && shader_fs_id_ != 0) {
+            return;
         }
-        if (!verts.empty()) {
-            lines_mesh_ = make_mesh_(device, verts, indices,
-                                     tgfx::PrimitiveTopology::LineList);
+
+        tgfx::ShaderHandle vs{};
+        tgfx::ShaderHandle fs{};
+        tc_shader* raw = tc_shader_get(tcplot3d_shader_handle());
+        if (!raw || !termin::tc_shader_ensure_tgfx2(raw, &device, &vs, &fs)) {
+            tc::Log::error("PlotEngine3D: failed to prepare builtin shader %s", TCPLOT_3D_SHADER_UUID);
+            shader_vs_id_ = 0;
+            shader_fs_id_ = 0;
+            shader_device_ = nullptr;
+            return;
         }
+
+        shader_vs_id_ = vs.id;
+        shader_fs_id_ = fs.id;
+        shader_device_ = &device;
     }
 
-    // --- Data bounds used by scatter cross size and grid extents ---
-    double lo[3], hi[3];
-    data.data_bounds_3d(lo, hi);
-    const double data_span = std::sqrt(
-        (hi[0] - lo[0]) * (hi[0] - lo[0]) +
-        (hi[1] - lo[1]) * (hi[1] - lo[1]) +
-        (hi[2] - lo[2]) * (hi[2] - lo[2]));
-    const float cs = (float)(data_span * 0.008);
+    // ---------------------------------------------------------------------------
+    // Mesh building
+    // ---------------------------------------------------------------------------
 
-    // --- Scatter (cross: 3 axis-aligned line segments per point) ---
-    {
-        std::vector<float> verts;
-        std::vector<uint32_t> indices;
-        uint32_t idx = 0;
-        uint32_t palette_i =
-            (uint32_t)(data.lines.size());  // continue palette past lines
-        for (const auto& s : data.scatters) {
-            if (s.z.empty() || s.x.empty()) {
-                palette_i++;
-                continue;
-            }
-            const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
-            const float series_cs = cs *
-                static_cast<float>(std::max(s.size, 0.1) / 4.0);
-            for (size_t i = 0; i < s.x.size(); i++) {
-                const float px = (float)s.x[i];
-                const float py = (float)s.y[i];
-                const float pz = (float)s.z[i];
-                struct Axis { float dx, dy, dz; };
-                const Axis axes[] = {
-                    {series_cs, 0, 0},
-                    {0, series_cs, 0},
-                    {0, 0, series_cs}};
-                for (const auto& a : axes) {
-                    push_vertex(verts, px - a.dx, py - a.dy, pz - a.dz, c);
-                    push_vertex(verts, px + a.dx, py + a.dy, pz + a.dz, c);
-                    indices.push_back(idx);
-                    indices.push_back(idx + 1);
-                    idx += 2;
+    void PlotEngine3D::rebuild_meshes_(tgfx::IRenderDevice& device) {
+        release_meshes_();
+        mesh_device_ = &device;
+
+        // --- Lines ---
+        {
+            std::vector<float> verts;
+            std::vector<uint32_t> indices;
+            uint32_t idx = 0;
+            uint32_t palette_i = 0;
+            for (const auto& s : data.lines) {
+                if (s.z.empty() || s.x.size() < 2) {
+                    palette_i++;
+                    continue;
                 }
+                const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
+                for (size_t i = 0; i < s.x.size(); i++) {
+                    push_vertex(verts, (float)s.x[i], (float)s.y[i], (float)s.z[i], c);
+                }
+                for (size_t i = 0; i + 1 < s.x.size(); i++) {
+                    indices.push_back(idx + (uint32_t)i);
+                    indices.push_back(idx + (uint32_t)i + 1);
+                }
+                idx += (uint32_t)s.x.size();
+                palette_i++;
             }
-            palette_i++;
+            if (!verts.empty()) {
+                lines_mesh_ = make_mesh_(device, verts, indices, tgfx::PrimitiveTopology::LineList);
+            }
         }
-        if (!verts.empty()) {
-            scatter_mesh_ = make_mesh_(device, verts, indices,
-                                       tgfx::PrimitiveTopology::LineList);
+
+        // --- Data bounds used by scatter cross size and grid extents ---
+        double lo[3], hi[3];
+        data.data_bounds_3d(lo, hi);
+        const double data_span = std::sqrt((hi[0] - lo[0]) * (hi[0] - lo[0]) + (hi[1] - lo[1]) * (hi[1] - lo[1]) +
+                                           (hi[2] - lo[2]) * (hi[2] - lo[2]));
+        const float cs = (float)(data_span * 0.008);
+
+        // --- Scatter (cross: 3 axis-aligned line segments per point) ---
+        {
+            std::vector<float> verts;
+            std::vector<uint32_t> indices;
+            uint32_t idx = 0;
+            uint32_t palette_i = (uint32_t)(data.lines.size()); // continue palette past lines
+            for (const auto& s : data.scatters) {
+                if (s.z.empty() || s.x.empty()) {
+                    palette_i++;
+                    continue;
+                }
+                const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
+                const float series_cs = cs * static_cast<float>(std::max(s.size, 0.1) / 4.0);
+                for (size_t i = 0; i < s.x.size(); i++) {
+                    const float px = (float)s.x[i];
+                    const float py = (float)s.y[i];
+                    const float pz = (float)s.z[i];
+                    struct Axis {
+                        float dx, dy, dz;
+                    };
+                    const Axis axes[] = {{series_cs, 0, 0}, {0, series_cs, 0}, {0, 0, series_cs}};
+                    for (const auto& a : axes) {
+                        push_vertex(verts, px - a.dx, py - a.dy, pz - a.dz, c);
+                        push_vertex(verts, px + a.dx, py + a.dy, pz + a.dz, c);
+                        indices.push_back(idx);
+                        indices.push_back(idx + 1);
+                        idx += 2;
+                    }
+                }
+                palette_i++;
+            }
+            if (!verts.empty()) {
+                scatter_mesh_ = make_mesh_(device, verts, indices, tgfx::PrimitiveTopology::LineList);
+            }
         }
+
+        // --- Surfaces ---
+        for (const auto& surf : data.surfaces) {
+            build_surface_mesh_(device, surf);
+        }
+
+        // --- Grid + axes ---
+        if (show_grid) {
+            build_grid_mesh_(device, lo, hi);
+        }
+
+        dirty_ = false;
     }
 
-    // --- Surfaces ---
-    for (const auto& surf : data.surfaces) {
-        build_surface_mesh_(device, surf);
-    }
+    void PlotEngine3D::build_grid_mesh_(tgfx::IRenderDevice& device,
+                                        const double bounds_min[3],
+                                        const double bounds_max[3]) {
+        std::vector<float> verts;
+        std::vector<uint32_t> indices;
+        uint32_t idx = 0;
+        // Brighter 3D grid than the 2D default. 1-pixel GL lines under MSAA
+        // get very dim if sampled with low coverage; full alpha + mid-gray
+        // keeps the grid legible without drowning the data series.
+        // styles::grid_color() = (0.3, 0.3, 0.3, 0.5) stays the 2D choice.
+        const Color4 gc = grid_color;
 
-    // --- Grid + axes ---
-    if (show_grid) {
-        build_grid_mesh_(device, lo, hi);
-    }
+        // For each axis, draw ticks as line segments running along the
+        // bounding box's "floor" on one of the other two axes. Matches
+        // Python's `_build_grid_mesh` 1:1.
+        for (int axis = 0; axis < 3; ++axis) {
+            const std::vector<double> ticks = axes::nice_ticks(bounds_min[axis], bounds_max[axis], 8);
+            const int a1 = (axis == 0) ? 1 : 0;
+            const int a2 = (axis == 2) ? 1 : 2;
+            // Python picks other_axes = [a for a in 0..2 if a != axis],
+            // then a1, a2 = other_axes. Explicitly replicate.
+            int oa[2] = {-1, -1};
+            int k = 0;
+            for (int a = 0; a < 3; ++a)
+                if (a != axis)
+                    oa[k++] = a;
+            (void)a1;
+            (void)a2; // suppress unused above
 
-    dirty_ = false;
-}
+            for (double t : ticks) {
+                double p0[3] = {0, 0, 0};
+                double p1[3] = {0, 0, 0};
+                p0[axis] = t;
+                p1[axis] = t;
+                p0[oa[0]] = bounds_min[oa[0]];
+                p1[oa[0]] = bounds_max[oa[0]];
+                p0[oa[1]] = bounds_min[oa[1]];
+                p1[oa[1]] = bounds_min[oa[1]]; // along a1, locked at min of a2
+                push_vertex(verts, (float)p0[0], (float)p0[1], (float)p0[2], gc);
+                push_vertex(verts, (float)p1[0], (float)p1[1], (float)p1[2], gc);
+                indices.push_back(idx);
+                indices.push_back(idx + 1);
+                idx += 2;
+            }
+        }
 
-void PlotEngine3D::build_grid_mesh_(tgfx::IRenderDevice& device,
-                                     const double bounds_min[3],
-                                     const double bounds_max[3]) {
-    std::vector<float> verts;
-    std::vector<uint32_t> indices;
-    uint32_t idx = 0;
-    // Brighter 3D grid than the 2D default. 1-pixel GL lines under MSAA
-    // get very dim if sampled with low coverage; full alpha + mid-gray
-    // keeps the grid legible without drowning the data series.
-    // styles::grid_color() = (0.3, 0.3, 0.3, 0.5) stays the 2D choice.
-    const Color4 gc = grid_color;
-
-    // For each axis, draw ticks as line segments running along the
-    // bounding box's "floor" on one of the other two axes. Matches
-    // Python's `_build_grid_mesh` 1:1.
-    for (int axis = 0; axis < 3; ++axis) {
-        const std::vector<double> ticks =
-            axes::nice_ticks(bounds_min[axis], bounds_max[axis], 8);
-        const int a1 = (axis == 0) ? 1 : 0;
-        const int a2 = (axis == 2) ? 1 : 2;
-        // Python picks other_axes = [a for a in 0..2 if a != axis],
-        // then a1, a2 = other_axes. Explicitly replicate.
-        int oa[2] = {-1, -1};
-        int k = 0;
-        for (int a = 0; a < 3; ++a) if (a != axis) oa[k++] = a;
-        (void)a1; (void)a2;  // suppress unused above
-
-        for (double t : ticks) {
-            double p0[3] = {0, 0, 0};
-            double p1[3] = {0, 0, 0};
-            p0[axis] = t;
-            p1[axis] = t;
-            p0[oa[0]] = bounds_min[oa[0]];
-            p1[oa[0]] = bounds_max[oa[0]];
-            p0[oa[1]] = bounds_min[oa[1]];
-            p1[oa[1]] = bounds_min[oa[1]];  // along a1, locked at min of a2
-            push_vertex(verts, (float)p0[0], (float)p0[1], (float)p0[2], gc);
-            push_vertex(verts, (float)p1[0], (float)p1[1], (float)p1[2], gc);
+        // Axis lines through bounds_min: x=red, y=green, z=blue.
+        for (int axis = 0; axis < 3; ++axis) {
+            double p0[3] = {bounds_min[0], bounds_min[1], bounds_min[2]};
+            double p1[3] = {p0[0], p0[1], p0[2]};
+            p1[axis] = bounds_max[axis];
+            push_vertex(verts, (float)p0[0], (float)p0[1], (float)p0[2], axis_colors[axis]);
+            push_vertex(verts, (float)p1[0], (float)p1[1], (float)p1[2], axis_colors[axis]);
             indices.push_back(idx);
             indices.push_back(idx + 1);
             idx += 2;
         }
-    }
 
-    // Axis lines through bounds_min: x=red, y=green, z=blue.
-    for (int axis = 0; axis < 3; ++axis) {
-        double p0[3] = {bounds_min[0], bounds_min[1], bounds_min[2]};
-        double p1[3] = {p0[0], p0[1], p0[2]};
-        p1[axis] = bounds_max[axis];
-        push_vertex(verts, (float)p0[0], (float)p0[1], (float)p0[2], axis_colors[axis]);
-        push_vertex(verts, (float)p1[0], (float)p1[1], (float)p1[2], axis_colors[axis]);
-        indices.push_back(idx);
-        indices.push_back(idx + 1);
-        idx += 2;
-    }
-
-    if (!verts.empty()) {
-        grid_mesh_ = make_mesh_(device, verts, indices,
-                                tgfx::PrimitiveTopology::LineList);
-    }
-}
-
-void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device,
-                                       const SurfaceSeries& surf) {
-    const uint32_t rows = surf.rows;
-    const uint32_t cols = surf.cols;
-    if (rows < 2 || cols < 2) return;
-
-    const Color4 surface_color = surf.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
-    const float alpha = surface_color.a;
-
-    const Color4 grid_color =
-        surf.grid_color.value_or(Color4{0.05f, 0.05f, 0.05f, 1.0f});
-    const float row_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_row_step));
-    const float col_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_col_step));
-    const float grid_width_px = std::max(surf.grid_width_px, 0.1f);
-
-    std::vector<float> verts;
-    verts.reserve((size_t)rows * cols * kFloatsPerVertex);
-    for (uint32_t j = 0; j < rows; ++j) {
-        for (uint32_t i = 0; i < cols; ++i) {
-            const size_t idx = (size_t)j * cols + i;
-            const double x = surf.X[idx];
-            const double y = surf.Y[idx];
-            const double z = surf.Z[idx];
-            SurfaceVertexData vertex;
-            vertex.x = static_cast<float>(x);
-            vertex.y = static_cast<float>(y);
-            vertex.z = static_cast<float>(z);
-            vertex.color = {surface_color.r, surface_color.g, surface_color.b, alpha};
-            vertex.grid.col = static_cast<float>(i);
-            vertex.grid.row = static_cast<float>(j);
-            vertex.grid.row_step = row_step;
-            vertex.grid.col_step = col_step;
-            vertex.grid.color = grid_color;
-            vertex.grid.visible = surf.grid_visible;
-            vertex.grid.width_px = grid_width_px;
-            vertex.grid.max_col = static_cast<float>(cols - 1);
-            vertex.grid.max_row = static_cast<float>(rows - 1);
-            push_surface_vertex(verts, vertex);
+        if (!verts.empty()) {
+            grid_mesh_ = make_mesh_(device, verts, indices, tgfx::PrimitiveTopology::LineList);
         }
     }
 
-    std::vector<uint32_t> tri_indices;
-    tri_indices.reserve((size_t)(rows - 1) * (cols - 1) * 6);
-    for (uint32_t j = 0; j + 1 < rows; ++j) {
-        for (uint32_t i = 0; i + 1 < cols; ++i) {
-            const uint32_t v00 = j * cols + i;
-            const uint32_t v10 = j * cols + i + 1;
-            const uint32_t v01 = (j + 1) * cols + i;
-            const uint32_t v11 = (j + 1) * cols + i + 1;
-            tri_indices.push_back(v00);
-            tri_indices.push_back(v10);
-            tri_indices.push_back(v01);
-            tri_indices.push_back(v10);
-            tri_indices.push_back(v11);
-            tri_indices.push_back(v01);
+    void PlotEngine3D::build_surface_mesh_(tgfx::IRenderDevice& device, const SurfaceSeries& surf) {
+        const uint32_t rows = surf.rows;
+        const uint32_t cols = surf.cols;
+        if (rows < 2 || cols < 2)
+            return;
+
+        const Color4 surface_color = surf.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
+        const float alpha = surface_color.a;
+
+        const Color4 grid_color = surf.grid_color.value_or(Color4{0.05f, 0.05f, 0.05f, 1.0f});
+        const float row_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_row_step));
+        const float col_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_col_step));
+        const float grid_width_px = std::max(surf.grid_width_px, 0.1f);
+
+        std::vector<float> verts;
+        verts.reserve((size_t)rows * cols * kFloatsPerVertex);
+        for (uint32_t j = 0; j < rows; ++j) {
+            for (uint32_t i = 0; i < cols; ++i) {
+                const size_t idx = (size_t)j * cols + i;
+                const double x = surf.X[idx];
+                const double y = surf.Y[idx];
+                const double z = surf.Z[idx];
+                SurfaceVertexData vertex;
+                vertex.x = static_cast<float>(x);
+                vertex.y = static_cast<float>(y);
+                vertex.z = static_cast<float>(z);
+                vertex.color = {surface_color.r, surface_color.g, surface_color.b, alpha};
+                vertex.grid.col = static_cast<float>(i);
+                vertex.grid.row = static_cast<float>(j);
+                vertex.grid.row_step = row_step;
+                vertex.grid.col_step = col_step;
+                vertex.grid.color = grid_color;
+                vertex.grid.visible = surf.grid_visible;
+                vertex.grid.width_px = grid_width_px;
+                vertex.grid.max_col = static_cast<float>(cols - 1);
+                vertex.grid.max_row = static_cast<float>(rows - 1);
+                push_surface_vertex(verts, vertex);
+            }
         }
-    }
 
-    if (surf.wireframe) {
-        std::vector<uint32_t> wire_indices;
-        wire_indices.reserve(tri_indices.size() * 2);
-        for (size_t k = 0; k + 2 < tri_indices.size(); k += 3) {
-            const uint32_t a = tri_indices[k];
-            const uint32_t b = tri_indices[k + 1];
-            const uint32_t c = tri_indices[k + 2];
-            wire_indices.push_back(a); wire_indices.push_back(b);
-            wire_indices.push_back(b); wire_indices.push_back(c);
-            wire_indices.push_back(c); wire_indices.push_back(a);
+        std::vector<uint32_t> tri_indices;
+        tri_indices.reserve((size_t)(rows - 1) * (cols - 1) * 6);
+        for (uint32_t j = 0; j + 1 < rows; ++j) {
+            for (uint32_t i = 0; i + 1 < cols; ++i) {
+                const uint32_t v00 = j * cols + i;
+                const uint32_t v10 = j * cols + i + 1;
+                const uint32_t v01 = (j + 1) * cols + i;
+                const uint32_t v11 = (j + 1) * cols + i + 1;
+                tri_indices.push_back(v00);
+                tri_indices.push_back(v10);
+                tri_indices.push_back(v01);
+                tri_indices.push_back(v10);
+                tri_indices.push_back(v11);
+                tri_indices.push_back(v01);
+            }
         }
-        auto mesh = make_mesh_(device, verts, wire_indices,
-                               tgfx::PrimitiveTopology::LineList);
-        if (mesh.has_value()) wireframe_meshes_.push_back(std::move(*mesh));
-    } else {
-        auto mesh = make_mesh_(device, verts, tri_indices,
-                               tgfx::PrimitiveTopology::TriangleList);
-        if (mesh.has_value()) {
-            surface_meshes_.push_back(std::move(*mesh));
-            surface_mesh_styles_.push_back(surf);
-        }
-    }
-}
 
-// ---------------------------------------------------------------------------
-// MVP / rendering
-// ---------------------------------------------------------------------------
-
-void PlotEngine3D::compute_mvp_(float aspect,
-                                float out16[16],
-                                bool apply_axis_scale) const {
-    const termin::Mat44f mvp = camera.projection_matrix(aspect) * camera.view_matrix();
-
-    std::memcpy(out16, mvp.data, sizeof(mvp.data));
-    if (!apply_axis_scale ||
-        (std::abs(x_scale - 1.0f) < 1e-6f &&
-         std::abs(y_scale - 1.0f) < 1e-6f &&
-         std::abs(z_scale - 1.0f) < 1e-6f)) {
-        return;
-    }
-
-    // Post-multiply by diag(x_scale, y_scale, z_scale, 1). Data stays
-    // in original units; only the view transform changes.
-    for (int r = 0; r < 4; ++r) {
-        out16[0 * 4 + r] *= x_scale;
-        out16[1 * 4 + r] *= y_scale;
-        out16[2 * 4 + r] *= z_scale;
-    }
-}
-
-void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
-    if (!ctx || vw_ <= 0 || vh_ <= 0) return;
-
-    ensure_shader_(ctx->device());
-    if (shader_vs_id_ == 0 || shader_fs_id_ == 0) {
-        return;
-    }
-    if (mesh_device_ != nullptr && mesh_device_ != &ctx->device()) {
-        release_meshes_();
-        dirty_ = true;
-    }
-    if (dirty_) rebuild_meshes_(ctx->device());
-
-    // RenderContext2 is shared by hosts that may draw 2D tcplot panels
-    // immediately before this 3D view. Canvas2DRenderer intentionally
-    // leaves depth writes disabled, so 3D must establish the full depth
-    // state, not just depth-test, before drawing surfaces.
-    ctx->set_depth_test(true);
-    ctx->set_depth_write(true);
-    ctx->set_depth_func(tgfx::CompareOp::Less);
-    ctx->set_blend(true);
-    ctx->set_cull(tgfx::CullMode::None);
-    ctx->clear_scissor();
-
-    const float aspect = vw_ / std::max(vh_, 1.0f);
-    float mvp[16];
-    compute_mvp_(aspect, mvp, true);
-
-    tgfx::ShaderHandle vs; vs.id = shader_vs_id_;
-    tgfx::ShaderHandle fs; fs.id = shader_fs_id_;
-    tc_shader* plot_raw = tc_shader_get(tcplot3d_shader_handle());
-    ctx->bind_shader(vs, fs);
-    ctx->use_shader_resource_layout(plot_raw);
-
-    double lo[3], hi[3];
-    data.data_bounds_3d(lo, hi);
-    const float z_min = static_cast<float>(lo[2]);
-    const float z_max = static_cast<float>(hi[2]);
-
-    // Grid (no jet).
-    bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
-    if (grid_mesh_) draw_mesh_(*ctx, *grid_mesh_);
-
-    // Opaque surfaces. Color mapping is shader-driven to avoid baking
-    // colormap transitions into mesh vertex colors.
-    ctx->set_blend(false);
-    if (show_series) {
-        for (size_t i = 0; i < surface_meshes_.size(); ++i) {
-            const SurfaceSeries& style = surface_mesh_styles_[i];
-            const Color4 surface_color =
-                style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
-            Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
-            surface_params.colormap = style.colormap;
-            surface_params.colormap_reversed = style.colormap_reversed;
-            surface_params.surface_color = surface_color;
-            bind_plot3d_draw_data(*ctx, *this, surface_params);
-            draw_mesh_(*ctx, surface_meshes_[i]);
-        }
-    }
-
-    // Wireframes on top (no depth, no jet).
-    bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
-    if (show_series && show_wireframe) {
-        ctx->set_depth_test(false);
-        ctx->set_blend(true);
-        for (auto& m : wireframe_meshes_) {
-            draw_mesh_(*ctx, m);
-        }
-        ctx->set_depth_test(true);
-    }
-
-    // Lines and scatter.
-    if (show_series && lines_mesh_) draw_mesh_(*ctx, *lines_mesh_);
-    if (show_series && scatter_mesh_) draw_mesh_(*ctx, *scatter_mesh_);
-
-    // Marker (immediate mode cross at marker pos).
-    if (has_marker_ && marker_mode) {
-        tgfx::ShaderHandle imm_vs{};
-        tgfx::ShaderHandle imm_fs{};
-        tc_shader* imm_raw = tc_shader_get(immediate_shader_handle());
-        if (!imm_raw || !termin::tc_shader_ensure_tgfx2(imm_raw, &ctx->device(), &imm_vs, &imm_fs)) {
-            tc::Log::error("PlotEngine3D: failed to prepare builtin shader %s", IMMEDIATE_ENGINE_SHADER_UUID);
+        if (surf.wireframe) {
+            std::vector<uint32_t> wire_indices;
+            wire_indices.reserve(tri_indices.size() * 2);
+            for (size_t k = 0; k + 2 < tri_indices.size(); k += 3) {
+                const uint32_t a = tri_indices[k];
+                const uint32_t b = tri_indices[k + 1];
+                const uint32_t c = tri_indices[k + 2];
+                wire_indices.push_back(a);
+                wire_indices.push_back(b);
+                wire_indices.push_back(b);
+                wire_indices.push_back(c);
+                wire_indices.push_back(c);
+                wire_indices.push_back(a);
+            }
+            auto mesh = make_mesh_(device, verts, wire_indices, tgfx::PrimitiveTopology::LineList);
+            if (mesh.has_value())
+                wireframe_meshes_.push_back(std::move(*mesh));
         } else {
-            ctx->bind_shader(imm_vs, imm_fs);
-            ctx->use_shader_resource_layout(imm_raw);
-            struct ImmediatePushData { float mvp[16]; } imm_push{};
-            std::memcpy(imm_push.mvp, mvp, sizeof(imm_push.mvp));
-            ctx->bind_uniform_data("u_push", &imm_push, static_cast<uint32_t>(sizeof(imm_push)));
-            ctx->set_depth_test(false);
+            auto mesh = make_mesh_(device, verts, tri_indices, tgfx::PrimitiveTopology::TriangleList);
+            if (mesh.has_value()) {
+                surface_meshes_.push_back(std::move(*mesh));
+                surface_mesh_styles_.push_back(surf);
+            }
+        }
+    }
 
+    // ---------------------------------------------------------------------------
+    // MVP / rendering
+    // ---------------------------------------------------------------------------
+
+    void PlotEngine3D::compute_mvp_(float aspect, float out16[16], bool apply_axis_scale) const {
+        const termin::Mat44f mvp = camera.projection_matrix(aspect) * camera.view_matrix();
+
+        std::memcpy(out16, mvp.data, sizeof(mvp.data));
+        if (!apply_axis_scale || (std::abs(x_scale - 1.0f) < 1e-6f && std::abs(y_scale - 1.0f) < 1e-6f &&
+                                  std::abs(z_scale - 1.0f) < 1e-6f)) {
+            return;
+        }
+
+        // Post-multiply by diag(x_scale, y_scale, z_scale, 1). Data stays
+        // in original units; only the view transform changes.
+        for (int r = 0; r < 4; ++r) {
+            out16[0 * 4 + r] *= x_scale;
+            out16[1 * 4 + r] *= y_scale;
+            out16[2 * 4 + r] *= z_scale;
+        }
+    }
+
+    void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
+        if (!ctx || vw_ <= 0 || vh_ <= 0)
+            return;
+
+        ensure_shader_(ctx->device());
+        if (shader_vs_id_ == 0 || shader_fs_id_ == 0) {
+            return;
+        }
+        if (mesh_device_ != nullptr && mesh_device_ != &ctx->device()) {
+            release_meshes_();
+            dirty_ = true;
+        }
+        if (dirty_)
+            rebuild_meshes_(ctx->device());
+
+        // RenderContext2 is shared by hosts that may draw 2D tcplot panels
+        // immediately before this 3D view. Canvas2DRenderer intentionally
+        // leaves depth writes disabled, so 3D must establish the full depth
+        // state, not just depth-test, before drawing surfaces.
+        ctx->set_depth_test(true);
+        ctx->set_depth_write(true);
+        ctx->set_depth_func(tgfx::CompareOp::Less);
+        ctx->set_blend(true);
+        ctx->set_cull(tgfx::CullMode::None);
+        ctx->clear_scissor();
+
+        const float aspect = vw_ / std::max(vh_, 1.0f);
+        float mvp[16];
+        compute_mvp_(aspect, mvp, true);
+
+        tgfx::ShaderHandle vs;
+        vs.id = shader_vs_id_;
+        tgfx::ShaderHandle fs;
+        fs.id = shader_fs_id_;
+        tc_shader* plot_raw = tc_shader_get(tcplot3d_shader_handle());
+        ctx->bind_shader(vs, fs);
+        ctx->use_shader_resource_layout(plot_raw);
+
+        double lo[3], hi[3];
+        data.data_bounds_3d(lo, hi);
+        const float z_min = static_cast<float>(lo[2]);
+        const float z_max = static_cast<float>(hi[2]);
+
+        // Grid (no jet).
+        bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
+        if (grid_mesh_)
+            draw_mesh_(*ctx, *grid_mesh_);
+
+        // Opaque surfaces. Color mapping is shader-driven to avoid baking
+        // colormap transitions into mesh vertex colors.
+        ctx->set_blend(false);
+        if (show_series) {
+            for (size_t i = 0; i < surface_meshes_.size(); ++i) {
+                const SurfaceSeries& style = surface_mesh_styles_[i];
+                const Color4 surface_color = style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
+                Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
+                surface_params.colormap = style.colormap;
+                surface_params.colormap_reversed = style.colormap_reversed;
+                surface_params.surface_color = surface_color;
+                bind_plot3d_draw_data(*ctx, *this, surface_params);
+                draw_mesh_(*ctx, surface_meshes_[i]);
+            }
+        }
+
+        // Wireframes on top (no depth, no jet).
+        bind_plot3d_draw_data(*ctx, *this, {mvp, z_min, z_max, false});
+        if (show_series && show_wireframe) {
+            ctx->set_depth_test(false);
+            ctx->set_blend(true);
+            for (auto& m : wireframe_meshes_) {
+                draw_mesh_(*ctx, m);
+            }
+            ctx->set_depth_test(true);
+        }
+
+        // Lines and scatter.
+        if (show_series && lines_mesh_)
+            draw_mesh_(*ctx, *lines_mesh_);
+        if (show_series && scatter_mesh_)
+            draw_mesh_(*ctx, *scatter_mesh_);
+
+        // Marker (immediate mode cross at marker pos).
+        if (has_marker_ && marker_mode) {
+            tgfx::ShaderHandle imm_vs{};
+            tgfx::ShaderHandle imm_fs{};
+            tc_shader* imm_raw = tc_shader_get(immediate_shader_handle());
+            if (!imm_raw || !termin::tc_shader_ensure_tgfx2(imm_raw, &ctx->device(), &imm_vs, &imm_fs)) {
+                tc::Log::error("PlotEngine3D: failed to prepare builtin shader %s", IMMEDIATE_ENGINE_SHADER_UUID);
+            } else {
+                ctx->bind_shader(imm_vs, imm_fs);
+                ctx->use_shader_resource_layout(imm_raw);
+                struct ImmediatePushData {
+                    float mvp[16];
+                } imm_push{};
+                std::memcpy(imm_push.mvp, mvp, sizeof(imm_push.mvp));
+                ctx->bind_uniform_data("u_push", &imm_push, static_cast<uint32_t>(sizeof(imm_push)));
+                ctx->set_depth_test(false);
+
+                const double dx = (hi[0] - lo[0]) * x_scale;
+                const double dy = (hi[1] - lo[1]) * y_scale;
+                const double dz = (hi[2] - lo[2]) * z_scale;
+                const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
+                const float cs = (float)(data_size * 0.015);
+                const Color4 c{1.0f, 1.0f, 0.0f, 1.0f};
+                std::vector<float> verts;
+                const float px = (float)marker_x_;
+                const float py = (float)marker_y_;
+                const float pz = (float)marker_z_;
+                struct Axis {
+                    float dx, dy, dz;
+                };
+                const Axis axes_[] = {{cs, 0, 0}, {0, cs, 0}, {0, 0, cs}};
+                auto push_immediate_vertex = [&](float x, float y, float z) {
+                    verts.push_back(x);
+                    verts.push_back(y);
+                    verts.push_back(z);
+                    verts.push_back(c.r);
+                    verts.push_back(c.g);
+                    verts.push_back(c.b);
+                    verts.push_back(c.a);
+                };
+                for (const auto& a : axes_) {
+                    push_immediate_vertex(px - a.dx, py - a.dy, pz - a.dz);
+                    push_immediate_vertex(px + a.dx, py + a.dy, pz + a.dz);
+                }
+                ctx->draw_immediate_lines(verts.data(), (uint32_t)(verts.size() / 7));
+                ctx->set_depth_test(true);
+            }
+        }
+        // Tick labels + marker value label via Text3D.
+        if (font && show_labels) {
+            float view[16];
+            camera.view_matrix(view);
+            // view is column-major 4x4. Row 0: world-space camera-right;
+            // Row 1: world-space camera-up. Same extraction as in Python.
+            const termin::Vec3f cr{view[0 * 4 + 0], view[1 * 4 + 0], view[2 * 4 + 0]};
+            const termin::Vec3f cu{view[0 * 4 + 1], view[1 * 4 + 1], view[2 * 4 + 1]};
+
+            // For Text3D we pass the UNSCALED camera MVP: label positions
+            // already have z_scale baked into their world-Z (see pos[2]
+            // below). If we used the z_scaled mvp here, z would be
+            // multiplied twice and — worse — the billboard quad's offset
+            // through u_cam_up / u_cam_right would get stretched by z_scale
+            // whenever cam_up has any world-Z component.
+            float label_mvp[16];
+            compute_mvp_(aspect, label_mvp, false);
+
+            // Tick/axis labels are an annotation layer, not plot geometry.
+            // Keep them readable even when surfaces have already populated depth.
+            text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
+            ctx->set_depth_test(false);
+            ctx->set_blend(true);
+            text3d_->begin(ctx, label_mvp, cr, cu, font);
+
+            const Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
             const double dx = (hi[0] - lo[0]) * x_scale;
             const double dy = (hi[1] - lo[1]) * y_scale;
             const double dz = (hi[2] - lo[2]) * z_scale;
             const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
-            const float cs = (float)(data_size * 0.015);
-            const Color4 c{1.0f, 1.0f, 0.0f, 1.0f};
-            std::vector<float> verts;
-            const float px = (float)marker_x_;
-            const float py = (float)marker_y_;
-            const float pz = (float)marker_z_;
-            struct Axis { float dx, dy, dz; };
-            const Axis axes_[] = {{cs, 0, 0}, {0, cs, 0}, {0, 0, cs}};
-            auto push_immediate_vertex = [&](float x, float y, float z) {
-                verts.push_back(x);
-                verts.push_back(y);
-                verts.push_back(z);
-                verts.push_back(c.r);
-                verts.push_back(c.g);
-                verts.push_back(c.b);
-                verts.push_back(c.a);
-            };
-            for (const auto& a : axes_) {
-                push_immediate_vertex(px - a.dx, py - a.dy, pz - a.dz);
-                push_immediate_vertex(px + a.dx, py + a.dy, pz + a.dz);
+            const float tick_text_size_px = 14.0f;
+            const float axis_label_size_px = 16.0f;
+            const float marker_text_size_px = 14.0f;
+            const double offset = data_size * 0.03;
+
+            for (int axis = 0; axis < 3; ++axis) {
+                const double axis_lo = lo[axis];
+                const double axis_hi = hi[axis];
+                const std::vector<double> ticks = axes::nice_ticks(axis_lo, axis_hi, 6);
+                for (double t : ticks) {
+                    termin::Vec3f pos{
+                        (float)(lo[0] * x_scale),
+                        (float)(lo[1] * y_scale),
+                        (float)(lo[2] * z_scale),
+                    };
+                    if (axis == 2) {
+                        pos[axis] = (float)(t * z_scale);
+                    } else if (axis == 1) {
+                        pos[axis] = (float)(t * y_scale);
+                    } else {
+                        pos[axis] = (float)(t * x_scale);
+                    }
+                    // Offset label away from plot volume.
+                    if (axis == 0)
+                        pos[1] -= (float)offset; // X axis: offset in -Y
+                    else if (axis == 1)
+                        pos[0] -= (float)offset; // Y axis: offset in -X
+                    else
+                        pos[0] -= (float)offset; // Z axis: offset in -X
+
+                    text3d_->draw(axes::format_tick(t),
+                                  tgfx::Text3DRenderer::DrawOptions{
+                                      pos,
+                                      termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                                      tick_text_size_px,
+                                      tgfx::Text3DRenderer::Anchor::Center});
+                }
             }
-            ctx->draw_immediate_lines(verts.data(),
-                                      (uint32_t)(verts.size() / 7));
-            ctx->set_depth_test(true);
-        }
-    }
-    // Tick labels + marker value label via Text3D.
-    if (font && show_labels) {
-        float view[16];
-        camera.view_matrix(view);
-        // view is column-major 4x4. Row 0: world-space camera-right;
-        // Row 1: world-space camera-up. Same extraction as in Python.
-        const termin::Vec3f cr{view[0 * 4 + 0], view[1 * 4 + 0], view[2 * 4 + 0]};
-        const termin::Vec3f cu{view[0 * 4 + 1], view[1 * 4 + 1], view[2 * 4 + 1]};
 
-        // For Text3D we pass the UNSCALED camera MVP: label positions
-        // already have z_scale baked into their world-Z (see pos[2]
-        // below). If we used the z_scaled mvp here, z would be
-        // multiplied twice and — worse — the billboard quad's offset
-        // through u_cam_up / u_cam_right would get stretched by z_scale
-        // whenever cam_up has any world-Z component.
-        float label_mvp[16];
-        compute_mvp_(aspect, label_mvp, false);
+            const std::string* axis_labels[3] = {
+                &data.x_label,
+                &data.y_label,
+                &data.z_label,
+            };
+            const float label_size = axis_label_size_px;
+            for (int axis = 0; axis < 3; ++axis) {
+                if (axis_labels[axis]->empty())
+                    continue;
 
-        // Tick/axis labels are an annotation layer, not plot geometry.
-        // Keep them readable even when surfaces have already populated depth.
-        text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
-        ctx->set_depth_test(false);
-        ctx->set_blend(true);
-        text3d_->begin(ctx, label_mvp, cr, cu, font);
-
-        const Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
-        const double dx = (hi[0] - lo[0]) * x_scale;
-        const double dy = (hi[1] - lo[1]) * y_scale;
-        const double dz = (hi[2] - lo[2]) * z_scale;
-        const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
-        const float tick_text_size_px = 14.0f;
-        const float axis_label_size_px = 16.0f;
-        const float marker_text_size_px = 14.0f;
-        const double offset = data_size * 0.03;
-
-        for (int axis = 0; axis < 3; ++axis) {
-            const double axis_lo = lo[axis];
-            const double axis_hi = hi[axis];
-            const std::vector<double> ticks = axes::nice_ticks(axis_lo, axis_hi, 6);
-            for (double t : ticks) {
                 termin::Vec3f pos{
                     (float)(lo[0] * x_scale),
                     (float)(lo[1] * y_scale),
                     (float)(lo[2] * z_scale),
                 };
-                if (axis == 2) {
-                    pos[axis] = (float)(t * z_scale);
+                if (axis == 0) {
+                    pos[0] = (float)(hi[0] * x_scale);
+                    pos[1] -= (float)(offset * 1.9);
                 } else if (axis == 1) {
-                    pos[axis] = (float)(t * y_scale);
+                    pos[1] = (float)(hi[1] * y_scale);
+                    pos[0] -= (float)(offset * 1.9);
                 } else {
-                    pos[axis] = (float)(t * x_scale);
+                    pos[2] = (float)(hi[2] * z_scale);
+                    pos[0] -= (float)(offset * 1.9);
                 }
-                // Offset label away from plot volume.
-                if (axis == 0) pos[1] -= (float)offset;  // X axis: offset in -Y
-                else if (axis == 1) pos[0] -= (float)offset;  // Y axis: offset in -X
-                else pos[0] -= (float)offset;                 // Z axis: offset in -X
 
-                text3d_->draw(axes::format_tick(t), tgfx::Text3DRenderer::DrawOptions{
-                    pos,
-                    termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
-                    tick_text_size_px,
-                    tgfx::Text3DRenderer::Anchor::Center
-                });
+                text3d_->draw(*axis_labels[axis],
+                              tgfx::Text3DRenderer::DrawOptions{
+                                  pos,
+                                  termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                                  label_size,
+                                  tgfx::Text3DRenderer::Anchor::Center});
             }
-        }
-
-        const std::string* axis_labels[3] = {
-            &data.x_label,
-            &data.y_label,
-            &data.z_label,
-        };
-        const float label_size = axis_label_size_px;
-        for (int axis = 0; axis < 3; ++axis) {
-            if (axis_labels[axis]->empty()) continue;
-
-            termin::Vec3f pos{
-                (float)(lo[0] * x_scale),
-                (float)(lo[1] * y_scale),
-                (float)(lo[2] * z_scale),
-            };
-            if (axis == 0) {
-                pos[0] = (float)(hi[0] * x_scale);
-                pos[1] -= (float)(offset * 1.9);
-            } else if (axis == 1) {
-                pos[1] = (float)(hi[1] * y_scale);
-                pos[0] -= (float)(offset * 1.9);
-            } else {
-                pos[2] = (float)(hi[2] * z_scale);
-                pos[0] -= (float)(offset * 1.9);
-            }
-
-            text3d_->draw(*axis_labels[axis], tgfx::Text3DRenderer::DrawOptions{
-                pos,
-                termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
-                label_size,
-                tgfx::Text3DRenderer::Anchor::Center
-            });
-        }
-        text3d_->end();
-
-        // Marker value label (always on top).
-        if (has_marker_ && marker_mode) {
-            ctx->set_depth_test(false);
-            text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
-            text3d_->begin(ctx, label_mvp, cr, cu, font);
-            char label_buf[64];
-            std::snprintf(label_buf, sizeof(label_buf),
-                          "(%.3g, %.3g, %.3g)",
-                          marker_x_, marker_y_, marker_z_);
-            const termin::Vec3f pos{
-                (float)(marker_x_ * x_scale),
-                (float)(marker_y_ * y_scale),
-                (float)(marker_z_ * z_scale + data_size * 0.04),
-            };
-            text3d_->draw(label_buf, tgfx::Text3DRenderer::DrawOptions{
-                pos,
-                termin::Color4{1.0f, 1.0f, 0.0f, 1.0f},
-                marker_text_size_px,
-                tgfx::Text3DRenderer::Anchor::Center
-            });
             text3d_->end();
-            ctx->set_depth_test(true);
-        }
-    }
 
-    // Restore 2D state for subsequent UI rendering.
-    ctx->set_depth_test(false);
-    ctx->set_depth_write(false);
-}
-
-// ---------------------------------------------------------------------------
-// Picking (direct loop, no numpy vectorisation)
-// ---------------------------------------------------------------------------
-
-std::optional<PickResult3D> PlotEngine3D::pick(float mx, float my) const {
-    const float aspect = vw_ / std::max(vh_, 1.0f);
-    float mvp[16];
-    compute_mvp_(aspect, mvp, true);
-
-    // Collect all data points (lines + scatter + surface grid) into one
-    // flat buffer — allocate once then iterate.
-    struct Pt { double x, y, z; };
-    std::vector<Pt> pts;
-    pts.reserve(128);
-    for (const auto& s : data.lines) {
-        if (s.z.empty()) continue;
-        for (size_t i = 0; i < s.x.size(); i++) {
-            pts.push_back({s.x[i], s.y[i], s.z[i]});
-        }
-    }
-    for (const auto& s : data.scatters) {
-        if (s.z.empty()) continue;
-        for (size_t i = 0; i < s.x.size(); i++) {
-            pts.push_back({s.x[i], s.y[i], s.z[i]});
-        }
-    }
-    for (const auto& s : data.surfaces) {
-        for (size_t i = 0; i < s.X.size(); i++) {
-            pts.push_back({s.X[i], s.Y[i], s.Z[i]});
-        }
-    }
-
-    if (pts.empty()) return std::nullopt;
-
-    // Project each point, compute screen distance, keep the closest
-    // within a threshold — same thresholds as Python.
-    constexpr double kNearThresh = 30.0;  // px
-    constexpr double kFarLimit = 50.0;    // px
-
-    double best_dist = std::numeric_limits<double>::infinity();
-    double best_depth = std::numeric_limits<double>::infinity();
-    size_t best_idx = 0;
-    size_t fallback_idx = 0;
-    double fallback_dist = std::numeric_limits<double>::infinity();
-    bool any_candidate = false;
-
-    for (size_t i = 0; i < pts.size(); i++) {
-        const double px = pts[i].x;
-        const double py = pts[i].y;
-        const double pz = pts[i].z;
-        // mvp * (px, py, pz, 1) — column-major 4x4 * 4-vec.
-        const double clip_x = mvp[0] * px + mvp[4] * py + mvp[8] * pz + mvp[12];
-        const double clip_y = mvp[1] * px + mvp[5] * py + mvp[9] * pz + mvp[13];
-        const double clip_z = mvp[2] * px + mvp[6] * py + mvp[10] * pz + mvp[14];
-        const double clip_w = mvp[3] * px + mvp[7] * py + mvp[11] * pz + mvp[15];
-
-        if (clip_w <= 0.001) continue;
-        const double ndc_x = clip_x / clip_w;
-        const double ndc_y = clip_y / clip_w;
-        const double ndc_z = clip_z / clip_w;
-
-        // NDC → viewport pixel. Clip-space Y points down (Vulkan-native;
-        // OpenGL matches via glClipControl(GL_UPPER_LEFT)), so pixel_y
-        // grows together with ndc_y — no sign flip here.
-        const double spx = vx_ + (ndc_x * 0.5 + 0.5) * vw_;
-        const double spy = vy_ + (ndc_y * 0.5 + 0.5) * vh_;
-        const double d = std::sqrt((spx - mx) * (spx - mx) + (spy - my) * (spy - my));
-
-        if (d < fallback_dist) {
-            fallback_dist = d;
-            fallback_idx = i;
-        }
-        if (d < kNearThresh) {
-            any_candidate = true;
-            if (ndc_z < best_depth) {
-                best_depth = ndc_z;
-                best_dist = d;
-                best_idx = i;
+            // Marker value label (always on top).
+            if (has_marker_ && marker_mode) {
+                ctx->set_depth_test(false);
+                text3d_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
+                text3d_->begin(ctx, label_mvp, cr, cu, font);
+                char label_buf[64];
+                std::snprintf(label_buf, sizeof(label_buf), "(%.3g, %.3g, %.3g)", marker_x_, marker_y_, marker_z_);
+                const termin::Vec3f pos{
+                    (float)(marker_x_ * x_scale),
+                    (float)(marker_y_ * y_scale),
+                    (float)(marker_z_ * z_scale + data_size * 0.04),
+                };
+                text3d_->draw(label_buf,
+                              tgfx::Text3DRenderer::DrawOptions{pos,
+                                                                termin::Color4{1.0f, 1.0f, 0.0f, 1.0f},
+                                                                marker_text_size_px,
+                                                                tgfx::Text3DRenderer::Anchor::Center});
+                text3d_->end();
+                ctx->set_depth_test(true);
             }
         }
+
+        // Restore 2D state for subsequent UI rendering.
+        ctx->set_depth_test(false);
+        ctx->set_depth_write(false);
     }
 
-    if (any_candidate) {
-        return PickResult3D{pts[best_idx].x, pts[best_idx].y, pts[best_idx].z,
-                            best_dist};
-    }
-    if (fallback_dist > kFarLimit) return std::nullopt;
-    return PickResult3D{pts[fallback_idx].x, pts[fallback_idx].y, pts[fallback_idx].z,
-                        fallback_dist};
-}
+    // ---------------------------------------------------------------------------
+    // Picking (direct loop, no numpy vectorisation)
+    // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Input
-// ---------------------------------------------------------------------------
+    std::optional<PickResult3D> PlotEngine3D::pick(float mx, float my) const {
+        const float aspect = vw_ / std::max(vh_, 1.0f);
+        float mvp[16];
+        compute_mvp_(aspect, mvp, true);
 
-bool PlotEngine3D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
-    if (button == tcbase::MouseButton::RIGHT) {
-        auto res = pick(x, y);
-        if (res) {
-            std::cout << "[Pick] x=" << res->x << "  y=" << res->y
-                      << "  z=" << res->z
-                      << "  (dist=" << res->screen_dist_px << "px)\n";
-        } else {
-            std::cout << "[Pick] no point nearby\n";
+        // Collect all data points (lines + scatter + surface grid) into one
+        // flat buffer — allocate once then iterate.
+        struct Pt {
+            double x, y, z;
+        };
+        std::vector<Pt> pts;
+        pts.reserve(128);
+        for (const auto& s : data.lines) {
+            if (s.z.empty())
+                continue;
+            for (size_t i = 0; i < s.x.size(); i++) {
+                pts.push_back({s.x[i], s.y[i], s.z[i]});
+            }
         }
-        return true;
+        for (const auto& s : data.scatters) {
+            if (s.z.empty())
+                continue;
+            for (size_t i = 0; i < s.x.size(); i++) {
+                pts.push_back({s.x[i], s.y[i], s.z[i]});
+            }
+        }
+        for (const auto& s : data.surfaces) {
+            for (size_t i = 0; i < s.X.size(); i++) {
+                pts.push_back({s.X[i], s.Y[i], s.Z[i]});
+            }
+        }
+
+        if (pts.empty())
+            return std::nullopt;
+
+        // Project each point, compute screen distance, keep the closest
+        // within a threshold — same thresholds as Python.
+        constexpr double kNearThresh = 30.0; // px
+        constexpr double kFarLimit = 50.0;   // px
+
+        double best_dist = std::numeric_limits<double>::infinity();
+        double best_depth = std::numeric_limits<double>::infinity();
+        size_t best_idx = 0;
+        size_t fallback_idx = 0;
+        double fallback_dist = std::numeric_limits<double>::infinity();
+        bool any_candidate = false;
+
+        for (size_t i = 0; i < pts.size(); i++) {
+            const double px = pts[i].x;
+            const double py = pts[i].y;
+            const double pz = pts[i].z;
+            // mvp * (px, py, pz, 1) — column-major 4x4 * 4-vec.
+            const double clip_x = mvp[0] * px + mvp[4] * py + mvp[8] * pz + mvp[12];
+            const double clip_y = mvp[1] * px + mvp[5] * py + mvp[9] * pz + mvp[13];
+            const double clip_z = mvp[2] * px + mvp[6] * py + mvp[10] * pz + mvp[14];
+            const double clip_w = mvp[3] * px + mvp[7] * py + mvp[11] * pz + mvp[15];
+
+            if (clip_w <= 0.001)
+                continue;
+            const double ndc_x = clip_x / clip_w;
+            const double ndc_y = clip_y / clip_w;
+            const double ndc_z = clip_z / clip_w;
+
+            // NDC → viewport pixel. Clip-space Y points down (Vulkan-native;
+            // OpenGL matches via glClipControl(GL_UPPER_LEFT)), so pixel_y
+            // grows together with ndc_y — no sign flip here.
+            const double spx = vx_ + (ndc_x * 0.5 + 0.5) * vw_;
+            const double spy = vy_ + (ndc_y * 0.5 + 0.5) * vh_;
+            const double d = std::sqrt((spx - mx) * (spx - mx) + (spy - my) * (spy - my));
+
+            if (d < fallback_dist) {
+                fallback_dist = d;
+                fallback_idx = i;
+            }
+            if (d < kNearThresh) {
+                any_candidate = true;
+                if (ndc_z < best_depth) {
+                    best_depth = ndc_z;
+                    best_dist = d;
+                    best_idx = i;
+                }
+            }
+        }
+
+        if (any_candidate) {
+            return PickResult3D{pts[best_idx].x, pts[best_idx].y, pts[best_idx].z, best_dist};
+        }
+        if (fallback_dist > kFarLimit)
+            return std::nullopt;
+        return PickResult3D{pts[fallback_idx].x, pts[fallback_idx].y, pts[fallback_idx].z, fallback_dist};
     }
-    if (button == tcbase::MouseButton::LEFT ||
-        button == tcbase::MouseButton::MIDDLE) {
-        dragging_ = true;
-        drag_button_ = button;
+
+    // ---------------------------------------------------------------------------
+    // Input
+    // ---------------------------------------------------------------------------
+
+    bool PlotEngine3D::on_mouse_down(float x, float y, tcbase::MouseButton button) {
+        if (button == tcbase::MouseButton::RIGHT) {
+            auto res = pick(x, y);
+            if (res) {
+                std::cout << "[Pick] x=" << res->x << "  y=" << res->y << "  z=" << res->z
+                          << "  (dist=" << res->screen_dist_px << "px)\n";
+            } else {
+                std::cout << "[Pick] no point nearby\n";
+            }
+            return true;
+        }
+        if (button == tcbase::MouseButton::LEFT || button == tcbase::MouseButton::MIDDLE) {
+            dragging_ = true;
+            drag_button_ = button;
+            drag_start_x_ = x;
+            drag_start_y_ = y;
+            return true;
+        }
+        return false;
+    }
+
+    void PlotEngine3D::on_mouse_move(float x, float y) {
+        if (marker_mode && !dragging_) {
+            auto res = pick(x, y);
+            if (res) {
+                has_marker_ = true;
+                marker_x_ = res->x;
+                marker_y_ = res->y;
+                marker_z_ = res->z;
+            } else {
+                has_marker_ = false;
+            }
+        }
+
+        if (!dragging_)
+            return;
+        const float dx = x - drag_start_x_;
+        const float dy = y - drag_start_y_;
         drag_start_x_ = x;
         drag_start_y_ = y;
-        return true;
-    }
-    return false;
-}
 
-void PlotEngine3D::on_mouse_move(float x, float y) {
-    if (marker_mode && !dragging_) {
-        auto res = pick(x, y);
-        if (res) {
-            has_marker_ = true;
-            marker_x_ = res->x;
-            marker_y_ = res->y;
-            marker_z_ = res->z;
-        } else {
-            has_marker_ = false;
+        if (drag_button_ == tcbase::MouseButton::LEFT) {
+            camera.orbit(-dx * 0.005f, dy * 0.005f);
+        } else if (drag_button_ == tcbase::MouseButton::MIDDLE) {
+            camera.pan(-dx, dy);
         }
     }
 
-    if (!dragging_) return;
-    const float dx = x - drag_start_x_;
-    const float dy = y - drag_start_y_;
-    drag_start_x_ = x;
-    drag_start_y_ = y;
-
-    if (drag_button_ == tcbase::MouseButton::LEFT) {
-        camera.orbit(-dx * 0.005f, dy * 0.005f);
-    } else if (drag_button_ == tcbase::MouseButton::MIDDLE) {
-        camera.pan(-dx, dy);
+    void PlotEngine3D::on_mouse_up(float /*x*/, float /*y*/, tcbase::MouseButton /*button*/) {
+        dragging_ = false;
     }
-}
 
-void PlotEngine3D::on_mouse_up(float /*x*/, float /*y*/,
-                                tcbase::MouseButton /*button*/) {
-    dragging_ = false;
-}
+    bool PlotEngine3D::on_mouse_wheel(float /*x*/, float /*y*/, float dy) {
+        const float factor = (dy > 0) ? 0.9f : 1.0f / 0.9f;
+        camera.zoom(factor);
+        return true;
+    }
 
-bool PlotEngine3D::on_mouse_wheel(float /*x*/, float /*y*/, float dy) {
-    const float factor = (dy > 0) ? 0.9f : 1.0f / 0.9f;
-    camera.zoom(factor);
-    return true;
-}
-
-}  // namespace tcplot
+} // namespace tcplot

@@ -15,8 +15,7 @@ extern "C" {
 TERMIN_GUI_NATIVE_API tc_value tc_ui_document_serialize(tc_ui_document_handle document);
 
 /* Restores into an empty document. Any widgets created before failure are rolled back. */
-TERMIN_GUI_NATIVE_API bool tc_ui_document_restore(tc_ui_document_handle document,
-                                                  const tc_value* serialized);
+TERMIN_GUI_NATIVE_API bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* serialized);
 
 #ifdef __cplusplus
 }

@@ -36,8 +36,7 @@ static tc_value serialize_length(tc_ui_length value) {
 }
 
 static tc_value serialize_layout_spec(tc_ui_widget_layout_spec value) {
-    const float margins[] = {
-        value.margin.left, value.margin.top, value.margin.right, value.margin.bottom};
+    const float margins[] = {value.margin.left, value.margin.top, value.margin.right, value.margin.bottom};
     tc_value result = tc_value_dict_new();
     tc_value_dict_set(&result, "width", serialize_length(value.width));
     tc_value_dict_set(&result, "height", serialize_length(value.height));
@@ -47,10 +46,8 @@ static tc_value serialize_layout_spec(tc_ui_widget_layout_spec value) {
     tc_value_dict_set(&result, "max_height", tc_value_double(value.max_height));
     tc_value_dict_set(&result, "margin", serialize_float_list(margins, 4));
     tc_value_dict_set(&result, "aspect_ratio", tc_value_double(value.aspect_ratio));
-    tc_value_dict_set(
-        &result, "touch_target_policy", tc_value_int(value.touch_target_policy));
-    tc_value_dict_set(
-        &result, "minimum_touch_target", serialize_size(value.minimum_touch_target));
+    tc_value_dict_set(&result, "touch_target_policy", tc_value_int(value.touch_target_policy));
+    tc_value_dict_set(&result, "minimum_touch_target", serialize_size(value.minimum_touch_target));
     return result;
 }
 
@@ -84,11 +81,9 @@ static tc_value serialize_common(const tc_ui_widget_snapshot* widget) {
         TC_WIDGET_FOCUSABLE | TC_WIDGET_VISIBLE | TC_WIDGET_ENABLED | TC_WIDGET_MOUSE_TRANSPARENT;
     tc_value result = tc_value_dict_new();
     tc_value style_override = tc_value_dict_new();
-    tc_value_dict_set(&result, "stable_id",
-                      tc_value_string(widget->stable_id ? widget->stable_id : ""));
+    tc_value_dict_set(&result, "stable_id", tc_value_string(widget->stable_id ? widget->stable_id : ""));
     tc_value_dict_set(&result, "name", tc_value_string(widget->name ? widget->name : ""));
-    tc_value_dict_set(&result, "debug_name",
-                      tc_value_string(widget->debug_name ? widget->debug_name : ""));
+    tc_value_dict_set(&result, "debug_name", tc_value_string(widget->debug_name ? widget->debug_name : ""));
     tc_value_dict_set(&result, "bounds", serialize_rect(widget->bounds));
     tc_value_dict_set(&result, "min_size", serialize_size(widget->min_size));
     tc_value_dict_set(&result, "preferred_size", serialize_size(widget->preferred_size));
@@ -97,16 +92,15 @@ static tc_value serialize_common(const tc_ui_widget_snapshot* widget) {
     tc_value_dict_set(&result, "flags", tc_value_int(widget->flags & persisted_flags));
     tc_value_dict_set(&result, "cursor_intent", tc_value_int(widget->cursor_intent));
     tc_value_dict_set(&result, "style_role", tc_value_int(widget->style_role));
-    tc_value_dict_set(&style_override, "fields",
-                      tc_value_int((int64_t)widget->style_override.fields));
+    tc_value_dict_set(&style_override, "fields", tc_value_int((int64_t)widget->style_override.fields));
     tc_value_dict_set(&style_override, "flags", tc_value_int(widget->style_override.flags));
     tc_value_dict_set(&style_override, "value", serialize_style(widget->style_override.value));
     tc_value_dict_set(&result, "style_override", style_override);
     return result;
 }
 
-static bool find_widget_index(const tc_ui_document_inspect_snapshot* snapshot,
-                              tc_widget_handle handle, size_t* out_index) {
+static bool
+find_widget_index(const tc_ui_document_inspect_snapshot* snapshot, tc_widget_handle handle, size_t* out_index) {
     size_t index;
     for (index = 0; index < snapshot->widget_count; ++index) {
         if (tc_widget_handle_eq(snapshot->widgets[index].handle, handle)) {
@@ -137,15 +131,13 @@ tc_value tc_ui_document_serialize(tc_ui_document_handle document) {
 
     for (index = 0; index < snapshot.widget_count; ++index) {
         const tc_ui_widget_snapshot* widget_snapshot = &snapshot.widgets[index];
-        const tc_widget* widget =
-            tc_ui_document_resolve_widget_const(document, widget_snapshot->handle);
+        const tc_widget* widget = tc_ui_document_resolve_widget_const(document, widget_snapshot->handle);
         tc_value record = tc_value_dict_new();
         tc_value children = tc_value_list_new();
         tc_value state = tc_value_nil();
         size_t child;
         if (!widget || !widget->runtime_type_link.type_name) {
-            tc_log_error("[termin-gui-native] cannot serialize unregistered widget at record %zu",
-                         index);
+            tc_log_error("[termin-gui-native] cannot serialize unregistered widget at record %zu", index);
             tc_value_free(&record);
             tc_value_free(&children);
             tc_value_free(&widgets);
@@ -171,8 +163,7 @@ tc_value tc_ui_document_serialize(tc_ui_document_handle document) {
         tc_value_dict_set(&record, "state", state);
         for (child = 0; child < widget_snapshot->child_count; ++child) {
             size_t child_record;
-            tc_widget_handle child_handle =
-                snapshot.children[widget_snapshot->child_offset + child];
+            tc_widget_handle child_handle = snapshot.children[widget_snapshot->child_offset + child];
             if (!find_widget_index(&snapshot, child_handle, &child_record)) {
                 tc_log_error("[termin-gui-native] snapshot child is missing from widget records");
                 tc_value_free(&record);
@@ -227,10 +218,9 @@ serialization_failure:
 
 static tc_value* required_value(const tc_value* dict, const char* key, tc_value_type type) {
     tc_value* value;
-    if (!dict || dict->type != TC_VALUE_DICT ||
-        !(value = tc_value_dict_get((tc_value*)dict, key)) || value->type != type) {
-        tc_log_error("[termin-gui-native] serialized UI field '%s' is missing or has wrong type",
-                     key);
+    if (!dict || dict->type != TC_VALUE_DICT || !(value = tc_value_dict_get((tc_value*)dict, key)) ||
+        value->type != type) {
+        tc_log_error("[termin-gui-native] serialized UI field '%s' is missing or has wrong type", key);
         return NULL;
     }
     return value;
@@ -276,12 +266,10 @@ static bool read_float_list(const tc_value* value, float* out, size_t count) {
 
 static bool read_length(const tc_value* data, tc_ui_length* out) {
     tc_value* mode = required_value(data, "mode", TC_VALUE_INT);
-    tc_value* value = data && data->type == TC_VALUE_DICT
-        ? tc_value_dict_get((tc_value*)data, "value")
-        : NULL;
+    tc_value* value = data && data->type == TC_VALUE_DICT ? tc_value_dict_get((tc_value*)data, "value") : NULL;
     float parsed_value;
-    if (!mode || !read_float_value(value, &parsed_value) ||
-        mode->data.i < TC_UI_LENGTH_AUTO || mode->data.i > TC_UI_LENGTH_PERCENT) {
+    if (!mode || !read_float_value(value, &parsed_value) || mode->data.i < TC_UI_LENGTH_AUTO ||
+        mode->data.i > TC_UI_LENGTH_PERCENT) {
         return false;
     }
     *out = (tc_ui_length){(tc_ui_length_mode)mode->data.i, parsed_value};
@@ -293,24 +281,19 @@ static bool read_layout_spec(const tc_value* data, tc_ui_widget_layout_spec* out
     tc_value* height = required_value(data, "height", TC_VALUE_DICT);
     tc_value* margin = required_value(data, "margin", TC_VALUE_LIST);
     tc_value* touch_policy = required_value(data, "touch_target_policy", TC_VALUE_INT);
-    tc_value* minimum_touch_target =
-        required_value(data, "minimum_touch_target", TC_VALUE_LIST);
+    tc_value* minimum_touch_target = required_value(data, "minimum_touch_target", TC_VALUE_LIST);
     tc_ui_widget_layout_spec parsed = tc_ui_widget_layout_spec_default();
     float margins[4];
     float touch_size[2];
-#define READ_LAYOUT_FLOAT(field)                                                                  \
-    do {                                                                                          \
-        tc_value* value = data && data->type == TC_VALUE_DICT                                     \
-            ? tc_value_dict_get((tc_value*)data, #field)                                          \
-            : NULL;                                                                               \
-        if (!read_float_value(value, &parsed.field))                                               \
-            return false;                                                                         \
+#define READ_LAYOUT_FLOAT(field)                                                                                       \
+    do {                                                                                                               \
+        tc_value* value = data && data->type == TC_VALUE_DICT ? tc_value_dict_get((tc_value*)data, #field) : NULL;     \
+        if (!read_float_value(value, &parsed.field))                                                                   \
+            return false;                                                                                              \
     } while (0)
-    if (!out || !width || !height || !margin || !touch_policy ||
-        !minimum_touch_target || !read_length(width, &parsed.width) ||
-        !read_length(height, &parsed.height) ||
-        !read_float_list(margin, margins, 4) ||
-        !read_float_list(minimum_touch_target, touch_size, 2)) {
+    if (!out || !width || !height || !margin || !touch_policy || !minimum_touch_target ||
+        !read_length(width, &parsed.width) || !read_length(height, &parsed.height) ||
+        !read_float_list(margin, margins, 4) || !read_float_list(minimum_touch_target, touch_size, 2)) {
         return false;
     }
     READ_LAYOUT_FLOAT(min_width);
@@ -328,18 +311,18 @@ static bool read_layout_spec(const tc_value* data, tc_ui_widget_layout_spec* out
 static bool read_style(const tc_value* data, tc_ui_style* out) {
     tc_value* value;
     float color[4];
-#define READ_STYLE_FLOAT(field)                                                                    \
-    do {                                                                                           \
-        value = tc_value_dict_get((tc_value*)data, #field);                                        \
-        if (!read_float_value(value, &out->field))                                                 \
-            return false;                                                                          \
+#define READ_STYLE_FLOAT(field)                                                                                        \
+    do {                                                                                                               \
+        value = tc_value_dict_get((tc_value*)data, #field);                                                            \
+        if (!read_float_value(value, &out->field))                                                                     \
+            return false;                                                                                              \
     } while (0)
-#define READ_STYLE_COLOR(field)                                                                    \
-    do {                                                                                           \
-        value = tc_value_dict_get((tc_value*)data, #field);                                        \
-        if (!read_float_list(value, color, 4))                                                     \
-            return false;                                                                          \
-        out->field = (tc_ui_color){color[0], color[1], color[2], color[3]};                        \
+#define READ_STYLE_COLOR(field)                                                                                        \
+    do {                                                                                                               \
+        value = tc_value_dict_get((tc_value*)data, #field);                                                            \
+        if (!read_float_list(value, color, 4))                                                                         \
+            return false;                                                                                              \
+        out->field = (tc_ui_color){color[0], color[1], color[2], color[3]};                                            \
     } while (0)
     if (!data || data->type != TC_VALUE_DICT || !out) {
         return false;
@@ -396,24 +379,20 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     float parsed_min_values[2];
     float parsed_preferred_values[2];
     float parsed_max_values[2];
-    if (!widget || !stable_id || !name || !debug_name || !bounds || !min_size || !preferred_size ||
-        !max_size || !layout_spec || !flags || !cursor_intent || !style_role || !override ||
-        flags->data.i < 0 ||
+    if (!widget || !stable_id || !name || !debug_name || !bounds || !min_size || !preferred_size || !max_size ||
+        !layout_spec || !flags || !cursor_intent || !style_role || !override || flags->data.i < 0 ||
         ((uint64_t)flags->data.i & ~persisted_flags) != 0 || style_role->data.i < 0 ||
-        style_role->data.i >= TC_UI_STYLE_ROLE_COUNT ||
-        cursor_intent->data.i < TC_UI_CURSOR_INHERIT ||
+        style_role->data.i >= TC_UI_STYLE_ROLE_COUNT || cursor_intent->data.i < TC_UI_CURSOR_INHERIT ||
         cursor_intent->data.i >= TC_UI_CURSOR_INTENT_COUNT) {
         return false;
     }
-    if (!read_float_list(bounds, parsed_rect_values, 4) ||
-        !read_float_list(min_size, parsed_min_values, 2) ||
+    if (!read_float_list(bounds, parsed_rect_values, 4) || !read_float_list(min_size, parsed_min_values, 2) ||
         !read_float_list(preferred_size, parsed_preferred_values, 2) ||
-        !read_float_list(max_size, parsed_max_values, 2) ||
-        !read_layout_spec(layout_spec, &parsed_layout_spec)) {
+        !read_float_list(max_size, parsed_max_values, 2) || !read_layout_spec(layout_spec, &parsed_layout_spec)) {
         return false;
     }
-    parsed_bounds = (tc_ui_rect){parsed_rect_values[0], parsed_rect_values[1],
-                                 parsed_rect_values[2], parsed_rect_values[3]};
+    parsed_bounds =
+        (tc_ui_rect){parsed_rect_values[0], parsed_rect_values[1], parsed_rect_values[2], parsed_rect_values[3]};
     parsed_min = (tc_ui_size){parsed_min_values[0], parsed_min_values[1]};
     parsed_preferred = (tc_ui_size){parsed_preferred_values[0], parsed_preferred_values[1]};
     parsed_max = (tc_ui_size){parsed_max_values[0], parsed_max_values[1]};
@@ -421,16 +400,14 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
     override_flags = required_value(override, "flags", TC_VALUE_INT);
     override_value = required_value(override, "value", TC_VALUE_DICT);
     if (!override_fields || !override_flags || !override_value || override_fields->data.i < 0 ||
-        ((uint64_t)override_fields->data.i & ~TC_UI_STYLE_ALL_FIELDS) != 0 ||
-        override_flags->data.i < 0 ||
+        ((uint64_t)override_fields->data.i & ~TC_UI_STYLE_ALL_FIELDS) != 0 || override_flags->data.i < 0 ||
         ((uint64_t)override_flags->data.i & ~TC_UI_STYLE_OVERRIDE_INHERIT) != 0 ||
         !read_style(override_value, &parsed_override.value)) {
         return false;
     }
     parsed_override.fields = (tc_ui_style_field_mask)override_fields->data.i;
     parsed_override.flags = (uint32_t)override_flags->data.i;
-    if (!tc_widget_set_stable_id(widget, stable_id->data.s) ||
-        !tc_widget_set_name(widget, name->data.s) ||
+    if (!tc_widget_set_stable_id(widget, stable_id->data.s) || !tc_widget_set_name(widget, name->data.s) ||
         !tc_widget_set_debug_name(widget, debug_name->data.s)) {
         return false;
     }
@@ -453,16 +430,14 @@ static bool apply_common_state(tc_widget* widget, const tc_value* common) {
 }
 
 static bool read_record_index(const tc_value* value, size_t count, size_t* out_index) {
-    if (!value || value->type != TC_VALUE_INT || value->data.i < 0 ||
-        (uint64_t)value->data.i >= count) {
+    if (!value || value->type != TC_VALUE_INT || value->data.i < 0 || (uint64_t)value->data.i >= count) {
         return false;
     }
     *out_index = (size_t)value->data.i;
     return true;
 }
 
-static void rollback_restored_widgets(tc_ui_document_handle document, tc_widget_handle* handles,
-                                      size_t count) {
+static void rollback_restored_widgets(tc_ui_document_handle document, tc_widget_handle* handles, size_t count) {
     while (count > 0) {
         tc_widget_handle handle = handles[--count];
         if (tc_ui_document_is_alive(document, handle)) {
@@ -480,10 +455,8 @@ bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* seri
     tc_widget_handle* handles = NULL;
     size_t widget_count;
     size_t index;
-    if (!tc_ui_document_is_valid(document) || !serialized ||
-        tc_ui_document_live_widget_count(document) != 0) {
-        tc_log_error(
-            "[termin-gui-native] UI restore requires an empty document and serialized data");
+    if (!tc_ui_document_is_valid(document) || !serialized || tc_ui_document_live_widget_count(document) != 0) {
+        tc_log_error("[termin-gui-native] UI restore requires an empty document and serialized data");
         return false;
     }
     schema = required_value(serialized, "$schema", TC_VALUE_STRING);
@@ -491,8 +464,7 @@ bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* seri
     widgets = required_value(serialized, "widgets", TC_VALUE_LIST);
     roots = required_value(serialized, "roots", TC_VALUE_LIST);
     overlays = required_value(serialized, "overlays", TC_VALUE_LIST);
-    if (!schema || !version || !widgets || !roots || !overlays ||
-        strcmp(schema->data.s, TC_UI_DOCUMENT_SCHEMA) != 0 ||
+    if (!schema || !version || !widgets || !roots || !overlays || strcmp(schema->data.s, TC_UI_DOCUMENT_SCHEMA) != 0 ||
         version->data.i != TC_UI_DOCUMENT_SCHEMA_VERSION) {
         tc_log_error("[termin-gui-native] unsupported UI document serialization schema");
         return false;
@@ -518,8 +490,7 @@ bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* seri
         }
         handles[index] = tc_ui_document_create_registered_widget(document, type->data.s);
         widget = tc_ui_document_resolve_widget(document, handles[index]);
-        if (!widget || !apply_common_state(widget, common) ||
-            !tc_widget_registry_deserialize_state(widget, state)) {
+        if (!widget || !apply_common_state(widget, common) || !tc_widget_registry_deserialize_state(widget, state)) {
             tc_log_error("[termin-gui-native] failed to restore widget record %zu", index);
             goto restore_failure;
         }
@@ -530,13 +501,10 @@ bool tc_ui_document_restore(tc_ui_document_handle document, const tc_value* seri
         size_t child;
         for (child = 0; child < tc_value_list_size(children); ++child) {
             size_t child_record;
-            if (!read_record_index(tc_value_list_get(children, child), widget_count,
-                                   &child_record) ||
-                !tc_widget_append_child(
-                    tc_ui_document_resolve_widget(document, handles[index]),
-                    tc_ui_document_resolve_widget(document, handles[child_record]))) {
-                tc_log_error("[termin-gui-native] invalid child relation at widget record %zu",
-                             index);
+            if (!read_record_index(tc_value_list_get(children, child), widget_count, &child_record) ||
+                !tc_widget_append_child(tc_ui_document_resolve_widget(document, handles[index]),
+                                        tc_ui_document_resolve_widget(document, handles[child_record]))) {
+                tc_log_error("[termin-gui-native] invalid child relation at widget record %zu", index);
                 goto restore_failure;
             }
         }

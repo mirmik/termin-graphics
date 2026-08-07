@@ -19,7 +19,8 @@ static const char* intern_optional(const char* value) {
 }
 
 static void clear_payload(tc_pipeline_template* pipeline_template) {
-    if (!pipeline_template) return;
+    if (!pipeline_template)
+        return;
     free(pipeline_template->passes);
     free(pipeline_template->resources);
     free(pipeline_template->dependencies);
@@ -41,12 +42,9 @@ static void clear_payload(tc_pipeline_template* pipeline_template) {
 }
 
 void tc_pipeline_template_init(void) {
-    if (g_initialized) return;
-    if (!tc_pool_init_rebootstrap(
-            &g_pool,
-            sizeof(tc_pipeline_template),
-            32,
-            &g_generation_epoch)) {
+    if (g_initialized)
+        return;
+    if (!tc_pool_init_rebootstrap(&g_pool, sizeof(tc_pipeline_template), 32, &g_generation_epoch)) {
         tc_log_error("tc_pipeline_template_init: failed to initialize pool");
         return;
     }
@@ -60,7 +58,8 @@ void tc_pipeline_template_init(void) {
 }
 
 void tc_pipeline_template_shutdown(void) {
-    if (!g_initialized) return;
+    if (!g_initialized)
+        return;
     for (uint32_t i = 0; i < g_pool.capacity; ++i) {
         if (g_pool.states[i] == TC_SLOT_OCCUPIED) {
             clear_payload((tc_pipeline_template*)tc_pool_get_unchecked(&g_pool, i));
@@ -73,7 +72,8 @@ void tc_pipeline_template_shutdown(void) {
 }
 
 tc_pipeline_template_handle tc_pipeline_template_create(const char* uuid, const char* name) {
-    if (!g_initialized) tc_pipeline_template_init();
+    if (!g_initialized)
+        tc_pipeline_template_init();
     if (!g_initialized || !uuid || !uuid[0] || !name || !name[0]) {
         tc_log_error("tc_pipeline_template_create: UUID and name are required");
         return tc_pipeline_template_handle_invalid();
@@ -109,9 +109,11 @@ tc_pipeline_template_handle tc_pipeline_template_create(const char* uuid, const 
 }
 
 tc_pipeline_template_handle tc_pipeline_template_find(const char* uuid) {
-    if (!g_initialized || !uuid) return tc_pipeline_template_handle_invalid();
+    if (!g_initialized || !uuid)
+        return tc_pipeline_template_handle_invalid();
     void* value = tc_resource_map_get(g_uuid_to_index, uuid);
-    if (!tc_has_index(value)) return tc_pipeline_template_handle_invalid();
+    if (!tc_has_index(value))
+        return tc_pipeline_template_handle_invalid();
     uint32_t index = tc_unpack_index(value);
     if (index >= g_pool.capacity || g_pool.states[index] != TC_SLOT_OCCUPIED) {
         return tc_pipeline_template_handle_invalid();
@@ -122,14 +124,13 @@ tc_pipeline_template_handle tc_pipeline_template_find(const char* uuid) {
 
 tc_pipeline_template_handle tc_pipeline_template_declare(const char* uuid, const char* name) {
     tc_pipeline_template_handle existing = tc_pipeline_template_find(uuid);
-    return tc_pipeline_template_handle_is_invalid(existing)
-        ? tc_pipeline_template_create(uuid, name) : existing;
+    return tc_pipeline_template_handle_is_invalid(existing) ? tc_pipeline_template_create(uuid, name) : existing;
 }
 
 tc_pipeline_template* tc_pipeline_template_get(tc_pipeline_template_handle handle) {
-    if (!g_initialized) return NULL;
-    return (tc_pipeline_template*)tc_pool_get_checked(
-        &g_pool, handle, "tc_pipeline_template");
+    if (!g_initialized)
+        return NULL;
+    return (tc_pipeline_template*)tc_pool_get_checked(&g_pool, handle, "tc_pipeline_template");
 }
 
 bool tc_pipeline_template_is_valid(tc_pipeline_template_handle handle) {
@@ -141,25 +142,24 @@ size_t tc_pipeline_template_count(void) {
 }
 
 tc_pipeline_template_info* tc_pipeline_template_get_all_info(size_t* count) {
-    if (!count) return NULL;
+    if (!count)
+        return NULL;
     *count = 0;
     const size_t template_count = tc_pipeline_template_count();
-    if (template_count == 0) return NULL;
+    if (template_count == 0)
+        return NULL;
 
-    tc_pipeline_template_info* infos =
-        (tc_pipeline_template_info*)calloc(template_count, sizeof(*infos));
+    tc_pipeline_template_info* infos = (tc_pipeline_template_info*)calloc(template_count, sizeof(*infos));
     if (!infos) {
         tc_log_error("tc_pipeline_template_get_all_info: allocation failed");
         return NULL;
     }
 
     size_t output_index = 0;
-    for (uint32_t index = 0;
-         index < g_pool.capacity && output_index < template_count;
-         ++index) {
-        if (g_pool.states[index] != TC_SLOT_OCCUPIED) continue;
-        tc_pipeline_template* pipeline_template =
-            (tc_pipeline_template*)tc_pool_get_unchecked(&g_pool, index);
+    for (uint32_t index = 0; index < g_pool.capacity && output_index < template_count; ++index) {
+        if (g_pool.states[index] != TC_SLOT_OCCUPIED)
+            continue;
+        tc_pipeline_template* pipeline_template = (tc_pipeline_template*)tc_pool_get_unchecked(&g_pool, index);
         tc_pipeline_template_info* info = &infos[output_index++];
         info->handle.index = index;
         info->handle.generation = g_pool.generations[index];
@@ -179,38 +179,40 @@ tc_pipeline_template_info* tc_pipeline_template_get_all_info(size_t* count) {
 
 static bool destroy_pipeline_template(tc_pipeline_template_handle handle) {
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(handle);
-    if (!pipeline_template) return false;
+    if (!pipeline_template)
+        return false;
     tc_resource_map_remove(g_uuid_to_index, pipeline_template->header.uuid);
     clear_payload(pipeline_template);
     return tc_pool_free_slot(&g_pool, handle);
 }
 
 void tc_pipeline_template_retain(tc_pipeline_template* pipeline_template) {
-    if (pipeline_template) ++pipeline_template->header.ref_count;
+    if (pipeline_template)
+        ++pipeline_template->header.ref_count;
 }
 
 bool tc_pipeline_template_release(tc_pipeline_template* pipeline_template) {
-    if (!pipeline_template || pipeline_template->header.ref_count == 0) return false;
+    if (!pipeline_template || pipeline_template->header.ref_count == 0)
+        return false;
     --pipeline_template->header.ref_count;
     return pipeline_template->header.ref_count == 0 && destroy_pipeline_template(pipeline_template->self_handle);
 }
 
 bool tc_pipeline_template_remove(tc_pipeline_template_handle handle) {
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(handle);
-    if (!pipeline_template) return false;
+    if (!pipeline_template)
+        return false;
     if (pipeline_template->header.ref_count != 0) {
-        tc_log_error(
-            "tc_pipeline_template_remove: '%s' still has %u retained handle(s)",
-            pipeline_template->header.uuid,
-            pipeline_template->header.ref_count);
+        tc_log_error("tc_pipeline_template_remove: '%s' still has %u retained handle(s)",
+                     pipeline_template->header.uuid,
+                     pipeline_template->header.ref_count);
         return false;
     }
     return destroy_pipeline_template(handle);
 }
 
 static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
-    if (!desc || desc->descriptor_version != TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION
-        || !desc->name || !desc->name[0]) {
+    if (!desc || desc->descriptor_version != TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION || !desc->name || !desc->name[0]) {
         tc_log_error("tc_pipeline_template_set_payload: invalid descriptor version or name");
         return false;
     }
@@ -219,25 +221,23 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         tc_log_error("tc_pipeline_template_set_payload: invalid execution model");
         return false;
     }
-    if ((desc->pass_count && !desc->passes)
-        || (desc->resource_count && !desc->resources)
-        || (desc->dependency_count && !desc->dependencies)
-        || (desc->target_count && !desc->targets)
-        || (desc->resource_view_count && !desc->resource_views)
-        || (desc->fbo_composition_count && !desc->fbo_compositions)) {
+    if ((desc->pass_count && !desc->passes) || (desc->resource_count && !desc->resources) ||
+        (desc->dependency_count && !desc->dependencies) || (desc->target_count && !desc->targets) ||
+        (desc->resource_view_count && !desc->resource_views) ||
+        (desc->fbo_composition_count && !desc->fbo_compositions)) {
         tc_log_error("tc_pipeline_template_set_payload: array pointer is NULL");
         return false;
     }
     for (uint32_t i = 0; i < desc->pass_count; ++i) {
-        if (!desc->passes[i].type_name || !desc->passes[i].type_name[0]
-            || !desc->passes[i].name || !desc->passes[i].name[0]) {
+        if (!desc->passes[i].type_name || !desc->passes[i].type_name[0] || !desc->passes[i].name ||
+            !desc->passes[i].name[0]) {
             tc_log_error("tc_pipeline_template_set_payload: pass %u lacks type or name", i);
             return false;
         }
     }
     for (uint32_t i = 0; i < desc->resource_count; ++i) {
-        if (!desc->resources[i].name || !desc->resources[i].name[0]
-            || !desc->resources[i].resource_type || !desc->resources[i].resource_type[0]) {
+        if (!desc->resources[i].name || !desc->resources[i].name[0] || !desc->resources[i].resource_type ||
+            !desc->resources[i].resource_type[0]) {
             tc_log_error("tc_pipeline_template_set_payload: resource %u lacks name or type", i);
             return false;
         }
@@ -251,62 +251,50 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         }
         for (uint32_t previous = 0; previous < i; ++previous) {
             if (strcmp(desc->resources[previous].name, desc->resources[i].name) == 0) {
-                tc_log_error(
-                    "tc_pipeline_template_set_payload: duplicate resource '%s'",
-                    desc->resources[i].name);
+                tc_log_error("tc_pipeline_template_set_payload: duplicate resource '%s'", desc->resources[i].name);
                 return false;
             }
         }
     }
     for (uint32_t i = 0; i < desc->resource_view_count; ++i) {
         const tc_pipeline_template_resource_view_desc* view = &desc->resource_views[i];
-        if (!view->name || !view->name[0] || !view->parent || !view->parent[0]
-            || (view->attachment != TC_PIPELINE_ATTACHMENT_COLOR
-                && view->attachment != TC_PIPELINE_ATTACHMENT_DEPTH)) {
+        if (!view->name || !view->name[0] || !view->parent || !view->parent[0] ||
+            (view->attachment != TC_PIPELINE_ATTACHMENT_COLOR && view->attachment != TC_PIPELINE_ATTACHMENT_DEPTH)) {
             tc_log_error("tc_pipeline_template_set_payload: invalid resource view %u", i);
             return false;
         }
         bool parent_found = false;
-        for (uint32_t resource_index = 0;
-             resource_index < desc->resource_count;
-             ++resource_index) {
+        for (uint32_t resource_index = 0; resource_index < desc->resource_count; ++resource_index) {
             const char* resource_name = desc->resources[resource_index].name;
             if (strcmp(resource_name, view->name) == 0) {
-                tc_log_error(
-                    "tc_pipeline_template_set_payload: resource view '%s' conflicts with a concrete resource",
-                    view->name);
+                tc_log_error("tc_pipeline_template_set_payload: resource view '%s' conflicts with a concrete resource",
+                             view->name);
                 return false;
             }
-            if (strcmp(resource_name, view->parent) == 0) parent_found = true;
+            if (strcmp(resource_name, view->parent) == 0)
+                parent_found = true;
         }
         if (!parent_found) {
-            tc_log_error(
-                "tc_pipeline_template_set_payload: resource view '%s' references missing parent '%s'",
-                view->name,
-                view->parent);
+            tc_log_error("tc_pipeline_template_set_payload: resource view '%s' references missing parent '%s'",
+                         view->name,
+                         view->parent);
             return false;
         }
         for (uint32_t previous = 0; previous < i; ++previous) {
             if (strcmp(desc->resource_views[previous].name, view->name) == 0) {
-                tc_log_error(
-                    "tc_pipeline_template_set_payload: duplicate resource view '%s'",
-                    view->name);
+                tc_log_error("tc_pipeline_template_set_payload: duplicate resource view '%s'", view->name);
                 return false;
             }
         }
     }
     for (uint32_t i = 0; i < desc->fbo_composition_count; ++i) {
-        const tc_pipeline_template_fbo_composition_desc* composition =
-            &desc->fbo_compositions[i];
-        if (!composition->name || !composition->name[0]
-            || ((!composition->color || !composition->color[0])
-                && (!composition->depth || !composition->depth[0]))) {
+        const tc_pipeline_template_fbo_composition_desc* composition = &desc->fbo_compositions[i];
+        if (!composition->name || !composition->name[0] ||
+            ((!composition->color || !composition->color[0]) && (!composition->depth || !composition->depth[0]))) {
             tc_log_error("tc_pipeline_template_set_payload: invalid FBO composition %u", i);
             return false;
         }
-        for (uint32_t resource_index = 0;
-             resource_index < desc->resource_count;
-             ++resource_index) {
+        for (uint32_t resource_index = 0; resource_index < desc->resource_count; ++resource_index) {
             if (strcmp(desc->resources[resource_index].name, composition->name) == 0) {
                 tc_log_error(
                     "tc_pipeline_template_set_payload: FBO composition '%s' conflicts with a concrete resource",
@@ -314,21 +302,16 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
                 return false;
             }
         }
-        for (uint32_t view_index = 0;
-             view_index < desc->resource_view_count;
-             ++view_index) {
+        for (uint32_t view_index = 0; view_index < desc->resource_view_count; ++view_index) {
             if (strcmp(desc->resource_views[view_index].name, composition->name) == 0) {
-                tc_log_error(
-                    "tc_pipeline_template_set_payload: FBO composition '%s' conflicts with a resource view",
-                    composition->name);
+                tc_log_error("tc_pipeline_template_set_payload: FBO composition '%s' conflicts with a resource view",
+                             composition->name);
                 return false;
             }
         }
         for (uint32_t previous = 0; previous < i; ++previous) {
             if (strcmp(desc->fbo_compositions[previous].name, composition->name) == 0) {
-                tc_log_error(
-                    "tc_pipeline_template_set_payload: duplicate FBO composition '%s'",
-                    composition->name);
+                tc_log_error("tc_pipeline_template_set_payload: duplicate FBO composition '%s'", composition->name);
                 return false;
             }
         }
@@ -339,27 +322,23 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         };
         for (uint32_t attachment_index = 0; attachment_index < 2; ++attachment_index) {
             const char* attachment = attachments[attachment_index];
-            if (!attachment || !attachment[0]) continue;
+            if (!attachment || !attachment[0])
+                continue;
             bool found = false;
-            for (uint32_t resource_index = 0;
-                 resource_index < desc->resource_count;
-                 ++resource_index) {
+            for (uint32_t resource_index = 0; resource_index < desc->resource_count; ++resource_index) {
                 if (strcmp(desc->resources[resource_index].name, attachment) == 0) {
                     found = true;
                     break;
                 }
             }
-            for (uint32_t view_index = 0;
-                 !found && view_index < desc->resource_view_count;
-                 ++view_index) {
-                const tc_pipeline_template_resource_view_desc* view =
-                    &desc->resource_views[view_index];
+            for (uint32_t view_index = 0; !found && view_index < desc->resource_view_count; ++view_index) {
+                const tc_pipeline_template_resource_view_desc* view = &desc->resource_views[view_index];
                 if (strcmp(view->name, attachment) == 0) {
                     if (view->attachment != expected_kinds[attachment_index]) {
-                        tc_log_error(
-                            "tc_pipeline_template_set_payload: FBO composition '%s' uses view '%s' for the wrong attachment kind",
-                            composition->name,
-                            attachment);
+                        tc_log_error("tc_pipeline_template_set_payload: FBO composition '%s' uses view '%s' for the "
+                                     "wrong attachment kind",
+                                     composition->name,
+                                     attachment);
                         return false;
                     }
                     found = true;
@@ -375,61 +354,50 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         }
     }
     for (uint32_t i = 0; i < desc->dependency_count; ++i) {
-        if (desc->dependencies[i].pass_index >= desc->pass_count
-            || !desc->dependencies[i].resource || !desc->dependencies[i].resource[0]
-            || desc->dependencies[i].access < TC_PIPELINE_RESOURCE_READ
-            || desc->dependencies[i].access > TC_PIPELINE_RESOURCE_READ_WRITE) {
+        if (desc->dependencies[i].pass_index >= desc->pass_count || !desc->dependencies[i].resource ||
+            !desc->dependencies[i].resource[0] || desc->dependencies[i].access < TC_PIPELINE_RESOURCE_READ ||
+            desc->dependencies[i].access > TC_PIPELINE_RESOURCE_READ_WRITE) {
             tc_log_error("tc_pipeline_template_set_payload: invalid dependency %u", i);
             return false;
         }
         bool resource_found = false;
-        for (uint32_t resource_index = 0;
-             resource_index < desc->resource_count;
-             ++resource_index) {
-            if (strcmp(
-                    desc->resources[resource_index].name,
-                    desc->dependencies[i].resource) == 0) {
+        for (uint32_t resource_index = 0; resource_index < desc->resource_count; ++resource_index) {
+            if (strcmp(desc->resources[resource_index].name, desc->dependencies[i].resource) == 0) {
                 resource_found = true;
                 break;
             }
         }
-        for (uint32_t view_index = 0;
-             !resource_found && view_index < desc->resource_view_count;
-             ++view_index) {
-            resource_found = strcmp(
-                desc->resource_views[view_index].name,
-                desc->dependencies[i].resource) == 0;
+        for (uint32_t view_index = 0; !resource_found && view_index < desc->resource_view_count; ++view_index) {
+            resource_found = strcmp(desc->resource_views[view_index].name, desc->dependencies[i].resource) == 0;
         }
-        for (uint32_t composition_index = 0;
-             !resource_found && composition_index < desc->fbo_composition_count;
+        for (uint32_t composition_index = 0; !resource_found && composition_index < desc->fbo_composition_count;
              ++composition_index) {
-            resource_found = strcmp(
-                desc->fbo_compositions[composition_index].name,
-                desc->dependencies[i].resource) == 0;
+            resource_found =
+                strcmp(desc->fbo_compositions[composition_index].name, desc->dependencies[i].resource) == 0;
         }
         if (!resource_found) {
-            tc_log_error(
-                "tc_pipeline_template_set_payload: dependency %u references missing resource '%s'",
-                i,
-                desc->dependencies[i].resource);
+            tc_log_error("tc_pipeline_template_set_payload: dependency %u references missing resource '%s'",
+                         i,
+                         desc->dependencies[i].resource);
             return false;
         }
     }
     return true;
 }
 
-#define ALLOC_COPY(field, count) do { \
-    if ((count) != 0) { \
-        field = calloc((count), sizeof(*field)); \
-        if (!field) goto allocation_failed; \
-    } \
-} while (0)
+#define ALLOC_COPY(field, count)                                                                                       \
+    do {                                                                                                               \
+        if ((count) != 0) {                                                                                            \
+            field = calloc((count), sizeof(*field));                                                                   \
+            if (!field)                                                                                                \
+                goto allocation_failed;                                                                                \
+        }                                                                                                              \
+    } while (0)
 
-bool tc_pipeline_template_set_payload(
-    tc_pipeline_template* pipeline_template,
-    const tc_pipeline_template_payload_desc* desc
-) {
-    if (!pipeline_template || !validate_payload(desc)) return false;
+bool tc_pipeline_template_set_payload(tc_pipeline_template* pipeline_template,
+                                      const tc_pipeline_template_payload_desc* desc) {
+    if (!pipeline_template || !validate_payload(desc))
+        return false;
     tc_pipeline_template_pass_desc* passes = NULL;
     tc_pipeline_template_resource_desc* resources = NULL;
     tc_pipeline_template_dependency_desc* dependencies = NULL;
@@ -522,7 +490,10 @@ typedef struct byte_writer {
 } byte_writer;
 
 static void write_bytes(byte_writer* writer, const void* value, size_t size) {
-    if (writer->offset > SIZE_MAX - size) { writer->valid = false; return; }
+    if (writer->offset > SIZE_MAX - size) {
+        writer->valid = false;
+        return;
+    }
     if (writer->data && writer->offset + size <= writer->capacity) {
         memcpy(writer->data + writer->offset, value, size);
     }
@@ -552,18 +523,17 @@ static void write_f32(byte_writer* writer, float value) {
 static void write_string(byte_writer* writer, const char* value) {
     uint32_t length = value ? (uint32_t)strlen(value) : 0;
     write_u32(writer, length);
-    if (length) write_bytes(writer, value, length);
+    if (length)
+        write_bytes(writer, value, length);
 }
 
-size_t tc_pipeline_template_serialize(
-    const tc_pipeline_template* pipeline_template,
-    uint8_t* output,
-    size_t capacity
-) {
-    if (!pipeline_template) return 0;
+size_t tc_pipeline_template_serialize(const tc_pipeline_template* pipeline_template, uint8_t* output, size_t capacity) {
+    if (!pipeline_template)
+        return 0;
     if (output) {
         const size_t required = tc_pipeline_template_serialize(pipeline_template, NULL, 0);
-        if (capacity < required) return required;
+        if (capacity < required)
+            return required;
     }
     byte_writer writer = {output, capacity, 0, true};
     const uint8_t magic[4] = {'T', 'P', 'L', 'T'};
@@ -618,8 +588,10 @@ size_t tc_pipeline_template_serialize(
         write_string(&writer, pipeline_template->fbo_compositions[i].color);
         write_string(&writer, pipeline_template->fbo_compositions[i].depth);
     }
-    if (!writer.valid) return 0;
-    if (output && writer.offset > capacity) return writer.offset;
+    if (!writer.valid)
+        return 0;
+    if (output && writer.offset > capacity)
+        return writer.offset;
     return writer.offset;
 }
 
@@ -642,10 +614,7 @@ static void read_bytes(byte_reader* reader, void* output, size_t size) {
 static uint32_t read_u32(byte_reader* reader) {
     uint8_t bytes[4] = {0};
     read_bytes(reader, bytes, sizeof(bytes));
-    return (uint32_t)bytes[0]
-        | ((uint32_t)bytes[1] << 8)
-        | ((uint32_t)bytes[2] << 16)
-        | ((uint32_t)bytes[3] << 24);
+    return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 }
 
 static int32_t read_i32(byte_reader* reader) {
@@ -666,14 +635,19 @@ static char* read_string(byte_reader* reader) {
         return NULL;
     }
     char* value = (char*)malloc((size_t)length + 1);
-    if (!value) { reader->valid = false; return NULL; }
-    if (length) read_bytes(reader, value, length);
+    if (!value) {
+        reader->valid = false;
+        return NULL;
+    }
+    if (length)
+        read_bytes(reader, value, length);
     value[length] = '\0';
     return value;
 }
 
 static void free_decoded_payload(tc_pipeline_template_payload_desc* desc) {
-    if (!desc) return;
+    if (!desc)
+        return;
     free((void*)desc->name);
     for (uint32_t i = 0; desc->passes && i < desc->pass_count; ++i) {
         free((void*)desc->passes[i].type_name);
@@ -698,9 +672,7 @@ static void free_decoded_payload(tc_pipeline_template_payload_desc* desc) {
         free((void*)desc->resource_views[i].name);
         free((void*)desc->resource_views[i].parent);
     }
-    for (uint32_t i = 0;
-         desc->fbo_compositions && i < desc->fbo_composition_count;
-         ++i) {
+    for (uint32_t i = 0; desc->fbo_compositions && i < desc->fbo_composition_count; ++i) {
         free((void*)desc->fbo_compositions[i].name);
         free((void*)desc->fbo_compositions[i].color);
         free((void*)desc->fbo_compositions[i].depth);
@@ -713,11 +685,7 @@ static void free_decoded_payload(tc_pipeline_template_payload_desc* desc) {
     free((void*)desc->fbo_compositions);
 }
 
-tc_pipeline_template_handle tc_pipeline_template_deserialize(
-    const char* uuid,
-    const uint8_t* data,
-    size_t size
-) {
+tc_pipeline_template_handle tc_pipeline_template_deserialize(const char* uuid, const uint8_t* data, size_t size) {
     tc_pipeline_template_payload_desc desc;
     memset(&desc, 0, sizeof(desc));
     if (!uuid || !uuid[0] || !data) {
@@ -737,28 +705,26 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
     desc.target_count = read_u32(&reader);
     desc.resource_view_count = read_u32(&reader);
     desc.fbo_composition_count = read_u32(&reader);
-    if (!reader.valid || memcmp(magic, "TPLT", 4) != 0
-        || binary_version != TC_PIPELINE_TEMPLATE_BINARY_VERSION
-        || desc.descriptor_version != TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION
-        || desc.pass_count > 65536 || desc.resource_count > 65536
-        || desc.dependency_count > 262144 || desc.target_count > 65536
-        || desc.resource_view_count > 65536 || desc.fbo_composition_count > 65536) {
+    if (!reader.valid || memcmp(magic, "TPLT", 4) != 0 || binary_version != TC_PIPELINE_TEMPLATE_BINARY_VERSION ||
+        desc.descriptor_version != TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION || desc.pass_count > 65536 ||
+        desc.resource_count > 65536 || desc.dependency_count > 262144 || desc.target_count > 65536 ||
+        desc.resource_view_count > 65536 || desc.fbo_composition_count > 65536) {
         tc_log_error("tc_pipeline_template_deserialize: invalid header");
         free_decoded_payload(&desc);
         return tc_pipeline_template_handle_invalid();
     }
     desc.passes = (tc_pipeline_template_pass_desc*)calloc(desc.pass_count, sizeof(*desc.passes));
     desc.resources = (tc_pipeline_template_resource_desc*)calloc(desc.resource_count, sizeof(*desc.resources));
-    desc.dependencies = (tc_pipeline_template_dependency_desc*)calloc(desc.dependency_count, sizeof(*desc.dependencies));
+    desc.dependencies =
+        (tc_pipeline_template_dependency_desc*)calloc(desc.dependency_count, sizeof(*desc.dependencies));
     desc.targets = (tc_pipeline_template_target_desc*)calloc(desc.target_count, sizeof(*desc.targets));
-    desc.resource_views = (tc_pipeline_template_resource_view_desc*)calloc(
-        desc.resource_view_count, sizeof(*desc.resource_views));
-    desc.fbo_compositions = (tc_pipeline_template_fbo_composition_desc*)calloc(
-        desc.fbo_composition_count, sizeof(*desc.fbo_compositions));
-    if ((desc.pass_count && !desc.passes) || (desc.resource_count && !desc.resources)
-        || (desc.dependency_count && !desc.dependencies) || (desc.target_count && !desc.targets)
-        || (desc.resource_view_count && !desc.resource_views)
-        || (desc.fbo_composition_count && !desc.fbo_compositions)) {
+    desc.resource_views =
+        (tc_pipeline_template_resource_view_desc*)calloc(desc.resource_view_count, sizeof(*desc.resource_views));
+    desc.fbo_compositions =
+        (tc_pipeline_template_fbo_composition_desc*)calloc(desc.fbo_composition_count, sizeof(*desc.fbo_compositions));
+    if ((desc.pass_count && !desc.passes) || (desc.resource_count && !desc.resources) ||
+        (desc.dependency_count && !desc.dependencies) || (desc.target_count && !desc.targets) ||
+        (desc.resource_view_count && !desc.resource_views) || (desc.fbo_composition_count && !desc.fbo_compositions)) {
         reader.valid = false;
     }
     for (uint32_t i = 0; reader.valid && i < desc.pass_count; ++i) {
@@ -816,7 +782,8 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(
     tc_pipeline_template_handle handle = tc_pipeline_template_create(uuid, desc.name);
     tc_pipeline_template* pipeline_template = tc_pipeline_template_get(handle);
     if (!pipeline_template || !tc_pipeline_template_set_payload(pipeline_template, &desc)) {
-        if (pipeline_template) tc_pipeline_template_remove(handle);
+        if (pipeline_template)
+            tc_pipeline_template_remove(handle);
         handle = tc_pipeline_template_handle_invalid();
     }
     free_decoded_payload(&desc);

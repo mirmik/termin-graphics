@@ -4,704 +4,689 @@
 #include <tcbase/tc_log.hpp>
 #include <tgfx/resources/tc_shader.h>
 
-#include <sstream>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <regex>
+#include <sstream>
 #include <unordered_set>
 #include <utility>
 
 namespace termin {
 
-namespace {
+    namespace {
 
-// Trim whitespace from both ends
-std::string trim(const std::string& s) {
-    size_t start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return "";
-    size_t end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
-}
+        // Trim whitespace from both ends
+        std::string trim(const std::string& s) {
+            size_t start = s.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos)
+                return "";
+            size_t end = s.find_last_not_of(" \t\r\n");
+            return s.substr(start, end - start + 1);
+        }
 
-// Convert to lowercase
-std::string to_lower(const std::string& s) {
-    std::string result = s;
-    std::transform(result.begin(), result.end(), result.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return result;
-}
+        // Convert to lowercase
+        std::string to_lower(const std::string& s) {
+            std::string result = s;
+            std::transform(
+                result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+            return result;
+        }
 
-// Check if string starts with prefix
-bool starts_with(const std::string& s, const std::string& prefix) {
-    return s.size() >= prefix.size() &&
-           s.compare(0, prefix.size(), prefix) == 0;
-}
+        // Check if string starts with prefix
+        bool starts_with(const std::string& s, const std::string& prefix) {
+            return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+        }
 
-// Split string by whitespace
-std::vector<std::string> split_whitespace(const std::string& s) {
-    std::vector<std::string> result;
-    std::istringstream iss(s);
-    std::string word;
-    while (iss >> word) {
-        result.push_back(word);
-    }
-    return result;
-}
-
-std::string require_key_value(
-    const std::string& token,
-    std::unordered_set<std::string>& seen,
-    const char* directive,
-    std::string& key)
-{
-    const size_t equals = token.find('=');
-    if (equals == std::string::npos || equals == 0 ||
-        equals + 1 >= token.size()) {
-        throw std::runtime_error(
-            std::string(directive) +
-            " expects key=value tokens; invalid token: " + token);
-    }
-    key = token.substr(0, equals);
-    if (!seen.insert(key).second) {
-        throw std::runtime_error(
-            std::string(directive) + " has duplicate key: " + key);
-    }
-    return token.substr(equals + 1);
-}
-
-MaterialSurfaceProducer parse_surface_directive(const std::string& line) {
-    const std::vector<std::string> parts = split_whitespace(line);
-    if (parts.size() != 5) {
-        throw std::runtime_error(
-            "@surface requires contract, version, type and entry");
-    }
-
-    MaterialSurfaceProducer result;
-    std::unordered_set<std::string> seen;
-    for (size_t index = 1; index < parts.size(); ++index) {
-        std::string key;
-        std::string value =
-            require_key_value(parts[index], seen, "@surface", key);
-        if (key == "contract") {
-            result.contract_id = std::move(value);
-        } else if (key == "version") {
-            size_t consumed = 0;
-            const unsigned long parsed = std::stoul(value, &consumed);
-            if (consumed != value.size() || parsed == 0 ||
-                parsed > UINT32_MAX) {
-                throw std::runtime_error(
-                    "@surface version must be a non-zero uint32");
+        // Split string by whitespace
+        std::vector<std::string> split_whitespace(const std::string& s) {
+            std::vector<std::string> result;
+            std::istringstream iss(s);
+            std::string word;
+            while (iss >> word) {
+                result.push_back(word);
             }
-            result.contract_version = static_cast<uint32_t>(parsed);
-        } else if (key == "type") {
-            result.surface_type_name = std::move(value);
-        } else if (key == "entry") {
-            result.evaluator_entry = std::move(value);
-        } else {
-            throw std::runtime_error("@surface has unknown key: " + key);
-        }
-    }
-    if (result.contract_id.empty() || result.contract_version == 0 ||
-        result.surface_type_name.empty() || result.evaluator_entry.empty()) {
-        throw std::runtime_error(
-            "@surface requires contract=<id> version=<n> type=<type> entry=<entry>");
-    }
-    return result;
-}
-
-bool valid_surface_input_type(const std::string& value_type) {
-    return value_type == "float" || value_type == "float2" ||
-        value_type == "float3" || value_type == "float4" ||
-        value_type == "float4x4";
-}
-
-SurfaceFragmentInput parse_surface_input_directive(const std::string& line) {
-    const std::vector<std::string> parts = split_whitespace(line);
-    if (parts.size() != 3 || parts[1].empty() ||
-        !valid_surface_input_type(parts[2])) {
-        throw std::runtime_error(
-            "@surfaceInput expects <semantic> "
-            "<float|float2|float3|float4|float4x4>");
-    }
-    return {parts[1], parts[2]};
-}
-
-std::string regex_escape(const std::string& text) {
-    static const std::regex special(R"([.^$|()\\[\]{}*+?])");
-    return std::regex_replace(text, special, R"(\\$&)");
-}
-
-std::string surface_producer_source_identity(
-    const MaterialSurfaceProducer& producer)
-{
-    uint64_t hash = 14695981039346656037ull;
-    auto append = [&hash](const std::string& value) {
-        for (const unsigned char ch : value) {
-            hash ^= ch;
-            hash *= 1099511628211ull;
-        }
-        hash ^= 0xffu;
-        hash *= 1099511628211ull;
-    };
-    append(producer.contract_id);
-    append(std::to_string(producer.contract_version));
-    append(producer.surface_type_name);
-    append(producer.evaluator_entry);
-    append(producer.evaluator_source);
-    for (const SurfaceFragmentInput& input :
-         producer.required_fragment_inputs) {
-        append(input.semantic);
-        append(input.value_type);
-    }
-    for (const SurfaceProducerResourceDecl& resource : producer.resources) {
-        append(resource.name);
-        append(std::to_string(resource.kind));
-        append(std::to_string(resource.scope));
-        append(std::to_string(resource.stage_mask));
-        append(std::to_string(resource.size));
-    }
-    char buffer[80] = {};
-    std::snprintf(
-        buffer,
-        sizeof(buffer),
-        "%s@%u:evaluator-fnv1a64:%016llx",
-        producer.contract_id.c_str(),
-        producer.contract_version,
-        static_cast<unsigned long long>(hash));
-    return buffer;
-}
-
-// Parse property value from string
-MaterialProperty::DefaultValue parse_property_value(
-    const std::string& value_str,
-    const std::string& property_type
-) {
-    std::string val = trim(value_str);
-
-    if (property_type == "Float") {
-        return std::stod(val);
-    }
-    else if (property_type == "Int") {
-        return std::stoi(val);
-    }
-    else if (property_type == "Bool") {
-        return parse_bool(val);
-    }
-    else if (property_type == "Vec2" || property_type == "Vec3" ||
-             property_type == "Vec4" || property_type == "Color") {
-        // Parse: Color(1.0, 0.5, 0.0, 1.0) or Vec3(1, 2, 3) or [1.0, 0.5, 0.0, 1.0] or "1.0 0.5 0.0"
-        std::vector<double> values;
-
-        // Try constructor format: Type(...)
-        std::regex ctor_regex(R"(\w+\s*\(\s*([^)]+)\s*\))");
-        std::smatch match;
-        std::string inner;
-
-        if (std::regex_search(val, match, ctor_regex)) {
-            inner = match[1].str();
-        } else {
-            inner = val;
+            return result;
         }
 
-        // Parse comma or space separated values, ignoring brackets
-        std::string num;
-        for (char c : inner) {
-            if (c == ',' || c == ' ' || c == '\t' || c == '[' || c == ']') {
+        std::string require_key_value(const std::string& token,
+                                      std::unordered_set<std::string>& seen,
+                                      const char* directive,
+                                      std::string& key) {
+            const size_t equals = token.find('=');
+            if (equals == std::string::npos || equals == 0 || equals + 1 >= token.size()) {
+                throw std::runtime_error(std::string(directive) + " expects key=value tokens; invalid token: " + token);
+            }
+            key = token.substr(0, equals);
+            if (!seen.insert(key).second) {
+                throw std::runtime_error(std::string(directive) + " has duplicate key: " + key);
+            }
+            return token.substr(equals + 1);
+        }
+
+        MaterialSurfaceProducer parse_surface_directive(const std::string& line) {
+            const std::vector<std::string> parts = split_whitespace(line);
+            if (parts.size() != 5) {
+                throw std::runtime_error("@surface requires contract, version, type and entry");
+            }
+
+            MaterialSurfaceProducer result;
+            std::unordered_set<std::string> seen;
+            for (size_t index = 1; index < parts.size(); ++index) {
+                std::string key;
+                std::string value = require_key_value(parts[index], seen, "@surface", key);
+                if (key == "contract") {
+                    result.contract_id = std::move(value);
+                } else if (key == "version") {
+                    size_t consumed = 0;
+                    const unsigned long parsed = std::stoul(value, &consumed);
+                    if (consumed != value.size() || parsed == 0 || parsed > UINT32_MAX) {
+                        throw std::runtime_error("@surface version must be a non-zero uint32");
+                    }
+                    result.contract_version = static_cast<uint32_t>(parsed);
+                } else if (key == "type") {
+                    result.surface_type_name = std::move(value);
+                } else if (key == "entry") {
+                    result.evaluator_entry = std::move(value);
+                } else {
+                    throw std::runtime_error("@surface has unknown key: " + key);
+                }
+            }
+            if (result.contract_id.empty() || result.contract_version == 0 || result.surface_type_name.empty() ||
+                result.evaluator_entry.empty()) {
+                throw std::runtime_error("@surface requires contract=<id> version=<n> type=<type> entry=<entry>");
+            }
+            return result;
+        }
+
+        bool valid_surface_input_type(const std::string& value_type) {
+            return value_type == "float" || value_type == "float2" || value_type == "float3" ||
+                   value_type == "float4" || value_type == "float4x4";
+        }
+
+        SurfaceFragmentInput parse_surface_input_directive(const std::string& line) {
+            const std::vector<std::string> parts = split_whitespace(line);
+            if (parts.size() != 3 || parts[1].empty() || !valid_surface_input_type(parts[2])) {
+                throw std::runtime_error("@surfaceInput expects <semantic> "
+                                         "<float|float2|float3|float4|float4x4>");
+            }
+            return {parts[1], parts[2]};
+        }
+
+        std::string regex_escape(const std::string& text) {
+            static const std::regex special(R"([.^$|()\\[\]{}*+?])");
+            return std::regex_replace(text, special, R"(\\$&)");
+        }
+
+        std::string surface_producer_source_identity(const MaterialSurfaceProducer& producer) {
+            uint64_t hash = 14695981039346656037ull;
+            auto append = [&hash](const std::string& value) {
+                for (const unsigned char ch : value) {
+                    hash ^= ch;
+                    hash *= 1099511628211ull;
+                }
+                hash ^= 0xffu;
+                hash *= 1099511628211ull;
+            };
+            append(producer.contract_id);
+            append(std::to_string(producer.contract_version));
+            append(producer.surface_type_name);
+            append(producer.evaluator_entry);
+            append(producer.evaluator_source);
+            for (const SurfaceFragmentInput& input : producer.required_fragment_inputs) {
+                append(input.semantic);
+                append(input.value_type);
+            }
+            for (const SurfaceProducerResourceDecl& resource : producer.resources) {
+                append(resource.name);
+                append(std::to_string(resource.kind));
+                append(std::to_string(resource.scope));
+                append(std::to_string(resource.stage_mask));
+                append(std::to_string(resource.size));
+            }
+            char buffer[80] = {};
+            std::snprintf(buffer,
+                          sizeof(buffer),
+                          "%s@%u:evaluator-fnv1a64:%016llx",
+                          producer.contract_id.c_str(),
+                          producer.contract_version,
+                          static_cast<unsigned long long>(hash));
+            return buffer;
+        }
+
+        // Parse property value from string
+        MaterialProperty::DefaultValue parse_property_value(const std::string& value_str,
+                                                            const std::string& property_type) {
+            std::string val = trim(value_str);
+
+            if (property_type == "Float") {
+                return std::stod(val);
+            } else if (property_type == "Int") {
+                return std::stoi(val);
+            } else if (property_type == "Bool") {
+                return parse_bool(val);
+            } else if (property_type == "Vec2" || property_type == "Vec3" || property_type == "Vec4" ||
+                       property_type == "Color") {
+                // Parse: Color(1.0, 0.5, 0.0, 1.0) or Vec3(1, 2, 3) or [1.0, 0.5, 0.0, 1.0] or "1.0 0.5 0.0"
+                std::vector<double> values;
+
+                // Try constructor format: Type(...)
+                std::regex ctor_regex(R"(\w+\s*\(\s*([^)]+)\s*\))");
+                std::smatch match;
+                std::string inner;
+
+                if (std::regex_search(val, match, ctor_regex)) {
+                    inner = match[1].str();
+                } else {
+                    inner = val;
+                }
+
+                // Parse comma or space separated values, ignoring brackets
+                std::string num;
+                for (char c : inner) {
+                    if (c == ',' || c == ' ' || c == '\t' || c == '[' || c == ']') {
+                        if (!num.empty()) {
+                            values.push_back(std::stod(trim(num)));
+                            num.clear();
+                        }
+                    } else {
+                        num += c;
+                    }
+                }
                 if (!num.empty()) {
                     values.push_back(std::stod(trim(num)));
-                    num.clear();
                 }
-            } else {
-                num += c;
+
+                // Ensure correct size
+                size_t expected = 0;
+                if (property_type == "Vec2")
+                    expected = 2;
+                else if (property_type == "Vec3")
+                    expected = 3;
+                else
+                    expected = 4; // Vec4 or Color
+
+                while (values.size() < expected) {
+                    values.push_back(property_type == "Color" ? 1.0 : 0.0);
+                }
+
+                return values;
+            } else if (property_type == "Texture") {
+                // Remove quotes if present
+                if (val.size() >= 2 &&
+                    ((val.front() == '"' && val.back() == '"') || (val.front() == '\'' && val.back() == '\''))) {
+                    return val.substr(1, val.size() - 2);
+                }
+                return val.empty() ? MaterialProperty::DefaultValue{std::monostate{}}
+                                   : MaterialProperty::DefaultValue{val};
             }
-        }
-        if (!num.empty()) {
-            values.push_back(std::stod(trim(num)));
-        }
 
-        // Ensure correct size
-        size_t expected = 0;
-        if (property_type == "Vec2") expected = 2;
-        else if (property_type == "Vec3") expected = 3;
-        else expected = 4;  // Vec4 or Color
-
-        while (values.size() < expected) {
-            values.push_back(property_type == "Color" ? 1.0 : 0.0);
+            throw std::runtime_error("Unknown property type: " + property_type);
         }
 
-        return values;
+        // Get default value for property type
+        MaterialProperty::DefaultValue get_default_for_type(const std::string& type) {
+            if (type == "Float")
+                return 0.0;
+            if (type == "Int")
+                return 0;
+            if (type == "Bool")
+                return false;
+            if (type == "Vec2")
+                return std::vector<double>{0.0, 0.0};
+            if (type == "Vec3")
+                return std::vector<double>{0.0, 0.0, 0.0};
+            if (type == "Vec4")
+                return std::vector<double>{0.0, 0.0, 0.0, 0.0};
+            if (type == "Color")
+                return std::vector<double>{1.0, 1.0, 1.0, 1.0};
+            if (type == "Mat4") {
+                // 4x4 identity, column-major like Mat44f storage.
+                return std::vector<double>{
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                };
+            }
+            if (type == "Texture")
+                return std::monostate{};
+            throw std::runtime_error("Unknown property type: " + type);
+        }
+
+    } // anonymous namespace
+
+    bool parse_bool(const std::string& value) {
+        std::string low = to_lower(trim(value));
+        if (low == "true" || low == "1" || low == "yes" || low == "on") {
+            return true;
+        }
+        if (low == "false" || low == "0" || low == "no" || low == "off") {
+            return false;
+        }
+        throw std::runtime_error("Cannot parse as bool: " + value);
     }
-    else if (property_type == "Texture") {
-        // Remove quotes if present
-        if (val.size() >= 2 &&
-            ((val.front() == '"' && val.back() == '"') ||
-             (val.front() == '\'' && val.back() == '\''))) {
-            return val.substr(1, val.size() - 2);
+
+    // ========== std140 Material UBO generator ==========
+
+    std::pair<uint32_t, uint32_t> std140_size_align(const std::string& property_type) {
+        // Scalars.
+        if (property_type == "Float" || property_type == "Int" || property_type == "Bool") {
+            return {4u, 4u};
         }
-        return val.empty() ? MaterialProperty::DefaultValue{std::monostate{}} :
-                             MaterialProperty::DefaultValue{val};
+        // Two-component vector.
+        if (property_type == "Vec2") {
+            return {8u, 8u};
+        }
+        // Three-component vector: data size 12, but base alignment is 16.
+        if (property_type == "Vec3") {
+            return {12u, 16u};
+        }
+        // Four-component vectors.
+        if (property_type == "Vec4" || property_type == "Color") {
+            return {16u, 16u};
+        }
+        // 4x4 matrix — four column vec4s, base alignment 16.
+        if (property_type == "Mat4") {
+            return {64u, 16u};
+        }
+        // Texture / anything else: not in UBO.
+        return {0u, 0u};
     }
 
-    throw std::runtime_error("Unknown property type: " + property_type);
-}
+    static uint32_t round_up(uint32_t value, uint32_t align) {
+        if (align == 0)
+            return value;
+        return (value + align - 1u) & ~(align - 1u);
+    }
 
-// Get default value for property type
-MaterialProperty::DefaultValue get_default_for_type(const std::string& type) {
-    if (type == "Float") return 0.0;
-    if (type == "Int") return 0;
-    if (type == "Bool") return false;
-    if (type == "Vec2") return std::vector<double>{0.0, 0.0};
-    if (type == "Vec3") return std::vector<double>{0.0, 0.0, 0.0};
-    if (type == "Vec4") return std::vector<double>{0.0, 0.0, 0.0, 0.0};
-    if (type == "Color") return std::vector<double>{1.0, 1.0, 1.0, 1.0};
-    if (type == "Mat4") {
-        // 4x4 identity, column-major like Mat44f storage.
-        return std::vector<double>{
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+    MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& properties) {
+        MaterialUboLayout layout;
+        uint32_t cursor = 0;
+
+        for (const auto& prop : properties) {
+            auto [size, align] = std140_size_align(prop.property_type);
+            if (size == 0)
+                continue; // Texture / unknown — skip.
+
+            cursor = round_up(cursor, align);
+
+            MaterialUboEntry entry;
+            entry.name = prop.name;
+            entry.property_type = prop.property_type;
+            entry.offset = cursor;
+            entry.size = size;
+            layout.entries.push_back(std::move(entry));
+
+            cursor += size;
+        }
+
+        // Whole block rounds up to 16-byte boundary per std140.
+        layout.block_size = round_up(cursor, 16u);
+        return layout;
+    }
+
+    std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
+        if (layout.empty())
+            return "";
+
+        auto slang_type = [](const std::string& prop_type) -> const char* {
+            if (prop_type == "Float")
+                return "float";
+            if (prop_type == "Int")
+                return "int";
+            // Runtime packing writes Bool as a 32-bit 0/1 integer. Keep the Slang
+            // ABI explicit instead of depending on backend bool buffer layout.
+            if (prop_type == "Bool")
+                return "int";
+            if (prop_type == "Vec2")
+                return "float2";
+            if (prop_type == "Vec3")
+                return "float3";
+            if (prop_type == "Vec4")
+                return "float4";
+            if (prop_type == "Color")
+                return "float4";
+            if (prop_type == "Mat4")
+                return "column_major float4x4";
+            return nullptr;
         };
-    }
-    if (type == "Texture") return std::monostate{};
-    throw std::runtime_error("Unknown property type: " + type);
-}
 
-} // anonymous namespace
-
-
-bool parse_bool(const std::string& value) {
-    std::string low = to_lower(trim(value));
-    if (low == "true" || low == "1" || low == "yes" || low == "on") {
-        return true;
-    }
-    if (low == "false" || low == "0" || low == "no" || low == "off") {
-        return false;
-    }
-    throw std::runtime_error("Cannot parse as bool: " + value);
-}
-
-
-// ========== std140 Material UBO generator ==========
-
-std::pair<uint32_t, uint32_t> std140_size_align(const std::string& property_type) {
-    // Scalars.
-    if (property_type == "Float" || property_type == "Int" || property_type == "Bool") {
-        return {4u, 4u};
-    }
-    // Two-component vector.
-    if (property_type == "Vec2") {
-        return {8u, 8u};
-    }
-    // Three-component vector: data size 12, but base alignment is 16.
-    if (property_type == "Vec3") {
-        return {12u, 16u};
-    }
-    // Four-component vectors.
-    if (property_type == "Vec4" || property_type == "Color") {
-        return {16u, 16u};
-    }
-    // 4x4 matrix — four column vec4s, base alignment 16.
-    if (property_type == "Mat4") {
-        return {64u, 16u};
-    }
-    // Texture / anything else: not in UBO.
-    return {0u, 0u};
-}
-
-static uint32_t round_up(uint32_t value, uint32_t align) {
-    if (align == 0) return value;
-    return (value + align - 1u) & ~(align - 1u);
-}
-
-MaterialUboLayout compute_std140_layout(const std::vector<MaterialProperty>& properties) {
-    MaterialUboLayout layout;
-    uint32_t cursor = 0;
-
-    for (const auto& prop : properties) {
-        auto [size, align] = std140_size_align(prop.property_type);
-        if (size == 0) continue;  // Texture / unknown — skip.
-
-        cursor = round_up(cursor, align);
-
-        MaterialUboEntry entry;
-        entry.name = prop.name;
-        entry.property_type = prop.property_type;
-        entry.offset = cursor;
-        entry.size = size;
-        layout.entries.push_back(std::move(entry));
-
-        cursor += size;
-    }
-
-    // Whole block rounds up to 16-byte boundary per std140.
-    layout.block_size = round_up(cursor, 16u);
-    return layout;
-}
-
-std::string synthesize_material_ubo_slang(const MaterialUboLayout& layout) {
-    if (layout.empty()) return "";
-
-    auto slang_type = [](const std::string& prop_type) -> const char* {
-        if (prop_type == "Float") return "float";
-        if (prop_type == "Int")   return "int";
-        // Runtime packing writes Bool as a 32-bit 0/1 integer. Keep the Slang
-        // ABI explicit instead of depending on backend bool buffer layout.
-        if (prop_type == "Bool")  return "int";
-        if (prop_type == "Vec2")  return "float2";
-        if (prop_type == "Vec3")  return "float3";
-        if (prop_type == "Vec4")  return "float4";
-        if (prop_type == "Color") return "float4";
-        if (prop_type == "Mat4")  return "column_major float4x4";
-        return nullptr;
-    };
-
-    std::ostringstream out;
-    out << "struct MaterialParams {\n";
-    for (const auto& e : layout.entries) {
-        const char* t = slang_type(e.property_type);
-        if (!t) continue;
-        out << "    " << t << " " << e.name << ";\n";
-    }
-    out << "};\n";
-    out << "[[TerminScope(\"material\")]]\n";
-    out << "ConstantBuffer<MaterialParams> material;\n";
-    return out.str();
-}
-
-std::vector<std::string> collect_texture_properties(const std::vector<MaterialProperty>& properties) {
-    std::vector<std::string> names;
-    for (const auto& prop : properties) {
-        if (prop.property_type == "Texture" || prop.property_type == "Texture2D") {
-            names.push_back(prop.name);
+        std::ostringstream out;
+        out << "struct MaterialParams {\n";
+        for (const auto& e : layout.entries) {
+            const char* t = slang_type(e.property_type);
+            if (!t)
+                continue;
+            out << "    " << t << " " << e.name << ";\n";
         }
-    }
-    return names;
-}
-
-std::string strip_slang_sampler_decls(
-    const std::string& source,
-    const std::vector<std::string>& sampler_names
-) {
-    if (sampler_names.empty()) return source;
-
-    std::vector<std::regex> res;
-    res.reserve(sampler_names.size());
-    for (const auto& name : sampler_names) {
-        std::string pattern =
-            std::string("[ \\t]*Sampler[0-9A-Za-z_]*[ \\t]+")
-            + name + "[ \\t]*;[ \\t]*";
-        res.emplace_back(pattern);
-    }
-
-    std::string result;
-    size_t i = 0;
-    while (i < source.size()) {
-        size_t eol = source.find('\n', i);
-        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
-        std::string line = source.substr(i, line_end - i);
-        bool drop = false;
-        for (const auto& re : res) {
-            if (std::regex_match(line, re)) {
-                drop = true;
-                break;
-            }
-        }
-        if (!drop) {
-            result.append(line);
-            if (eol != std::string::npos) result.push_back('\n');
-        }
-        if (eol == std::string::npos) break;
-        i = eol + 1;
-    }
-    return result;
-}
-
-bool source_uses_identifier(const std::string& source, const std::string& name) {
-    std::regex re(std::string("\\b") + name + "\\b");
-    return std::regex_search(source, re);
-}
-
-bool slang_source_has_prelude_import(const std::string& source) {
-    static const std::regex re(R"(\bimport\s+termin_prelude\s*;)");
-    return std::regex_search(source, re);
-}
-
-std::string ensure_slang_prelude_import(std::string source) {
-    if (source.find("TerminScope(") == std::string::npos ||
-        slang_source_has_prelude_import(source)) {
-        return source;
-    }
-    return "import termin_prelude;\n" + source;
-}
-
-std::string synthesize_material_sampler_slang(
-    const std::vector<std::string>& texture_names,
-    const std::string& stage_source
-) {
-    if (texture_names.empty()) return "";
-
-    std::ostringstream out;
-    for (const std::string& name : texture_names) {
-        if (!source_uses_identifier(stage_source, name)) {
-            continue;
-        }
+        out << "};\n";
         out << "[[TerminScope(\"material\")]]\n";
-        out << "Sampler2D " << name << ";\n";
+        out << "ConstantBuffer<MaterialParams> material;\n";
+        return out.str();
     }
-    return out.str();
-}
 
-bool is_engine_uniform_name(const std::string& name);
-
-std::vector<MaterialProperty> collect_used_material_properties(
-    const std::vector<MaterialProperty>& material_properties,
-    const ShaderPhase& phase)
-{
-    std::vector<MaterialProperty> used;
-    for (const auto& prop : material_properties) {
-        for (const auto& kv : phase.stages) {
-            if (source_uses_identifier(kv.second.source, prop.name)) {
-                used.push_back(prop);
-                break;
+    std::vector<std::string> collect_texture_properties(const std::vector<MaterialProperty>& properties) {
+        std::vector<std::string> names;
+        for (const auto& prop : properties) {
+            if (prop.property_type == "Texture" || prop.property_type == "Texture2D") {
+                names.push_back(prop.name);
             }
         }
-    }
-    return used;
-}
-
-bool contains_slang_material_params_declaration(const ShaderPhase& phase) {
-    for (const auto& kv : phase.stages) {
-        const std::string& src = kv.second.source;
-        if (src.find("struct MaterialParams") != std::string::npos ||
-            src.find("ConstantBuffer<MaterialParams>") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool stage_uses_material_ubo_layout(
-    const ShaderStage& stage,
-    const MaterialUboLayout& layout)
-{
-    for (const auto& entry : layout.entries) {
-        if (source_uses_identifier(stage.source, entry.name)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// ============================================================================
-// Engine uniforms auto-substitution
-// ============================================================================
-//
-// Slang .shader stages may still use the compact engine names
-// (`u_view`, `u_model`, etc.) while authoring migrated stdlib materials.
-// Transform the stage source so that:
-//
-//   - legacy-style `uniform <type> <name>;` decls for known engine names are
-//     stripped
-//   - a PerFrame constant buffer is injected with view / projection / view_projection /
-//     camera_position
-//   - a draw-scope constant buffer with `u_model` is injected
-//   - `#define u_model draw_data._u_model` so stage bodies keep writing
-//     `u_model * vec4(pos, 1.0)` without manual rewrite
-//
-// This is the minimal substitution needed to get stdlib materials
-// (TestMaterialUbo, BlinnPhong, CookTorrancePBR, …) to compile for
-// Vulkan without touching their .shader files. The list of recognised
-// names is deliberately closed — shader-specific uniforms that aren't
-// wired into the engine remain the shader author's responsibility.
-const char* const ENGINE_PLAIN_UNIFORM_NAMES[] = {
-    "u_model",
-    "u_view",
-    "u_projection",
-    "u_view_projection",
-    "u_inv_view",
-    "u_inv_proj",
-    "u_camera_position",
-    "u_resolution",
-    "u_near",
-    "u_far",
-};
-
-bool is_engine_uniform_name(const std::string& name) {
-    for (const char* engine_name : ENGINE_PLAIN_UNIFORM_NAMES) {
-        if (name == engine_name) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::string strip_engine_uniform_decls(const std::string& source) {
-    std::vector<std::regex> res;
-    for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
-        std::string pattern =
-            std::string("[ \\t]*uniform[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]+") +
-            name + "[ \\t]*;[ \\t]*";
-        res.emplace_back(pattern);
+        return names;
     }
 
-    std::string result;
-    result.reserve(source.size());
-    size_t i = 0;
-    while (i < source.size()) {
-        size_t eol = source.find('\n', i);
-        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
-        std::string line = source.substr(i, line_end - i);
-        bool drop = false;
-        for (const auto& re : res) {
-            if (std::regex_match(line, re)) { drop = true; break; }
+    std::string strip_slang_sampler_decls(const std::string& source, const std::vector<std::string>& sampler_names) {
+        if (sampler_names.empty())
+            return source;
+
+        std::vector<std::regex> res;
+        res.reserve(sampler_names.size());
+        for (const auto& name : sampler_names) {
+            std::string pattern = std::string("[ \\t]*Sampler[0-9A-Za-z_]*[ \\t]+") + name + "[ \\t]*;[ \\t]*";
+            res.emplace_back(pattern);
         }
-        if (!drop) {
-            result.append(line);
-            if (eol != std::string::npos) result.push_back('\n');
+
+        std::string result;
+        size_t i = 0;
+        while (i < source.size()) {
+            size_t eol = source.find('\n', i);
+            size_t line_end = (eol == std::string::npos) ? source.size() : eol;
+            std::string line = source.substr(i, line_end - i);
+            bool drop = false;
+            for (const auto& re : res) {
+                if (std::regex_match(line, re)) {
+                    drop = true;
+                    break;
+                }
+            }
+            if (!drop) {
+                result.append(line);
+                if (eol != std::string::npos)
+                    result.push_back('\n');
+            }
+            if (eol == std::string::npos)
+                break;
+            i = eol + 1;
         }
-        if (eol == std::string::npos) break;
-        i = eol + 1;
+        return result;
     }
-    return result;
-}
 
-struct EngineUniformDeclUsage {
-    bool per_frame = false;
-    bool model = false;
+    bool source_uses_identifier(const std::string& source, const std::string& name) {
+        std::regex re(std::string("\\b") + name + "\\b");
+        return std::regex_search(source, re);
+    }
 
-    bool any() const { return per_frame || model; }
-};
+    bool slang_source_has_prelude_import(const std::string& source) {
+        static const std::regex re(R"(\bimport\s+termin_prelude\s*;)");
+        return std::regex_search(source, re);
+    }
 
-bool is_per_frame_engine_uniform_name(const std::string& name) {
-    return name == "u_view" ||
-           name == "u_projection" ||
-           name == "u_view_projection" ||
-           name == "u_inv_view" ||
-           name == "u_inv_proj" ||
-           name == "u_camera_position" ||
-           name == "u_resolution" ||
-           name == "u_near" ||
-           name == "u_far";
-}
-
-bool is_identifier_char(char c) {
-    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-}
-
-bool line_declares_engine_identifier(const std::string& line,
-                                     const std::string& name) {
-    const std::string pattern =
-        std::string(R"((^|[;{,(])[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?)")
-        + R"((?:uniform[ \t]+)?)"
-        + R"((?:column_major[ \t]+|row_major[ \t]+)?)"
-        + R"([A-Za-z_][A-Za-z0-9_]*(?:[ \t]*x[ \t]*[0-9]+)?[ \t]+)"
-        + name
-        + R"((?:[ \t]*\[[^\]]+\])?[ \t]*(?:;|:).*$)";
-    return std::regex_search(line, std::regex(pattern));
-}
-
-bool source_uses_engine_identifier_reference(const std::string& source,
-                                             const std::string& name) {
-    std::istringstream lines(source);
-    std::string line;
-    while (std::getline(lines, line)) {
-        size_t comment = line.find("//");
-        if (comment != std::string::npos) {
-            line = line.substr(0, comment);
+    std::string ensure_slang_prelude_import(std::string source) {
+        if (source.find("TerminScope(") == std::string::npos || slang_source_has_prelude_import(source)) {
+            return source;
         }
-        if (line_declares_engine_identifier(line, name) ||
-            line.find("#define") != std::string::npos) {
-            continue;
-        }
+        return "import termin_prelude;\n" + source;
+    }
 
-        size_t pos = line.find(name);
-        while (pos != std::string::npos) {
-            const bool left_ok =
-                pos == 0 || !is_identifier_char(line[pos - 1]);
-            const size_t end = pos + name.size();
-            const bool right_ok =
-                end >= line.size() || !is_identifier_char(line[end]);
-            const bool member_access =
-                pos > 0 && line[pos - 1] == '.';
-            if (left_ok && right_ok && !member_access) {
+    std::string synthesize_material_sampler_slang(const std::vector<std::string>& texture_names,
+                                                  const std::string& stage_source) {
+        if (texture_names.empty())
+            return "";
+
+        std::ostringstream out;
+        for (const std::string& name : texture_names) {
+            if (!source_uses_identifier(stage_source, name)) {
+                continue;
+            }
+            out << "[[TerminScope(\"material\")]]\n";
+            out << "Sampler2D " << name << ";\n";
+        }
+        return out.str();
+    }
+
+    bool is_engine_uniform_name(const std::string& name);
+
+    std::vector<MaterialProperty>
+    collect_used_material_properties(const std::vector<MaterialProperty>& material_properties,
+                                     const ShaderPhase& phase) {
+        std::vector<MaterialProperty> used;
+        for (const auto& prop : material_properties) {
+            for (const auto& kv : phase.stages) {
+                if (source_uses_identifier(kv.second.source, prop.name)) {
+                    used.push_back(prop);
+                    break;
+                }
+            }
+        }
+        return used;
+    }
+
+    bool contains_slang_material_params_declaration(const ShaderPhase& phase) {
+        for (const auto& kv : phase.stages) {
+            const std::string& src = kv.second.source;
+            if (src.find("struct MaterialParams") != std::string::npos ||
+                src.find("ConstantBuffer<MaterialParams>") != std::string::npos) {
                 return true;
             }
-            pos = line.find(name, pos + name.size());
         }
+        return false;
     }
-    return false;
-}
 
-bool source_declares_slang_constant_buffer(const std::string& source,
-                                           const std::string& resource_name) {
-    const std::string pattern =
-        std::string(R"(ConstantBuffer[ \t]*<[^>]+>[ \t]*)") +
-        resource_name + R"(\b)";
-    return std::regex_search(source, std::regex(pattern));
-}
-
-bool stage_uses_per_frame_engine_uniform(const std::string& source) {
-    for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
-        if (!is_per_frame_engine_uniform_name(name)) {
-            continue;
+    bool stage_uses_material_ubo_layout(const ShaderStage& stage, const MaterialUboLayout& layout) {
+        for (const auto& entry : layout.entries) {
+            if (source_uses_identifier(stage.source, entry.name)) {
+                return true;
+            }
         }
-        if (source_uses_engine_identifier_reference(source, name)) {
-            return true;
-        }
+        return false;
     }
-    return false;
-}
 
-EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
-    EngineUniformDeclUsage usage;
-    std::regex uniform_re(
-        R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?uniform[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]*\[[^\]]+\])?[ \t]*;[ \t]*(?://.*)?$)");
+    // ============================================================================
+    // Engine uniforms auto-substitution
+    // ============================================================================
+    //
+    // Slang .shader stages may still use the compact engine names
+    // (`u_view`, `u_model`, etc.) while authoring migrated stdlib materials.
+    // Transform the stage source so that:
+    //
+    //   - legacy-style `uniform <type> <name>;` decls for known engine names are
+    //     stripped
+    //   - a PerFrame constant buffer is injected with view / projection / view_projection /
+    //     camera_position
+    //   - a draw-scope constant buffer with `u_model` is injected
+    //   - `#define u_model draw_data._u_model` so stage bodies keep writing
+    //     `u_model * vec4(pos, 1.0)` without manual rewrite
+    //
+    // This is the minimal substitution needed to get stdlib materials
+    // (TestMaterialUbo, BlinnPhong, CookTorrancePBR, …) to compile for
+    // Vulkan without touching their .shader files. The list of recognised
+    // names is deliberately closed — shader-specific uniforms that aren't
+    // wired into the engine remain the shader author's responsibility.
+    const char* const ENGINE_PLAIN_UNIFORM_NAMES[] = {
+        "u_model",
+        "u_view",
+        "u_projection",
+        "u_view_projection",
+        "u_inv_view",
+        "u_inv_proj",
+        "u_camera_position",
+        "u_resolution",
+        "u_near",
+        "u_far",
+    };
 
-    std::istringstream lines(source);
-    std::string line;
-    while (std::getline(lines, line)) {
-        std::smatch match;
-        if (!std::regex_match(line, match, uniform_re)) {
-            continue;
+    bool is_engine_uniform_name(const std::string& name) {
+        for (const char* engine_name : ENGINE_PLAIN_UNIFORM_NAMES) {
+            if (name == engine_name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::string strip_engine_uniform_decls(const std::string& source) {
+        std::vector<std::regex> res;
+        for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
+            std::string pattern =
+                std::string("[ \\t]*uniform[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]+") + name + "[ \\t]*;[ \\t]*";
+            res.emplace_back(pattern);
         }
 
-        std::string name = match[1].str();
-        if (name == "u_model") {
-            usage.model = true;
-        } else if (is_per_frame_engine_uniform_name(name)) {
+        std::string result;
+        result.reserve(source.size());
+        size_t i = 0;
+        while (i < source.size()) {
+            size_t eol = source.find('\n', i);
+            size_t line_end = (eol == std::string::npos) ? source.size() : eol;
+            std::string line = source.substr(i, line_end - i);
+            bool drop = false;
+            for (const auto& re : res) {
+                if (std::regex_match(line, re)) {
+                    drop = true;
+                    break;
+                }
+            }
+            if (!drop) {
+                result.append(line);
+                if (eol != std::string::npos)
+                    result.push_back('\n');
+            }
+            if (eol == std::string::npos)
+                break;
+            i = eol + 1;
+        }
+        return result;
+    }
+
+    struct EngineUniformDeclUsage {
+        bool per_frame = false;
+        bool model = false;
+
+        bool any() const {
+            return per_frame || model;
+        }
+    };
+
+    bool is_per_frame_engine_uniform_name(const std::string& name) {
+        return name == "u_view" || name == "u_projection" || name == "u_view_projection" || name == "u_inv_view" ||
+               name == "u_inv_proj" || name == "u_camera_position" || name == "u_resolution" || name == "u_near" ||
+               name == "u_far";
+    }
+
+    bool is_identifier_char(char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+    }
+
+    bool line_declares_engine_identifier(const std::string& line, const std::string& name) {
+        const std::string pattern = std::string(R"((^|[;{,(])[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?)") +
+                                    R"((?:uniform[ \t]+)?)" + R"((?:column_major[ \t]+|row_major[ \t]+)?)" +
+                                    R"([A-Za-z_][A-Za-z0-9_]*(?:[ \t]*x[ \t]*[0-9]+)?[ \t]+)" + name +
+                                    R"((?:[ \t]*\[[^\]]+\])?[ \t]*(?:;|:).*$)";
+        return std::regex_search(line, std::regex(pattern));
+    }
+
+    bool source_uses_engine_identifier_reference(const std::string& source, const std::string& name) {
+        std::istringstream lines(source);
+        std::string line;
+        while (std::getline(lines, line)) {
+            size_t comment = line.find("//");
+            if (comment != std::string::npos) {
+                line = line.substr(0, comment);
+            }
+            if (line_declares_engine_identifier(line, name) || line.find("#define") != std::string::npos) {
+                continue;
+            }
+
+            size_t pos = line.find(name);
+            while (pos != std::string::npos) {
+                const bool left_ok = pos == 0 || !is_identifier_char(line[pos - 1]);
+                const size_t end = pos + name.size();
+                const bool right_ok = end >= line.size() || !is_identifier_char(line[end]);
+                const bool member_access = pos > 0 && line[pos - 1] == '.';
+                if (left_ok && right_ok && !member_access) {
+                    return true;
+                }
+                pos = line.find(name, pos + name.size());
+            }
+        }
+        return false;
+    }
+
+    bool source_declares_slang_constant_buffer(const std::string& source, const std::string& resource_name) {
+        const std::string pattern = std::string(R"(ConstantBuffer[ \t]*<[^>]+>[ \t]*)") + resource_name + R"(\b)";
+        return std::regex_search(source, std::regex(pattern));
+    }
+
+    bool stage_uses_per_frame_engine_uniform(const std::string& source) {
+        for (const char* name : ENGINE_PLAIN_UNIFORM_NAMES) {
+            if (!is_per_frame_engine_uniform_name(name)) {
+                continue;
+            }
+            if (source_uses_engine_identifier_reference(source, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    EngineUniformDeclUsage collect_engine_uniform_usage(const std::string& source) {
+        EngineUniformDeclUsage usage;
+        std::regex uniform_re(
+            R"(^[ \t]*(?:layout[ \t]*\([^)]*\)[ \t]*)?uniform[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]*\[[^\]]+\])?[ \t]*;[ \t]*(?://.*)?$)");
+
+        std::istringstream lines(source);
+        std::string line;
+        while (std::getline(lines, line)) {
+            std::smatch match;
+            if (!std::regex_match(line, match, uniform_re)) {
+                continue;
+            }
+
+            std::string name = match[1].str();
+            if (name == "u_model") {
+                usage.model = true;
+            } else if (is_per_frame_engine_uniform_name(name)) {
+                usage.per_frame = true;
+            }
+        }
+
+        // Legacy helper code and Slang materials may use compact engine names such
+        // as `u_view` without GLSL-style `uniform` declarations, so expression-level
+        // references must also request the scoped engine blocks. The scan deliberately
+        // skips declarations and member accesses; fields such as
+        // `struct IdPushData { mat4 u_model; }` are not engine bindings.
+        if (!usage.per_frame && stage_uses_per_frame_engine_uniform(source)) {
             usage.per_frame = true;
         }
+        if (!usage.model && source_uses_engine_identifier_reference(source, "u_model")) {
+            usage.model = true;
+        }
+        if (usage.per_frame && source_declares_slang_constant_buffer(source, "per_frame")) {
+            usage.per_frame = false;
+        }
+        if (usage.model && source_declares_slang_constant_buffer(source, "draw_data")) {
+            usage.model = false;
+        }
+
+        return usage;
     }
 
-    // Legacy helper code and Slang materials may use compact engine names such
-    // as `u_view` without GLSL-style `uniform` declarations, so expression-level
-    // references must also request the scoped engine blocks. The scan deliberately
-    // skips declarations and member accesses; fields such as
-    // `struct IdPushData { mat4 u_model; }` are not engine bindings.
-    if (!usage.per_frame && stage_uses_per_frame_engine_uniform(source)) {
-        usage.per_frame = true;
-    }
-    if (!usage.model &&
-        source_uses_engine_identifier_reference(source, "u_model")) {
-        usage.model = true;
-    }
-    if (usage.per_frame &&
-        source_declares_slang_constant_buffer(source, "per_frame")) {
-        usage.per_frame = false;
-    }
-    if (usage.model &&
-        source_declares_slang_constant_buffer(source, "draw_data")) {
-        usage.model = false;
-    }
-
-    return usage;
-}
-
-// Slang equivalents of the engine uniform blocks.
-const char* ENGINE_PER_FRAME_BLOCK_SLANG = R"(
+    // Slang equivalents of the engine uniform blocks.
+    const char* ENGINE_PER_FRAME_BLOCK_SLANG = R"(
 struct PerFrame {
     column_major float4x4 u_view;
     column_major float4x4 u_projection;
@@ -726,7 +711,7 @@ ConstantBuffer<PerFrame> per_frame;
 #define u_far per_frame.u_far
 )";
 
-const char* ENGINE_MODEL_PUSH_BLOCK_SLANG = R"(
+    const char* ENGINE_MODEL_PUSH_BLOCK_SLANG = R"(
 struct DrawData {
     column_major float4x4 _u_model;
 };
@@ -735,906 +720,826 @@ ConstantBuffer<DrawData> draw_data;
 #define u_model draw_data._u_model
 )";
 
-std::string synthesize_engine_uniform_slang(const EngineUniformDeclUsage& usage) {
-    std::string block;
-    if (usage.per_frame) {
-        block += ENGINE_PER_FRAME_BLOCK_SLANG;
-    }
-    if (usage.model) {
-        block += ENGINE_MODEL_PUSH_BLOCK_SLANG;
-    }
-    return block;
-}
-
-std::string strip_uniform_decls(const std::string& source,
-                                const std::vector<std::string>& names) {
-    if (names.empty()) return source;
-
-    // Match simple top-level declarations: `uniform <type> <name>;` where
-    // name is one of the provided. Use a per-name regex applied per line,
-    // since MSVC STL lacks std::regex::multiline.
-    std::vector<std::regex> res;
-    res.reserve(names.size());
-    for (const auto& name : names) {
-        std::string pattern =
-            std::string("[ \\t]*uniform[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]+") +
-            name + "[ \\t]*;[ \\t]*";
-        res.emplace_back(pattern);
-    }
-
-    std::string result;
-    result.reserve(source.size());
-    size_t i = 0;
-    while (i < source.size()) {
-        size_t eol = source.find('\n', i);
-        size_t line_end = (eol == std::string::npos) ? source.size() : eol;
-        std::string line = source.substr(i, line_end - i);
-        bool drop = false;
-        for (const auto& re : res) {
-            if (std::regex_match(line, re)) { drop = true; break; }
+    std::string synthesize_engine_uniform_slang(const EngineUniformDeclUsage& usage) {
+        std::string block;
+        if (usage.per_frame) {
+            block += ENGINE_PER_FRAME_BLOCK_SLANG;
         }
-        if (!drop) {
-            result.append(line);
-            if (eol != std::string::npos) result.push_back('\n');
+        if (usage.model) {
+            block += ENGINE_MODEL_PUSH_BLOCK_SLANG;
         }
-        if (eol == std::string::npos) break;
-        i = eol + 1;
+        return block;
     }
-    return result;
-}
 
-// ========== std140 value packer ==========
+    std::string strip_uniform_decls(const std::string& source, const std::vector<std::string>& names) {
+        if (names.empty())
+            return source;
 
-namespace {
-
-// Scalar readers: convert the property's variant payload to a single float
-// (std140 bool stores as 4-byte int-style 0/1, but since we read back as
-// vec4 in shaders for bools it's safe to write as float 0.0/1.0 — the bit
-// pattern matches for 0 and 1 in IEEE 754).
-
-inline void write_float(uint8_t* dst, float v) {
-    std::memcpy(dst, &v, sizeof(float));
-}
-
-inline void write_int(uint8_t* dst, int32_t v) {
-    std::memcpy(dst, &v, sizeof(int32_t));
-}
-
-// Write up to `count` floats from a vector<double> source. Missing elements
-// default to 0.0. Used for Vec2/Vec3/Vec4/Color.
-inline void write_float_array(uint8_t* dst,
-                               const std::vector<double>& src,
-                               size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        float v = i < src.size() ? static_cast<float>(src[i]) : 0.0f;
-        write_float(dst + i * sizeof(float), v);
-    }
-}
-
-// Resolve a property-type string + variant payload into raw std140 bytes at
-// the given destination. Returns true if a value was actually written.
-bool pack_one(const std::string& property_type,
-              const MaterialProperty::DefaultValue& value,
-              uint8_t* dst) {
-    if (property_type == "Float") {
-        if (auto* d = std::get_if<double>(&value)) {
-            write_float(dst, static_cast<float>(*d));
-            return true;
+        // Match simple top-level declarations: `uniform <type> <name>;` where
+        // name is one of the provided. Use a per-name regex applied per line,
+        // since MSVC STL lacks std::regex::multiline.
+        std::vector<std::regex> res;
+        res.reserve(names.size());
+        for (const auto& name : names) {
+            std::string pattern =
+                std::string("[ \\t]*uniform[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]+") + name + "[ \\t]*;[ \\t]*";
+            res.emplace_back(pattern);
         }
-        if (auto* i = std::get_if<int>(&value)) {
-            write_float(dst, static_cast<float>(*i));
-            return true;
-        }
-        return false;
-    }
-    if (property_type == "Int") {
-        if (auto* i = std::get_if<int>(&value)) {
-            write_int(dst, *i);
-            return true;
-        }
-        if (auto* d = std::get_if<double>(&value)) {
-            write_int(dst, static_cast<int32_t>(*d));
-            return true;
-        }
-        return false;
-    }
-    if (property_type == "Bool") {
-        if (auto* b = std::get_if<bool>(&value)) {
-            write_int(dst, *b ? 1 : 0);
-            return true;
-        }
-        if (auto* i = std::get_if<int>(&value)) {
-            write_int(dst, *i != 0 ? 1 : 0);
-            return true;
-        }
-        return false;
-    }
-    if (property_type == "Vec2" || property_type == "Vec3" ||
-        property_type == "Vec4" || property_type == "Color") {
-        auto* arr = std::get_if<std::vector<double>>(&value);
-        if (!arr) return false;
 
-        size_t count = 4;
-        if (property_type == "Vec2") count = 2;
-        else if (property_type == "Vec3") count = 3;
-        // Vec4 / Color → 4.
-        write_float_array(dst, *arr, count);
-        return true;
-    }
-    if (property_type == "Mat4") {
-        // 16 floats in column-major order, matching Mat44f storage and the
-        // GLSL `mat4` default. std140 aligns each column to 16 bytes, which
-        // for a tightly-packed mat4 means sequential 16-byte columns — so
-        // the raw memcpy-style layout works.
-        auto* arr = std::get_if<std::vector<double>>(&value);
-        if (!arr) return false;
-        write_float_array(dst, *arr, 16);
-        return true;
-    }
-    // Texture or unknown — not in UBO.
-    return false;
-}
-
-} // namespace
-
-namespace {
-
-// Two property_type strings are "compatible" for std140 packing if they
-// pack to the same std140 slot layout. This is needed because the
-// runtime value side (tc_uniform_value → MaterialProperty) doesn't know
-// whether the original declaration was `Color` or `Vec4` — both round-
-// trip through a vec4 of floats. Similarly, Float/Int can be written
-// through the same 4-byte slot. Bool fields also accept Int values because
-// editor/runtime material APIs commonly expose bool toggles through integer
-// setters; they are normalized to 0/1 by pack_one().
-bool property_types_compatible(const std::string& a, const std::string& b) {
-    if (a == b) return true;
-    // Color and Vec4 are the same std140 payload.
-    if ((a == "Color" && b == "Vec4") || (a == "Vec4" && b == "Color")) return true;
-    // Scalar std140 slots are 4 bytes. Reflected layouts may only know
-    // the slot size; allow the packer to coerce numeric scalar values.
-    if ((a == "Float" || a == "Int") && (b == "Float" || b == "Int")) return true;
-    if (a == "Int" && b == "Bool") return true;
-    return false;
-}
-
-} // namespace
-
-void std140_pack(const MaterialUboLayout& layout,
-                 const std::vector<MaterialProperty>& values,
-                 uint8_t* out_buffer) {
-    if (!out_buffer || layout.empty()) return;
-
-    // For each UBO entry, find a matching value by name. Linear scan is
-    // fine — material UBOs have at most a handful of fields.
-    for (const auto& entry : layout.entries) {
-        const MaterialProperty* match = nullptr;
-        for (const auto& v : values) {
-            if (v.name == entry.name) {
-                match = &v;
+        std::string result;
+        result.reserve(source.size());
+        size_t i = 0;
+        while (i < source.size()) {
+            size_t eol = source.find('\n', i);
+            size_t line_end = (eol == std::string::npos) ? source.size() : eol;
+            std::string line = source.substr(i, line_end - i);
+            bool drop = false;
+            for (const auto& re : res) {
+                if (std::regex_match(line, re)) {
+                    drop = true;
+                    break;
+                }
+            }
+            if (!drop) {
+                result.append(line);
+                if (eol != std::string::npos)
+                    result.push_back('\n');
+            }
+            if (eol == std::string::npos)
                 break;
+            i = eol + 1;
+        }
+        return result;
+    }
+
+    // ========== std140 value packer ==========
+
+    namespace {
+
+        // Scalar readers: convert the property's variant payload to a single float
+        // (std140 bool stores as 4-byte int-style 0/1, but since we read back as
+        // vec4 in shaders for bools it's safe to write as float 0.0/1.0 — the bit
+        // pattern matches for 0 and 1 in IEEE 754).
+
+        inline void write_float(uint8_t* dst, float v) {
+            std::memcpy(dst, &v, sizeof(float));
+        }
+
+        inline void write_int(uint8_t* dst, int32_t v) {
+            std::memcpy(dst, &v, sizeof(int32_t));
+        }
+
+        // Write up to `count` floats from a vector<double> source. Missing elements
+        // default to 0.0. Used for Vec2/Vec3/Vec4/Color.
+        inline void write_float_array(uint8_t* dst, const std::vector<double>& src, size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                float v = i < src.size() ? static_cast<float>(src[i]) : 0.0f;
+                write_float(dst + i * sizeof(float), v);
             }
         }
-        if (!match) continue;  // leave the slot as-is (caller may have zeroed it).
 
-        // Type must agree with what the layout expects. Mismatches are
-        // skipped to avoid writing garbage into the wrong slot.
-        if (!property_types_compatible(match->property_type, entry.property_type)) continue;
-
-        // Always dispatch on the layout's declared type — pack_one reads
-        // the layout type to know how many floats to write, and Color
-        // packs as a 4-float Vec4.
-        pack_one(entry.property_type, match->default_value,
-                 out_buffer + entry.offset);
-    }
-}
-
-
-static MaterialProperty parse_typed_uniform_directive(
-    const std::string& line,
-    const std::string& directive)
-{
-    // Remove directive prefix.
-    std::string content = line.substr(directive.size());
-    content = trim(content);
-
-    // Extract range(...) if present.
-    std::optional<double> range_min, range_max;
-    std::regex range_regex(R"(\brange\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\))");
-    std::smatch range_match;
-    if (std::regex_search(content, range_match, range_regex)) {
-        try {
-            range_min = std::stod(trim(range_match[1].str()));
-            range_max = std::stod(trim(range_match[2].str()));
-        } catch (...) {
-            tc::Log::debug("Failed to parse range() in %s directive: %s",
-                           directive.c_str(), line.c_str());
-        }
-        content.erase(range_match.position(), range_match.length());
-        content = trim(content);
-    }
-
-    std::optional<tgfx::TextureEncoding> expected_texture_encoding;
-    std::regex encoding_regex(R"(\bencoding\s*\(\s*([^)]+)\s*\))");
-    std::smatch encoding_match;
-    if (std::regex_search(content, encoding_match, encoding_regex)) {
-        const std::string value = trim(encoding_match[1].str());
-        if (value == "srgb") {
-            expected_texture_encoding = tgfx::TextureEncoding::SRGB;
-        } else if (value == "linear") {
-            expected_texture_encoding = tgfx::TextureEncoding::Linear;
-        } else {
-            throw std::runtime_error(
-                "Unknown texture encoding '" + value + "' in " + directive + ": " + line);
-        }
-        content.erase(encoding_match.position(), encoding_match.length());
-        content = trim(content);
-        if (std::regex_search(content, encoding_match, encoding_regex)) {
-            throw std::runtime_error(
-                "Duplicate encoding() modifier in " + directive + ": " + line);
-        }
-    }
-    const std::regex encoding_word_regex(R"(\bencoding\b)");
-    if (std::regex_search(content, encoding_word_regex)) {
-        throw std::runtime_error(
-            "Malformed encoding() modifier in " + directive + ": " + line);
-    }
-
-    // Parse: Type name = value
-    std::string property_type, name, value_str;
-
-    size_t eq_pos = content.find('=');
-    if (eq_pos != std::string::npos) {
-        // Has default value
-        std::string left = trim(content.substr(0, eq_pos));
-        value_str = trim(content.substr(eq_pos + 1));
-
-        auto parts = split_whitespace(left);
-        if (parts.size() < 2) {
-            throw std::runtime_error(directive + " requires type and name: " + line);
-        }
-        property_type = parts[0];
-        name = parts[1];
-    } else {
-        // No default value
-        auto parts = split_whitespace(content);
-        if (parts.size() < 2) {
-            throw std::runtime_error(directive + " requires type and name: " + line);
-        }
-        property_type = parts[0];
-        name = parts[1];
-    }
-
-    // Validate type (Texture2D is alias for Texture)
-    if (property_type == "Texture2D") {
-        property_type = "Texture";
-    }
-    static const std::vector<std::string> valid_types = {
-        "Float", "Int", "Bool", "Vec2", "Vec3", "Vec4", "Color", "Mat4", "Texture"
-    };
-    bool type_valid = std::find(valid_types.begin(), valid_types.end(), property_type) != valid_types.end();
-    if (!type_valid) {
-        throw std::runtime_error("Unknown property type: " + property_type);
-    }
-    const bool is_texture = property_type == "Texture";
-    if (!is_texture && expected_texture_encoding.has_value()) {
-        throw std::runtime_error(
-            "encoding() modifier is only valid for Texture2D properties: " + line);
-    }
-
-    // Parse default value
-    MaterialProperty::DefaultValue default_value;
-    if (!value_str.empty()) {
-        default_value = parse_property_value(value_str, property_type);
-    } else {
-        default_value = get_default_for_type(property_type);
-    }
-    if (is_texture && std::holds_alternative<std::string>(default_value)) {
-        const std::string& default_name = std::get<std::string>(default_value);
-        if (default_name != "white" && default_name != "normal") {
-            throw std::runtime_error(
-                "Texture2D property default must be \"white\" or \"normal\": " + line);
-        }
-        if (default_name == "normal"
-            && expected_texture_encoding.has_value()
-            && expected_texture_encoding != tgfx::TextureEncoding::Linear) {
-            throw std::runtime_error(
-                "Texture2D property default \"normal\" requires encoding(linear): " + line);
-        }
-    }
-
-    return MaterialProperty(
-        name,
-        property_type,
-        default_value,
-        range_min,
-        range_max,
-        std::nullopt,
-        expected_texture_encoding);
-}
-
-MaterialProperty parse_property_directive(const std::string& line) {
-    return parse_typed_uniform_directive(line, "@property");
-}
-
-
-ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
-    std::istringstream stream(text);
-    std::string raw_line;
-
-    std::string program_name;
-    std::string language;
-    bool language_seen = false;
-    std::vector<ShaderPhase> phases;
-    std::vector<std::string> features;  // From @features directive
-
-    // For @phases mode (shared stages)
-    std::vector<std::string> declared_phases;  // From @phases directive
-    std::unordered_map<std::string, ShaderStage> shared_stages;
-    std::vector<MaterialProperty> material_properties;
-    std::unordered_map<std::string, ShaderPhase> phase_settings;  // Per-phase overrides
-    std::optional<MaterialSurfaceProducer> shared_surface_producer;
-
-    ShaderPhase* current_phase = nullptr;
-    std::string current_settings_phase;  // Which phase @settings applies to
-    std::string current_stage_name;
-    std::string current_stage_entry = "main";
-    std::vector<std::string> current_stage_lines;
-    bool in_shared_stage = false;  // Stage outside @phase (for @phases mode)
-
-    auto add_material_property = [&](MaterialProperty prop) {
-        auto existing = std::find_if(
-            material_properties.begin(),
-            material_properties.end(),
-            [&](const MaterialProperty& other) {
-                return other.name == prop.name;
-            });
-        if (existing != material_properties.end()) {
-            if (existing->property_type != prop.property_type
-                || existing->expected_texture_encoding != prop.expected_texture_encoding) {
-                throw std::runtime_error(
-                    "Duplicate @property with conflicting contract: " + prop.name);
+        // Resolve a property-type string + variant payload into raw std140 bytes at
+        // the given destination. Returns true if a value was actually written.
+        bool pack_one(const std::string& property_type, const MaterialProperty::DefaultValue& value, uint8_t* dst) {
+            if (property_type == "Float") {
+                if (auto* d = std::get_if<double>(&value)) {
+                    write_float(dst, static_cast<float>(*d));
+                    return true;
+                }
+                if (auto* i = std::get_if<int>(&value)) {
+                    write_float(dst, static_cast<float>(*i));
+                    return true;
+                }
+                return false;
             }
+            if (property_type == "Int") {
+                if (auto* i = std::get_if<int>(&value)) {
+                    write_int(dst, *i);
+                    return true;
+                }
+                if (auto* d = std::get_if<double>(&value)) {
+                    write_int(dst, static_cast<int32_t>(*d));
+                    return true;
+                }
+                return false;
+            }
+            if (property_type == "Bool") {
+                if (auto* b = std::get_if<bool>(&value)) {
+                    write_int(dst, *b ? 1 : 0);
+                    return true;
+                }
+                if (auto* i = std::get_if<int>(&value)) {
+                    write_int(dst, *i != 0 ? 1 : 0);
+                    return true;
+                }
+                return false;
+            }
+            if (property_type == "Vec2" || property_type == "Vec3" || property_type == "Vec4" ||
+                property_type == "Color") {
+                auto* arr = std::get_if<std::vector<double>>(&value);
+                if (!arr)
+                    return false;
+
+                size_t count = 4;
+                if (property_type == "Vec2")
+                    count = 2;
+                else if (property_type == "Vec3")
+                    count = 3;
+                // Vec4 / Color → 4.
+                write_float_array(dst, *arr, count);
+                return true;
+            }
+            if (property_type == "Mat4") {
+                // 16 floats in column-major order, matching Mat44f storage and the
+                // GLSL `mat4` default. std140 aligns each column to 16 bytes, which
+                // for a tightly-packed mat4 means sequential 16-byte columns — so
+                // the raw memcpy-style layout works.
+                auto* arr = std::get_if<std::vector<double>>(&value);
+                if (!arr)
+                    return false;
+                write_float_array(dst, *arr, 16);
+                return true;
+            }
+            // Texture or unknown — not in UBO.
+            return false;
+        }
+
+    } // namespace
+
+    namespace {
+
+        // Two property_type strings are "compatible" for std140 packing if they
+        // pack to the same std140 slot layout. This is needed because the
+        // runtime value side (tc_uniform_value → MaterialProperty) doesn't know
+        // whether the original declaration was `Color` or `Vec4` — both round-
+        // trip through a vec4 of floats. Similarly, Float/Int can be written
+        // through the same 4-byte slot. Bool fields also accept Int values because
+        // editor/runtime material APIs commonly expose bool toggles through integer
+        // setters; they are normalized to 0/1 by pack_one().
+        bool property_types_compatible(const std::string& a, const std::string& b) {
+            if (a == b)
+                return true;
+            // Color and Vec4 are the same std140 payload.
+            if ((a == "Color" && b == "Vec4") || (a == "Vec4" && b == "Color"))
+                return true;
+            // Scalar std140 slots are 4 bytes. Reflected layouts may only know
+            // the slot size; allow the packer to coerce numeric scalar values.
+            if ((a == "Float" || a == "Int") && (b == "Float" || b == "Int"))
+                return true;
+            if (a == "Int" && b == "Bool")
+                return true;
+            return false;
+        }
+
+    } // namespace
+
+    void
+    std140_pack(const MaterialUboLayout& layout, const std::vector<MaterialProperty>& values, uint8_t* out_buffer) {
+        if (!out_buffer || layout.empty())
             return;
-        }
-        material_properties.push_back(std::move(prop));
-    };
 
-    auto close_current_stage = [&]() {
-        if (current_stage_name.empty()) return;
+        // For each UBO entry, find a matching value by name. Linear scan is
+        // fine — material UBOs have at most a handful of fields.
+        for (const auto& entry : layout.entries) {
+            const MaterialProperty* match = nullptr;
+            for (const auto& v : values) {
+                if (v.name == entry.name) {
+                    match = &v;
+                    break;
+                }
+            }
+            if (!match)
+                continue; // leave the slot as-is (caller may have zeroed it).
 
-        std::string source;
-        for (const auto& l : current_stage_lines) {
-            source += l;
-        }
-
-        if (in_shared_stage) {
-            // Shared stage (for @phases mode)
-            shared_stages[current_stage_name] =
-                ShaderStage(current_stage_name, source, current_stage_entry);
-        } else if (current_phase) {
-            // Traditional @phase mode
-            current_phase->stages[current_stage_name] =
-                ShaderStage(current_stage_name, source, current_stage_entry);
-        }
-
-        current_stage_name.clear();
-        current_stage_entry = "main";
-        current_stage_lines.clear();
-        in_shared_stage = false;
-    };
-
-    auto close_current_phase = [&]() {
-        if (!current_phase) return;
-        close_current_stage();
-        phases.push_back(std::move(*current_phase));
-        delete current_phase;
-        current_phase = nullptr;
-    };
-
-    while (std::getline(stream, raw_line)) {
-        // Keep newline for stage content
-        std::string line_with_newline = raw_line + "\n";
-        std::string line = trim(raw_line);
-
-        // Inside @stage: collect lines until @endstage or another directive
-        if (!current_stage_name.empty()) {
-            if (starts_with(line, "@endstage")) {
-                close_current_stage();
+            // Type must agree with what the layout expects. Mismatches are
+            // skipped to avoid writing garbage into the wrong slot.
+            if (!property_types_compatible(match->property_type, entry.property_type))
                 continue;
+
+            // Always dispatch on the layout's declared type — pack_one reads
+            // the layout type to know how many floats to write, and Color
+            // packs as a 4-float Vec4.
+            pack_one(entry.property_type, match->default_value, out_buffer + entry.offset);
+        }
+    }
+
+    static MaterialProperty parse_typed_uniform_directive(const std::string& line, const std::string& directive) {
+        // Remove directive prefix.
+        std::string content = line.substr(directive.size());
+        content = trim(content);
+
+        // Extract range(...) if present.
+        std::optional<double> range_min, range_max;
+        std::regex range_regex(R"(\brange\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\))");
+        std::smatch range_match;
+        if (std::regex_search(content, range_match, range_regex)) {
+            try {
+                range_min = std::stod(trim(range_match[1].str()));
+                range_max = std::stod(trim(range_match[2].str()));
+            } catch (...) {
+                tc::Log::debug("Failed to parse range() in %s directive: %s", directive.c_str(), line.c_str());
             }
-            else if (starts_with(line, "@stage ")) {
-                close_current_stage();
-                // Fall through to handle @stage below
-            }
-            else if (starts_with(line, "@phase ")) {
-                close_current_stage();
-                close_current_phase();
-                // Fall through to handle @phase below
-            }
-            else if (starts_with(line, "@endphase")) {
-                close_current_stage();
-                // Fall through to handle @endphase below
-            }
-            else if (starts_with(line, "@settings ")) {
-                close_current_stage();
-                // Fall through to handle @settings below
-            }
-            else if (starts_with(line, "@surface ") ||
-                     starts_with(line, "@surfaceInput ")) {
-                throw std::runtime_error(
-                    "@surface metadata must be declared before @stage");
-            }
-            else if (starts_with(line, "@endsettings")) {
-                close_current_stage();
-                // Fall through
-            }
-            else {
-                current_stage_lines.push_back(line_with_newline);
-                continue;
-            }
+            content.erase(range_match.position(), range_match.length());
+            content = trim(content);
         }
 
-        // Outside @stage: process directives
-        if (!starts_with(line, "@") || line == "@") {
-            continue;
+        std::optional<tgfx::TextureEncoding> expected_texture_encoding;
+        std::regex encoding_regex(R"(\bencoding\s*\(\s*([^)]+)\s*\))");
+        std::smatch encoding_match;
+        if (std::regex_search(content, encoding_match, encoding_regex)) {
+            const std::string value = trim(encoding_match[1].str());
+            if (value == "srgb") {
+                expected_texture_encoding = tgfx::TextureEncoding::SRGB;
+            } else if (value == "linear") {
+                expected_texture_encoding = tgfx::TextureEncoding::Linear;
+            } else {
+                throw std::runtime_error("Unknown texture encoding '" + value + "' in " + directive + ": " + line);
+            }
+            content.erase(encoding_match.position(), encoding_match.length());
+            content = trim(content);
+            if (std::regex_search(content, encoding_match, encoding_regex)) {
+                throw std::runtime_error("Duplicate encoding() modifier in " + directive + ": " + line);
+            }
+        }
+        const std::regex encoding_word_regex(R"(\bencoding\b)");
+        if (std::regex_search(content, encoding_word_regex)) {
+            throw std::runtime_error("Malformed encoding() modifier in " + directive + ": " + line);
         }
 
-        auto parts = split_whitespace(line);
-        std::string directive = parts[0];
+        // Parse: Type name = value
+        std::string property_type, name, value_str;
 
-        if (directive == "@program") {
+        size_t eq_pos = content.find('=');
+        if (eq_pos != std::string::npos) {
+            // Has default value
+            std::string left = trim(content.substr(0, eq_pos));
+            value_str = trim(content.substr(eq_pos + 1));
+
+            auto parts = split_whitespace(left);
             if (parts.size() < 2) {
-                throw std::runtime_error("@program without name");
+                throw std::runtime_error(directive + " requires type and name: " + line);
             }
-            program_name = parts[1];
-            for (size_t i = 2; i < parts.size(); ++i) {
-                program_name += " " + parts[i];
+            property_type = parts[0];
+            name = parts[1];
+        } else {
+            // No default value
+            auto parts = split_whitespace(content);
+            if (parts.size() < 2) {
+                throw std::runtime_error(directive + " requires type and name: " + line);
+            }
+            property_type = parts[0];
+            name = parts[1];
+        }
+
+        // Validate type (Texture2D is alias for Texture)
+        if (property_type == "Texture2D") {
+            property_type = "Texture";
+        }
+        static const std::vector<std::string> valid_types = {
+            "Float", "Int", "Bool", "Vec2", "Vec3", "Vec4", "Color", "Mat4", "Texture"};
+        bool type_valid = std::find(valid_types.begin(), valid_types.end(), property_type) != valid_types.end();
+        if (!type_valid) {
+            throw std::runtime_error("Unknown property type: " + property_type);
+        }
+        const bool is_texture = property_type == "Texture";
+        if (!is_texture && expected_texture_encoding.has_value()) {
+            throw std::runtime_error("encoding() modifier is only valid for Texture2D properties: " + line);
+        }
+
+        // Parse default value
+        MaterialProperty::DefaultValue default_value;
+        if (!value_str.empty()) {
+            default_value = parse_property_value(value_str, property_type);
+        } else {
+            default_value = get_default_for_type(property_type);
+        }
+        if (is_texture && std::holds_alternative<std::string>(default_value)) {
+            const std::string& default_name = std::get<std::string>(default_value);
+            if (default_name != "white" && default_name != "normal") {
+                throw std::runtime_error("Texture2D property default must be \"white\" or \"normal\": " + line);
+            }
+            if (default_name == "normal" && expected_texture_encoding.has_value() &&
+                expected_texture_encoding != tgfx::TextureEncoding::Linear) {
+                throw std::runtime_error("Texture2D property default \"normal\" requires encoding(linear): " + line);
             }
         }
-        else if (directive == "@language") {
-            if (parts.size() != 2) {
-                throw std::runtime_error("@language expects exactly one value");
-            }
-            language = to_lower(parts[1]);
-            language_seen = true;
-            if (language != "glsl" && language != "slang") {
-                throw std::runtime_error("Unsupported shader language: " + parts[1]);
-            }
-            if (language != "slang") {
-                throw std::runtime_error(
-                    ".shader files must declare @language slang; GLSL .shader "
-                    "programs are no longer supported");
-            }
-        }
-        else if (directive == "@features") {
-            // Parse comma-separated feature names: @features lighting_ubo, instancing
-            std::string rest = line.substr(9);  // len("@features") = 9
-            std::string feature_name;
-            for (char c : rest) {
-                if (c == ',' || c == ' ' || c == '\t') {
-                    std::string trimmed = trim(feature_name);
-                    if (!trimmed.empty()) {
-                        features.push_back(trimmed);
-                        feature_name.clear();
-                    }
-                } else {
-                    feature_name += c;
+
+        return MaterialProperty(
+            name, property_type, default_value, range_min, range_max, std::nullopt, expected_texture_encoding);
+    }
+
+    MaterialProperty parse_property_directive(const std::string& line) {
+        return parse_typed_uniform_directive(line, "@property");
+    }
+
+    ShaderMultyPhaseProgramm parse_shader_text(const std::string& text) {
+        std::istringstream stream(text);
+        std::string raw_line;
+
+        std::string program_name;
+        std::string language;
+        bool language_seen = false;
+        std::vector<ShaderPhase> phases;
+        std::vector<std::string> features; // From @features directive
+
+        // For @phases mode (shared stages)
+        std::vector<std::string> declared_phases; // From @phases directive
+        std::unordered_map<std::string, ShaderStage> shared_stages;
+        std::vector<MaterialProperty> material_properties;
+        std::unordered_map<std::string, ShaderPhase> phase_settings; // Per-phase overrides
+        std::optional<MaterialSurfaceProducer> shared_surface_producer;
+
+        ShaderPhase* current_phase = nullptr;
+        std::string current_settings_phase; // Which phase @settings applies to
+        std::string current_stage_name;
+        std::string current_stage_entry = "main";
+        std::vector<std::string> current_stage_lines;
+        bool in_shared_stage = false; // Stage outside @phase (for @phases mode)
+
+        auto add_material_property = [&](MaterialProperty prop) {
+            auto existing = std::find_if(material_properties.begin(),
+                                         material_properties.end(),
+                                         [&](const MaterialProperty& other) { return other.name == prop.name; });
+            if (existing != material_properties.end()) {
+                if (existing->property_type != prop.property_type ||
+                    existing->expected_texture_encoding != prop.expected_texture_encoding) {
+                    throw std::runtime_error("Duplicate @property with conflicting contract: " + prop.name);
                 }
+                return;
             }
-            std::string trimmed = trim(feature_name);
-            if (!trimmed.empty()) {
-                features.push_back(trimmed);
-            }
-        }
-        else if (directive == "@phases") {
-            // Parse comma-separated phase names: @phases opaque, transparent
-            std::string rest = line.substr(7);  // len("@phases") = 7
-            std::string phase_name;
-            for (char c : rest) {
-                if (c == ',' || c == ' ' || c == '\t') {
-                    std::string trimmed = trim(phase_name);
-                    if (!trimmed.empty()) {
-                        declared_phases.push_back(trimmed);
-                        phase_name.clear();
-                    }
-                } else {
-                    phase_name += c;
-                }
-            }
-            std::string trimmed = trim(phase_name);
-            if (!trimmed.empty()) {
-                declared_phases.push_back(trimmed);
-            }
-        }
-        else if (directive == "@settings") {
-            if (parts.size() < 2) {
-                throw std::runtime_error("@settings without phase name");
-            }
-            current_settings_phase = parts[1];
-            // Initialize settings for this phase if not exists
-            if (phase_settings.find(current_settings_phase) == phase_settings.end()) {
-                phase_settings[current_settings_phase] = ShaderPhase(current_settings_phase);
-            }
-        }
-        else if (directive == "@endsettings") {
-            current_settings_phase.clear();
-        }
-        else if (directive == "@phase") {
-            if (parts.size() < 2) {
-                throw std::runtime_error("@phase without mark");
-            }
-            close_current_phase();
+            material_properties.push_back(std::move(prop));
+        };
 
-            // Parse comma-separated marks: @phase mark1, mark2
-            std::string rest = line.substr(6);  // len("@phase") = 6
-            std::vector<std::string> marks;
-            std::string mark_name;
-            for (char c : rest) {
-                if (c == ',' || c == ' ' || c == '\t') {
-                    std::string trimmed = trim(mark_name);
-                    if (!trimmed.empty()) {
-                        marks.push_back(trimmed);
-                        mark_name.clear();
-                    }
-                } else {
-                    mark_name += c;
-                }
-            }
-            std::string trimmed = trim(mark_name);
-            if (!trimmed.empty()) {
-                marks.push_back(trimmed);
+        auto close_current_stage = [&]() {
+            if (current_stage_name.empty())
+                return;
+
+            std::string source;
+            for (const auto& l : current_stage_lines) {
+                source += l;
             }
 
-            current_phase = new ShaderPhase(std::move(marks));
-        }
-        else if (directive == "@endphase") {
-            close_current_phase();
-        }
-        else if (directive == "@priority") {
-            if (!current_settings_phase.empty()) {
-                if (parts.size() < 2) throw std::runtime_error("@priority without value");
-                phase_settings[current_settings_phase].priority = std::stoi(parts[1]);
+            if (in_shared_stage) {
+                // Shared stage (for @phases mode)
+                shared_stages[current_stage_name] = ShaderStage(current_stage_name, source, current_stage_entry);
             } else if (current_phase) {
-                if (parts.size() < 2) throw std::runtime_error("@priority without value");
-                current_phase->priority = std::stoi(parts[1]);
-            } else {
-                throw std::runtime_error("@priority outside @phase or @settings");
+                // Traditional @phase mode
+                current_phase->stages[current_stage_name] =
+                    ShaderStage(current_stage_name, source, current_stage_entry);
             }
-        }
-        else if (directive == "@glDepthMask") {
-            if (parts.size() < 2) throw std::runtime_error("@glDepthMask without value");
-            bool val = parse_bool(parts[1]);
-            if (!current_settings_phase.empty()) {
-                phase_settings[current_settings_phase].gl_depth_mask = val;
-            } else if (current_phase) {
-                current_phase->gl_depth_mask = val;
-            } else {
-                throw std::runtime_error("@glDepthMask outside @phase or @settings");
-            }
-        }
-        else if (directive == "@glDepthTest") {
-            if (parts.size() < 2) throw std::runtime_error("@glDepthTest without value");
-            bool val = parse_bool(parts[1]);
-            if (!current_settings_phase.empty()) {
-                phase_settings[current_settings_phase].gl_depth_test = val;
-            } else if (current_phase) {
-                current_phase->gl_depth_test = val;
-            } else {
-                throw std::runtime_error("@glDepthTest outside @phase or @settings");
-            }
-        }
-        else if (directive == "@glBlend") {
-            if (parts.size() < 2) throw std::runtime_error("@glBlend without value");
-            bool val = parse_bool(parts[1]);
-            if (!current_settings_phase.empty()) {
-                phase_settings[current_settings_phase].gl_blend = val;
-            } else if (current_phase) {
-                current_phase->gl_blend = val;
-            } else {
-                throw std::runtime_error("@glBlend outside @phase or @settings");
-            }
-        }
-        else if (directive == "@glCull") {
-            if (parts.size() < 2) throw std::runtime_error("@glCull without value");
-            bool val = parse_bool(parts[1]);
-            if (!current_settings_phase.empty()) {
-                phase_settings[current_settings_phase].gl_cull = val;
-            } else if (current_phase) {
-                current_phase->gl_cull = val;
-            } else {
-                throw std::runtime_error("@glCull outside @phase or @settings");
-            }
-        }
-        else if (directive == "@stage") {
-            if (parts.size() < 2) {
-                throw std::runtime_error("@stage without name");
-            }
-            if (!current_stage_name.empty()) {
-                throw std::runtime_error("Nested @stage not supported");
-            }
-            current_stage_name = parts[1];
-            current_stage_entry = parts.size() >= 3 ? parts[2] : "main";
-            const std::string entry_prefix = "entry=";
-            if (current_stage_entry.rfind(entry_prefix, 0) == 0) {
-                current_stage_entry = current_stage_entry.substr(entry_prefix.size());
-            }
-            if (current_stage_entry.empty()) {
-                throw std::runtime_error("@stage entry name is empty");
-            }
+
+            current_stage_name.clear();
+            current_stage_entry = "main";
             current_stage_lines.clear();
+            in_shared_stage = false;
+        };
 
-            // If inside @phase, it's phase-specific; otherwise shared
-            in_shared_stage = (current_phase == nullptr);
-        }
-        else if (directive == "@endstage") {
+        auto close_current_phase = [&]() {
+            if (!current_phase)
+                return;
             close_current_stage();
+            phases.push_back(std::move(*current_phase));
+            delete current_phase;
+            current_phase = nullptr;
+        };
+
+        while (std::getline(stream, raw_line)) {
+            // Keep newline for stage content
+            std::string line_with_newline = raw_line + "\n";
+            std::string line = trim(raw_line);
+
+            // Inside @stage: collect lines until @endstage or another directive
+            if (!current_stage_name.empty()) {
+                if (starts_with(line, "@endstage")) {
+                    close_current_stage();
+                    continue;
+                } else if (starts_with(line, "@stage ")) {
+                    close_current_stage();
+                    // Fall through to handle @stage below
+                } else if (starts_with(line, "@phase ")) {
+                    close_current_stage();
+                    close_current_phase();
+                    // Fall through to handle @phase below
+                } else if (starts_with(line, "@endphase")) {
+                    close_current_stage();
+                    // Fall through to handle @endphase below
+                } else if (starts_with(line, "@settings ")) {
+                    close_current_stage();
+                    // Fall through to handle @settings below
+                } else if (starts_with(line, "@surface ") || starts_with(line, "@surfaceInput ")) {
+                    throw std::runtime_error("@surface metadata must be declared before @stage");
+                } else if (starts_with(line, "@endsettings")) {
+                    close_current_stage();
+                    // Fall through
+                } else {
+                    current_stage_lines.push_back(line_with_newline);
+                    continue;
+                }
+            }
+
+            // Outside @stage: process directives
+            if (!starts_with(line, "@") || line == "@") {
+                continue;
+            }
+
+            auto parts = split_whitespace(line);
+            std::string directive = parts[0];
+
+            if (directive == "@program") {
+                if (parts.size() < 2) {
+                    throw std::runtime_error("@program without name");
+                }
+                program_name = parts[1];
+                for (size_t i = 2; i < parts.size(); ++i) {
+                    program_name += " " + parts[i];
+                }
+            } else if (directive == "@language") {
+                if (parts.size() != 2) {
+                    throw std::runtime_error("@language expects exactly one value");
+                }
+                language = to_lower(parts[1]);
+                language_seen = true;
+                if (language != "glsl" && language != "slang") {
+                    throw std::runtime_error("Unsupported shader language: " + parts[1]);
+                }
+                if (language != "slang") {
+                    throw std::runtime_error(".shader files must declare @language slang; GLSL .shader "
+                                             "programs are no longer supported");
+                }
+            } else if (directive == "@features") {
+                // Parse comma-separated feature names: @features lighting_ubo, instancing
+                std::string rest = line.substr(9); // len("@features") = 9
+                std::string feature_name;
+                for (char c : rest) {
+                    if (c == ',' || c == ' ' || c == '\t') {
+                        std::string trimmed = trim(feature_name);
+                        if (!trimmed.empty()) {
+                            features.push_back(trimmed);
+                            feature_name.clear();
+                        }
+                    } else {
+                        feature_name += c;
+                    }
+                }
+                std::string trimmed = trim(feature_name);
+                if (!trimmed.empty()) {
+                    features.push_back(trimmed);
+                }
+            } else if (directive == "@phases") {
+                // Parse comma-separated phase names: @phases opaque, transparent
+                std::string rest = line.substr(7); // len("@phases") = 7
+                std::string phase_name;
+                for (char c : rest) {
+                    if (c == ',' || c == ' ' || c == '\t') {
+                        std::string trimmed = trim(phase_name);
+                        if (!trimmed.empty()) {
+                            declared_phases.push_back(trimmed);
+                            phase_name.clear();
+                        }
+                    } else {
+                        phase_name += c;
+                    }
+                }
+                std::string trimmed = trim(phase_name);
+                if (!trimmed.empty()) {
+                    declared_phases.push_back(trimmed);
+                }
+            } else if (directive == "@settings") {
+                if (parts.size() < 2) {
+                    throw std::runtime_error("@settings without phase name");
+                }
+                current_settings_phase = parts[1];
+                // Initialize settings for this phase if not exists
+                if (phase_settings.find(current_settings_phase) == phase_settings.end()) {
+                    phase_settings[current_settings_phase] = ShaderPhase(current_settings_phase);
+                }
+            } else if (directive == "@endsettings") {
+                current_settings_phase.clear();
+            } else if (directive == "@phase") {
+                if (parts.size() < 2) {
+                    throw std::runtime_error("@phase without mark");
+                }
+                close_current_phase();
+
+                // Parse comma-separated marks: @phase mark1, mark2
+                std::string rest = line.substr(6); // len("@phase") = 6
+                std::vector<std::string> marks;
+                std::string mark_name;
+                for (char c : rest) {
+                    if (c == ',' || c == ' ' || c == '\t') {
+                        std::string trimmed = trim(mark_name);
+                        if (!trimmed.empty()) {
+                            marks.push_back(trimmed);
+                            mark_name.clear();
+                        }
+                    } else {
+                        mark_name += c;
+                    }
+                }
+                std::string trimmed = trim(mark_name);
+                if (!trimmed.empty()) {
+                    marks.push_back(trimmed);
+                }
+
+                current_phase = new ShaderPhase(std::move(marks));
+            } else if (directive == "@endphase") {
+                close_current_phase();
+            } else if (directive == "@priority") {
+                if (!current_settings_phase.empty()) {
+                    if (parts.size() < 2)
+                        throw std::runtime_error("@priority without value");
+                    phase_settings[current_settings_phase].priority = std::stoi(parts[1]);
+                } else if (current_phase) {
+                    if (parts.size() < 2)
+                        throw std::runtime_error("@priority without value");
+                    current_phase->priority = std::stoi(parts[1]);
+                } else {
+                    throw std::runtime_error("@priority outside @phase or @settings");
+                }
+            } else if (directive == "@glDepthMask") {
+                if (parts.size() < 2)
+                    throw std::runtime_error("@glDepthMask without value");
+                bool val = parse_bool(parts[1]);
+                if (!current_settings_phase.empty()) {
+                    phase_settings[current_settings_phase].gl_depth_mask = val;
+                } else if (current_phase) {
+                    current_phase->gl_depth_mask = val;
+                } else {
+                    throw std::runtime_error("@glDepthMask outside @phase or @settings");
+                }
+            } else if (directive == "@glDepthTest") {
+                if (parts.size() < 2)
+                    throw std::runtime_error("@glDepthTest without value");
+                bool val = parse_bool(parts[1]);
+                if (!current_settings_phase.empty()) {
+                    phase_settings[current_settings_phase].gl_depth_test = val;
+                } else if (current_phase) {
+                    current_phase->gl_depth_test = val;
+                } else {
+                    throw std::runtime_error("@glDepthTest outside @phase or @settings");
+                }
+            } else if (directive == "@glBlend") {
+                if (parts.size() < 2)
+                    throw std::runtime_error("@glBlend without value");
+                bool val = parse_bool(parts[1]);
+                if (!current_settings_phase.empty()) {
+                    phase_settings[current_settings_phase].gl_blend = val;
+                } else if (current_phase) {
+                    current_phase->gl_blend = val;
+                } else {
+                    throw std::runtime_error("@glBlend outside @phase or @settings");
+                }
+            } else if (directive == "@glCull") {
+                if (parts.size() < 2)
+                    throw std::runtime_error("@glCull without value");
+                bool val = parse_bool(parts[1]);
+                if (!current_settings_phase.empty()) {
+                    phase_settings[current_settings_phase].gl_cull = val;
+                } else if (current_phase) {
+                    current_phase->gl_cull = val;
+                } else {
+                    throw std::runtime_error("@glCull outside @phase or @settings");
+                }
+            } else if (directive == "@stage") {
+                if (parts.size() < 2) {
+                    throw std::runtime_error("@stage without name");
+                }
+                if (!current_stage_name.empty()) {
+                    throw std::runtime_error("Nested @stage not supported");
+                }
+                current_stage_name = parts[1];
+                current_stage_entry = parts.size() >= 3 ? parts[2] : "main";
+                const std::string entry_prefix = "entry=";
+                if (current_stage_entry.rfind(entry_prefix, 0) == 0) {
+                    current_stage_entry = current_stage_entry.substr(entry_prefix.size());
+                }
+                if (current_stage_entry.empty()) {
+                    throw std::runtime_error("@stage entry name is empty");
+                }
+                current_stage_lines.clear();
+
+                // If inside @phase, it's phase-specific; otherwise shared
+                in_shared_stage = (current_phase == nullptr);
+            } else if (directive == "@endstage") {
+                close_current_stage();
+            } else if (directive == "@surface") {
+                if (!current_settings_phase.empty()) {
+                    throw std::runtime_error("@surface is not valid inside @settings");
+                }
+                std::optional<MaterialSurfaceProducer>& target =
+                    current_phase ? current_phase->surface_producer : shared_surface_producer;
+                if (target.has_value()) {
+                    throw std::runtime_error("Duplicate @surface declaration in one shader phase");
+                }
+                target = parse_surface_directive(line);
+            } else if (directive == "@surfaceInput") {
+                if (!current_settings_phase.empty()) {
+                    throw std::runtime_error("@surfaceInput is not valid inside @settings");
+                }
+                std::optional<MaterialSurfaceProducer>& target =
+                    current_phase ? current_phase->surface_producer : shared_surface_producer;
+                if (!target.has_value()) {
+                    throw std::runtime_error("@surfaceInput must follow @surface in the same phase");
+                }
+                SurfaceFragmentInput input = parse_surface_input_directive(line);
+                const auto duplicate = std::find_if(
+                    target->required_fragment_inputs.begin(),
+                    target->required_fragment_inputs.end(),
+                    [&input](const SurfaceFragmentInput& existing) { return existing.semantic == input.semantic; });
+                if (duplicate != target->required_fragment_inputs.end()) {
+                    throw std::runtime_error("Duplicate @surfaceInput semantic: " + input.semantic);
+                }
+                target->required_fragment_inputs.push_back(std::move(input));
+            } else if (directive == "@property") {
+                add_material_property(parse_property_directive(line));
+            } else {
+                throw std::runtime_error("Unknown directive: " + directive);
+            }
         }
-        else if (directive == "@surface") {
-            if (!current_settings_phase.empty()) {
-                throw std::runtime_error("@surface is not valid inside @settings");
-            }
-            std::optional<MaterialSurfaceProducer>& target =
-                current_phase
-                    ? current_phase->surface_producer
-                    : shared_surface_producer;
-            if (target.has_value()) {
-                throw std::runtime_error(
-                    "Duplicate @surface declaration in one shader phase");
-            }
-            target = parse_surface_directive(line);
-        }
-        else if (directive == "@surfaceInput") {
-            if (!current_settings_phase.empty()) {
-                throw std::runtime_error(
-                    "@surfaceInput is not valid inside @settings");
-            }
-            std::optional<MaterialSurfaceProducer>& target =
-                current_phase
-                    ? current_phase->surface_producer
-                    : shared_surface_producer;
-            if (!target.has_value()) {
-                throw std::runtime_error(
-                    "@surfaceInput must follow @surface in the same phase");
-            }
-            SurfaceFragmentInput input =
-                parse_surface_input_directive(line);
-            const auto duplicate = std::find_if(
-                target->required_fragment_inputs.begin(),
-                target->required_fragment_inputs.end(),
-                [&input](const SurfaceFragmentInput& existing) {
-                    return existing.semantic == input.semantic;
-                });
-            if (duplicate != target->required_fragment_inputs.end()) {
-                throw std::runtime_error(
-                    "Duplicate @surfaceInput semantic: " + input.semantic);
-            }
-            target->required_fragment_inputs.push_back(std::move(input));
-        }
-        else if (directive == "@property") {
-            add_material_property(parse_property_directive(line));
-        }
-        else {
-            throw std::runtime_error("Unknown directive: " + directive);
-        }
-    }
 
-    // Close anything remaining
-    close_current_stage();
-    if (current_phase) {
-        close_current_phase();
-    }
-
-    // If @phases was used, generate ONE phase with all marks as available choices
-    if (!declared_phases.empty()) {
-        ShaderPhase phase(declared_phases);  // Constructor sets phase_mark to first, available_marks to all
-
-        // Copy shared stages
-        phase.stages = shared_stages;
-        phase.surface_producer = std::move(shared_surface_producer);
-
-        // Apply default opaque settings
-        phase.gl_depth_test = true;
-        phase.gl_depth_mask = true;
-        phase.gl_blend = false;
-        phase.gl_cull = true;
-        phase.priority = 0;
-
-        // Store per-mark settings from @settings blocks
-        for (const auto& mark : declared_phases) {
-            PhaseRenderSettings settings;
-            // Default opaque settings
-            settings.gl_depth_test = true;
-            settings.gl_depth_mask = true;
-            settings.gl_blend = false;
-            settings.gl_cull = true;
-            settings.priority = 0;
-
-            // Apply overrides from @settings
-            auto it = phase_settings.find(mark);
-            if (it != phase_settings.end()) {
-                const auto& overrides = it->second;
-                if (overrides.gl_depth_test.has_value())
-                    settings.gl_depth_test = overrides.gl_depth_test;
-                if (overrides.gl_depth_mask.has_value())
-                    settings.gl_depth_mask = overrides.gl_depth_mask;
-                if (overrides.gl_blend.has_value())
-                    settings.gl_blend = overrides.gl_blend;
-                if (overrides.gl_cull.has_value())
-                    settings.gl_cull = overrides.gl_cull;
-                if (overrides.priority != 0)
-                    settings.priority = overrides.priority;
-            }
-
-            // Default priority for transparent
-            if (mark == "transparent" && settings.priority == 0) {
-                settings.priority = 1000;
-            }
-
-            phase.mark_settings[mark] = settings;
+        // Close anything remaining
+        close_current_stage();
+        if (current_phase) {
+            close_current_phase();
         }
 
-        // Apply settings for the default (first) phase mark
-        auto it = phase.mark_settings.find(phase.phase_mark);
-        if (it != phase.mark_settings.end()) {
-            const auto& s = it->second;
-            phase.gl_depth_test = s.gl_depth_test;
-            phase.gl_depth_mask = s.gl_depth_mask;
-            phase.gl_blend = s.gl_blend;
-            phase.gl_cull = s.gl_cull;
-            phase.priority = s.priority;
+        // If @phases was used, generate ONE phase with all marks as available choices
+        if (!declared_phases.empty()) {
+            ShaderPhase phase(declared_phases); // Constructor sets phase_mark to first, available_marks to all
+
+            // Copy shared stages
+            phase.stages = shared_stages;
+            phase.surface_producer = std::move(shared_surface_producer);
+
+            // Apply default opaque settings
+            phase.gl_depth_test = true;
+            phase.gl_depth_mask = true;
+            phase.gl_blend = false;
+            phase.gl_cull = true;
+            phase.priority = 0;
+
+            // Store per-mark settings from @settings blocks
+            for (const auto& mark : declared_phases) {
+                PhaseRenderSettings settings;
+                // Default opaque settings
+                settings.gl_depth_test = true;
+                settings.gl_depth_mask = true;
+                settings.gl_blend = false;
+                settings.gl_cull = true;
+                settings.priority = 0;
+
+                // Apply overrides from @settings
+                auto it = phase_settings.find(mark);
+                if (it != phase_settings.end()) {
+                    const auto& overrides = it->second;
+                    if (overrides.gl_depth_test.has_value())
+                        settings.gl_depth_test = overrides.gl_depth_test;
+                    if (overrides.gl_depth_mask.has_value())
+                        settings.gl_depth_mask = overrides.gl_depth_mask;
+                    if (overrides.gl_blend.has_value())
+                        settings.gl_blend = overrides.gl_blend;
+                    if (overrides.gl_cull.has_value())
+                        settings.gl_cull = overrides.gl_cull;
+                    if (overrides.priority != 0)
+                        settings.priority = overrides.priority;
+                }
+
+                // Default priority for transparent
+                if (mark == "transparent" && settings.priority == 0) {
+                    settings.priority = 1000;
+                }
+
+                phase.mark_settings[mark] = settings;
+            }
+
+            // Apply settings for the default (first) phase mark
+            auto it = phase.mark_settings.find(phase.phase_mark);
+            if (it != phase.mark_settings.end()) {
+                const auto& s = it->second;
+                phase.gl_depth_test = s.gl_depth_test;
+                phase.gl_depth_mask = s.gl_depth_mask;
+                phase.gl_blend = s.gl_blend;
+                phase.gl_cull = s.gl_cull;
+                phase.priority = s.priority;
+            }
+
+            phases.push_back(std::move(phase));
+        } else if (shared_surface_producer.has_value()) {
+            throw std::runtime_error("Shared @surface requires a @phases declaration");
         }
 
-        phases.push_back(std::move(phase));
-    } else if (shared_surface_producer.has_value()) {
-        throw std::runtime_error(
-            "Shared @surface requires a @phases declaration");
-    }
-
-    if (!language_seen) {
-        throw std::runtime_error(
-            ".shader files must declare @language slang; implicit GLSL .shader "
-            "programs are no longer supported");
-    }
-
-    ShaderMultyPhaseProgramm result(
-        program_name,
-        std::move(phases),
-        "",
-        std::move(features),
-        std::move(material_properties));
-    result.language = language;
-
-    for (auto& phase : result.phases) {
-        phase.uniforms = collect_used_material_properties(
-            result.material_properties,
-            phase);
-
-        MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
-        std::vector<std::string> texture_names =
-            collect_texture_properties(phase.uniforms);
-        phase.material_texture_resources = texture_names;
-
-        if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
-            throw std::runtime_error(
-                "Slang .shader @property auto-generates MaterialParams; "
-                "remove the manual MaterialParams/ConstantBuffer declaration");
+        if (!language_seen) {
+            throw std::runtime_error(".shader files must declare @language slang; implicit GLSL .shader "
+                                     "programs are no longer supported");
         }
 
-        std::string block_slang = synthesize_material_ubo_slang(layout);
-        for (auto& kv : phase.stages) {
-            std::string sampler_slang =
-                synthesize_material_sampler_slang(texture_names, kv.second.source);
-            if (!sampler_slang.empty()) {
-                kv.second.source =
-                    strip_slang_sampler_decls(kv.second.source, texture_names);
+        ShaderMultyPhaseProgramm result(
+            program_name, std::move(phases), "", std::move(features), std::move(material_properties));
+        result.language = language;
+
+        for (auto& phase : result.phases) {
+            phase.uniforms = collect_used_material_properties(result.material_properties, phase);
+
+            MaterialUboLayout layout = compute_std140_layout(phase.uniforms);
+            std::vector<std::string> texture_names = collect_texture_properties(phase.uniforms);
+            phase.material_texture_resources = texture_names;
+
+            if (!layout.empty() && contains_slang_material_params_declaration(phase)) {
+                throw std::runtime_error("Slang .shader @property auto-generates MaterialParams; "
+                                         "remove the manual MaterialParams/ConstantBuffer declaration");
             }
 
-            // Engine uniforms for Slang: detect u_view / u_model usage
-            // and inject matching PerFrame / draw-data resources.
-            EngineUniformDeclUsage eng_usage =
-                collect_engine_uniform_usage(kv.second.source);
-            if (phase.surface_producer.has_value() &&
-                kv.first == "fragment" &&
-                eng_usage.any()) {
-                throw std::runtime_error(
-                    "Surface evaluator fragment source must receive world/pass "
-                    "data through @surfaceInput and cannot use engine "
-                    "u_view/u_projection/u_model uniforms");
-            }
-            phase.uses_engine_per_frame =
-                phase.uses_engine_per_frame ||
-                eng_usage.per_frame;
-            phase.uses_engine_draw_data =
-                phase.uses_engine_draw_data || eng_usage.model;
-            std::string eng_slang;
-            if (eng_usage.any()) {
-                kv.second.source =
-                    strip_engine_uniform_decls(kv.second.source);
-                eng_slang = synthesize_engine_uniform_slang(eng_usage);
-            }
+            std::string block_slang = synthesize_material_ubo_slang(layout);
+            for (auto& kv : phase.stages) {
+                std::string sampler_slang = synthesize_material_sampler_slang(texture_names, kv.second.source);
+                if (!sampler_slang.empty()) {
+                    kv.second.source = strip_slang_sampler_decls(kv.second.source, texture_names);
+                }
 
-            if (stage_uses_material_ubo_layout(kv.second, layout)) {
-                kv.second.source = block_slang + eng_slang + sampler_slang + kv.second.source;
-            } else if (!sampler_slang.empty() || !eng_slang.empty()) {
-                kv.second.source = eng_slang + sampler_slang + kv.second.source;
-            }
-            kv.second.source = ensure_slang_prelude_import(std::move(kv.second.source));
-        }
+                // Engine uniforms for Slang: detect u_view / u_model usage
+                // and inject matching PerFrame / draw-data resources.
+                EngineUniformDeclUsage eng_usage = collect_engine_uniform_usage(kv.second.source);
+                if (phase.surface_producer.has_value() && kv.first == "fragment" && eng_usage.any()) {
+                    throw std::runtime_error("Surface evaluator fragment source must receive world/pass "
+                                             "data through @surfaceInput and cannot use engine "
+                                             "u_view/u_projection/u_model uniforms");
+                }
+                phase.uses_engine_per_frame = phase.uses_engine_per_frame || eng_usage.per_frame;
+                phase.uses_engine_draw_data = phase.uses_engine_draw_data || eng_usage.model;
+                std::string eng_slang;
+                if (eng_usage.any()) {
+                    kv.second.source = strip_engine_uniform_decls(kv.second.source);
+                    eng_slang = synthesize_engine_uniform_slang(eng_usage);
+                }
 
-        if (!layout.empty()) {
-            phase.material_ubo_layout = std::move(layout);
-        }
-
-        if (phase.surface_producer.has_value()) {
-            MaterialSurfaceProducer& producer = *phase.surface_producer;
-            auto fragment = phase.stages.find("fragment");
-            if (fragment == phase.stages.end()) {
-                throw std::runtime_error(
-                    "@surface phase '" + phase.phase_mark +
-                    "' has no fragment evaluator source");
+                if (stage_uses_material_ubo_layout(kv.second, layout)) {
+                    kv.second.source = block_slang + eng_slang + sampler_slang + kv.second.source;
+                } else if (!sampler_slang.empty() || !eng_slang.empty()) {
+                    kv.second.source = eng_slang + sampler_slang + kv.second.source;
+                }
+                kv.second.source = ensure_slang_prelude_import(std::move(kv.second.source));
             }
 
-            const tc_surface_contract_desc* registered =
-                tc_surface_contract_registry_find({
+            if (!layout.empty()) {
+                phase.material_ubo_layout = std::move(layout);
+            }
+
+            if (phase.surface_producer.has_value()) {
+                MaterialSurfaceProducer& producer = *phase.surface_producer;
+                auto fragment = phase.stages.find("fragment");
+                if (fragment == phase.stages.end()) {
+                    throw std::runtime_error("@surface phase '" + phase.phase_mark +
+                                             "' has no fragment evaluator source");
+                }
+
+                const tc_surface_contract_desc* registered = tc_surface_contract_registry_find({
                     producer.contract_id.c_str(),
                     producer.contract_version,
                 });
-            if (!registered) {
-                throw std::runtime_error(
-                    "Unknown surface contract: " + producer.contract_id +
-                    "@" + std::to_string(producer.contract_version));
-            }
-            if (producer.surface_type_name != registered->surface_type_name) {
-                throw std::runtime_error(
-                    "Surface contract type mismatch for " +
-                    producer.contract_id + "@" +
-                    std::to_string(producer.contract_version) +
-                    ": declared '" + producer.surface_type_name +
-                    "', registered '" + registered->surface_type_name + "'");
-            }
+                if (!registered) {
+                    throw std::runtime_error("Unknown surface contract: " + producer.contract_id + "@" +
+                                             std::to_string(producer.contract_version));
+                }
+                if (producer.surface_type_name != registered->surface_type_name) {
+                    throw std::runtime_error("Surface contract type mismatch for " + producer.contract_id + "@" +
+                                             std::to_string(producer.contract_version) + ": declared '" +
+                                             producer.surface_type_name + "', registered '" +
+                                             registered->surface_type_name + "'");
+                }
 
-            producer.evaluator_source = fragment->second.source;
-            const std::regex evaluator_signature(
-                "\\b" + regex_escape(producer.surface_type_name) +
-                "\\s+" + regex_escape(producer.evaluator_entry) +
-                "\\s*\\(");
-            if (!std::regex_search(
-                    producer.evaluator_source,
-                    evaluator_signature)) {
-                throw std::runtime_error(
-                    "Surface evaluator entry '" + producer.evaluator_entry +
-                    "' returning '" + producer.surface_type_name +
-                    "' was not found in fragment source");
-            }
-            fragment->second.entry = producer.evaluator_entry;
+                producer.evaluator_source = fragment->second.source;
+                const std::regex evaluator_signature("\\b" + regex_escape(producer.surface_type_name) + "\\s+" +
+                                                     regex_escape(producer.evaluator_entry) + "\\s*\\(");
+                if (!std::regex_search(producer.evaluator_source, evaluator_signature)) {
+                    throw std::runtime_error("Surface evaluator entry '" + producer.evaluator_entry + "' returning '" +
+                                             producer.surface_type_name + "' was not found in fragment source");
+                }
+                fragment->second.entry = producer.evaluator_entry;
 
-            producer.resources.clear();
-            if (!phase.material_ubo_layout.empty()) {
-                producer.resources.push_back({
-                    TC_SHADER_RESOURCE_MATERIAL,
-                    TC_SHADER_RESOURCE_CONSTANT_BUFFER,
-                    TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-                    TC_SHADER_STAGE_FRAGMENT,
-                    phase.material_ubo_layout.block_size,
-                });
+                producer.resources.clear();
+                if (!phase.material_ubo_layout.empty()) {
+                    producer.resources.push_back({
+                        TC_SHADER_RESOURCE_MATERIAL,
+                        TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                        TC_SHADER_STAGE_FRAGMENT,
+                        phase.material_ubo_layout.block_size,
+                    });
+                }
+                for (const std::string& texture_name : phase.material_texture_resources) {
+                    producer.resources.push_back({
+                        texture_name,
+                        TC_SHADER_RESOURCE_TEXTURE,
+                        TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                        TC_SHADER_STAGE_FRAGMENT,
+                        0,
+                    });
+                }
+                producer.source_identity = surface_producer_source_identity(producer);
             }
-            for (const std::string& texture_name :
-                 phase.material_texture_resources) {
-                producer.resources.push_back({
-                    texture_name,
-                    TC_SHADER_RESOURCE_TEXTURE,
-                    TC_SHADER_RESOURCE_SCOPE_MATERIAL,
-                    TC_SHADER_STAGE_FRAGMENT,
-                    0,
-                });
-            }
-            producer.source_identity =
-                surface_producer_source_identity(producer);
         }
-    }
 
-    return result;
-}
+        return result;
+    }
 
 } // namespace termin

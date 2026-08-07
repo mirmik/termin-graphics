@@ -4,16 +4,16 @@
 
 #include <algorithm>
 #include <atomic>
-#include <exception>
 #include <cmath>
+#include <exception>
 #include <mutex>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
 #include <vector>
 
-#include <tcbase/tc_log.h>
 #include <tc_profiler.h>
+#include <tcbase/tc_log.h>
 
 #include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/native_document_painter.hpp>
@@ -25,514 +25,480 @@
 
 namespace termin::gui_native {
 
-namespace {
+    namespace {
 
-class ProfilerSection final {
-  public:
-    explicit ProfilerSection(const char* name)
-        : active_(tc_profiler_enabled()) {
-        if (active_) tc_profiler_begin_section(name);
-    }
-
-    ~ProfilerSection() {
-        if (active_) tc_profiler_end_section();
-    }
-
-    ProfilerSection(const ProfilerSection&) = delete;
-    ProfilerSection& operator=(const ProfilerSection&) = delete;
-
-  private:
-    bool active_;
-};
-
-[[noreturn]] void renderer_error(const std::string& message) {
-    tc_log_error("[gui-native-document-renderer] %s", message.c_str());
-    throw std::logic_error(message);
-}
-
-tgfx::TextureHandle create_color_target(
-    tgfx::IRenderDevice& device, int width, int height) {
-    tgfx::TextureDesc description;
-    description.width = static_cast<uint32_t>(width);
-    description.height = static_cast<uint32_t>(height);
-    description.format = tgfx::PixelFormat::RGBA8_UNorm;
-    description.usage = tgfx::TextureUsage::Sampled |
-                        tgfx::TextureUsage::ColorAttachment |
-                        tgfx::TextureUsage::CopySrc;
-    return device.create_texture(description);
-}
-
-} // namespace
-
-struct DocumentRenderer::Impl {
-    DocumentRenderer* facade;
-    tgfx::GraphicsHost* graphics;
-    TcDocument document;
-    DocumentRendererConfig config;
-    DocumentFrameSink* frame_sink;
-    DocumentPlatformServices* platform;
-    tgfx::IRenderDevice* device;
-    tgfx::RenderContext2* context;
-    NativeDocumentPainter painter;
-    tgfx::TextureHandle color_target{};
-    int target_width = 0;
-    int target_height = 0;
-    size_t rendered_frames = 0;
-    std::atomic<bool> repaint_requested{true};
-    UnhandledKeyHandler unhandled_key_handler;
-    std::function<void(tgfx::RenderContext2&)> before_frame;
-    std::vector<tc_widget_handle> color_pickers;
-    std::shared_ptr<DocumentRendererLeaseState> texture_leases;
-    std::string clipboard_buffer;
-    bool closed = false;
-
-    Impl(DocumentRenderer& renderer_facade, tgfx::GraphicsHost& graphics_ref,
-         TcDocument document_ref, DocumentRendererConfig renderer_config,
-         DocumentFrameSink& sink, DocumentPlatformServices& services)
-        : facade(&renderer_facade), graphics(&graphics_ref), document(document_ref),
-          config(std::move(renderer_config)), frame_sink(&sink), platform(&services),
-          device(&graphics_ref.device()), context(&graphics_ref.context()) {
-        if (!document.valid()) {
-            renderer_error("DocumentRenderer requires a live TcDocument");
-        }
-        if (config.font_path.empty()) {
-            renderer_error("DocumentRenderer requires a resolved font path");
-        }
-        if (!painter.set_default_font_path(config.font_path, config.font_size)) {
-            renderer_error(
-                "DocumentRenderer failed to load UI font: " + config.font_path);
-        }
-
-        try {
-            if (!platform->set_text_input_enabled(config.enable_text_input)) {
-                renderer_error("DocumentRenderer platform rejected text-input configuration");
+        class ProfilerSection final {
+        public:
+            explicit ProfilerSection(const char* name)
+                : active_(tc_profiler_enabled()) {
+                if (active_)
+                    tc_profiler_begin_section(name);
             }
-            document.set_clipboard(&clipboard_get, &clipboard_set, this);
-            document.set_cursor_changed_callback(&cursor_changed, this);
-            texture_leases = std::make_shared<DocumentRendererLeaseState>();
-            texture_leases->request_repaint = [this]() {
-                facade->request_repaint();
-            };
-            texture_leases->graphics = graphics;
-            texture_leases->document = document;
-        } catch (...) {
+
+            ~ProfilerSection() {
+                if (active_)
+                    tc_profiler_end_section();
+            }
+
+            ProfilerSection(const ProfilerSection&) = delete;
+            ProfilerSection& operator=(const ProfilerSection&) = delete;
+
+        private:
+            bool active_;
+        };
+
+        [[noreturn]] void renderer_error(const std::string& message) {
+            tc_log_error("[gui-native-document-renderer] %s", message.c_str());
+            throw std::logic_error(message);
+        }
+
+        tgfx::TextureHandle create_color_target(tgfx::IRenderDevice& device, int width, int height) {
+            tgfx::TextureDesc description;
+            description.width = static_cast<uint32_t>(width);
+            description.height = static_cast<uint32_t>(height);
+            description.format = tgfx::PixelFormat::RGBA8_UNorm;
+            description.usage =
+                tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+            return device.create_texture(description);
+        }
+
+    } // namespace
+
+    struct DocumentRenderer::Impl {
+        DocumentRenderer* facade;
+        tgfx::GraphicsHost* graphics;
+        TcDocument document;
+        DocumentRendererConfig config;
+        DocumentFrameSink* frame_sink;
+        DocumentPlatformServices* platform;
+        tgfx::IRenderDevice* device;
+        tgfx::RenderContext2* context;
+        NativeDocumentPainter painter;
+        tgfx::TextureHandle color_target{};
+        int target_width = 0;
+        int target_height = 0;
+        size_t rendered_frames = 0;
+        std::atomic<bool> repaint_requested{true};
+        UnhandledKeyHandler unhandled_key_handler;
+        std::function<void(tgfx::RenderContext2&)> before_frame;
+        std::vector<tc_widget_handle> color_pickers;
+        std::shared_ptr<DocumentRendererLeaseState> texture_leases;
+        std::string clipboard_buffer;
+        bool closed = false;
+
+        Impl(DocumentRenderer& renderer_facade,
+             tgfx::GraphicsHost& graphics_ref,
+             TcDocument document_ref,
+             DocumentRendererConfig renderer_config,
+             DocumentFrameSink& sink,
+             DocumentPlatformServices& services)
+            : facade(&renderer_facade),
+              graphics(&graphics_ref),
+              document(document_ref),
+              config(std::move(renderer_config)),
+              frame_sink(&sink),
+              platform(&services),
+              device(&graphics_ref.device()),
+              context(&graphics_ref.context()) {
+            if (!document.valid()) {
+                renderer_error("DocumentRenderer requires a live TcDocument");
+            }
+            if (config.font_path.empty()) {
+                renderer_error("DocumentRenderer requires a resolved font path");
+            }
+            if (!painter.set_default_font_path(config.font_path, config.font_size)) {
+                renderer_error("DocumentRenderer failed to load UI font: " + config.font_path);
+            }
+
+            try {
+                if (!platform->set_text_input_enabled(config.enable_text_input)) {
+                    renderer_error("DocumentRenderer platform rejected text-input configuration");
+                }
+                document.set_clipboard(&clipboard_get, &clipboard_set, this);
+                document.set_cursor_changed_callback(&cursor_changed, this);
+                texture_leases = std::make_shared<DocumentRendererLeaseState>();
+                texture_leases->request_repaint = [this]() {
+                    facade->request_repaint();
+                };
+                texture_leases->graphics = graphics;
+                texture_leases->document = document;
+            } catch (...) {
+                document.set_cursor_changed_callback(nullptr, nullptr);
+                document.set_clipboard(nullptr, nullptr, nullptr);
+                document.set_text_measurer(nullptr, nullptr);
+                try {
+                    platform->set_text_input_enabled(false);
+                } catch (...) {
+                    tc_log_error("[gui-native-document-renderer] failed to roll back text input");
+                }
+                throw;
+            }
+        }
+
+        static const char* clipboard_get(void* user_data) {
+            auto& self = *static_cast<Impl*>(user_data);
+            try {
+                self.clipboard_buffer = self.platform->clipboard_text();
+                return self.clipboard_buffer.c_str();
+            } catch (const std::exception& error) {
+                tc_log_error("[gui-native-document-renderer] clipboard read failed: %s", error.what());
+            } catch (...) {
+                tc_log_error("[gui-native-document-renderer] clipboard read failed with unknown exception");
+            }
+            return nullptr;
+        }
+
+        static bool clipboard_set(void* user_data, const char* text, size_t byte_length) {
+            auto& self = *static_cast<Impl*>(user_data);
+            try {
+                return self.platform->set_clipboard_text(std::string(text ? text : "", byte_length));
+            } catch (const std::exception& error) {
+                tc_log_error("[gui-native-document-renderer] clipboard write failed: %s", error.what());
+            } catch (...) {
+                tc_log_error("[gui-native-document-renderer] clipboard write failed with unknown exception");
+            }
+            return false;
+        }
+
+        static void cursor_changed(void* user_data, tc_ui_cursor_intent cursor) {
+            auto& self = *static_cast<Impl*>(user_data);
+            try {
+                if (!self.platform->set_cursor(cursor)) {
+                    tc_log_error("[gui-native-document-renderer] platform rejected cursor update");
+                    return;
+                }
+                self.facade->request_repaint();
+            } catch (const std::exception& error) {
+                tc_log_error("[gui-native-document-renderer] cursor update failed: %s", error.what());
+            } catch (...) {
+                tc_log_error("[gui-native-document-renderer] cursor update failed with unknown exception");
+            }
+        }
+
+        void require_open(const char* operation) const {
+            if (closed || !graphics || graphics->is_closed() || !document.valid() || !frame_sink || !platform) {
+                renderer_error(std::string("DocumentRenderer::") + operation + " called after dependency shutdown");
+            }
+        }
+
+        void ensure_target(int width, int height) {
+            if (color_target && target_width == width && target_height == height)
+                return;
+            if (color_target) {
+                device->wait_idle();
+                device->destroy(color_target);
+                device->invalidate_render_target_cache();
+                color_target = {};
+            }
+            color_target = create_color_target(*device, width, height);
+            if (!color_target) {
+                renderer_error("DocumentRenderer failed to create its color target");
+            }
+            target_width = width;
+            target_height = height;
+        }
+
+        void close() {
+            if (closed)
+                return;
+            if (!document.valid()) {
+                renderer_error("TcDocument must outlive DocumentRenderer");
+            }
+            if (!graphics || graphics->is_closed()) {
+                renderer_error("GraphicsHost must outlive DocumentRenderer");
+            }
+            unhandled_key_handler = {};
+            before_frame = {};
+            color_pickers.clear();
+            try {
+                if (!platform->set_text_input_enabled(false)) {
+                    tc_log_error("[gui-native-document-renderer] platform rejected text-input shutdown");
+                }
+            } catch (const std::exception& error) {
+                tc_log_error("[gui-native-document-renderer] text-input shutdown failed: %s", error.what());
+            } catch (...) {
+                tc_log_error("[gui-native-document-renderer] text-input shutdown failed with unknown exception");
+            }
             document.set_cursor_changed_callback(nullptr, nullptr);
             document.set_clipboard(nullptr, nullptr, nullptr);
-            document.set_text_measurer(nullptr, nullptr);
-            try {
-                platform->set_text_input_enabled(false);
-            } catch (...) {
-                tc_log_error(
-                    "[gui-native-document-renderer] failed to roll back text input");
-            }
-            throw;
-        }
-    }
-
-    static const char* clipboard_get(void* user_data) {
-        auto& self = *static_cast<Impl*>(user_data);
-        try {
-            self.clipboard_buffer = self.platform->clipboard_text();
-            return self.clipboard_buffer.c_str();
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] clipboard read failed: %s",
-                error.what());
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] clipboard read failed with unknown exception");
-        }
-        return nullptr;
-    }
-
-    static bool clipboard_set(
-        void* user_data, const char* text, size_t byte_length) {
-        auto& self = *static_cast<Impl*>(user_data);
-        try {
-            return self.platform->set_clipboard_text(
-                std::string(text ? text : "", byte_length));
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] clipboard write failed: %s",
-                error.what());
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] clipboard write failed with unknown exception");
-        }
-        return false;
-    }
-
-    static void cursor_changed(void* user_data, tc_ui_cursor_intent cursor) {
-        auto& self = *static_cast<Impl*>(user_data);
-        try {
-            if (!self.platform->set_cursor(cursor)) {
-                tc_log_error(
-                    "[gui-native-document-renderer] platform rejected cursor update");
-                return;
-            }
-            self.facade->request_repaint();
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] cursor update failed: %s",
-                error.what());
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] cursor update failed with unknown exception");
-        }
-    }
-
-    void require_open(const char* operation) const {
-        if (closed || !graphics || graphics->is_closed() ||
-            !document.valid() || !frame_sink || !platform) {
-            renderer_error(
-                std::string("DocumentRenderer::") + operation +
-                " called after dependency shutdown");
-        }
-    }
-
-    void ensure_target(int width, int height) {
-        if (color_target && target_width == width && target_height == height) return;
-        if (color_target) {
+            texture_leases->close_all();
             device->wait_idle();
-            device->destroy(color_target);
-            device->invalidate_render_target_cache();
-            color_target = {};
-        }
-        color_target = create_color_target(*device, width, height);
-        if (!color_target) {
-            renderer_error("DocumentRenderer failed to create its color target");
-        }
-        target_width = width;
-        target_height = height;
-    }
-
-    void close() {
-        if (closed) return;
-        if (!document.valid()) {
-            renderer_error("TcDocument must outlive DocumentRenderer");
-        }
-        if (!graphics || graphics->is_closed()) {
-            renderer_error("GraphicsHost must outlive DocumentRenderer");
-        }
-        unhandled_key_handler = {};
-        before_frame = {};
-        color_pickers.clear();
-        try {
-            if (!platform->set_text_input_enabled(false)) {
-                tc_log_error(
-                    "[gui-native-document-renderer] platform rejected text-input shutdown");
+            painter.close();
+            if (color_target) {
+                device->destroy(color_target);
+                device->invalidate_render_target_cache();
+                color_target = {};
             }
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] text-input shutdown failed: %s",
-                error.what());
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] text-input shutdown failed with unknown exception");
+            document = TcDocument{};
+            frame_sink = nullptr;
+            platform = nullptr;
+            context = nullptr;
+            device = nullptr;
+            graphics = nullptr;
+            closed = true;
         }
-        document.set_cursor_changed_callback(nullptr, nullptr);
-        document.set_clipboard(nullptr, nullptr, nullptr);
-        texture_leases->close_all();
-        device->wait_idle();
-        painter.close();
-        if (color_target) {
-            device->destroy(color_target);
-            device->invalidate_render_target_cache();
-            color_target = {};
-        }
-        document = TcDocument{};
-        frame_sink = nullptr;
-        platform = nullptr;
-        context = nullptr;
-        device = nullptr;
-        graphics = nullptr;
-        closed = true;
-    }
-};
-
-DocumentRenderer::DocumentRenderer(
-    tgfx::GraphicsHost& graphics, TcDocument document,
-    DocumentRendererConfig config, DocumentFrameSink& frame_sink,
-    DocumentPlatformServices& platform_services)
-    : impl_(std::make_unique<Impl>(
-          *this, graphics, document, std::move(config),
-          frame_sink, platform_services)) {}
-
-DocumentRenderer::~DocumentRenderer() {
-    if (!impl_ || impl_->closed) return;
-    try {
-        impl_->close();
-    } catch (const std::exception& error) {
-        tc_log_error(
-            "[gui-native-document-renderer] destructor shutdown failed: %s",
-            error.what());
-    } catch (...) {
-        tc_log_error(
-            "[gui-native-document-renderer] destructor shutdown failed with unknown exception");
-    }
-}
-
-tgfx::GraphicsHost& DocumentRenderer::graphics() {
-    impl_->require_open("graphics");
-    return *impl_->graphics;
-}
-
-const tgfx::GraphicsHost& DocumentRenderer::graphics() const {
-    impl_->require_open("graphics");
-    return *impl_->graphics;
-}
-
-tgfx::IRenderDevice& DocumentRenderer::device() {
-    return graphics().device();
-}
-
-const tgfx::IRenderDevice& DocumentRenderer::device() const {
-    return graphics().device();
-}
-
-TcDocument DocumentRenderer::document() const {
-    impl_->require_open("document");
-    return impl_->document;
-}
-
-tc_ui_event_result DocumentRenderer::dispatch_pointer(
-    const tc_ui_pointer_event& event) {
-    impl_->require_open("dispatch_pointer");
-    const tc_ui_event_result result = impl_->document.dispatch_pointer_event(event);
-    request_repaint();
-    return result;
-}
-
-tc_ui_event_result DocumentRenderer::dispatch_key(const tc_ui_key_event& event) {
-    impl_->require_open("dispatch_key");
-    tc_ui_event_result result = impl_->document.dispatch_key_event(event);
-    if (result == TC_UI_EVENT_IGNORED && event.type == TC_UI_KEY_DOWN &&
-        !event.repeat && impl_->unhandled_key_handler) {
-        try {
-            if (impl_->unhandled_key_handler(event)) {
-                result = TC_UI_EVENT_HANDLED;
-            }
-        } catch (const std::exception& error) {
-            tc_log_error(
-                "[gui-native-document-renderer] unhandled-key callback failed: %s",
-                error.what());
-            throw;
-        } catch (...) {
-            tc_log_error(
-                "[gui-native-document-renderer] unhandled-key callback failed with "
-                "an unknown exception");
-            throw;
-        }
-    }
-    request_repaint();
-    return result;
-}
-
-tc_ui_event_result DocumentRenderer::dispatch_text(const std::string& utf8) {
-    impl_->require_open("dispatch_text");
-    const tc_ui_text_event event{utf8.c_str()};
-    const tc_ui_event_result result = impl_->document.dispatch_text_event(event);
-    request_repaint();
-    return result;
-}
-
-std::pair<int, int> DocumentRenderer::framebuffer_size() const {
-    impl_->require_open("framebuffer_size");
-    return impl_->frame_sink->framebuffer_size();
-}
-
-bool DocumentRenderer::sync_presentation_metrics() {
-    impl_->require_open("sync_presentation_metrics");
-    const auto [width, height] = framebuffer_size();
-    if (width <= 0 || height <= 0) {
-        return false;
-    }
-    const float density_scale = impl_->frame_sink->content_scale();
-    const tc_ui_presentation_metrics metrics{
-        density_scale,
-        1.0f,
-        tc_ui_size{
-            static_cast<float>(width),
-            static_cast<float>(height),
-        },
-        tc_ui_insets{},
     };
-    if (!std::isfinite(density_scale) || density_scale <= 0.0f ||
-        !impl_->document.set_presentation_metrics(metrics)) {
-        renderer_error(
-            "DocumentRenderer received invalid per-window presentation metrics");
-    }
-    return true;
-}
 
-bool DocumentRenderer::render_frame() {
-    impl_->require_open("render_frame");
-    int width = 0;
-    int height = 0;
-    {
-        ProfilerSection profile("UI Presentation Sync");
-        std::tie(width, height) = framebuffer_size();
-        if (width <= 0 || height <= 0) return false;
-        if (!sync_presentation_metrics()) return false;
-        impl_->repaint_requested.store(false, std::memory_order_release);
-        impl_->ensure_target(width, height);
+    DocumentRenderer::DocumentRenderer(tgfx::GraphicsHost& graphics,
+                                       TcDocument document,
+                                       DocumentRendererConfig config,
+                                       DocumentFrameSink& frame_sink,
+                                       DocumentPlatformServices& platform_services)
+        : impl_(std::make_unique<Impl>(*this, graphics, document, std::move(config), frame_sink, platform_services)) {}
+
+    DocumentRenderer::~DocumentRenderer() {
+        if (!impl_ || impl_->closed)
+            return;
+        try {
+            impl_->close();
+        } catch (const std::exception& error) {
+            tc_log_error("[gui-native-document-renderer] destructor shutdown failed: %s", error.what());
+        } catch (...) {
+            tc_log_error("[gui-native-document-renderer] destructor shutdown failed with unknown exception");
+        }
     }
 
-    {
-        ProfilerSection profile("UI Begin Frame");
-        impl_->context->begin_frame();
+    tgfx::GraphicsHost& DocumentRenderer::graphics() {
+        impl_->require_open("graphics");
+        return *impl_->graphics;
     }
-    {
-        ProfilerSection profile("UI Before Frame");
-        if (impl_->before_frame) {
+
+    const tgfx::GraphicsHost& DocumentRenderer::graphics() const {
+        impl_->require_open("graphics");
+        return *impl_->graphics;
+    }
+
+    tgfx::IRenderDevice& DocumentRenderer::device() {
+        return graphics().device();
+    }
+
+    const tgfx::IRenderDevice& DocumentRenderer::device() const {
+        return graphics().device();
+    }
+
+    TcDocument DocumentRenderer::document() const {
+        impl_->require_open("document");
+        return impl_->document;
+    }
+
+    tc_ui_event_result DocumentRenderer::dispatch_pointer(const tc_ui_pointer_event& event) {
+        impl_->require_open("dispatch_pointer");
+        const tc_ui_event_result result = impl_->document.dispatch_pointer_event(event);
+        request_repaint();
+        return result;
+    }
+
+    tc_ui_event_result DocumentRenderer::dispatch_key(const tc_ui_key_event& event) {
+        impl_->require_open("dispatch_key");
+        tc_ui_event_result result = impl_->document.dispatch_key_event(event);
+        if (result == TC_UI_EVENT_IGNORED && event.type == TC_UI_KEY_DOWN && !event.repeat &&
+            impl_->unhandled_key_handler) {
             try {
-                impl_->before_frame(*impl_->context);
+                if (impl_->unhandled_key_handler(event)) {
+                    result = TC_UI_EVENT_HANDLED;
+                }
             } catch (const std::exception& error) {
-                tc_log_error(
-                    "[gui-native-document-renderer] before-frame callback failed: %s",
-                    error.what());
+                tc_log_error("[gui-native-document-renderer] unhandled-key callback failed: %s", error.what());
                 throw;
             } catch (...) {
-                tc_log_error(
-                    "[gui-native-document-renderer] before-frame callback failed with "
-                    "an unknown exception");
+                tc_log_error("[gui-native-document-renderer] unhandled-key callback failed with "
+                             "an unknown exception");
                 throw;
             }
         }
+        request_repaint();
+        return result;
     }
-    {
-        ProfilerSection profile("UI Texture Sync");
-        for (auto iterator = impl_->color_pickers.begin();
-             iterator != impl_->color_pickers.end();) {
-            tc_widget* widget = tc_ui_document_resolve_widget(
-                impl_->document.handle(), *iterator);
-            auto* picker = widget
-                ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body))
-                : nullptr;
-            if (!picker) {
-                tc_log_error(
-                    "[gui-native-document-renderer] registered ColorPicker was "
-                    "destroyed without renderer unregistration");
-                iterator = impl_->color_pickers.erase(iterator);
-                continue;
-            }
-            impl_->painter.sync_color_picker_surfaces(*impl_->context, *picker);
-            ++iterator;
-        }
+
+    tc_ui_event_result DocumentRenderer::dispatch_text(const std::string& utf8) {
+        impl_->require_open("dispatch_text");
+        const tc_ui_text_event event{utf8.c_str()};
+        const tc_ui_event_result result = impl_->document.dispatch_text_event(event);
+        request_repaint();
+        return result;
     }
-    {
-        ProfilerSection profile("UI Document Paint");
-        impl_->context->begin_pass(
-            impl_->color_target, tgfx::TextureHandle{},
-            impl_->config.clear_color.data(), 1.0f, false);
-        tc_ui_presentation_metrics presentation_metrics{};
-        if (!impl_->document.presentation_metrics(presentation_metrics)) {
-            renderer_error(
-                "DocumentRenderer failed to read synchronized presentation metrics");
+
+    std::pair<int, int> DocumentRenderer::framebuffer_size() const {
+        impl_->require_open("framebuffer_size");
+        return impl_->frame_sink->framebuffer_size();
+    }
+
+    bool DocumentRenderer::sync_presentation_metrics() {
+        impl_->require_open("sync_presentation_metrics");
+        const auto [width, height] = framebuffer_size();
+        if (width <= 0 || height <= 0) {
+            return false;
         }
-        const UiDocumentSubmission submission{
-            impl_->document,
-            0,
-            0,
-            presentation_metrics,
+        const float density_scale = impl_->frame_sink->content_scale();
+        const tc_ui_presentation_metrics metrics{
+            density_scale,
+            1.0f,
+            tc_ui_size{
+                static_cast<float>(width),
+                static_cast<float>(height),
+            },
+            tc_ui_insets{},
         };
-        impl_->painter.paint_documents(
-            *impl_->context, width, height,
-            std::span<const UiDocumentSubmission>(&submission, 1));
-        impl_->context->end_pass();
+        if (!std::isfinite(density_scale) || density_scale <= 0.0f ||
+            !impl_->document.set_presentation_metrics(metrics)) {
+            renderer_error("DocumentRenderer received invalid per-window presentation metrics");
+        }
+        return true;
     }
-    {
-        ProfilerSection profile("UI Submit");
-        impl_->context->end_frame();
-    }
-    {
-        ProfilerSection profile("UI Present");
-        impl_->frame_sink->publish_frame(impl_->color_target);
-    }
-    ++impl_->rendered_frames;
-    return true;
-}
 
-void DocumentRenderer::set_unhandled_key_handler(UnhandledKeyHandler handler) {
-    impl_->require_open("set_unhandled_key_handler");
-    impl_->unhandled_key_handler = std::move(handler);
-}
+    bool DocumentRenderer::render_frame() {
+        impl_->require_open("render_frame");
+        int width = 0;
+        int height = 0;
+        {
+            ProfilerSection profile("UI Presentation Sync");
+            std::tie(width, height) = framebuffer_size();
+            if (width <= 0 || height <= 0)
+                return false;
+            if (!sync_presentation_metrics())
+                return false;
+            impl_->repaint_requested.store(false, std::memory_order_release);
+            impl_->ensure_target(width, height);
+        }
 
-void DocumentRenderer::set_before_frame_callback(
-    std::function<void(tgfx::RenderContext2&)> callback) {
-    impl_->require_open("set_before_frame_callback");
-    impl_->before_frame = std::move(callback);
-    request_repaint();
-}
-
-void DocumentRenderer::register_color_picker(ColorPicker& picker) {
-    impl_->require_open("register_color_picker");
-    if (!tc_ui_document_handle_eq(picker.document(), impl_->document.handle())) {
-        renderer_error(
-            "DocumentRenderer cannot register a ColorPicker from another tc_ui_document");
+        {
+            ProfilerSection profile("UI Begin Frame");
+            impl_->context->begin_frame();
+        }
+        {
+            ProfilerSection profile("UI Before Frame");
+            if (impl_->before_frame) {
+                try {
+                    impl_->before_frame(*impl_->context);
+                } catch (const std::exception& error) {
+                    tc_log_error("[gui-native-document-renderer] before-frame callback failed: %s", error.what());
+                    throw;
+                } catch (...) {
+                    tc_log_error("[gui-native-document-renderer] before-frame callback failed with "
+                                 "an unknown exception");
+                    throw;
+                }
+            }
+        }
+        {
+            ProfilerSection profile("UI Texture Sync");
+            for (auto iterator = impl_->color_pickers.begin(); iterator != impl_->color_pickers.end();) {
+                tc_widget* widget = tc_ui_document_resolve_widget(impl_->document.handle(), *iterator);
+                auto* picker = widget ? dynamic_cast<ColorPicker*>(static_cast<Widget*>(widget->body)) : nullptr;
+                if (!picker) {
+                    tc_log_error("[gui-native-document-renderer] registered ColorPicker was "
+                                 "destroyed without renderer unregistration");
+                    iterator = impl_->color_pickers.erase(iterator);
+                    continue;
+                }
+                impl_->painter.sync_color_picker_surfaces(*impl_->context, *picker);
+                ++iterator;
+            }
+        }
+        {
+            ProfilerSection profile("UI Document Paint");
+            impl_->context->begin_pass(
+                impl_->color_target, tgfx::TextureHandle{}, impl_->config.clear_color.data(), 1.0f, false);
+            tc_ui_presentation_metrics presentation_metrics{};
+            if (!impl_->document.presentation_metrics(presentation_metrics)) {
+                renderer_error("DocumentRenderer failed to read synchronized presentation metrics");
+            }
+            const UiDocumentSubmission submission{
+                impl_->document,
+                0,
+                0,
+                presentation_metrics,
+            };
+            impl_->painter.paint_documents(
+                *impl_->context, width, height, std::span<const UiDocumentSubmission>(&submission, 1));
+            impl_->context->end_pass();
+        }
+        {
+            ProfilerSection profile("UI Submit");
+            impl_->context->end_frame();
+        }
+        {
+            ProfilerSection profile("UI Present");
+            impl_->frame_sink->publish_frame(impl_->color_target);
+        }
+        ++impl_->rendered_frames;
+        return true;
     }
-    const tc_widget_handle handle = picker.handle();
-    if (std::none_of(
-            impl_->color_pickers.begin(), impl_->color_pickers.end(),
-            [handle](tc_widget_handle candidate) {
-                return tc_widget_handle_eq(candidate, handle);
-            })) {
-        impl_->color_pickers.push_back(handle);
+
+    void DocumentRenderer::set_unhandled_key_handler(UnhandledKeyHandler handler) {
+        impl_->require_open("set_unhandled_key_handler");
+        impl_->unhandled_key_handler = std::move(handler);
+    }
+
+    void DocumentRenderer::set_before_frame_callback(std::function<void(tgfx::RenderContext2&)> callback) {
+        impl_->require_open("set_before_frame_callback");
+        impl_->before_frame = std::move(callback);
         request_repaint();
     }
-}
 
-void DocumentRenderer::unregister_color_picker(ColorPicker& picker) {
-    impl_->require_open("unregister_color_picker");
-    impl_->painter.release_color_picker_surfaces(picker);
-    const tc_widget_handle handle = picker.handle();
-    impl_->color_pickers.erase(
-        std::remove_if(
-            impl_->color_pickers.begin(), impl_->color_pickers.end(),
-            [handle](tc_widget_handle candidate) {
-                return tc_widget_handle_eq(candidate, handle);
-            }),
-        impl_->color_pickers.end());
-    request_repaint();
-}
-
-void DocumentRenderer::request_repaint() {
-    if (impl_ && !impl_->closed) {
-        impl_->repaint_requested.store(true, std::memory_order_release);
+    void DocumentRenderer::register_color_picker(ColorPicker& picker) {
+        impl_->require_open("register_color_picker");
+        if (!tc_ui_document_handle_eq(picker.document(), impl_->document.handle())) {
+            renderer_error("DocumentRenderer cannot register a ColorPicker from another tc_ui_document");
+        }
+        const tc_widget_handle handle = picker.handle();
+        if (std::none_of(impl_->color_pickers.begin(),
+                         impl_->color_pickers.end(),
+                         [handle](tc_widget_handle candidate) { return tc_widget_handle_eq(candidate, handle); })) {
+            impl_->color_pickers.push_back(handle);
+            request_repaint();
+        }
     }
-}
 
-bool DocumentRenderer::repaint_requested() const {
-    return impl_ && impl_->repaint_requested.load(std::memory_order_acquire);
-}
+    void DocumentRenderer::unregister_color_picker(ColorPicker& picker) {
+        impl_->require_open("unregister_color_picker");
+        impl_->painter.release_color_picker_surfaces(picker);
+        const tc_widget_handle handle = picker.handle();
+        impl_->color_pickers.erase(
+            std::remove_if(impl_->color_pickers.begin(),
+                           impl_->color_pickers.end(),
+                           [handle](tc_widget_handle candidate) { return tc_widget_handle_eq(candidate, handle); }),
+            impl_->color_pickers.end());
+        request_repaint();
+    }
 
-size_t DocumentRenderer::rendered_frame_count() const {
-    impl_->require_open("rendered_frame_count");
-    return impl_->rendered_frames;
-}
+    void DocumentRenderer::request_repaint() {
+        if (impl_ && !impl_->closed) {
+            impl_->repaint_requested.store(true, std::memory_order_release);
+        }
+    }
 
-tgfx::TextureHandle DocumentRenderer::color_target() const {
-    impl_->require_open("color_target");
-    return impl_->color_target;
-}
+    bool DocumentRenderer::repaint_requested() const {
+        return impl_ && impl_->repaint_requested.load(std::memory_order_acquire);
+    }
 
-void DocumentRenderer::wait_idle() {
-    impl_->require_open("wait_idle");
-    impl_->device->wait_idle();
-}
+    size_t DocumentRenderer::rendered_frame_count() const {
+        impl_->require_open("rendered_frame_count");
+        return impl_->rendered_frames;
+    }
 
-void DocumentRenderer::close() {
-    if (impl_) impl_->close();
-}
+    tgfx::TextureHandle DocumentRenderer::color_target() const {
+        impl_->require_open("color_target");
+        return impl_->color_target;
+    }
 
-bool DocumentRenderer::is_open() const {
-    return impl_ && !impl_->closed;
-}
+    void DocumentRenderer::wait_idle() {
+        impl_->require_open("wait_idle");
+        impl_->device->wait_idle();
+    }
 
-std::shared_ptr<DocumentRendererLeaseState>
-DocumentRenderer::texture_lease_state() const {
-    impl_->require_open("texture_lease_state");
-    return impl_->texture_leases;
-}
+    void DocumentRenderer::close() {
+        if (impl_)
+            impl_->close();
+    }
+
+    bool DocumentRenderer::is_open() const {
+        return impl_ && !impl_->closed;
+    }
+
+    std::shared_ptr<DocumentRendererLeaseState> DocumentRenderer::texture_lease_state() const {
+        impl_->require_open("texture_lease_state");
+        return impl_->texture_leases;
+    }
 
 } // namespace termin::gui_native

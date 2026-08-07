@@ -45,34 +45,23 @@ TGFX_API const char* tc_material_get_name_str(tc_material_handle h);
 // Phase operations
 // ============================================================================
 
-TGFX_API tc_material_phase* tc_material_add_phase(
-    tc_material* mat,
-    tc_shader_handle shader,
-    const char* phase_mark,
-    int priority
-);
+TGFX_API tc_material_phase*
+tc_material_add_phase(tc_material* mat, tc_shader_handle shader, const char* phase_mark, int priority);
 
 TGFX_API bool tc_material_remove_phase(tc_material* mat, size_t index);
 
-TGFX_API size_t tc_material_get_phases_for_mark(
-    tc_material* mat,
-    const char* mark,
-    tc_material_phase** out_phases,
-    size_t max_count
-);
+TGFX_API size_t tc_material_get_phases_for_mark(tc_material* mat,
+                                                const char* mark,
+                                                tc_material_phase** out_phases,
+                                                size_t max_count);
 
-TGFX_API size_t tc_material_get_phases_for_phase(
-    tc_material* mat,
-    tc_phase_mask phase,
-    tc_material_phase** out_phases,
-    size_t max_count
-);
+TGFX_API size_t tc_material_get_phases_for_phase(tc_material* mat,
+                                                 tc_phase_mask phase,
+                                                 tc_material_phase** out_phases,
+                                                 size_t max_count);
 
-TGFX_API bool tc_material_find_phase_ref(
-    const tc_material_phase* phase,
-    tc_material_handle* out_material,
-    size_t* out_phase_index
-);
+TGFX_API bool
+tc_material_find_phase_ref(const tc_material_phase* phase, tc_material_handle* out_material, size_t* out_phase_index);
 
 // ============================================================================
 // Material info for debugging/inspection
@@ -104,7 +93,8 @@ TGFX_API void tc_material_foreach(tc_material_iter_fn callback, void* user_data)
 // ============================================================================
 
 static inline void tc_material_bump_version(tc_material* mat) {
-    if (mat) mat->header.version++;
+    if (mat)
+        mat->header.version++;
 }
 
 TGFX_API tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid);

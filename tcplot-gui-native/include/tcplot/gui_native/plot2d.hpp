@@ -10,12 +10,9 @@
 
 #include "tcplot/gui_native/export.h"
 
-namespace tcplot::gui_native
-{
+namespace tcplot::gui_native {
 
-    class TCPLOT_GUI_NATIVE_API Plot2D final
-        : public termin::gui_native::NativeWidget
-    {
+    class TCPLOT_GUI_NATIVE_API Plot2D final : public termin::gui_native::NativeWidget {
     public:
         Plot2D();
         ~Plot2D() override;
@@ -37,19 +34,13 @@ namespace tcplot::gui_native
         [[nodiscard]] std::size_t line_count() const noexcept;
         std::size_t add_line();
         std::size_t add_line(PlotLineSeriesStyle2D style);
-        bool set_line_data(std::size_t index,
-                           std::span<const double> x,
-                           std::span<const double> y);
-        bool append_line_data(std::size_t index,
-                              std::span<const double> x,
-                              std::span<const double> y);
+        bool set_line_data(std::size_t index, std::span<const double> x, std::span<const double> y);
+        bool append_line_data(std::size_t index, std::span<const double> x, std::span<const double> y);
         void clear_lines();
 
-        tc_ui_size measure(tc_ui_document_handle document,
-                           tc_ui_constraints constraints) override;
+        tc_ui_size measure(tc_ui_document_handle document, tc_ui_constraints constraints) override;
         void layout(tc_ui_document_handle document, tc_ui_rect rect) override;
-        void paint(tc_ui_document_handle document,
-                   tc_ui_paint_context* context) override;
+        void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
 
     private:
         struct Impl;

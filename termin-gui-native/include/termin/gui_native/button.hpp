@@ -7,27 +7,31 @@
 #include <termin/gui_native/widget_types.hpp>
 
 namespace termin::gui_native {
-class Button : public NativeWidget {
-  private:
-    std::string text_;
-    bool pressed_ = false;
-    bool keyboard_pressed_ = false;
-    Signal<Button&> clicked_;
+    class Button : public NativeWidget {
+    private:
+        std::string text_;
+        bool pressed_ = false;
+        bool keyboard_pressed_ = false;
+        Signal<Button&> clicked_;
 
-  public:
-    explicit Button(std::string text = {});
-    Button(std::string text, Color fill);
-    explicit Button(Color fill);
-    Button& set_accent(Color color);
-    Button& set_text(std::string text);
-    Signal<Button&>& clicked() { return clicked_; }
-    const Signal<Button&>& clicked() const { return clicked_; }
-    bool pressed() const { return pressed_ || keyboard_pressed_; }
-    void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
-    tc_ui_event_result pointer_event(tc_ui_document_handle document,
-                                     const tc_ui_pointer_event* event) override;
-    tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
-    void focus_event(tc_ui_document_handle document, bool focused) override;
-
-};
+    public:
+        explicit Button(std::string text = {});
+        Button(std::string text, Color fill);
+        explicit Button(Color fill);
+        Button& set_accent(Color color);
+        Button& set_text(std::string text);
+        Signal<Button&>& clicked() {
+            return clicked_;
+        }
+        const Signal<Button&>& clicked() const {
+            return clicked_;
+        }
+        bool pressed() const {
+            return pressed_ || keyboard_pressed_;
+        }
+        void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
+        tc_ui_event_result pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) override;
+        tc_ui_event_result key_event(tc_ui_document_handle document, const tc_ui_key_event* event) override;
+        void focus_event(tc_ui_document_handle document, bool focused) override;
+    };
 } // namespace termin::gui_native

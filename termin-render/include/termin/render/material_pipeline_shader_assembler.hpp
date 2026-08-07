@@ -4,91 +4,89 @@
 #include <string>
 #include <vector>
 
+#include <termin/materials/surface_contract_registry.hpp>
 #include <termin/render/material_pipeline_contracts.hpp>
 #include <termin/render/render_export.hpp>
 #include <termin/render/vertex_transform_contracts.hpp>
-#include <termin/materials/surface_contract_registry.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
 
 namespace termin {
 
-struct MaterialPipelineMaterialContract {
-    TcShader shader;
-    MaterialFragmentInterface required_fragment_input;
-    std::vector<MaterialPipelineResourceDecl> resources;
-};
+    struct MaterialPipelineMaterialContract {
+        TcShader shader;
+        MaterialFragmentInterface required_fragment_input;
+        std::vector<MaterialPipelineResourceDecl> resources;
+    };
 
-enum class MaterialFragmentComposition : uint8_t {
-    FinalColor,
-    SurfaceConsumer,
-    PassOwned,
-    SurfaceConsumerOrFinalColor,
-};
+    enum class MaterialFragmentComposition : uint8_t {
+        FinalColor,
+        SurfaceConsumer,
+        PassOwned,
+        SurfaceConsumerOrFinalColor,
+    };
 
-struct MaterialSurfaceConsumerContract {
-    SurfaceContractKey accepted_surface;
-    std::string consumer_source;
-    std::string fragment_entry;
-    std::string source_identity;
-    MaterialFragmentInterface required_fragment_input;
-    std::vector<MaterialPipelineResourceDecl> resources;
-};
+    struct MaterialSurfaceConsumerContract {
+        SurfaceContractKey accepted_surface;
+        std::string consumer_source;
+        std::string fragment_entry;
+        std::string source_identity;
+        MaterialFragmentInterface required_fragment_input;
+        std::vector<MaterialPipelineResourceDecl> resources;
+    };
 
-struct MaterialPipelinePassContract {
-    std::string debug_name;
+    struct MaterialPipelinePassContract {
+        std::string debug_name;
 
-    // Pass-owned material/shader ABI intent. This structure is deliberately
-    // independent from drawable phase labels: a pass with phase_mark="opaque",
-    // "depth", "actor_attribute", or any project-owned label can request any
-    // compatible vertex transform/resource/fragment contract explicitly.
-    MaterialFragmentComposition fragment_composition =
-        MaterialFragmentComposition::FinalColor;
+        // Pass-owned material/shader ABI intent. This structure is deliberately
+        // independent from drawable phase labels: a pass with phase_mark="opaque",
+        // "depth", "actor_attribute", or any project-owned label can request any
+        // compatible vertex transform/resource/fragment contract explicitly.
+        MaterialFragmentComposition fragment_composition = MaterialFragmentComposition::FinalColor;
 
-    // Transitional final-color declaration for authored shaders that predate
-    // phase-owned fragment-input metadata. Surface producers always carry
-    // their own requirements on tc_shader and never use this field.
-    MaterialFragmentInterface required_material_fragment_input;
+        // Transitional final-color declaration for authored shaders that predate
+        // phase-owned fragment-input metadata. Surface producers always carry
+        // their own requirements on tc_shader and never use this field.
+        MaterialFragmentInterface required_material_fragment_input;
 
-    std::optional<MaterialSurfaceConsumerContract> surface_consumer;
-    std::string fragment_source_override;
-    std::string fragment_entry_override = "fs_main";
-    std::vector<MaterialPipelineResourceDecl> resources;
-    std::optional<VertexOutputAdapter> vertex_output_adapter;
-    std::optional<VertexTransformContract> static_vertex_transform;
-    std::optional<VertexTransformContract> skinned_vertex_transform;
-    std::optional<VertexTransformContract> foliage_vertex_transform;
-};
+        std::optional<MaterialSurfaceConsumerContract> surface_consumer;
+        std::string fragment_source_override;
+        std::string fragment_entry_override = "fs_main";
+        std::vector<MaterialPipelineResourceDecl> resources;
+        std::optional<VertexOutputAdapter> vertex_output_adapter;
+        std::optional<VertexTransformContract> static_vertex_transform;
+        std::optional<VertexTransformContract> skinned_vertex_transform;
+        std::optional<VertexTransformContract> foliage_vertex_transform;
+    };
 
-struct MaterialPipelineShaderAssemblyRequest {
-    MaterialPipelineMaterialContract material;
-    VertexTransformContract vertex_transform;
-    MaterialPipelinePassContract pass;
+    struct MaterialPipelineShaderAssemblyRequest {
+        MaterialPipelineMaterialContract material;
+        VertexTransformContract vertex_transform;
+        MaterialPipelinePassContract pass;
 
-    std::string shader_name;
-    std::string shader_uuid;
-    std::string vertex_source_override;
-    std::string vertex_entry_override;
-    std::string geometry_source_override;
-    std::string geometry_entry_override;
+        std::string shader_name;
+        std::string shader_uuid;
+        std::string vertex_source_override;
+        std::string vertex_entry_override;
+        std::string geometry_source_override;
+        std::string geometry_entry_override;
 
-    tc_shader_language language = TC_SHADER_LANGUAGE_SLANG;
-    tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
-};
+        tc_shader_language language = TC_SHADER_LANGUAGE_SLANG;
+        tc_shader_artifact_policy artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+    };
 
-struct MaterialPipelineShaderAssemblyResult {
-    TcShader shader;
-    std::vector<MaterialPipelineDiagnostic> diagnostics;
+    struct MaterialPipelineShaderAssemblyResult {
+        TcShader shader;
+        std::vector<MaterialPipelineDiagnostic> diagnostics;
 
-    bool ok() const {
-        return shader.is_valid() && diagnostics.empty();
-    }
-};
+        bool ok() const {
+            return shader.is_valid() && diagnostics.empty();
+        }
+    };
 
-RENDER_CORE_API MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
-    TcShader shader,
-    MaterialFragmentInterface final_color_required_fragment_input = {});
+    RENDER_CORE_API MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
+        TcShader shader, MaterialFragmentInterface final_color_required_fragment_input = {});
 
-RENDER_CORE_API MaterialPipelineShaderAssemblyResult material_pipeline_assemble_shader(
-    const MaterialPipelineShaderAssemblyRequest& request);
+    RENDER_CORE_API MaterialPipelineShaderAssemblyResult
+    material_pipeline_assemble_shader(const MaterialPipelineShaderAssemblyRequest& request);
 
 } // namespace termin

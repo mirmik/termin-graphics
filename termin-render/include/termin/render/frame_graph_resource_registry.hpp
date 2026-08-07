@@ -8,50 +8,42 @@
 
 namespace termin {
 
-using FrameGraphResourceCreateFn = FrameGraphResource* (*)(
-    const ResourceSpec& spec);
-enum class FrameGraphResourceSampledTextureKind {
-    Color,
-    Depth,
-};
+    using FrameGraphResourceCreateFn = FrameGraphResource* (*)(const ResourceSpec& spec);
+    enum class FrameGraphResourceSampledTextureKind {
+        Color,
+        Depth,
+    };
 
-struct FrameGraphResourceSampledTexture {
-    tgfx::TextureHandle texture;
-    FrameGraphResourceSampledTextureKind kind =
-        FrameGraphResourceSampledTextureKind::Color;
-};
+    struct FrameGraphResourceSampledTexture {
+        tgfx::TextureHandle texture;
+        FrameGraphResourceSampledTextureKind kind = FrameGraphResourceSampledTextureKind::Color;
+    };
 
-using FrameGraphResourceSampledTextureFn = FrameGraphResourceSampledTexture (*)(
-    const FrameGraphResource& resource);
+    using FrameGraphResourceSampledTextureFn = FrameGraphResourceSampledTexture (*)(const FrameGraphResource& resource);
 
-// Registration is a cold-path extension boundary for non-texture framegraph
-// resources. The registry owns the type name, while factories return one
-// heap-allocated resource whose lifetime is transferred to PipelineRenderCache.
-struct FrameGraphResourceTypeDescriptor {
-    const char* resource_type = nullptr;
-    FrameGraphResourceCreateFn create = nullptr;
-    FrameGraphResourceSampledTextureFn sampled_texture = nullptr;
-};
+    // Registration is a cold-path extension boundary for non-texture framegraph
+    // resources. The registry owns the type name, while factories return one
+    // heap-allocated resource whose lifetime is transferred to PipelineRenderCache.
+    struct FrameGraphResourceTypeDescriptor {
+        const char* resource_type = nullptr;
+        FrameGraphResourceCreateFn create = nullptr;
+        FrameGraphResourceSampledTextureFn sampled_texture = nullptr;
+    };
 
-RENDER_CORE_API bool register_frame_graph_resource_type(
-    const FrameGraphResourceTypeDescriptor& descriptor);
-RENDER_CORE_API bool unregister_frame_graph_resource_type(
-    const char* resource_type);
-RENDER_CORE_API bool has_frame_graph_resource_type(
-    const char* resource_type);
-RENDER_CORE_API bool frame_graph_resource_type_matches(
-    const FrameGraphResourceTypeDescriptor& descriptor);
-RENDER_CORE_API void clear_frame_graph_resource_types();
+    RENDER_CORE_API bool register_frame_graph_resource_type(const FrameGraphResourceTypeDescriptor& descriptor);
+    RENDER_CORE_API bool unregister_frame_graph_resource_type(const char* resource_type);
+    RENDER_CORE_API bool has_frame_graph_resource_type(const char* resource_type);
+    RENDER_CORE_API bool frame_graph_resource_type_matches(const FrameGraphResourceTypeDescriptor& descriptor);
+    RENDER_CORE_API void clear_frame_graph_resource_types();
 
-// Returns an owned resource or nullptr after logging a precise registry or
-// factory error. Callers must not silently reinterpret unknown kinds as FBOs.
-RENDER_CORE_API FrameGraphResource* create_frame_graph_resource(
-    const ResourceSpec& spec);
+    // Returns an owned resource or nullptr after logging a precise registry or
+    // factory error. Callers must not silently reinterpret unknown kinds as FBOs.
+    RENDER_CORE_API FrameGraphResource* create_frame_graph_resource(const ResourceSpec& spec);
 
-// Optional generic sampled view used by ordinary texture consumers and the
-// framegraph debugger. Its attachment kind preserves depth capture semantics;
-// an empty handle means that the resource has no preview.
-RENDER_CORE_API FrameGraphResourceSampledTexture frame_graph_resource_sampled_texture(
-    const FrameGraphResource& resource);
+    // Optional generic sampled view used by ordinary texture consumers and the
+    // framegraph debugger. Its attachment kind preserves depth capture semantics;
+    // an empty handle means that the resource has no preview.
+    RENDER_CORE_API FrameGraphResourceSampledTexture
+    frame_graph_resource_sampled_texture(const FrameGraphResource& resource);
 
 } // namespace termin

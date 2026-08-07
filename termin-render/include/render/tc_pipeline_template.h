@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <tcbase/tc_resource.h>
 #include <tcbase/tc_binding_types.h>
+#include <tcbase/tc_resource.h>
 #include <tcbase/types/api.h>
 
 #ifdef __cplusplus

@@ -1,12 +1,12 @@
 #ifndef TC_PASS_H
 #define TC_PASS_H
 
-#include <tc_types.h>
 #include <inspect/tc_runtime_type_registry.h>
 #include <render/tc_pipeline_pool.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <tc_types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,17 +68,20 @@ static inline void tc_pass_init_unowned(tc_pass* p, const tc_pass_vtable* vtable
 }
 
 static inline void* tc_pass_get_binding(tc_pass* p, tc_language lang) {
-    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX) return NULL;
+    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX)
+        return NULL;
     return p->bindings[lang];
 }
 
 static inline void tc_pass_set_binding(tc_pass* p, tc_language lang, void* binding) {
-    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX) return;
+    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX)
+        return;
     p->bindings[lang] = binding;
 }
 
 static inline void tc_pass_clear_binding(tc_pass* p, tc_language lang) {
-    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX) return;
+    if (!p || lang < 0 || lang >= TC_LANGUAGE_MAX)
+        return;
     p->bindings[lang] = NULL;
 }
 
@@ -148,20 +151,14 @@ TC_API void tc_pass_set_enabled(tc_pass* p, bool enabled);
 TC_API void tc_pass_set_passthrough(tc_pass* p, bool passthrough);
 TC_API void tc_pass_set_viewport_name(tc_pass* p, const char* viewport_name);
 
-typedef bool (*tc_pass_prepare_unload_fn)(
-    const char* type_name,
-    void* context,
-    void* user_data
-);
+typedef bool (*tc_pass_prepare_unload_fn)(const char* type_name, void* context, void* user_data);
 
 // Stage the frame-pass facet on a runtime type descriptor. The descriptor
 // owns the facet payload after a successful call and publishes it only when
 // the descriptor itself is committed.
-TC_API bool tc_pass_type_descriptor_add_facet(
-    tc_runtime_type_descriptor* descriptor,
-    tc_runtime_owned_factory* factory,
-    tc_pass_kind kind
-);
+TC_API bool tc_pass_type_descriptor_add_facet(tc_runtime_type_descriptor* descriptor,
+                                              tc_runtime_owned_factory* factory,
+                                              tc_pass_kind kind);
 
 TC_API void tc_pass_registry_unregister(const char* type_name);
 TC_API bool tc_pass_registry_has(const char* type_name);
@@ -173,15 +170,13 @@ TC_API size_t tc_pass_registry_type_count(void);
 TC_API const char* tc_pass_registry_type_at(size_t index);
 TC_API tc_pass_kind tc_pass_registry_get_kind(const char* type_name);
 TC_API size_t tc_pass_registry_instance_count(const char* type_name);
-TC_API void tc_pass_registry_set_prepare_unload_callback(
-    tc_pass_prepare_unload_fn callback,
-    void* user_data
-);
+TC_API void tc_pass_registry_set_prepare_unload_callback(tc_pass_prepare_unload_fn callback, void* user_data);
 TC_API bool tc_pass_link_registered_type(tc_pass* p, const char* type_name);
 TC_API void tc_pass_unlink_from_registry(tc_pass* p);
 
 static inline bool tc_pass_type_is_current(const tc_pass* p) {
-    if (!p || !p->runtime_type_link.type_name) return true;
+    if (!p || !p->runtime_type_link.type_name)
+        return true;
     return tc_runtime_type_registry_instance_is_current(&p->runtime_type_link);
 }
 

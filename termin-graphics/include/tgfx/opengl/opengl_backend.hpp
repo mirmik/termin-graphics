@@ -1,12 +1,12 @@
 #pragma once
 
-#include <tgfx/tgfx_api.h>
-#include <glad/glad.h>
 #include <array>
 #include <cstring>
+#include <glad/glad.h>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <tgfx/tgfx_api.h>
 #include <unordered_map>
 #include <vector>
 
@@ -14,12 +14,12 @@
 
 namespace termin {
 
-// Initialize OpenGL function pointers via glad.
-// Must be called after OpenGL context is created.
-// Returns true on success.
-inline bool init_opengl() {
-    return gladLoaderLoadGL() != 0;
-}
+    // Initialize OpenGL function pointers via glad.
+    // Must be called after OpenGL context is created.
+    // Returns true on success.
+    inline bool init_opengl() {
+        return gladLoaderLoadGL() != 0;
+    }
 
 // GL_KHR_debug constants (may not be in all glad versions)
 #ifndef GL_DEBUG_OUTPUT
@@ -44,42 +44,67 @@ inline bool init_opengl() {
 #define GL_DEBUG_SEVERITY_NOTIFICATION 0x826B
 #endif
 
-// OpenGL debug callback for detailed error messages.
-// Enabled when GL_KHR_debug extension is available.
-inline void GLAPIENTRY gl_debug_callback(
-    GLenum source,
-    GLenum type,
-    GLuint id,
-    GLenum severity,
-    GLsizei /*length*/,
-    const GLchar* message,
-    const void* /*userParam*/
-) {
-    // Convert source to string
-    const char* src_str = "UNKNOWN";
-    switch (source) {
-        case GL_DEBUG_SOURCE_API: src_str = "API"; break;
-        case GL_DEBUG_SOURCE_WINDOW_SYSTEM: src_str = "WINDOW"; break;
-        case GL_DEBUG_SOURCE_SHADER_COMPILER: src_str = "SHADER"; break;
-        case GL_DEBUG_SOURCE_THIRD_PARTY: src_str = "3RD_PARTY"; break;
-        case GL_DEBUG_SOURCE_APPLICATION: src_str = "APP"; break;
-        case GL_DEBUG_SOURCE_OTHER: src_str = "OTHER"; break;
-    }
+    // OpenGL debug callback for detailed error messages.
+    // Enabled when GL_KHR_debug extension is available.
+    inline void GLAPIENTRY gl_debug_callback(GLenum source,
+                                             GLenum type,
+                                             GLuint id,
+                                             GLenum severity,
+                                             GLsizei /*length*/,
+                                             const GLchar* message,
+                                             const void* /*userParam*/
+    ) {
+        // Convert source to string
+        const char* src_str = "UNKNOWN";
+        switch (source) {
+        case GL_DEBUG_SOURCE_API:
+            src_str = "API";
+            break;
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+            src_str = "WINDOW";
+            break;
+        case GL_DEBUG_SOURCE_SHADER_COMPILER:
+            src_str = "SHADER";
+            break;
+        case GL_DEBUG_SOURCE_THIRD_PARTY:
+            src_str = "3RD_PARTY";
+            break;
+        case GL_DEBUG_SOURCE_APPLICATION:
+            src_str = "APP";
+            break;
+        case GL_DEBUG_SOURCE_OTHER:
+            src_str = "OTHER";
+            break;
+        }
 
-    // Convert type to string
-    const char* type_str = "UNKNOWN";
-    switch (type) {
-        case GL_DEBUG_TYPE_ERROR: type_str = "ERROR"; break;
-        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: type_str = "DEPRECATED"; break;
-        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR: type_str = "UNDEFINED"; break;
-        case GL_DEBUG_TYPE_PORTABILITY: type_str = "PORTABILITY"; break;
-        case GL_DEBUG_TYPE_PERFORMANCE: type_str = "PERFORMANCE"; break;
-        case GL_DEBUG_TYPE_MARKER: type_str = "MARKER"; break;
-        case GL_DEBUG_TYPE_OTHER: type_str = "OTHER"; break;
-    }
+        // Convert type to string
+        const char* type_str = "UNKNOWN";
+        switch (type) {
+        case GL_DEBUG_TYPE_ERROR:
+            type_str = "ERROR";
+            break;
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+            type_str = "DEPRECATED";
+            break;
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+            type_str = "UNDEFINED";
+            break;
+        case GL_DEBUG_TYPE_PORTABILITY:
+            type_str = "PORTABILITY";
+            break;
+        case GL_DEBUG_TYPE_PERFORMANCE:
+            type_str = "PERFORMANCE";
+            break;
+        case GL_DEBUG_TYPE_MARKER:
+            type_str = "MARKER";
+            break;
+        case GL_DEBUG_TYPE_OTHER:
+            type_str = "OTHER";
+            break;
+        }
 
-    // Log based on severity
-    switch (severity) {
+        // Log based on severity
+        switch (severity) {
         case GL_DEBUG_SEVERITY_HIGH:
             tc::Log::error("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
@@ -92,9 +117,7 @@ inline void GLAPIENTRY gl_debug_callback(
         default:
             tc::Log::debug("[GL %s/%s #%u] %s", src_str, type_str, id, message);
             break;
+        }
     }
-}
-
-
 
 } // namespace termin

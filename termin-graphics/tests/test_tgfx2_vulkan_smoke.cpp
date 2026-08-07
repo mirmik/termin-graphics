@@ -16,11 +16,11 @@
 #include <vector>
 
 #include "tgfx2/backend_binding_plan.hpp"
-#include "tgfx2/enums.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/engine_shader_catalog.hpp"
-#include "tgfx2/i_render_device.hpp"
+#include "tgfx2/enums.hpp"
 #include "tgfx2/i_command_list.hpp"
+#include "tgfx2/i_render_device.hpp"
 #include "tgfx2/pipeline_cache.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
@@ -188,9 +188,7 @@ static std::optional<std::string> read_text_file(const std::filesystem::path& pa
         fprintf(stderr, "Failed to open text file: %s\n", path.string().c_str());
         return std::nullopt;
     }
-    return std::string(
-        std::istreambuf_iterator<char>(in),
-        std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
 static bool is_existing_file(const std::filesystem::path& path) {
@@ -200,14 +198,17 @@ static bool is_existing_file(const std::filesystem::path& path) {
 
 static std::vector<std::string> split_paths(const char* value) {
     std::vector<std::string> paths;
-    if (!value || value[0] == '\0') return paths;
+    if (!value || value[0] == '\0')
+        return paths;
     std::string text(value);
     size_t start = 0;
     while (start <= text.size()) {
         size_t end = text.find(':', start);
         std::string part = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
-        if (!part.empty()) paths.push_back(part);
-        if (end == std::string::npos) break;
+        if (!part.empty())
+            paths.push_back(part);
+        if (end == std::string::npos)
+            break;
         start = end + 1;
     }
     return paths;
@@ -216,7 +217,8 @@ static std::vector<std::string> split_paths(const char* value) {
 static std::optional<std::filesystem::path> find_on_path(const char* exe_name) {
     for (const std::string& dir : split_paths(std::getenv("PATH"))) {
         std::filesystem::path candidate = std::filesystem::path(dir) / exe_name;
-        if (is_existing_file(candidate)) return candidate;
+        if (is_existing_file(candidate))
+            return candidate;
     }
     return std::nullopt;
 }
@@ -253,7 +255,8 @@ static std::optional<std::filesystem::path> resolve_termin_shaderc(const char* a
     candidates.push_back(std::filesystem::current_path() / "sdk" / "bin" / "termin_shaderc");
 
     for (const auto& candidate : candidates) {
-        if (is_existing_file(candidate)) return candidate;
+        if (is_existing_file(candidate))
+            return candidate;
     }
     return find_on_path("termin_shaderc");
 }
@@ -272,20 +275,15 @@ static std::string quote_arg(const std::filesystem::path& value) {
     return out;
 }
 
-static bool run_shaderc(
-    const std::filesystem::path& shaderc,
-    const std::filesystem::path& slangc,
-    const char* stage,
-    const char* entry,
-    const std::filesystem::path& input,
-    const std::filesystem::path& output)
-{
-    std::string cmd =
-        quote_arg(shaderc) +
-        " compile --language slang --target vulkan --stage " + stage +
-        " --entry " + entry + " --input " + quote_arg(input) +
-        " --output " + quote_arg(output) +
-        " --slangc " + quote_arg(slangc);
+static bool run_shaderc(const std::filesystem::path& shaderc,
+                        const std::filesystem::path& slangc,
+                        const char* stage,
+                        const char* entry,
+                        const std::filesystem::path& input,
+                        const std::filesystem::path& output) {
+    std::string cmd = quote_arg(shaderc) + " compile --language slang --target vulkan --stage " + stage + " --entry " +
+                      entry + " --input " + quote_arg(input) + " --output " + quote_arg(output) + " --slangc " +
+                      quote_arg(slangc);
     int rc = std::system(cmd.c_str());
     if (rc != 0) {
         fprintf(stderr, "termin_shaderc failed for %s with status %d\n", input.string().c_str(), rc);
@@ -348,17 +346,22 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
                    device.read_pixel_rgba8(rt, kWidth / 2, kHeight - 1, bottom_pixel);
     printf("FSQ Slang artifact center pixel: (%.2f %.2f %.2f %.2f), "
            "top: (%.2f %.2f %.2f %.2f), bottom: (%.2f %.2f %.2f %.2f)\n",
-           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3],
-           top_pixel[0], top_pixel[1], top_pixel[2], top_pixel[3],
-           bottom_pixel[0], bottom_pixel[1], bottom_pixel[2], bottom_pixel[3]);
+           center_pixel[0],
+           center_pixel[1],
+           center_pixel[2],
+           center_pixel[3],
+           top_pixel[0],
+           top_pixel[1],
+           top_pixel[2],
+           top_pixel[3],
+           bottom_pixel[0],
+           bottom_pixel[1],
+           bottom_pixel[2],
+           bottom_pixel[3]);
 
-    const bool matches_canonical_uv =
-        read_ok &&
-        center_pixel[0] > 0.40f && center_pixel[0] < 0.60f &&
-        center_pixel[1] > 0.40f && center_pixel[1] < 0.60f &&
-        top_pixel[1] < 0.20f &&
-        bottom_pixel[1] > 0.80f &&
-        center_pixel[2] < 0.10f;
+    const bool matches_canonical_uv = read_ok && center_pixel[0] > 0.40f && center_pixel[0] < 0.60f &&
+                                      center_pixel[1] > 0.40f && center_pixel[1] < 0.60f && top_pixel[1] < 0.20f &&
+                                      bottom_pixel[1] > 0.80f && center_pixel[2] < 0.10f;
 
     device.destroy(fs);
     device.destroy(rt);
@@ -383,35 +386,30 @@ static bool render_ordered_mrt_smoke(tgfx::IRenderDevice& device) {
     }
 
     const float vertices[] = {
-        -1.0f, -1.0f,
-         3.0f, -1.0f,
-        -1.0f,  3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
     };
     tgfx::BufferDesc vertex_buffer_desc;
     vertex_buffer_desc.size = sizeof(vertices);
-    vertex_buffer_desc.usage =
-        tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
-    const tgfx::BufferHandle vertex_buffer =
-        device.create_buffer(vertex_buffer_desc);
-    device.upload_buffer(
-        vertex_buffer,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(vertices),
-            sizeof(vertices)));
+    vertex_buffer_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
+    const tgfx::BufferHandle vertex_buffer = device.create_buffer(vertex_buffer_desc);
+    device.upload_buffer(vertex_buffer,
+                         std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
     tgfx::VertexBufferLayout vertex_layout;
     vertex_layout.stride = 2 * sizeof(float);
     vertex_layout.attributes = {
         {0, tgfx::VertexFormat::Float2, 0},
     };
 
-    const bool passed = tgfx::tests::run_ordered_mrt_smoke(
-        device,
-        "Vulkan",
-        [&](tgfx::RenderContext2& context) {
-            context.bind_shader(vertex, fragment);
-            context.set_vertex_layout(vertex_layout);
-            context.draw_arrays(vertex_buffer, 3);
-        });
+    const bool passed = tgfx::tests::run_ordered_mrt_smoke(device, "Vulkan", [&](tgfx::RenderContext2& context) {
+        context.bind_shader(vertex, fragment);
+        context.set_vertex_layout(vertex_layout);
+        context.draw_arrays(vertex_buffer, 3);
+    });
     device.destroy(vertex_buffer);
     device.destroy(vertex);
     device.destroy(fragment);
@@ -453,36 +451,33 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     pipeline_desc.vertex_layouts.push_back(tgfx::make_vertex_layout_desc(layout));
 
     tgfx::PipelineHandle pipeline = device.create_pipeline(pipeline_desc);
-    const uintptr_t resource_layout_token =
-        device.pipeline_resource_layout_token(pipeline);
+    const uintptr_t resource_layout_token = device.pipeline_resource_layout_token(pipeline);
     if (resource_layout_token == 0) {
         fprintf(stderr, "Vulkan bound smoke: pipeline resource layout token is null\n");
         return false;
     }
 
     const float vertices[] = {
-        -1.0f, -1.0f,
-         3.0f, -1.0f,
-        -1.0f,  3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
     };
     tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
     vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
     tgfx::BufferHandle vb = device.create_buffer(vb_desc);
-    device.upload_buffer(
-        vb,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+    device.upload_buffer(vb, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
 
     const float color_block[] = {0.15f, 0.65f, 0.25f, 1.0f};
     tgfx::BufferDesc ubo_desc;
     ubo_desc.size = sizeof(color_block);
     ubo_desc.usage = tgfx::BufferUsage::Uniform | tgfx::BufferUsage::CopyDst;
     tgfx::BufferHandle ubo = device.create_buffer(ubo_desc);
-    device.upload_buffer(
-        ubo,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(color_block), sizeof(color_block)));
+    device.upload_buffer(ubo,
+                         std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(color_block), sizeof(color_block)));
 
     tgfx::BackendBindingPlanEntry plan_entry;
     plan_entry.resource.name = "ColorBlock";
@@ -506,24 +501,26 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     };
     tgfx::BoundResourceSetStorage bound_storage;
     bound_storage.set_resource_layout_token(resource_layout_token);
-    bound_storage.append_group(
-        tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
+    bound_storage.append_group(tgfx::ShaderResourceScope::Material, true, &material_binding, 1);
     const tgfx::BoundResourceSetDesc bound_desc = bound_storage.view();
-    tgfx::ResourceSetHandle resource_set =
-        device.create_bound_resource_set(bound_desc);
+    tgfx::ResourceSetHandle resource_set = device.create_bound_resource_set(bound_desc);
     if (!resource_set) {
         fprintf(stderr, "Vulkan bound smoke: create_bound_resource_set failed\n");
         return false;
     }
 
     tgfx::BoundResourceBinding wrong_backend_binding = material_binding;
-    wrong_backend_binding.slot.placement.kind =
-        tgfx::BackendPlacementKind::OpenGLBinding;
+    wrong_backend_binding.slot.placement.kind = tgfx::BackendPlacementKind::OpenGLBinding;
     const tgfx::BoundResourceGroupView wrong_backend_group = {
-        tgfx::ShaderResourceScope::Material, true, &wrong_backend_binding, 1,
+        tgfx::ShaderResourceScope::Material,
+        true,
+        &wrong_backend_binding,
+        1,
     };
     const tgfx::BoundResourceSetDesc wrong_backend_desc = {
-        resource_layout_token, &wrong_backend_group, 1,
+        resource_layout_token,
+        &wrong_backend_group,
+        1,
     };
     if (device.create_bound_resource_set(wrong_backend_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted non-Vulkan placement\n");
@@ -531,13 +528,17 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     }
 
     tgfx::BoundResourceBinding wrong_descriptor_binding = material_binding;
-    wrong_descriptor_binding.slot.placement.vulkan.descriptor_kind =
-        tgfx::BackendDescriptorKind::Sampler;
+    wrong_descriptor_binding.slot.placement.vulkan.descriptor_kind = tgfx::BackendDescriptorKind::Sampler;
     const tgfx::BoundResourceGroupView wrong_descriptor_group = {
-        tgfx::ShaderResourceScope::Material, true, &wrong_descriptor_binding, 1,
+        tgfx::ShaderResourceScope::Material,
+        true,
+        &wrong_descriptor_binding,
+        1,
     };
     const tgfx::BoundResourceSetDesc wrong_descriptor_desc = {
-        resource_layout_token, &wrong_descriptor_group, 1,
+        resource_layout_token,
+        &wrong_descriptor_group,
+        1,
     };
     if (device.create_bound_resource_set(wrong_descriptor_desc)) {
         fprintf(stderr, "Vulkan bound smoke: accepted wrong descriptor kind\n");
@@ -579,14 +580,13 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     const bool read_ok = device.read_pixel_rgba8(rt, kWidth / 2, kHeight / 2, pixel);
     printf("Vulkan bound resource set center pixel: %s (%.2f %.2f %.2f %.2f)\n",
            read_ok ? "ok" : "failed",
-           pixel[0], pixel[1], pixel[2], pixel[3]);
+           pixel[0],
+           pixel[1],
+           pixel[2],
+           pixel[3]);
 
-    const bool pass_ok =
-        read_ok &&
-        pixel[0] > 0.08f && pixel[0] < 0.30f &&
-        pixel[1] > 0.50f && pixel[1] < 0.80f &&
-        pixel[2] > 0.15f && pixel[2] < 0.40f &&
-        pixel[3] > 0.90f;
+    const bool pass_ok = read_ok && pixel[0] > 0.08f && pixel[0] < 0.30f && pixel[1] > 0.50f && pixel[1] < 0.80f &&
+                         pixel[2] > 0.15f && pixel[2] < 0.40f && pixel[3] > 0.90f;
 
     device.destroy(resource_set);
     device.destroy(ubo);
@@ -629,52 +629,51 @@ static bool render_texture_encoding_sampling_smoke(tgfx::IRenderDevice& device) 
     const tgfx::PipelineHandle pipeline = device.create_pipeline(pipeline_desc);
 
     const float vertices[] = {
-        -1.0f, -1.0f,
-         3.0f, -1.0f,
-        -1.0f,  3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
+        -1.0f,
+        -1.0f,
+        3.0f,
     };
     tgfx::BufferDesc vb_desc;
     vb_desc.size = sizeof(vertices);
     vb_desc.usage = tgfx::BufferUsage::Vertex | tgfx::BufferUsage::CopyDst;
     const tgfx::BufferHandle vb = device.create_buffer(vb_desc);
-    device.upload_buffer(
-        vb,
-        std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
+    device.upload_buffer(vb, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(vertices), sizeof(vertices)));
 
     tgfx::TextureDesc source_desc;
     source_desc.width = 2;
     source_desc.height = 2;
     source_desc.mip_levels = 2;
     source_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
-    source_desc.usage =
-        tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+    source_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
     const tgfx::TextureHandle srgb_source = device.create_texture(source_desc);
     source_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
     const tgfx::TextureHandle linear_source = device.create_texture(source_desc);
     const uint8_t encoded_base[] = {
-        128, 128, 128, 128,
-        128, 128, 128, 128,
-        128, 128, 128, 128,
-        128, 128, 128, 128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
     };
     const uint8_t encoded_mip[] = {128, 128, 128, 128};
-    device.upload_texture(
-        srgb_source,
-        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
-        0);
-    device.upload_texture(
-        srgb_source,
-        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
-        1);
-    device.upload_texture(
-        linear_source,
-        std::span<const uint8_t>(encoded_base, sizeof(encoded_base)),
-        0);
-    device.upload_texture(
-        linear_source,
-        std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)),
-        1);
+    device.upload_texture(srgb_source, std::span<const uint8_t>(encoded_base, sizeof(encoded_base)), 0);
+    device.upload_texture(srgb_source, std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)), 1);
+    device.upload_texture(linear_source, std::span<const uint8_t>(encoded_base, sizeof(encoded_base)), 0);
+    device.upload_texture(linear_source, std::span<const uint8_t>(encoded_mip, sizeof(encoded_mip)), 1);
     const tgfx::SamplerHandle sampler = device.create_sampler(tgfx::SamplerDesc{});
 
     tgfx::BackendBindingPlanEntry plan_entry;
@@ -685,37 +684,30 @@ static bool render_texture_encoding_sampling_smoke(tgfx::IRenderDevice& device) 
     plan_entry.placement.kind = tgfx::BackendPlacementKind::VulkanDescriptor;
     plan_entry.placement.vulkan.set = 0;
     plan_entry.placement.vulkan.binding = 0;
-    plan_entry.placement.vulkan.descriptor_kind =
-        tgfx::BackendDescriptorKind::SampledTexture;
+    plan_entry.placement.vulkan.descriptor_kind = tgfx::BackendDescriptorKind::SampledTexture;
 
-    const auto create_resource_set =
-        [&](tgfx::TextureHandle texture) -> tgfx::ResourceSetHandle {
-            tgfx::BoundResourceValue value;
-            value.kind = tgfx::BoundResourceKind::SampledTexture;
-            value.texture = texture;
-            value.sampler = sampler;
-            const tgfx::BoundResourceBinding binding = {
-                tgfx::bound_resource_slot_from_plan_entry(plan_entry),
-                value,
-            };
-            tgfx::BoundResourceSetStorage storage;
-            storage.set_resource_layout_token(
-                device.pipeline_resource_layout_token(pipeline));
-            storage.append_group(
-                tgfx::ShaderResourceScope::Material, true, &binding, 1);
-            return device.create_bound_resource_set(storage.view());
+    const auto create_resource_set = [&](tgfx::TextureHandle texture) -> tgfx::ResourceSetHandle {
+        tgfx::BoundResourceValue value;
+        value.kind = tgfx::BoundResourceKind::SampledTexture;
+        value.texture = texture;
+        value.sampler = sampler;
+        const tgfx::BoundResourceBinding binding = {
+            tgfx::bound_resource_slot_from_plan_entry(plan_entry),
+            value,
         };
-    const tgfx::ResourceSetHandle srgb_resource_set =
-        create_resource_set(srgb_source);
-    const tgfx::ResourceSetHandle linear_resource_set =
-        create_resource_set(linear_source);
+        tgfx::BoundResourceSetStorage storage;
+        storage.set_resource_layout_token(device.pipeline_resource_layout_token(pipeline));
+        storage.append_group(tgfx::ShaderResourceScope::Material, true, &binding, 1);
+        return device.create_bound_resource_set(storage.view());
+    };
+    const tgfx::ResourceSetHandle srgb_resource_set = create_resource_set(srgb_source);
+    const tgfx::ResourceSetHandle linear_resource_set = create_resource_set(linear_source);
 
     tgfx::TextureDesc target_desc;
     target_desc.width = kSize;
     target_desc.height = kSize;
     target_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    target_desc.usage =
-        tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    target_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
     const tgfx::TextureHandle target = device.create_texture(target_desc);
 
     tgfx::RenderPassDesc pass;
@@ -723,47 +715,45 @@ static bool render_texture_encoding_sampling_smoke(tgfx::IRenderDevice& device) 
     color.texture = target;
     color.load = tgfx::LoadOp::Clear;
     pass.colors.push_back(color);
-    const auto sample =
-        [&](tgfx::ResourceSetHandle resource_set, float out_pixel[4]) {
-            auto cmd = device.create_command_list();
-            cmd->begin();
-            cmd->begin_render_pass(pass);
-            cmd->set_viewport(0, 0, kSize, kSize);
-            cmd->bind_pipeline(pipeline);
-            cmd->bind_resource_set(resource_set);
-            cmd->bind_vertex_buffer(0, vb);
-            cmd->draw(3);
-            cmd->end_render_pass();
-            cmd->end();
-            device.submit(*cmd);
-            device.wait_idle();
-            return device.read_pixel_rgba8(
-                target, kSize / 2, kSize / 2, out_pixel);
-        };
+    const auto sample = [&](tgfx::ResourceSetHandle resource_set, float out_pixel[4]) {
+        auto cmd = device.create_command_list();
+        cmd->begin();
+        cmd->begin_render_pass(pass);
+        cmd->set_viewport(0, 0, kSize, kSize);
+        cmd->bind_pipeline(pipeline);
+        cmd->bind_resource_set(resource_set);
+        cmd->bind_vertex_buffer(0, vb);
+        cmd->draw(3);
+        cmd->end_render_pass();
+        cmd->end();
+        device.submit(*cmd);
+        device.wait_idle();
+        return device.read_pixel_rgba8(target, kSize / 2, kSize / 2, out_pixel);
+    };
 
     float srgb_pixel[4] = {};
     float linear_pixel[4] = {};
     const bool srgb_read_ok = sample(srgb_resource_set, srgb_pixel);
     const bool linear_read_ok = sample(linear_resource_set, linear_pixel);
-    const bool srgb_ok =
-        srgb_read_ok &&
-        std::abs(srgb_pixel[0] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[1] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[2] - 0.21586f) < 0.015f &&
-        std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
-    const bool linear_ok =
-        linear_read_ok &&
-        std::abs(linear_pixel[0] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[1] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[2] - 0.50196f) < 0.015f &&
-        std::abs(linear_pixel[3] - 0.50196f) < 0.015f;
+    const bool srgb_ok = srgb_read_ok && std::abs(srgb_pixel[0] - 0.21586f) < 0.015f &&
+                         std::abs(srgb_pixel[1] - 0.21586f) < 0.015f && std::abs(srgb_pixel[2] - 0.21586f) < 0.015f &&
+                         std::abs(srgb_pixel[3] - 0.50196f) < 0.015f;
+    const bool linear_ok = linear_read_ok && std::abs(linear_pixel[0] - 0.50196f) < 0.015f &&
+                           std::abs(linear_pixel[1] - 0.50196f) < 0.015f &&
+                           std::abs(linear_pixel[2] - 0.50196f) < 0.015f &&
+                           std::abs(linear_pixel[3] - 0.50196f) < 0.015f;
     const bool pass_ok = srgb_ok && linear_ok;
-    printf(
-        "Vulkan mipmapped texture encoding sampling: %s "
-        "(sRGB %.3f %.3f %.3f %.3f; Linear %.3f %.3f %.3f %.3f)\n",
-        pass_ok ? "ok" : "failed",
-        srgb_pixel[0], srgb_pixel[1], srgb_pixel[2], srgb_pixel[3],
-        linear_pixel[0], linear_pixel[1], linear_pixel[2], linear_pixel[3]);
+    printf("Vulkan mipmapped texture encoding sampling: %s "
+           "(sRGB %.3f %.3f %.3f %.3f; Linear %.3f %.3f %.3f %.3f)\n",
+           pass_ok ? "ok" : "failed",
+           srgb_pixel[0],
+           srgb_pixel[1],
+           srgb_pixel[2],
+           srgb_pixel[3],
+           linear_pixel[0],
+           linear_pixel[1],
+           linear_pixel[2],
+           linear_pixel[3]);
 
     device.destroy(linear_resource_set);
     device.destroy(srgb_resource_set);
@@ -889,14 +879,16 @@ int main(int argc, char** argv) {
 
     float rgb16f_readback[4] = {};
     const bool rgb16f_ok = device->read_texture_rgba_float(rgb16f_handle, rgb16f_readback) &&
-        rgb16f_readback[0] > 0.49f && rgb16f_readback[0] < 0.51f &&
-        rgb16f_readback[1] > 0.99f && rgb16f_readback[1] < 1.01f &&
-        rgb16f_readback[2] > -0.01f && rgb16f_readback[2] < 0.01f &&
-        rgb16f_readback[3] > 0.99f && rgb16f_readback[3] < 1.01f;
+                           rgb16f_readback[0] > 0.49f && rgb16f_readback[0] < 0.51f && rgb16f_readback[1] > 0.99f &&
+                           rgb16f_readback[1] < 1.01f && rgb16f_readback[2] > -0.01f && rgb16f_readback[2] < 0.01f &&
+                           rgb16f_readback[3] > 0.99f && rgb16f_readback[3] < 1.01f;
     if (!rgb16f_ok) {
         fprintf(stderr,
                 "Vulkan tc_texture RGB16F readback mismatch: %.3f %.3f %.3f %.3f\n",
-                rgb16f_readback[0], rgb16f_readback[1], rgb16f_readback[2], rgb16f_readback[3]);
+                rgb16f_readback[0],
+                rgb16f_readback[1],
+                rgb16f_readback[2],
+                rgb16f_readback[3]);
         return 1;
     }
     vulkan_device->invalidate_tc_texture_cache(rgb16f_texture.header.pool_index);
@@ -906,21 +898,32 @@ int main(int argc, char** argv) {
     upload_desc.width = 4;
     upload_desc.height = 4;
     upload_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-    upload_desc.usage = tgfx::TextureUsage::Sampled |
-                        tgfx::TextureUsage::CopySrc |
-                        tgfx::TextureUsage::CopyDst;
+    upload_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
     auto upload_tex = device->create_texture(upload_desc);
 
     std::vector<uint8_t> zeros(4 * 4 * 4, 0);
     device->upload_texture(upload_tex, zeros);
 
     const uint8_t region_pixels[] = {
-        255, 0, 0, 255,  255, 0, 0, 255,
-        255, 0, 0, 255,  255, 0, 0, 255,
+        255,
+        0,
+        0,
+        255,
+        255,
+        0,
+        0,
+        255,
+        255,
+        0,
+        0,
+        255,
+        255,
+        0,
+        0,
+        255,
     };
     device->upload_texture_region(
-        upload_tex, 1, 2, 2, 2,
-        std::span<const uint8_t>(region_pixels, sizeof(region_pixels)));
+        upload_tex, 1, 2, 2, 2, std::span<const uint8_t>(region_pixels, sizeof(region_pixels)));
 
     auto upload_cmd = device->create_command_list();
     upload_cmd->begin();
@@ -932,38 +935,39 @@ int main(int argc, char** argv) {
     float untouched_pixel[4] = {};
     bool region_read_ok = device->read_pixel_rgba8(upload_tex, 1, 2, red_pixel) &&
                           device->read_pixel_rgba8(upload_tex, 0, 0, untouched_pixel);
-    bool region_upload_ok =
-        region_read_ok &&
-        red_pixel[0] > 0.9f && red_pixel[1] < 0.1f &&
-        red_pixel[2] < 0.1f && red_pixel[3] > 0.9f &&
-        untouched_pixel[0] < 0.1f && untouched_pixel[1] < 0.1f &&
-        untouched_pixel[2] < 0.1f && untouched_pixel[3] < 0.1f;
+    bool region_upload_ok = region_read_ok && red_pixel[0] > 0.9f && red_pixel[1] < 0.1f && red_pixel[2] < 0.1f &&
+                            red_pixel[3] > 0.9f && untouched_pixel[0] < 0.1f && untouched_pixel[1] < 0.1f &&
+                            untouched_pixel[2] < 0.1f && untouched_pixel[3] < 0.1f;
 
     std::vector<float> upload_pixels(4 * 4 * 4, 0.0f);
     bool full_color_read_ok = device->read_texture_rgba_float(upload_tex, upload_pixels.data());
     const size_t full_red = (2 * 4 + 1) * 4;
     const size_t full_untouched = 0;
-    bool full_color_matches =
-        full_color_read_ok &&
-        upload_pixels[full_red + 0] > 0.9f &&
-        upload_pixels[full_red + 1] < 0.1f &&
-        upload_pixels[full_red + 2] < 0.1f &&
-        upload_pixels[full_red + 3] > 0.9f &&
-        upload_pixels[full_untouched + 0] < 0.1f &&
-        upload_pixels[full_untouched + 1] < 0.1f &&
-        upload_pixels[full_untouched + 2] < 0.1f &&
-        upload_pixels[full_untouched + 3] < 0.1f;
+    bool full_color_matches = full_color_read_ok && upload_pixels[full_red + 0] > 0.9f &&
+                              upload_pixels[full_red + 1] < 0.1f && upload_pixels[full_red + 2] < 0.1f &&
+                              upload_pixels[full_red + 3] > 0.9f && upload_pixels[full_untouched + 0] < 0.1f &&
+                              upload_pixels[full_untouched + 1] < 0.1f && upload_pixels[full_untouched + 2] < 0.1f &&
+                              upload_pixels[full_untouched + 3] < 0.1f;
 
     printf("Texture region upload: %s, full color readback: %s\n",
            region_upload_ok ? "ok" : "failed",
            full_color_matches ? "ok" : "failed");
     if (!region_upload_ok || !full_color_matches) {
         fprintf(stderr,
-                "Texture readback mismatch: red=(%.3f %.3f %.3f %.3f), untouched=(%.3f %.3f %.3f %.3f), full_red=(%.3f %.3f %.3f %.3f)\n",
-                red_pixel[0], red_pixel[1], red_pixel[2], red_pixel[3],
-                untouched_pixel[0], untouched_pixel[1], untouched_pixel[2], untouched_pixel[3],
-                upload_pixels[full_red + 0], upload_pixels[full_red + 1],
-                upload_pixels[full_red + 2], upload_pixels[full_red + 3]);
+                "Texture readback mismatch: red=(%.3f %.3f %.3f %.3f), untouched=(%.3f %.3f %.3f %.3f), full_red=(%.3f "
+                "%.3f %.3f %.3f)\n",
+                red_pixel[0],
+                red_pixel[1],
+                red_pixel[2],
+                red_pixel[3],
+                untouched_pixel[0],
+                untouched_pixel[1],
+                untouched_pixel[2],
+                untouched_pixel[3],
+                upload_pixels[full_red + 0],
+                upload_pixels[full_red + 1],
+                upload_pixels[full_red + 2],
+                upload_pixels[full_red + 3]);
         return 1;
     }
     device->destroy(upload_tex);
@@ -972,13 +976,12 @@ int main(int argc, char** argv) {
     depth_desc.width = 2;
     depth_desc.height = 2;
     depth_desc.format = tgfx::PixelFormat::D32F;
-    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment |
-                       tgfx::TextureUsage::CopySrc |
-                       tgfx::TextureUsage::CopyDst;
+    depth_desc.usage =
+        tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc | tgfx::TextureUsage::CopyDst;
     auto depth_tex = device->create_texture(depth_desc);
     const float depth_upload[] = {0.25f, 0.5f, 0.75f, 1.0f};
-    device->upload_texture(depth_tex, std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(depth_upload), sizeof(depth_upload)));
+    device->upload_texture(
+        depth_tex, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(depth_upload), sizeof(depth_upload)));
 
     auto depth_cmd = device->create_command_list();
     depth_cmd->begin();
@@ -988,17 +991,17 @@ int main(int argc, char** argv) {
 
     float depth_pixels[4] = {};
     bool depth_read_ok = device->read_texture_depth_float(depth_tex, depth_pixels);
-    bool depth_matches =
-        depth_read_ok &&
-        depth_pixels[0] > 0.24f && depth_pixels[0] < 0.26f &&
-        depth_pixels[1] > 0.49f && depth_pixels[1] < 0.51f &&
-        depth_pixels[2] > 0.74f && depth_pixels[2] < 0.76f &&
-        depth_pixels[3] > 0.99f && depth_pixels[3] < 1.01f;
+    bool depth_matches = depth_read_ok && depth_pixels[0] > 0.24f && depth_pixels[0] < 0.26f &&
+                         depth_pixels[1] > 0.49f && depth_pixels[1] < 0.51f && depth_pixels[2] > 0.74f &&
+                         depth_pixels[2] < 0.76f && depth_pixels[3] > 0.99f && depth_pixels[3] < 1.01f;
     printf("Full depth readback: %s\n", depth_matches ? "ok" : "failed");
     if (!depth_matches) {
         fprintf(stderr,
                 "Depth readback mismatch: (%.3f %.3f %.3f %.3f)\n",
-                depth_pixels[0], depth_pixels[1], depth_pixels[2], depth_pixels[3]);
+                depth_pixels[0],
+                depth_pixels[1],
+                depth_pixels[2],
+                depth_pixels[3]);
         return 1;
     }
     device->destroy(depth_tex);
@@ -1055,12 +1058,23 @@ int main(int argc, char** argv) {
 
     // --- Create vertex data through the transient vertex ring ---
     float vertices[] = {
-         0.0f,  0.5f,  1.f, 0.f, 0.f,
-        -0.5f, -0.5f,  0.f, 1.f, 0.f,
-         0.5f, -0.5f,  0.f, 0.f, 1.f,
+        0.0f,
+        0.5f,
+        1.f,
+        0.f,
+        0.f,
+        -0.5f,
+        -0.5f,
+        0.f,
+        1.f,
+        0.f,
+        0.5f,
+        -0.5f,
+        0.f,
+        0.f,
+        1.f,
     };
-    uint64_t vertex_offset = device->transient_vertex_write(
-        vertices, static_cast<uint32_t>(sizeof(vertices)));
+    uint64_t vertex_offset = device->transient_vertex_write(vertices, static_cast<uint32_t>(sizeof(vertices)));
     if (vertex_offset == UINT64_MAX) {
         fprintf(stderr, "Transient vertex ring write failed\n");
         return 1;
@@ -1124,17 +1138,15 @@ int main(int argc, char** argv) {
 
     vk_device->execute_immediate([&](VkCommandBuffer cb) {
         // Transition to transfer src
-        vk_device->transition_image_layout(cb, rt->image,
-            rt->current_layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+        vk_device->transition_image_layout(
+            cb, rt->image, rt->current_layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
         VkBufferImageCopy region{};
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         region.imageSubresource.layerCount = 1;
         region.imageExtent = {256, 256, 1};
 
-        vkCmdCopyImageToBuffer(cb, rt->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                rb->buffer, 1, &region);
+        vkCmdCopyImageToBuffer(cb, rt->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb->buffer, 1, &region);
     });
     rt->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
@@ -1151,22 +1163,20 @@ int main(int argc, char** argv) {
 
     // Check center pixel (128, 128)
     size_t center = (128 * 256 + 128) * 4;
-    printf("Center pixel: (%u, %u, %u, %u)\n",
-           pixels[center], pixels[center+1], pixels[center+2], pixels[center+3]);
+    printf(
+        "Center pixel: (%u, %u, %u, %u)\n", pixels[center], pixels[center + 1], pixels[center + 2], pixels[center + 3]);
 
     // Check corner pixel (0, 0)
-    printf("Corner pixel: (%u, %u, %u, %u)\n",
-           pixels[0], pixels[1], pixels[2], pixels[3]);
+    printf("Corner pixel: (%u, %u, %u, %u)\n", pixels[0], pixels[1], pixels[2], pixels[3]);
 
-    bool center_drawn = (pixels[center] > 30 || pixels[center+1] > 30 || pixels[center+2] > 60);
+    bool center_drawn = (pixels[center] > 30 || pixels[center + 1] > 30 || pixels[center + 2] > 60);
     bool corner_is_blue = (pixels[0] < 10 && pixels[1] < 10 && pixels[2] > 40);
 
     bool bound_resource_ok = render_bound_resource_set_smoke(*device);
     if (!bound_resource_ok) {
         fprintf(stderr, "Vulkan bound resource set smoke failed\n");
     }
-    const bool texture_encoding_sampling_ok =
-        render_texture_encoding_sampling_smoke(*device);
+    const bool texture_encoding_sampling_ok = render_texture_encoding_sampling_smoke(*device);
     if (!texture_encoding_sampling_ok) {
         fprintf(stderr, "Vulkan texture encoding sampling smoke failed\n");
     }
@@ -1187,23 +1197,24 @@ int main(int argc, char** argv) {
         ring_ubo_overflow_ok = true;
     } else {
         printf("Slang Vulkan artifact smoke: termin_shaderc=%s, slangc=%s\n",
-               shaderc->string().c_str(), slangc->string().c_str());
+               shaderc->string().c_str(),
+               slangc->string().c_str());
 
         const char* artifact_uuid = "termin-vulkan-slang-matrix-smoke";
         const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
         std::filesystem::path artifact_root =
-            std::filesystem::temp_directory_path() /
-            ("termin-vulkan-slang-artifact-smoke-" + std::to_string(now));
+            std::filesystem::temp_directory_path() / ("termin-vulkan-slang-artifact-smoke-" + std::to_string(now));
         std::filesystem::path artifact_dir = artifact_root / "shaders" / "vulkan";
         std::error_code fs_ec;
         if (!std::filesystem::create_directories(artifact_dir, fs_ec) && fs_ec) {
-            fprintf(stderr, "Failed to create Slang artifact directory: %s (%s)\n",
-                    artifact_dir.string().c_str(), fs_ec.message().c_str());
+            fprintf(stderr,
+                    "Failed to create Slang artifact directory: %s (%s)\n",
+                    artifact_dir.string().c_str(),
+                    fs_ec.message().c_str());
             slang_artifact_ok = false;
         }
 
-        const tgfx::EngineShaderStageSource& fsq_shader =
-            tgfx::engine_fullscreen_quad_vertex_shader();
+        const tgfx::EngineShaderStageSource& fsq_shader = tgfx::engine_fullscreen_quad_vertex_shader();
         std::filesystem::path fsq_spv = artifact_dir / (std::string(fsq_shader.uuid) + ".vert.spv");
         if (slang_artifact_ok) {
             std::vector<uint8_t> fsq_bytecode;
@@ -1213,9 +1224,7 @@ int main(int argc, char** argv) {
             termin::tgfx2_set_shader_dev_compile_enabled(true);
 
             if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
-                    fsq_shader,
-                    tgfx::BackendType::Vulkan,
-                    fsq_bytecode)) {
+                    fsq_shader, tgfx::BackendType::Vulkan, fsq_bytecode)) {
                 fprintf(stderr, "FSQ Slang on-demand artifact compile failed\n");
                 slang_artifact_ok = false;
             } else if (fsq_bytecode.empty() || !is_existing_file(fsq_spv)) {
@@ -1238,13 +1247,12 @@ int main(int argc, char** argv) {
             slang_artifact_ok = false;
         }
         if (slang_artifact_ok) {
-            slang_artifact_ok =
-                write_text_file(vertex_slang, slang_matrix_vertex_src) &&
-                write_text_file(fragment_slang, slang_matrix_fragment_src) &&
-                write_text_file(fsq_slang, fsq_source->c_str()) &&
-                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", vertex_slang, vertex_spv) &&
-                run_shaderc(*shaderc, *slangc, "fragment", "fs_main", fragment_slang, fragment_spv) &&
-                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", fsq_slang, fsq_spv);
+            slang_artifact_ok = write_text_file(vertex_slang, slang_matrix_vertex_src) &&
+                                write_text_file(fragment_slang, slang_matrix_fragment_src) &&
+                                write_text_file(fsq_slang, fsq_source->c_str()) &&
+                                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", vertex_slang, vertex_spv) &&
+                                run_shaderc(*shaderc, *slangc, "fragment", "fs_main", fragment_slang, fragment_spv) &&
+                                run_shaderc(*shaderc, *slangc, "vertex", "vs_main", fsq_slang, fsq_spv);
         }
 
         tgfx::TextureHandle slang_rt_tex;
@@ -1253,21 +1261,17 @@ int main(int argc, char** argv) {
 
         if (slang_artifact_ok) {
             termin::tgfx2_set_shader_artifact_root(artifact_root.string().c_str());
-            const tc_shader_create_desc shader_desc = {
-                {
-                    invalid_fallback_src,
-                    invalid_fallback_src,
-                    nullptr,
-                    "tgfx2 Vulkan Slang matrix smoke",
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    nullptr
-                },
-                artifact_uuid,
-                TC_SHADER_LANGUAGE_SLANG,
-                TC_SHADER_ARTIFACT_REQUIRED
-            };
+            const tc_shader_create_desc shader_desc = {{invalid_fallback_src,
+                                                        invalid_fallback_src,
+                                                        nullptr,
+                                                        "tgfx2 Vulkan Slang matrix smoke",
+                                                        nullptr,
+                                                        nullptr,
+                                                        nullptr,
+                                                        nullptr},
+                                                       artifact_uuid,
+                                                       TC_SHADER_LANGUAGE_SLANG,
+                                                       TC_SHADER_ARTIFACT_REQUIRED};
             slang_shader_handle = tc_shader_from_sources_desc(&shader_desc);
 
             tc_shader* slang_shader = tc_shader_get(slang_shader_handle);
@@ -1287,9 +1291,12 @@ int main(int argc, char** argv) {
                 };
 
                 const float slang_vertices[] = {
-                    -0.25f, -0.25f,
-                     0.25f, -0.25f,
-                     0.00f,  0.25f,
+                    -0.25f,
+                    -0.25f,
+                    0.25f,
+                    -0.25f,
+                    0.00f,
+                    0.25f,
                 };
                 tgfx::BufferDesc slang_vb_desc;
                 slang_vb_desc.size = sizeof(slang_vertices);
@@ -1297,15 +1304,25 @@ int main(int argc, char** argv) {
                 slang_vb = device->create_buffer(slang_vb_desc);
                 device->upload_buffer(
                     slang_vb,
-                    std::span<const uint8_t>(
-                        reinterpret_cast<const uint8_t*>(slang_vertices),
-                        sizeof(slang_vertices)));
+                    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(slang_vertices), sizeof(slang_vertices)));
 
                 const std::array<float, 16> mvp_column_major = {
-                    1.0f, 0.0f, 0.0f, 0.0f,
-                    0.0f, 1.0f, 0.0f, 0.0f,
-                    0.0f, 0.0f, 1.0f, 0.0f,
-                   -0.5f, 0.0f, 0.0f, 1.0f,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f,
+                    -0.5f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
                 };
 
                 tgfx::TextureDesc slang_rt_desc;
@@ -1341,22 +1358,16 @@ int main(int argc, char** argv) {
                     std::vector<uint8_t> ring_fill(device->ubo_alignment(), 0x5a);
                     uint32_t ring_offset = 0;
                     while (device->ring_ubo_write(
-                        ring_fill.data(),
-                        static_cast<uint32_t>(ring_fill.size()),
-                        ring_offset)) {
+                        ring_fill.data(), static_cast<uint32_t>(ring_fill.size()), ring_offset)) {
                     }
                     const uint32_t untouched_offset = 0xdeadbeefu;
                     ring_offset = untouched_offset;
-                    ring_ubo_overflow_ok =
-                        !device->ring_ubo_write(
-                            ring_fill.data(),
-                            static_cast<uint32_t>(ring_fill.size()),
-                            ring_offset) &&
-                        ring_offset == untouched_offset;
+                    ring_ubo_overflow_ok = !device->ring_ubo_write(ring_fill.data(),
+                                                                   static_cast<uint32_t>(ring_fill.size()),
+                                                                   ring_offset) &&
+                                           ring_offset == untouched_offset;
                     slang_ctx.bind_uniform_data(
-                        "u_transform",
-                        mvp_column_major.data(),
-                        static_cast<uint32_t>(sizeof(mvp_column_major)));
+                        "u_transform", mvp_column_major.data(), static_cast<uint32_t>(sizeof(mvp_column_major)));
                     slang_ctx.draw_arrays(slang_vb, 3);
                     slang_ctx.end_pass();
                     slang_ctx.end_frame();
@@ -1367,26 +1378,28 @@ int main(int argc, char** argv) {
                     bool left_read_ok = device->read_pixel_rgba8(slang_rt_tex, 32, 64, left_pixel);
                     bool center_read_ok = device->read_pixel_rgba8(slang_rt_tex, 64, 64, center_pixel);
                     printf("Slang matrix left pixel: (%.2f %.2f %.2f %.2f), center: (%.2f %.2f %.2f %.2f)\n",
-                           left_pixel[0], left_pixel[1], left_pixel[2], left_pixel[3],
-                           center_pixel[0], center_pixel[1], center_pixel[2], center_pixel[3]);
+                           left_pixel[0],
+                           left_pixel[1],
+                           left_pixel[2],
+                           left_pixel[3],
+                           center_pixel[0],
+                           center_pixel[1],
+                           center_pixel[2],
+                           center_pixel[3]);
 
                     const bool left_is_shader_color =
-                        left_read_ok &&
-                        left_pixel[0] > 0.70f &&
-                        left_pixel[1] < 0.20f &&
-                        left_pixel[2] > 0.55f;
+                        left_read_ok && left_pixel[0] > 0.70f && left_pixel[1] < 0.20f && left_pixel[2] > 0.55f;
                     const bool center_is_clear =
-                        center_read_ok &&
-                        center_pixel[0] < 0.20f &&
-                        center_pixel[1] < 0.20f &&
-                        center_pixel[2] < 0.20f;
+                        center_read_ok && center_pixel[0] < 0.20f && center_pixel[1] < 0.20f && center_pixel[2] < 0.20f;
                     slang_artifact_ok = left_is_shader_color && center_is_clear;
                 }
             }
         }
 
-        if (slang_rt_tex) device->destroy(slang_rt_tex);
-        if (slang_vb) device->destroy(slang_vb);
+        if (slang_rt_tex)
+            device->destroy(slang_rt_tex);
+        if (slang_vb)
+            device->destroy(slang_vb);
         if (!tc_shader_handle_is_invalid(slang_shader_handle)) {
             tc_shader_destroy(slang_shader_handle);
         }
@@ -1402,8 +1415,10 @@ int main(int argc, char** argv) {
         termin::tgfx2_set_shader_dev_compile_enabled(false);
         std::filesystem::remove_all(artifact_root, fs_ec);
         if (fs_ec) {
-            fprintf(stderr, "Failed to remove Slang artifact temp root: %s (%s)\n",
-                    artifact_root.string().c_str(), fs_ec.message().c_str());
+            fprintf(stderr,
+                    "Failed to remove Slang artifact temp root: %s (%s)\n",
+                    artifact_root.string().c_str(),
+                    fs_ec.message().c_str());
         }
     }
 
@@ -1420,15 +1435,15 @@ int main(int argc, char** argv) {
     printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, "
            "Texture encoding sampling: %d, Ordered MRT: %d, Slang artifacts: %d, "
            "Ring overflow fallback: %d\n",
-           center_drawn, corner_is_blue, bound_resource_ok,
+           center_drawn,
+           corner_is_blue,
+           bound_resource_ok,
            texture_encoding_sampling_ok,
            ordered_mrt_ok,
            slang_artifact_ok,
            ring_ubo_overflow_ok);
-    if (center_drawn && corner_is_blue && bound_resource_ok &&
-        texture_encoding_sampling_ok && ordered_mrt_ok &&
-        slang_artifact_ok &&
-        ring_ubo_overflow_ok) {
+    if (center_drawn && corner_is_blue && bound_resource_ok && texture_encoding_sampling_ok && ordered_mrt_ok &&
+        slang_artifact_ok && ring_ubo_overflow_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {

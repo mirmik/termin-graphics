@@ -4,8 +4,8 @@ GUARD_TEST_MAIN();
 
 #include <termin/render/render_item_submission.hpp>
 #include <termin/render/render_task.hpp>
-#include <tgfx/tgfx_material_handle.hpp>
 #include <tgfx/resources/tc_mesh_registry.h>
+#include <tgfx/tgfx_material_handle.hpp>
 
 #include <array>
 #include <cstdio>
@@ -14,52 +14,44 @@ GUARD_TEST_MAIN();
 
 namespace {
 
-size_t vertex_contract_diagnostic_count = 0;
-size_t stale_mesh_diagnostic_count = 0;
+    size_t vertex_contract_diagnostic_count = 0;
+    size_t stale_mesh_diagnostic_count = 0;
 
-void capture_vertex_contract_diagnostic(tc_log_level level, const char* message)
-{
-    if (level == TC_LOG_ERROR && message &&
-        std::strstr(message, "phase contract requires vertex semantic")) {
-        ++vertex_contract_diagnostic_count;
+    void capture_vertex_contract_diagnostic(tc_log_level level, const char* message) {
+        if (level == TC_LOG_ERROR && message && std::strstr(message, "phase contract requires vertex semantic")) {
+            ++vertex_contract_diagnostic_count;
+        }
+        if (level == TC_LOG_ERROR && message && std::strstr(message, "mesh handle is stale or invalid")) {
+            ++stale_mesh_diagnostic_count;
+        }
     }
-    if (level == TC_LOG_ERROR && message &&
-        std::strstr(message, "mesh handle is stale or invalid")) {
-        ++stale_mesh_diagnostic_count;
+
+    bool test_encoder(tgfx::RenderContext2& ctx,
+                      const tc_render_item& item,
+                      const termin::RenderItemDrawSubmitRequest& request,
+                      void* user_data) {
+        (void)ctx;
+        (void)item;
+        (void)request;
+        (void)user_data;
+        return true;
     }
-}
 
-bool test_encoder(
-    tgfx::RenderContext2& ctx,
-    const tc_render_item& item,
-    const termin::RenderItemDrawSubmitRequest& request,
-    void* user_data)
-{
-    (void)ctx;
-    (void)item;
-    (void)request;
-    (void)user_data;
-    return true;
-}
+    bool other_test_encoder(tgfx::RenderContext2& ctx,
+                            const tc_render_item& item,
+                            const termin::RenderItemDrawSubmitRequest& request,
+                            void* user_data) {
+        (void)ctx;
+        (void)item;
+        (void)request;
+        (void)user_data;
+        // Keep this callback observably different from test_encoder: MSVC's
+        // identical COMDAT folding otherwise aliases their function pointers.
+        return false;
+    }
 
-bool other_test_encoder(
-    tgfx::RenderContext2& ctx,
-    const tc_render_item& item,
-    const termin::RenderItemDrawSubmitRequest& request,
-    void* user_data)
-{
-    (void)ctx;
-    (void)item;
-    (void)request;
-    (void)user_data;
-    // Keep this callback observably different from test_encoder: MSVC's
-    // identical COMDAT folding otherwise aliases their function pointers.
-    return false;
-}
-
-constexpr const char* kPlannerSurfaceInterface =
-    "struct PlannerSurface { float3 color; };";
-constexpr const char* kPlannerSurfaceEvaluator = R"(
+    constexpr const char* kPlannerSurfaceInterface = "struct PlannerSurface { float3 color; };";
+    constexpr const char* kPlannerSurfaceEvaluator = R"(
 struct FragmentInput {
     float4 screen_pos : SV_Position;
     float3 world_pos : TEXCOORD0;
@@ -71,7 +63,7 @@ PlannerSurface evaluate_planner_surface(FragmentInput input) {
     return surface;
 }
 )";
-constexpr const char* kPlannerSurfaceConsumer = R"(
+    constexpr const char* kPlannerSurfaceConsumer = R"(
 struct FragmentOutput { float4 color : SV_Target0; };
 [shader("fragment")]
 FragmentOutput consume_planner_surface(FragmentInput input) {
@@ -82,120 +74,97 @@ FragmentOutput consume_planner_surface(FragmentInput input) {
 }
 )";
 
-termin::TcShader planner_surface_producer()
-{
-    tc_shader_fragment_input inputs[2]{};
-    std::snprintf(
-        inputs[0].semantic,
-        sizeof(inputs[0].semantic),
-        "%s",
-        "world_pos");
-    inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
-    std::snprintf(
-        inputs[1].semantic,
-        sizeof(inputs[1].semantic),
-        "%s",
-        "normal_world");
-    inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
-    const tc_shader_surface_producer_desc producer = {
-        TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION,
-        "test.surface.planner",
-        1u,
-        "PlannerSurface",
-        "evaluate_planner_surface",
-        kPlannerSurfaceEvaluator,
-        "test.surface.planner@1:evaluator:v1",
-        inputs,
-        2u,
-        nullptr,
-        0u,
-    };
-    termin::TcShaderCreateInfo create_info{};
-    create_info.sources.vertex = "";
-    create_info.sources.fragment = kPlannerSurfaceEvaluator;
-    create_info.sources.name = "planner-surface-producer";
-    create_info.sources.fragment_entry = "evaluate_planner_surface";
-    create_info.uuid = "planner-surface-producer";
-    create_info.language = TC_SHADER_LANGUAGE_SLANG;
-    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
-    create_info.surface_producer = &producer;
-    return termin::TcShader::from_sources(create_info);
-}
-
-termin::MaterialPipelinePassContract planner_surface_pass(uint32_t version)
-{
-    termin::MaterialPipelinePassContract pass{};
-    pass.debug_name = "planner_surface_consumer";
-    pass.fragment_composition =
-        termin::MaterialFragmentComposition::SurfaceConsumer;
-    termin::MaterialSurfaceConsumerContract consumer{};
-    consumer.accepted_surface = {"test.surface.planner", version};
-    consumer.consumer_source = kPlannerSurfaceConsumer;
-    consumer.fragment_entry = "consume_planner_surface";
-    consumer.source_identity = "test.surface.planner:consumer:v1";
-    pass.surface_consumer = std::move(consumer);
-    pass.vertex_output_adapter =
-        termin::material_pipeline_standard_material_vertex_output_adapter();
-    pass.static_vertex_transform =
-        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
-            "planner_surface_static",
-            termin::MeshVertexTransformProfile::Material,
-            "draw_data.u_model");
-    pass.static_vertex_transform->resources.push_back(
-        termin::material_pipeline_draw_resource_decl(
-            "draw_data",
-            TC_SHADER_STAGE_VERTEX,
-            64u));
-    return pass;
-}
-
-termin::RenderItemTaskRejection selecting_test_shader_planner(
-    const termin::RenderItemTaskPlanningRequest& request,
-    termin::RenderItemTaskShaderPlan& out_plan,
-    const char*& out_detail,
-    void* user_data)
-{
-    (void)user_data;
-    if (!request.contract || !request.contract->shader_contract) {
-        out_detail = "missing pass-owned shader contract";
-        return termin::RenderItemTaskRejection::ShaderPlanningRejected;
+    termin::TcShader planner_surface_producer() {
+        tc_shader_fragment_input inputs[2]{};
+        std::snprintf(inputs[0].semantic, sizeof(inputs[0].semantic), "%s", "world_pos");
+        inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+        std::snprintf(inputs[1].semantic, sizeof(inputs[1].semantic), "%s", "normal_world");
+        inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+        const tc_shader_surface_producer_desc producer = {
+            TC_SHADER_SURFACE_PRODUCER_SCHEMA_VERSION,
+            "test.surface.planner",
+            1u,
+            "PlannerSurface",
+            "evaluate_planner_surface",
+            kPlannerSurfaceEvaluator,
+            "test.surface.planner@1:evaluator:v1",
+            inputs,
+            2u,
+            nullptr,
+            0u,
+        };
+        termin::TcShaderCreateInfo create_info{};
+        create_info.sources.vertex = "";
+        create_info.sources.fragment = kPlannerSurfaceEvaluator;
+        create_info.sources.name = "planner-surface-producer";
+        create_info.sources.fragment_entry = "evaluate_planner_surface";
+        create_info.uuid = "planner-surface-producer";
+        create_info.language = TC_SHADER_LANGUAGE_SLANG;
+        create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+        create_info.surface_producer = &producer;
+        return termin::TcShader::from_sources(create_info);
     }
-    out_plan.final_shader = request.candidate_shader;
-    ++out_plan.final_shader.index;
-    out_detail = nullptr;
-    return termin::RenderItemTaskRejection::None;
-}
 
-termin::RenderItemTaskRejection owning_test_shader_planner(
-    const termin::RenderItemTaskPlanningRequest& request,
-    termin::RenderItemTaskShaderPlan& out_plan,
-    const char*& out_detail,
-    void* user_data)
-{
-    (void)request;
-    (void)user_data;
-    termin::TcShaderCreateInfo create_info{};
-    create_info.sources.vertex = "void main() {}";
-    create_info.sources.fragment = "void main() {}";
-    create_info.sources.name = "RenderTaskOwnedShader";
-    create_info.uuid = "termin-render-task-owned-shader-test";
-    create_info.language = TC_SHADER_LANGUAGE_SLANG;
-    create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
-    if (!out_plan.set_final_shader(termin::TcShader::from_sources(create_info))) {
-        out_detail = "could not retain the planned shader";
-        return termin::RenderItemTaskRejection::ShaderPlanningRejected;
+    termin::MaterialPipelinePassContract planner_surface_pass(uint32_t version) {
+        termin::MaterialPipelinePassContract pass{};
+        pass.debug_name = "planner_surface_consumer";
+        pass.fragment_composition = termin::MaterialFragmentComposition::SurfaceConsumer;
+        termin::MaterialSurfaceConsumerContract consumer{};
+        consumer.accepted_surface = {"test.surface.planner", version};
+        consumer.consumer_source = kPlannerSurfaceConsumer;
+        consumer.fragment_entry = "consume_planner_surface";
+        consumer.source_identity = "test.surface.planner:consumer:v1";
+        pass.surface_consumer = std::move(consumer);
+        pass.vertex_output_adapter = termin::material_pipeline_standard_material_vertex_output_adapter();
+        pass.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+            "planner_surface_static", termin::MeshVertexTransformProfile::Material, "draw_data.u_model");
+        pass.static_vertex_transform->resources.push_back(
+            termin::material_pipeline_draw_resource_decl("draw_data", TC_SHADER_STAGE_VERTEX, 64u));
+        return pass;
     }
-    out_detail = nullptr;
-    return termin::RenderItemTaskRejection::None;
-}
+
+    termin::RenderItemTaskRejection selecting_test_shader_planner(const termin::RenderItemTaskPlanningRequest& request,
+                                                                  termin::RenderItemTaskShaderPlan& out_plan,
+                                                                  const char*& out_detail,
+                                                                  void* user_data) {
+        (void)user_data;
+        if (!request.contract || !request.contract->shader_contract) {
+            out_detail = "missing pass-owned shader contract";
+            return termin::RenderItemTaskRejection::ShaderPlanningRejected;
+        }
+        out_plan.final_shader = request.candidate_shader;
+        ++out_plan.final_shader.index;
+        out_detail = nullptr;
+        return termin::RenderItemTaskRejection::None;
+    }
+
+    termin::RenderItemTaskRejection owning_test_shader_planner(const termin::RenderItemTaskPlanningRequest& request,
+                                                               termin::RenderItemTaskShaderPlan& out_plan,
+                                                               const char*& out_detail,
+                                                               void* user_data) {
+        (void)request;
+        (void)user_data;
+        termin::TcShaderCreateInfo create_info{};
+        create_info.sources.vertex = "void main() {}";
+        create_info.sources.fragment = "void main() {}";
+        create_info.sources.name = "RenderTaskOwnedShader";
+        create_info.uuid = "termin-render-task-owned-shader-test";
+        create_info.language = TC_SHADER_LANGUAGE_SLANG;
+        create_info.artifact_policy = TC_SHADER_ARTIFACT_REQUIRED;
+        if (!out_plan.set_final_shader(termin::TcShader::from_sources(create_info))) {
+            out_detail = "could not retain the planned shader";
+            return termin::RenderItemTaskRejection::ShaderPlanningRejected;
+        }
+        out_detail = nullptr;
+        return termin::RenderItemTaskRejection::None;
+    }
 
 } // namespace
 
 TEST_CASE("Mesh RenderItem planner resolves its mesh handle after registry growth") {
     tc_mesh_init();
 
-    const tc_mesh_handle mesh_handle = tc_mesh_create(
-        "render-item-position-only-contract-test");
+    const tc_mesh_handle mesh_handle = tc_mesh_create("render-item-position-only-contract-test");
     REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
     tc_mesh* mesh = tc_mesh_get(mesh_handle);
     REQUIRE(mesh != nullptr);
@@ -212,20 +181,14 @@ TEST_CASE("Mesh RenderItem planner resolves its mesh handle after registry growt
 
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "normal";
-    shader_contract.static_vertex_transform =
-        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
-            "static_normal",
-            termin::MeshVertexTransformProfile::PositionNormal,
-            "normal_draw.u_model");
+    shader_contract.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+        "static_normal", termin::MeshVertexTransformProfile::PositionNormal, "normal_draw.u_model");
 
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_NORMAL;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.accepted_vertex_transform_kind_mask =
-        termin::render_item_vertex_transform_kind_bit(
-            termin::VertexTransformKind::StaticMesh);
+        termin::render_item_vertex_transform_kind_bit(termin::VertexTransformKind::StaticMesh);
     contract.shader_contract = &shader_contract;
     contract.debug_pass_name = "NormalPass";
 
@@ -236,17 +199,13 @@ TEST_CASE("Mesh RenderItem planner resolves its mesh handle after registry growt
     vertex_contract_diagnostic_count = 0;
     tc_log_set_callback(capture_vertex_contract_diagnostic);
     termin::RenderTaskList tasks;
-    const termin::RenderItemTaskPlanningResult result =
-        termin::plan_render_item_task(request, tasks);
+    const termin::RenderItemTaskPlanningResult result = termin::plan_render_item_task(request, tasks);
     termin::RenderTaskList repeated_tasks;
-    const termin::RenderItemTaskPlanningResult repeated_result =
-        termin::plan_render_item_task(request, repeated_tasks);
+    const termin::RenderItemTaskPlanningResult repeated_result = termin::plan_render_item_task(request, repeated_tasks);
     tc_log_set_callback(nullptr);
 
-    CHECK(result.rejection ==
-          termin::RenderItemTaskRejection::MeshVertexInputMismatch);
-    CHECK(repeated_result.rejection ==
-          termin::RenderItemTaskRejection::MeshVertexInputMismatch);
+    CHECK(result.rejection == termin::RenderItemTaskRejection::MeshVertexInputMismatch);
+    CHECK(repeated_result.rejection == termin::RenderItemTaskRejection::MeshVertexInputMismatch);
     CHECK(tasks.empty());
     CHECK(repeated_tasks.empty());
     CHECK(vertex_contract_diagnostic_count == 1u);
@@ -257,8 +216,7 @@ TEST_CASE("Mesh RenderItem planner resolves its mesh handle after registry growt
 TEST_CASE("Mesh RenderItem planner rejects a stale mesh handle") {
     tc_mesh_init();
 
-    const tc_mesh_handle mesh_handle = tc_mesh_create(
-        "render-item-stale-mesh-handle-test");
+    const tc_mesh_handle mesh_handle = tc_mesh_create("render-item-stale-mesh-handle-test");
     REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
 
     tc_render_item item{};
@@ -268,9 +226,7 @@ TEST_CASE("Mesh RenderItem planner rejects a stale mesh handle") {
     termin::MaterialPipelinePassContract shader_contract{};
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.shader_contract = &shader_contract;
     contract.debug_pass_name = "StaleMeshHandlePass";
 
@@ -283,12 +239,10 @@ TEST_CASE("Mesh RenderItem planner rejects a stale mesh handle") {
     stale_mesh_diagnostic_count = 0;
     tc_log_set_callback(capture_vertex_contract_diagnostic);
     termin::RenderTaskList tasks;
-    const termin::RenderItemTaskPlanningResult result =
-        termin::plan_render_item_task(request, tasks);
+    const termin::RenderItemTaskPlanningResult result = termin::plan_render_item_task(request, tasks);
     tc_log_set_callback(nullptr);
 
-    CHECK(result.rejection ==
-          termin::RenderItemTaskRejection::ShaderPlanningRejected);
+    CHECK(result.rejection == termin::RenderItemTaskRejection::ShaderPlanningRejected);
     REQUIRE(result.detail != nullptr);
     CHECK(std::strcmp(result.detail, "mesh handle is stale or invalid") == 0);
     CHECK(tasks.empty());
@@ -329,32 +283,17 @@ TEST_CASE("RenderItem draw encoder registry reserves built-in mesh encoder") {
     desc.debug_name = "replacement_mesh_encoder";
 
     CHECK(!termin::register_render_item_draw_encoder(TC_RENDER_ITEM_KIND_MESH, desc));
-    CHECK(!termin::unregister_render_item_draw_encoder(
-        TC_RENDER_ITEM_KIND_MESH,
-        test_encoder,
-        nullptr));
+    CHECK(!termin::unregister_render_item_draw_encoder(TC_RENDER_ITEM_KIND_MESH, test_encoder, nullptr));
 }
 
 TEST_CASE("RenderItem draw encoder registry exposes built-in mesh capabilities") {
     termin::RenderItemEncoderCapabilities capabilities{};
-    REQUIRE(termin::get_render_item_encoder_capabilities(
-        TC_RENDER_ITEM_KIND_MESH,
-        capabilities));
-    CHECK(termin::render_item_encoder_supports_phase(
-        TC_RENDER_ITEM_KIND_MESH,
-        TC_PHASE_OPAQUE));
-    CHECK(termin::render_item_encoder_supports_phase(
-        TC_RENDER_ITEM_KIND_MESH,
-        TC_PHASE_SHADOW));
-    CHECK(termin::render_item_encoder_supports_phase(
-        TC_RENDER_ITEM_KIND_MESH,
-        TC_PHASE_ID));
-    CHECK(termin::render_item_encoder_supports_phase(
-        TC_RENDER_ITEM_KIND_MESH,
-        TC_PHASE_DEPTH));
-    CHECK(termin::render_item_encoder_supports_phase(
-        TC_RENDER_ITEM_KIND_MESH,
-        TC_PHASE_NORMAL));
+    REQUIRE(termin::get_render_item_encoder_capabilities(TC_RENDER_ITEM_KIND_MESH, capabilities));
+    CHECK(termin::render_item_encoder_supports_phase(TC_RENDER_ITEM_KIND_MESH, TC_PHASE_OPAQUE));
+    CHECK(termin::render_item_encoder_supports_phase(TC_RENDER_ITEM_KIND_MESH, TC_PHASE_SHADOW));
+    CHECK(termin::render_item_encoder_supports_phase(TC_RENDER_ITEM_KIND_MESH, TC_PHASE_ID));
+    CHECK(termin::render_item_encoder_supports_phase(TC_RENDER_ITEM_KIND_MESH, TC_PHASE_DEPTH));
+    CHECK(termin::render_item_encoder_supports_phase(TC_RENDER_ITEM_KIND_MESH, TC_PHASE_NORMAL));
     CHECK(capabilities.requires_draw_context);
     CHECK(capabilities.consumes_common_resources);
 }
@@ -380,15 +319,9 @@ TEST_CASE("RenderItem draw encoder registry stores custom capabilities") {
 
     termin::RenderItemEncoderCapabilities capabilities{};
     REQUIRE(termin::get_render_item_encoder_capabilities(test_kind, capabilities));
-    CHECK(termin::render_item_encoder_supports_phase(
-        test_kind,
-        TC_PHASE_OPAQUE));
-    CHECK(termin::render_item_encoder_supports_phase(
-        test_kind,
-        TC_PHASE_SHADOW));
-    CHECK(!termin::render_item_encoder_supports_phase(
-        test_kind,
-        TC_PHASE_DEPTH));
+    CHECK(termin::render_item_encoder_supports_phase(test_kind, TC_PHASE_OPAQUE));
+    CHECK(termin::render_item_encoder_supports_phase(test_kind, TC_PHASE_SHADOW));
+    CHECK(!termin::render_item_encoder_supports_phase(test_kind, TC_PHASE_DEPTH));
     CHECK(capabilities.requires_draw_context);
     CHECK(!capabilities.consumes_common_resources);
 
@@ -419,11 +352,7 @@ FragmentOutput fs_main() {
     REQUIRE(candidate.is_valid());
 
     tc_shader_resource_binding material_layout{};
-    std::snprintf(
-        material_layout.name,
-        sizeof(material_layout.name),
-        "%s",
-        TC_SHADER_RESOURCE_MATERIAL);
+    std::snprintf(material_layout.name, sizeof(material_layout.name), "%s", TC_SHADER_RESOURCE_MATERIAL);
     material_layout.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     material_layout.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     material_layout.stage_mask = TC_SHADER_STAGE_FRAGMENT;
@@ -434,11 +363,7 @@ FragmentOutput fs_main() {
     // regression.  The mesh planner must not pass this original all-graphics
     // requirement through to a fragment-only material layout.
     tc_shader_resource_requirement authored_material{};
-    std::snprintf(
-        authored_material.name,
-        sizeof(authored_material.name),
-        "%s",
-        TC_SHADER_RESOURCE_MATERIAL);
+    std::snprintf(authored_material.name, sizeof(authored_material.name), "%s", TC_SHADER_RESOURCE_MATERIAL);
     authored_material.kind = TC_SHADER_RESOURCE_CONSTANT_BUFFER;
     authored_material.scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
     authored_material.stage_mask = TC_SHADER_STAGE_ALL_GRAPHICS;
@@ -454,8 +379,7 @@ FragmentOutput fs_main() {
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
-    const tc_mesh_handle mesh_handle = tc_mesh_create(
-        "supported-mesh-render-item-planner-test");
+    const tc_mesh_handle mesh_handle = tc_mesh_create("supported-mesh-render-item-planner-test");
     REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
     tc_mesh* mesh = tc_mesh_get(mesh_handle);
     REQUIRE(mesh != nullptr);
@@ -465,23 +389,16 @@ FragmentOutput fs_main() {
 
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "planner_test";
-    shader_contract.vertex_output_adapter =
-        termin::material_pipeline_standard_material_vertex_output_adapter();
-    shader_contract.static_vertex_transform =
-        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
-            "static",
-            termin::MeshVertexTransformProfile::Material,
-            "draw_data.u_model");
+    shader_contract.vertex_output_adapter = termin::material_pipeline_standard_material_vertex_output_adapter();
+    shader_contract.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+        "static", termin::MeshVertexTransformProfile::Material, "draw_data.u_model");
     shader_contract.static_vertex_transform->resources.push_back(
-        termin::material_pipeline_draw_resource_decl(
-            "draw_data", TC_SHADER_STAGE_VERTEX, 64u));
+        termin::material_pipeline_draw_resource_decl("draw_data", TC_SHADER_STAGE_VERTEX, 64u));
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
-    contract.required_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.accepted_vertex_transform_kind_mask =
         termin::render_item_vertex_transform_kind_bit(termin::VertexTransformKind::StaticMesh);
     contract.shader_contract = &shader_contract;
@@ -496,8 +413,7 @@ FragmentOutput fs_main() {
     request.contract = &contract;
 
     termin::RenderTaskList tasks;
-    termin::RenderItemTaskPlanningResult result =
-        termin::plan_render_item_task(request, tasks);
+    termin::RenderItemTaskPlanningResult result = termin::plan_render_item_task(request, tasks);
     REQUIRE(result.accepted());
     REQUIRE(tasks.size() == 1u);
     const termin::RenderTask& task = tasks.at(result.task_index);
@@ -516,9 +432,7 @@ FragmentOutput fs_main() {
     REQUIRE(planned_contract.resource_count > 0u);
     const tc_shader_resource_requirement* planned_material = nullptr;
     for (uint32_t i = 0; i < planned_contract.resource_count; ++i) {
-        if (std::strcmp(
-                planned_contract.resources[i].name,
-                TC_SHADER_RESOURCE_MATERIAL) == 0) {
+        if (std::strcmp(planned_contract.resources[i].name, TC_SHADER_RESOURCE_MATERIAL) == 0) {
             planned_material = &planned_contract.resources[i];
             break;
         }
@@ -543,9 +457,7 @@ TEST_CASE("RenderItem planner assembles surface consumers without fallback") {
         kPlannerSurfaceInterface,
         "test.surface.planner@1:interface:v1",
     };
-    REQUIRE(tc_surface_contract_registry_register(
-        "termin-render-item-tests",
-        &descriptor));
+    REQUIRE(tc_surface_contract_registry_register("termin-render-item-tests", &descriptor));
     termin::TcShader candidate = planner_surface_producer();
     REQUIRE(candidate.is_valid());
     REQUIRE(candidate.has_surface_producer());
@@ -553,8 +465,7 @@ TEST_CASE("RenderItem planner assembles surface consumers without fallback") {
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
-    const tc_mesh_handle mesh_handle = tc_mesh_create(
-        "surface-consumer-render-item-planner-test");
+    const tc_mesh_handle mesh_handle = tc_mesh_create("surface-consumer-render-item-planner-test");
     REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
     tc_mesh* mesh = tc_mesh_get(mesh_handle);
     REQUIRE(mesh != nullptr);
@@ -562,21 +473,14 @@ TEST_CASE("RenderItem planner assembles surface consumers without fallback") {
     item.payload.mesh.mesh_handle = mesh_handle;
     tc_material_phase phase{};
 
-    termin::MaterialPipelinePassContract shader_contract =
-        planner_surface_pass(1u);
+    termin::MaterialPipelinePassContract shader_contract = planner_surface_pass(1u);
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
-    contract.material_phase_policy =
-        termin::RenderItemMaterialPhasePolicy::Required;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
-    contract.required_input_mask =
-        termin::render_item_task_input_bit(
-            termin::RenderItemTaskInput::DrawContext);
+    contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.accepted_vertex_transform_kind_mask =
-        termin::render_item_vertex_transform_kind_bit(
-            termin::VertexTransformKind::StaticMesh);
+        termin::render_item_vertex_transform_kind_bit(termin::VertexTransformKind::StaticMesh);
     contract.shader_contract = &shader_contract;
     contract.debug_pass_name = "SurfacePlanner";
 
@@ -587,34 +491,24 @@ TEST_CASE("RenderItem planner assembles surface consumers without fallback") {
     request.contract = &contract;
 
     termin::RenderTaskList tasks;
-    termin::RenderItemTaskPlanningResult accepted =
-        termin::plan_render_item_task(request, tasks);
+    termin::RenderItemTaskPlanningResult accepted = termin::plan_render_item_task(request, tasks);
     REQUIRE(accepted.accepted());
     REQUIRE(tasks.size() == 1u);
-    const tc_shader_handle final_shader =
-        tasks.at(accepted.task_index).final_shader;
+    const tc_shader_handle final_shader = tasks.at(accepted.task_index).final_shader;
     CHECK_FALSE(tc_shader_handle_eq(final_shader, candidate.handle));
     REQUIRE(tc_shader_is_valid(final_shader));
     CHECK(tc_shader_is_executable(tc_shader_get(final_shader)));
-    CHECK(
-        std::string(tc_shader_get(final_shader)->fragment_source).find(
-            "consume_planner_surface") != std::string::npos);
+    CHECK(std::string(tc_shader_get(final_shader)->fragment_source).find("consume_planner_surface") !=
+          std::string::npos);
 
-    termin::MaterialPipelinePassContract incompatible =
-        planner_surface_pass(2u);
+    termin::MaterialPipelinePassContract incompatible = planner_surface_pass(2u);
     contract.shader_contract = &incompatible;
     termin::RenderTaskList rejected_tasks;
-    termin::RenderItemTaskPlanningResult rejected =
-        termin::plan_render_item_task(request, rejected_tasks);
-    CHECK(
-        rejected.rejection ==
-        termin::RenderItemTaskRejection::ShaderPlanningRejected);
+    termin::RenderItemTaskPlanningResult rejected = termin::plan_render_item_task(request, rejected_tasks);
+    CHECK(rejected.rejection == termin::RenderItemTaskRejection::ShaderPlanningRejected);
     CHECK(rejected_tasks.empty());
     CHECK(rejected.detail != nullptr);
-    CHECK(
-        std::strcmp(
-            rejected.detail,
-            "failed to assemble the mesh shader") == 0);
+    CHECK(std::strcmp(rejected.detail, "failed to assemble the mesh shader") == 0);
 
     tc_surface_contract_registry_clear();
     tc_mesh_shutdown();
@@ -665,9 +559,8 @@ FragmentOutput fs_main() {
     phase_info.shader = create_info;
     phase_info.phase_mark = "editor_debug_transparent";
     phase_info.state = tc_render_state_transparent();
-    termin::TcMaterial material = termin::TcMaterial::create(
-        "static-position-debug-material",
-        "static-position-debug-material-test");
+    termin::TcMaterial material =
+        termin::TcMaterial::create("static-position-debug-material", "static-position-debug-material-test");
     REQUIRE(material.is_valid());
     tc_material_phase* phase = material.add_phase_from_sources(phase_info);
     REQUIRE(phase != nullptr);
@@ -678,8 +571,7 @@ FragmentOutput fs_main() {
     tc_render_item item{};
     item.kind = TC_RENDER_ITEM_KIND_MESH;
     item.flags = TC_RENDER_ITEM_FLAG_HAS_MODEL_MATRIX;
-    const tc_mesh_handle mesh_handle = tc_mesh_create(
-        "static-position-debug-material-mesh");
+    const tc_mesh_handle mesh_handle = tc_mesh_create("static-position-debug-material-mesh");
     REQUIRE(!tc_mesh_handle_is_invalid(mesh_handle));
     tc_mesh* mesh = tc_mesh_get(mesh_handle);
     REQUIRE(mesh != nullptr);
@@ -687,26 +579,18 @@ FragmentOutput fs_main() {
     item.payload.mesh.mesh_handle = mesh_handle;
     termin::MaterialPipelinePassContract shader_contract{};
     shader_contract.debug_name = "static_color";
-    shader_contract.required_material_fragment_input =
-        termin::material_pipeline_standard_material_fragment_interface();
-    shader_contract.vertex_output_adapter =
-        termin::material_pipeline_standard_material_vertex_output_adapter();
-    shader_contract.static_vertex_transform =
-        termin::material_pipeline_make_static_mesh_vertex_transform_provider(
-            "static",
-            termin::MeshVertexTransformProfile::Material,
-            "draw_data.u_model");
+    shader_contract.required_material_fragment_input = termin::material_pipeline_standard_material_fragment_interface();
+    shader_contract.vertex_output_adapter = termin::material_pipeline_standard_material_vertex_output_adapter();
+    shader_contract.static_vertex_transform = termin::material_pipeline_make_static_mesh_vertex_transform_provider(
+        "static", termin::MeshVertexTransformProfile::Material, "draw_data.u_model");
 
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
-    contract.required_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.accepted_vertex_transform_kind_mask =
-        termin::render_item_vertex_transform_kind_bit(
-            termin::VertexTransformKind::StaticMesh);
+        termin::render_item_vertex_transform_kind_bit(termin::VertexTransformKind::StaticMesh);
     contract.shader_contract = &shader_contract;
     contract.debug_pass_name = "static_color";
 
@@ -717,17 +601,14 @@ FragmentOutput fs_main() {
     request.contract = &contract;
 
     termin::RenderTaskList tasks;
-    termin::RenderItemTaskPlanningResult result =
-        termin::plan_render_item_task(request, tasks);
+    termin::RenderItemTaskPlanningResult result = termin::plan_render_item_task(request, tasks);
     REQUIRE(result.accepted());
     REQUIRE_EQ(tasks.size(), 1u);
     const termin::RenderTask& task = tasks.at(result.task_index);
     CHECK(tc_shader_handle_eq(task.final_shader, candidate.handle));
-    CHECK(
-        termin::material_mesh_vertex_input_for_shader(
-            tc_shader_get(task.final_shader),
-            termin::MaterialMeshVertexInput::FullMaterial) ==
-        termin::MaterialMeshVertexInput::Position);
+    CHECK(termin::material_mesh_vertex_input_for_shader(tc_shader_get(task.final_shader),
+                                                        termin::MaterialMeshVertexInput::FullMaterial) ==
+          termin::MaterialMeshVertexInput::Position);
 
     tc_mesh_shutdown();
     tc_material_shutdown();
@@ -804,9 +685,7 @@ TEST_CASE("RenderItem task shaders can be retained by pass draw-call caches") {
         planned_handle = tasks.at(result.task_index).final_shader;
         CHECK(tc_shader_is_valid(planned_handle));
         CHECK(tasks.at(result.task_index).shader_usage_count == 1u);
-        CHECK(tc_shader_handle_eq(
-            tasks.at(result.task_index).shader_usages[0],
-            planned_handle));
+        CHECK(tc_shader_handle_eq(tasks.at(result.task_index).shader_usages[0], planned_handle));
         cached_shader = termin::TcShader(planned_handle);
     }
     CHECK(tc_shader_is_valid(planned_handle));
@@ -824,8 +703,7 @@ TEST_CASE("RenderItem task planner rejects material input transform and output m
     termin::RenderItemTaskPlanningContract contract{};
     contract.phase = TC_PHASE_OPAQUE;
     contract.material_phase_policy = termin::RenderItemMaterialPhasePolicy::Required;
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
     contract.accepted_vertex_transform_kind_mask =
         termin::render_item_vertex_transform_kind_bit(termin::VertexTransformKind::StaticMesh);
     contract.debug_pass_name = "planner_rejection_test";
@@ -854,18 +732,15 @@ TEST_CASE("RenderItem task planner rejects material input transform and output m
     CHECK(missing_input.rejection == termin::RenderItemTaskRejection::RequiredInputMissing);
     CHECK(tasks.empty());
 
-    contract.provided_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
-    contract.required_input_mask =
-        termin::render_item_task_input_bit(termin::RenderItemTaskInput::OverrideColor);
+    contract.provided_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::DrawContext);
+    contract.required_input_mask = termin::render_item_task_input_bit(termin::RenderItemTaskInput::OverrideColor);
     auto unsupported_input = termin::plan_render_item_task(request, tasks);
     CHECK(unsupported_input.rejection == termin::RenderItemTaskRejection::RequiredInputUnsupported);
     CHECK(tasks.empty());
 
     contract.required_input_mask = 0u;
     auto unsupported_transform = termin::plan_render_item_task(request, tasks);
-    CHECK(unsupported_transform.rejection ==
-          termin::RenderItemTaskRejection::PassVertexTransformUnsupported);
+    CHECK(unsupported_transform.rejection == termin::RenderItemTaskRejection::PassVertexTransformUnsupported);
     CHECK(tasks.empty());
 
     item.flags = 0u;
@@ -880,10 +755,7 @@ TEST_CASE("RenderItem inline uniform owns validated item-local bytes") {
     tc_render_item item{};
     const std::array<uint32_t, 4> payload{{1u, 2u, 3u, 4u}};
     REQUIRE(termin::set_render_item_inline_uniform(
-        item,
-        "chrono_effect_draw",
-        payload.data(),
-        static_cast<uint32_t>(sizeof(payload))));
+        item, "chrono_effect_draw", payload.data(), static_cast<uint32_t>(sizeof(payload))));
     CHECK((item.flags & TC_RENDER_ITEM_FLAG_HAS_INLINE_UNIFORM) != 0u);
     CHECK(std::strcmp(item.inline_uniform.name, "chrono_effect_draw") == 0);
     CHECK(item.inline_uniform.size == sizeof(payload));
@@ -891,8 +763,5 @@ TEST_CASE("RenderItem inline uniform owns validated item-local bytes") {
 
     std::array<uint8_t, TC_RENDER_ITEM_INLINE_UNIFORM_DATA_CAPACITY + 1u> oversized{};
     CHECK(!termin::set_render_item_inline_uniform(
-        item,
-        "too_large",
-        oversized.data(),
-        static_cast<uint32_t>(oversized.size())));
+        item, "too_large", oversized.data(), static_cast<uint32_t>(oversized.size())));
 }

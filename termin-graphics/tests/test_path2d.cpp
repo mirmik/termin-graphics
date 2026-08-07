@@ -20,8 +20,8 @@ int main() {
     assert(flat.contains({5, 5}, tgfx::FillRule::NonZero));
     assert(!flat.contains({50, 50}, tgfx::FillRule::EvenOdd));
 
-    const auto transformed = path.transformed_bounds(
-        termin::Affine2f::translation({3, 4}) * termin::Affine2f::shear(0.5f, 0.0f));
+    const auto transformed =
+        path.transformed_bounds(termin::Affine2f::translation({3, 4}) * termin::Affine2f::shear(0.5f, 0.0f));
     assert(transformed.x0 >= 3.0f);
     assert(transformed.y0 >= 4.0f);
 
@@ -40,8 +40,7 @@ int main() {
     // Raw imports are transactional.
     const auto old_verbs = path.verbs();
     const auto old_points = path.points();
-    const std::vector<tgfx::Path2Verb> malformed = {
-        tgfx::Path2Verb::MoveTo, tgfx::Path2Verb::CubicTo};
+    const std::vector<tgfx::Path2Verb> malformed = {tgfx::Path2Verb::MoveTo, tgfx::Path2Verb::CubicTo};
     const std::vector<termin::Vec2f> too_few = {{1, 2}, {3, 4}};
     assert(!path.try_assign(malformed, too_few));
     assert(path.verbs() == old_verbs);

@@ -16,152 +16,152 @@
 
 namespace tcplot {
 
-struct TCPLOT_API LineSeries {
-    std::vector<double> x;
-    std::vector<double> y;
-    std::vector<double> z;  // empty for 2D series
-    std::vector<double> scalar;  // optional per-point values for 2D colormap lines
-    std::optional<Color4> color;
-    SurfaceColorMap colormap = SurfaceColorMap::Jet;
-    bool colormap_reversed = false;
-    double scalar_min = 0.0;
-    double scalar_max = 1.0;
-    double thickness = 1.5;
-    LineStyle line_style = LineStyle::Solid;
-    float dash_px = 8.0f;
-    float gap_px = 5.0f;
-    std::string label;
-};
+    struct TCPLOT_API LineSeries {
+        std::vector<double> x;
+        std::vector<double> y;
+        std::vector<double> z;      // empty for 2D series
+        std::vector<double> scalar; // optional per-point values for 2D colormap lines
+        std::optional<Color4> color;
+        SurfaceColorMap colormap = SurfaceColorMap::Jet;
+        bool colormap_reversed = false;
+        double scalar_min = 0.0;
+        double scalar_max = 1.0;
+        double thickness = 1.5;
+        LineStyle line_style = LineStyle::Solid;
+        float dash_px = 8.0f;
+        float gap_px = 5.0f;
+        std::string label;
+    };
 
-struct TCPLOT_API ScatterSeries {
-    std::vector<double> x;
-    std::vector<double> y;
-    std::vector<double> z;  // empty for 2D series
-    std::optional<Color4> color;
-    double size = 4.0;
-    std::string label;
-};
+    struct TCPLOT_API ScatterSeries {
+        std::vector<double> x;
+        std::vector<double> y;
+        std::vector<double> z; // empty for 2D series
+        std::optional<Color4> color;
+        double size = 4.0;
+        std::string label;
+    };
 
-struct TCPLOT_API SeriesData2DView {
-    const double* x = nullptr;
-    const double* y = nullptr;
-    size_t count = 0;
-};
+    struct TCPLOT_API SeriesData2DView {
+        const double* x = nullptr;
+        const double* y = nullptr;
+        size_t count = 0;
+    };
 
-struct TCPLOT_API SeriesData3DView {
-    const double* x = nullptr;
-    const double* y = nullptr;
-    const double* z = nullptr;
-    size_t count = 0;
-};
+    struct TCPLOT_API SeriesData3DView {
+        const double* x = nullptr;
+        const double* y = nullptr;
+        const double* z = nullptr;
+        size_t count = 0;
+    };
 
-struct TCPLOT_API SurfaceDataView {
-    const double* x = nullptr;
-    const double* y = nullptr;
-    const double* z = nullptr;
-    uint32_t rows = 0;
-    uint32_t cols = 0;
+    struct TCPLOT_API SurfaceDataView {
+        const double* x = nullptr;
+        const double* y = nullptr;
+        const double* z = nullptr;
+        uint32_t rows = 0;
+        uint32_t cols = 0;
 
-    size_t count() const {
-        return static_cast<size_t>(rows) * static_cast<size_t>(cols);
-    }
-};
+        size_t count() const {
+            return static_cast<size_t>(rows) * static_cast<size_t>(cols);
+        }
+    };
 
-struct TCPLOT_API LinePlotOptions {
-    std::optional<Color4> color;
-    double thickness = 1.5;
-    std::string label;
-};
+    struct TCPLOT_API LinePlotOptions {
+        std::optional<Color4> color;
+        double thickness = 1.5;
+        std::string label;
+    };
 
-struct TCPLOT_API LineColormapOptions {
-    SurfaceColorMap colormap = SurfaceColorMap::Jet;
-    double scalar_min = 0.0;
-    double scalar_max = 1.0;
-    double thickness = 1.5;
-    std::string label;
-    bool colormap_reversed = false;
-};
+    struct TCPLOT_API LineColormapOptions {
+        SurfaceColorMap colormap = SurfaceColorMap::Jet;
+        double scalar_min = 0.0;
+        double scalar_max = 1.0;
+        double thickness = 1.5;
+        std::string label;
+        bool colormap_reversed = false;
+    };
 
-struct TCPLOT_API ScatterPlotOptions {
-    std::optional<Color4> color;
-    double size = 4.0;
-    std::string label;
-};
+    struct TCPLOT_API ScatterPlotOptions {
+        std::optional<Color4> color;
+        double size = 4.0;
+        std::string label;
+    };
 
-struct TCPLOT_API SurfacePlotOptions {
-    std::optional<Color4> color;
-    SurfaceColorMap colormap = SurfaceColorMap::Jet;
-    bool wireframe = false;
-    std::string label;
-    bool colormap_reversed = false;
-};
+    struct TCPLOT_API SurfacePlotOptions {
+        std::optional<Color4> color;
+        SurfaceColorMap colormap = SurfaceColorMap::Jet;
+        bool wireframe = false;
+        std::string label;
+        bool colormap_reversed = false;
+    };
 
-struct TCPLOT_API SurfaceGridOptions {
-    bool visible = false;
-    uint32_t row_step = 8;
-    uint32_t col_step = 8;
-    Color4 color = styles::grid_color();
-    float width_px = 1.5f;
-};
+    struct TCPLOT_API SurfaceGridOptions {
+        bool visible = false;
+        uint32_t row_step = 8;
+        uint32_t col_step = 8;
+        Color4 color = styles::grid_color();
+        float width_px = 1.5f;
+    };
 
-// Grid-sampled surface. X/Y/Z are row-major flats of shape (rows, cols).
-// X[j * cols + i] is the x-coordinate of grid cell (j, i); same for Y/Z.
-struct TCPLOT_API SurfaceSeries {
-    std::vector<double> X;
-    std::vector<double> Y;
-    std::vector<double> Z;
-    uint32_t rows = 0;
-    uint32_t cols = 0;
-    std::optional<Color4> color;
-    SurfaceColorMap colormap = SurfaceColorMap::Jet;
-    bool colormap_reversed = false;
-    bool wireframe = false;
-    bool grid_visible = false;
-    uint32_t grid_row_step = 8;
-    uint32_t grid_col_step = 8;
-    float grid_width_px = 1.5f;
-    std::optional<Color4> grid_color;
-    std::string label;
-};
+    // Grid-sampled surface. X/Y/Z are row-major flats of shape (rows, cols).
+    // X[j * cols + i] is the x-coordinate of grid cell (j, i); same for Y/Z.
+    struct TCPLOT_API SurfaceSeries {
+        std::vector<double> X;
+        std::vector<double> Y;
+        std::vector<double> Z;
+        uint32_t rows = 0;
+        uint32_t cols = 0;
+        std::optional<Color4> color;
+        SurfaceColorMap colormap = SurfaceColorMap::Jet;
+        bool colormap_reversed = false;
+        bool wireframe = false;
+        bool grid_visible = false;
+        uint32_t grid_row_step = 8;
+        uint32_t grid_col_step = 8;
+        float grid_width_px = 1.5f;
+        std::optional<Color4> grid_color;
+        std::string label;
+    };
 
-class TCPLOT_API PlotData {
-public:
-    std::vector<LineSeries> lines;
-    std::vector<ScatterSeries> scatters;
-    std::vector<SurfaceSeries> surfaces;
+    class TCPLOT_API PlotData {
+    public:
+        std::vector<LineSeries> lines;
+        std::vector<ScatterSeries> scatters;
+        std::vector<SurfaceSeries> surfaces;
 
-    std::string title;
-    std::string x_label;
-    std::string y_label;
-    std::string z_label;
+        std::string title;
+        std::string x_label;
+        std::string y_label;
+        std::string z_label;
 
-    // Add-line helper: copies x/y/z vectors into a new LineSeries and
-    // returns a reference to it (valid until the next modification).
-    // If `color` is nullopt, the engine will pick a palette color at
-    // render time based on the series index.
-    LineSeries& add_line(std::vector<double> x,
-                         std::vector<double> y,
-                         std::vector<double> z = {},
-                         std::optional<Color4> color = std::nullopt,
-                         double thickness = 1.5,
-                         std::string label = "");
+        // Add-line helper: copies x/y/z vectors into a new LineSeries and
+        // returns a reference to it (valid until the next modification).
+        // If `color` is nullopt, the engine will pick a palette color at
+        // render time based on the series index.
+        LineSeries& add_line(std::vector<double> x,
+                             std::vector<double> y,
+                             std::vector<double> z = {},
+                             std::optional<Color4> color = std::nullopt,
+                             double thickness = 1.5,
+                             std::string label = "");
 
-    ScatterSeries& add_scatter(std::vector<double> x,
-                                std::vector<double> y,
-                                std::vector<double> z = {},
-                                std::optional<Color4> color = std::nullopt,
-                                double size = 4.0,
-                                std::string label = "");
+        ScatterSeries& add_scatter(std::vector<double> x,
+                                   std::vector<double> y,
+                                   std::vector<double> z = {},
+                                   std::optional<Color4> color = std::nullopt,
+                                   double size = 4.0,
+                                   std::string label = "");
 
-    // 2D bounds across lines and scatter series (z ignored).
-    // Returns {x_min, x_max, y_min, y_max}. For an empty plot: {0, 1, 0, 1}.
-    std::array<double, 4> data_bounds_2d() const;
+        // 2D bounds across lines and scatter series (z ignored).
+        // Returns {x_min, x_max, y_min, y_max}. For an empty plot: {0, 1, 0, 1}.
+        std::array<double, 4> data_bounds_2d() const;
 
-    // 3D bounds across lines/scatter/surface series. Returns
-    // {min, max} as two 3-element arrays. For an empty plot or when
-    // any axis has zero extent, the bound is expanded by ±0.5 on that
-    // axis so the downstream camera `fit_bounds` doesn't produce NaN.
-    void data_bounds_3d(double out_min[3], double out_max[3]) const;
-};
+        // 3D bounds across lines/scatter/surface series. Returns
+        // {min, max} as two 3-element arrays. For an empty plot or when
+        // any axis has zero extent, the bound is expanded by ±0.5 on that
+        // axis so the downstream camera `fit_bounds` doesn't produce NaN.
+        void data_bounds_3d(double out_min[3], double out_max[3]) const;
+    };
 
-}  // namespace tcplot
+} // namespace tcplot

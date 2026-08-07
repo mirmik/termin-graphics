@@ -13,37 +13,35 @@
 #endif
 
 #include "termin/platform/sdl_backend_window.hpp"
-#include "tgfx2/graphics_host.hpp"
 #include "tgfx2/descriptors.hpp"
 #include "tgfx2/enums.hpp"
+#include "tgfx2/graphics_host.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/i_render_device.hpp"
 
 namespace {
 
-void force_d3d11_backend() {
+    void force_d3d11_backend() {
 #ifdef _WIN32
-    _putenv_s("TERMIN_BACKEND", "d3d11");
+        _putenv_s("TERMIN_BACKEND", "d3d11");
 #endif
-}
+    }
 
-bool close_enough(float a, float b) {
-    return std::fabs(a - b) < 0.02f;
-}
+    bool close_enough(float a, float b) {
+        return std::fabs(a - b) < 0.02f;
+    }
 
 } // namespace
 
 int main(int argc, char** argv) {
     force_d3d11_backend();
     const bool immediate = argc > 1 && std::strcmp(argv[1], "immediate") == 0;
-    const tgfx::PresentationMode requested_mode = immediate
-        ? tgfx::PresentationMode::Immediate
-        : tgfx::PresentationMode::VSync;
+    const tgfx::PresentationMode requested_mode =
+        immediate ? tgfx::PresentationMode::Immediate : tgfx::PresentationMode::VSync;
 
     try {
         auto graphics_session = termin::create_native_windowed_graphics();
-        auto window = graphics_session->create_window(
-            {"BackendWindow D3D11 present smoke", 320, 240, requested_mode});
+        auto window = graphics_session->create_window({"BackendWindow D3D11 present smoke", 320, 240, requested_mode});
         auto& win = *window;
         tgfx::IRenderDevice* dev = &graphics_session->graphics().device();
         if (!dev) {
@@ -54,24 +52,18 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "BackendWindow D3D11 smoke: backend is not D3D11\n");
             return 1;
         }
-        if (win.requested_presentation_mode() != requested_mode ||
-            win.presentation_mode() != requested_mode) {
-            std::fprintf(
-                stderr,
-                "BackendWindow D3D11 smoke: presentation contract mismatch "
-                "requested=%s effective=%s\n",
-                immediate ? "immediate" : "vsync",
-                win.presentation_mode() == tgfx::PresentationMode::Immediate
-                    ? "immediate"
-                    : "vsync");
+        if (win.requested_presentation_mode() != requested_mode || win.presentation_mode() != requested_mode) {
+            std::fprintf(stderr,
+                         "BackendWindow D3D11 smoke: presentation contract mismatch "
+                         "requested=%s effective=%s\n",
+                         immediate ? "immediate" : "vsync",
+                         win.presentation_mode() == tgfx::PresentationMode::Immediate ? "immediate" : "vsync");
             return 1;
         }
 
         auto [fb_w, fb_h] = win.framebuffer_size();
         if (fb_w <= 0 || fb_h <= 0) {
-            std::fprintf(stderr, "BackendWindow D3D11 smoke: invalid framebuffer size %dx%d\n",
-                         fb_w,
-                         fb_h);
+            std::fprintf(stderr, "BackendWindow D3D11 smoke: invalid framebuffer size %dx%d\n", fb_w, fb_h);
             return 1;
         }
 
@@ -79,9 +71,7 @@ int main(int argc, char** argv) {
         rt_desc.width = static_cast<uint32_t>(fb_w);
         rt_desc.height = static_cast<uint32_t>(fb_h);
         rt_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
-        rt_desc.usage = tgfx::TextureUsage::ColorAttachment |
-                        tgfx::TextureUsage::Sampled |
-                        tgfx::TextureUsage::CopySrc;
+        rt_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopySrc;
         tgfx::TextureHandle rt = dev->create_texture(rt_desc);
         if (!rt) {
             std::fprintf(stderr, "BackendWindow D3D11 smoke: failed to create render target\n");
@@ -111,9 +101,7 @@ int main(int argc, char** argv) {
             dev->destroy(rt);
             return 1;
         }
-        if (!close_enough(rgba[0], 0.24f) ||
-            !close_enough(rgba[1], 0.48f) ||
-            !close_enough(rgba[2], 0.76f) ||
+        if (!close_enough(rgba[0], 0.24f) || !close_enough(rgba[1], 0.48f) || !close_enough(rgba[2], 0.76f) ||
             !close_enough(rgba[3], 1.00f)) {
             std::fprintf(stderr,
                          "BackendWindow D3D11 smoke: unexpected pixel %.3f %.3f %.3f %.3f\n",
@@ -132,7 +120,8 @@ int main(int argc, char** argv) {
             desc.width = width;
             desc.height = height;
             tgfx::TextureHandle texture = dev->create_texture(desc);
-            if (!texture) return false;
+            if (!texture)
+                return false;
             tgfx::RenderPassDesc scaled_pass;
             tgfx::ColorAttachmentDesc scaled_color = color;
             scaled_color.texture = texture;
@@ -148,8 +137,8 @@ int main(int argc, char** argv) {
             dev->destroy(texture);
             return true;
         };
-        if (!present_scaled(160, 120) || !present_scaled(640, 480) ||
-            !present_scaled(320, 180) || !present_scaled(180, 320)) {
+        if (!present_scaled(160, 120) || !present_scaled(640, 480) || !present_scaled(320, 180) ||
+            !present_scaled(180, 320)) {
             std::fprintf(stderr, "BackendWindow D3D11 smoke: scaled source creation failed\n");
             dev->destroy(rt);
             return 1;
@@ -164,15 +153,11 @@ int main(int argc, char** argv) {
         graphics_session->close();
 
         std::printf(
-            "BackendWindow D3D11 present smoke OK: %dx%d mode=%s\n",
-            fb_w,
-            fb_h,
-            immediate ? "immediate" : "vsync");
+            "BackendWindow D3D11 present smoke OK: %dx%d mode=%s\n", fb_w, fb_h, immediate ? "immediate" : "vsync");
         return 0;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "BackendWindow D3D11 smoke failed: %s\n", e.what());
-        if (std::strstr(e.what(), "No available video device") ||
-            std::strstr(e.what(), "D3D11CreateDevice failed")) {
+        if (std::strstr(e.what(), "No available video device") || std::strstr(e.what(), "D3D11CreateDevice failed")) {
             return 77;
         }
         return 1;

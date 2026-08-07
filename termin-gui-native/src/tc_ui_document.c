@@ -32,26 +32,21 @@ static tc_handle document_base_handle(tc_ui_document_handle handle) {
     return (tc_handle){handle.index, handle.generation};
 }
 
-uint64_t tc_ui_internal_add_layout_prepare(
-    tc_ui_document_handle document_handle,
-    tc_ui_layout_prepare_fn callback,
-    void* user_data
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_internal_add_layout_prepare");
+uint64_t tc_ui_internal_add_layout_prepare(tc_ui_document_handle document_handle,
+                                           tc_ui_layout_prepare_fn callback,
+                                           void* user_data) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_internal_add_layout_prepare");
     tc_ui_layout_prepare_entry* entry;
     if (!document || !callback) {
-        tc_log_error(
-            "[termin-gui-native] cannot add an invalid layout prepare callback");
+        tc_log_error("[termin-gui-native] cannot add an invalid layout prepare callback");
         return 0;
     }
-    if (!tc_ui_internal_reserve_array(
-            (void**)&document->layout_prepare_entries,
-            sizeof(*document->layout_prepare_entries),
-            &document->layout_prepare_capacity,
-            document->layout_prepare_count + 1)) {
-        tc_log_error(
-            "[termin-gui-native] failed to reserve layout prepare callbacks");
+    if (!tc_ui_internal_reserve_array((void**)&document->layout_prepare_entries,
+                                      sizeof(*document->layout_prepare_entries),
+                                      &document->layout_prepare_capacity,
+                                      document->layout_prepare_count + 1)) {
+        tc_log_error("[termin-gui-native] failed to reserve layout prepare callbacks");
         return 0;
     }
     ++document->next_layout_prepare_token;
@@ -65,10 +60,7 @@ uint64_t tc_ui_internal_add_layout_prepare(
     return entry->token;
 }
 
-void tc_ui_internal_remove_layout_prepare(
-    tc_ui_document_handle document_handle,
-    uint64_t token
-) {
+void tc_ui_internal_remove_layout_prepare(tc_ui_document_handle document_handle, uint64_t token) {
     tc_ui_document* document = tc_ui_internal_resolve_document(document_handle);
     size_t index;
     if (!document || token == 0) {
@@ -76,34 +68,27 @@ void tc_ui_internal_remove_layout_prepare(
     }
     for (index = 0; index < document->layout_prepare_count; ++index) {
         if (document->layout_prepare_entries[index].token == token) {
-            memmove(
-                &document->layout_prepare_entries[index],
-                &document->layout_prepare_entries[index + 1],
-                (document->layout_prepare_count - index - 1) *
-                    sizeof(*document->layout_prepare_entries));
+            memmove(&document->layout_prepare_entries[index],
+                    &document->layout_prepare_entries[index + 1],
+                    (document->layout_prepare_count - index - 1) * sizeof(*document->layout_prepare_entries));
             --document->layout_prepare_count;
             return;
         }
     }
 }
 
-void tc_ui_internal_notify_layout_prepare(
-    tc_ui_document* document,
-    tc_ui_rect* rect
-) {
+void tc_ui_internal_notify_layout_prepare(tc_ui_document* document, tc_ui_rect* rect) {
     size_t index;
     if (!document || !rect) {
         return;
     }
     for (index = 0; index < document->layout_prepare_count; ++index) {
-        const tc_ui_layout_prepare_entry entry =
-            document->layout_prepare_entries[index];
+        const tc_ui_layout_prepare_entry entry = document->layout_prepare_entries[index];
         entry.callback(document->handle, rect, entry.user_data);
     }
 }
 
-tc_ui_presentation_metrics
-tc_ui_presentation_metrics_identity(tc_ui_size physical_extent) {
+tc_ui_presentation_metrics tc_ui_presentation_metrics_identity(tc_ui_size physical_extent) {
     tc_ui_presentation_metrics metrics;
     memset(&metrics, 0, sizeof(metrics));
     metrics.density_scale = 1.0f;
@@ -112,56 +97,37 @@ tc_ui_presentation_metrics_identity(tc_ui_size physical_extent) {
     return metrics;
 }
 
-bool tc_ui_presentation_metrics_is_valid(
-    const tc_ui_presentation_metrics* metrics
-) {
+bool tc_ui_presentation_metrics_is_valid(const tc_ui_presentation_metrics* metrics) {
     float logical_width;
     float logical_height;
     float effective_font_scale;
-    if (!metrics ||
-        !isfinite(metrics->density_scale) || metrics->density_scale <= 0.0f ||
-        !isfinite(metrics->font_scale) || metrics->font_scale <= 0.0f ||
-        !isfinite(metrics->physical_extent.width) ||
-        metrics->physical_extent.width <= 0.0f ||
-        !isfinite(metrics->physical_extent.height) ||
-        metrics->physical_extent.height <= 0.0f ||
-        !isfinite(metrics->physical_safe_insets.left) ||
-        metrics->physical_safe_insets.left < 0.0f ||
-        !isfinite(metrics->physical_safe_insets.top) ||
-        metrics->physical_safe_insets.top < 0.0f ||
-        !isfinite(metrics->physical_safe_insets.right) ||
-        metrics->physical_safe_insets.right < 0.0f ||
-        !isfinite(metrics->physical_safe_insets.bottom) ||
+    if (!metrics || !isfinite(metrics->density_scale) || metrics->density_scale <= 0.0f ||
+        !isfinite(metrics->font_scale) || metrics->font_scale <= 0.0f || !isfinite(metrics->physical_extent.width) ||
+        metrics->physical_extent.width <= 0.0f || !isfinite(metrics->physical_extent.height) ||
+        metrics->physical_extent.height <= 0.0f || !isfinite(metrics->physical_safe_insets.left) ||
+        metrics->physical_safe_insets.left < 0.0f || !isfinite(metrics->physical_safe_insets.top) ||
+        metrics->physical_safe_insets.top < 0.0f || !isfinite(metrics->physical_safe_insets.right) ||
+        metrics->physical_safe_insets.right < 0.0f || !isfinite(metrics->physical_safe_insets.bottom) ||
         metrics->physical_safe_insets.bottom < 0.0f ||
-        metrics->physical_safe_insets.left +
-                metrics->physical_safe_insets.right >
-            metrics->physical_extent.width ||
-        metrics->physical_safe_insets.top +
-                metrics->physical_safe_insets.bottom >
-            metrics->physical_extent.height) {
+        metrics->physical_safe_insets.left + metrics->physical_safe_insets.right > metrics->physical_extent.width ||
+        metrics->physical_safe_insets.top + metrics->physical_safe_insets.bottom > metrics->physical_extent.height) {
         return false;
     }
     logical_width = metrics->physical_extent.width / metrics->density_scale;
     logical_height = metrics->physical_extent.height / metrics->density_scale;
     effective_font_scale = metrics->density_scale * metrics->font_scale;
-    return isfinite(logical_width) && logical_width > 0.0f &&
-        isfinite(logical_height) && logical_height > 0.0f &&
-        isfinite(effective_font_scale) && effective_font_scale > 0.0f;
+    return isfinite(logical_width) && logical_width > 0.0f && isfinite(logical_height) && logical_height > 0.0f &&
+           isfinite(effective_font_scale) && effective_font_scale > 0.0f;
 }
 
-bool tc_ui_presentation_metrics_logical_viewport(
-    const tc_ui_presentation_metrics* metrics,
-    tc_ui_rect* out_rect
-) {
+bool tc_ui_presentation_metrics_logical_viewport(const tc_ui_presentation_metrics* metrics, tc_ui_rect* out_rect) {
     if (!out_rect) {
-        tc_log_error(
-            "[termin-gui-native] logical viewport output cannot be null");
+        tc_log_error("[termin-gui-native] logical viewport output cannot be null");
         return false;
     }
     if (!tc_ui_presentation_metrics_is_valid(metrics)) {
-        tc_log_error(
-            "[termin-gui-native] cannot derive logical viewport from invalid "
-            "presentation metrics");
+        tc_log_error("[termin-gui-native] cannot derive logical viewport from invalid "
+                     "presentation metrics");
         memset(out_rect, 0, sizeof(*out_rect));
         return false;
     }
@@ -174,14 +140,10 @@ bool tc_ui_presentation_metrics_logical_viewport(
     return true;
 }
 
-bool tc_ui_presentation_metrics_logical_safe_rect(
-    const tc_ui_presentation_metrics* metrics,
-    tc_ui_rect* out_rect
-) {
+bool tc_ui_presentation_metrics_logical_safe_rect(const tc_ui_presentation_metrics* metrics, tc_ui_rect* out_rect) {
     tc_ui_rect viewport;
     if (!out_rect) {
-        tc_log_error(
-            "[termin-gui-native] logical safe rect output cannot be null");
+        tc_log_error("[termin-gui-native] logical safe rect output cannot be null");
         return false;
     }
     if (!tc_ui_presentation_metrics_logical_viewport(metrics, &viewport)) {
@@ -192,44 +154,32 @@ bool tc_ui_presentation_metrics_logical_safe_rect(
         metrics->physical_safe_insets.left / metrics->density_scale,
         metrics->physical_safe_insets.top / metrics->density_scale,
         viewport.width -
-            (metrics->physical_safe_insets.left +
-             metrics->physical_safe_insets.right) /
-                metrics->density_scale,
+            (metrics->physical_safe_insets.left + metrics->physical_safe_insets.right) / metrics->density_scale,
         viewport.height -
-            (metrics->physical_safe_insets.top +
-             metrics->physical_safe_insets.bottom) /
-                metrics->density_scale,
+            (metrics->physical_safe_insets.top + metrics->physical_safe_insets.bottom) / metrics->density_scale,
     };
     return true;
 }
 
-float tc_ui_presentation_metrics_effective_font_scale(
-    const tc_ui_presentation_metrics* metrics
-) {
+float tc_ui_presentation_metrics_effective_font_scale(const tc_ui_presentation_metrics* metrics) {
     if (!tc_ui_presentation_metrics_is_valid(metrics)) {
-        tc_log_error(
-            "[termin-gui-native] cannot derive effective font scale from "
-            "invalid presentation metrics");
+        tc_log_error("[termin-gui-native] cannot derive effective font scale from "
+                     "invalid presentation metrics");
         return 0.0f;
     }
     return metrics->density_scale * metrics->font_scale;
 }
 
-bool tc_ui_presentation_metrics_physical_to_logical_point(
-    const tc_ui_presentation_metrics* metrics,
-    tc_ui_point physical_point,
-    tc_ui_point* out_logical_point
-) {
+bool tc_ui_presentation_metrics_physical_to_logical_point(const tc_ui_presentation_metrics* metrics,
+                                                          tc_ui_point physical_point,
+                                                          tc_ui_point* out_logical_point) {
     if (!out_logical_point) {
-        tc_log_error(
-            "[termin-gui-native] logical point output cannot be null");
+        tc_log_error("[termin-gui-native] logical point output cannot be null");
         return false;
     }
-    if (!tc_ui_presentation_metrics_is_valid(metrics) ||
-        !isfinite(physical_point.x) || !isfinite(physical_point.y)) {
-        tc_log_error(
-            "[termin-gui-native] cannot transform physical point with invalid "
-            "presentation metrics or coordinates");
+    if (!tc_ui_presentation_metrics_is_valid(metrics) || !isfinite(physical_point.x) || !isfinite(physical_point.y)) {
+        tc_log_error("[termin-gui-native] cannot transform physical point with invalid "
+                     "presentation metrics or coordinates");
         memset(out_logical_point, 0, sizeof(*out_logical_point));
         return false;
     }
@@ -243,25 +193,17 @@ tc_ui_document* tc_ui_internal_resolve_document(tc_ui_document_handle handle) {
     if (!g_ui_document_pool_initialized || tc_ui_document_handle_is_invalid(handle)) {
         return NULL;
     }
-    slot = (tc_ui_document_pool_slot*)tc_pool_get(
-        &g_ui_document_pool,
-        document_base_handle(handle)
-    );
+    slot = (tc_ui_document_pool_slot*)tc_pool_get(&g_ui_document_pool, document_base_handle(handle));
     return slot ? slot->document : NULL;
 }
 
-tc_ui_document* tc_ui_internal_resolve_document_checked(
-    tc_ui_document_handle handle,
-    const char* operation
-) {
+tc_ui_document* tc_ui_internal_resolve_document_checked(tc_ui_document_handle handle, const char* operation) {
     tc_ui_document* document = tc_ui_internal_resolve_document(handle);
     if (!document) {
-        tc_log_error(
-            "[termin-gui-native] %s received stale UI document handle (%u, %u)",
-            operation ? operation : "UI document operation",
-            handle.index,
-            handle.generation
-        );
+        tc_log_error("[termin-gui-native] %s received stale UI document handle (%u, %u)",
+                     operation ? operation : "UI document operation",
+                     handle.index,
+                     handle.generation);
     }
     return document;
 }
@@ -314,30 +256,21 @@ static tc_ui_color style_color(float r, float g, float b, float a) {
 }
 
 static bool valid_style_color(tc_ui_color color) {
-    return isfinite(color.r) && isfinite(color.g) && isfinite(color.b) && isfinite(color.a) &&
-        color.r >= 0.0f && color.r <= 1.0f &&
-        color.g >= 0.0f && color.g <= 1.0f &&
-        color.b >= 0.0f && color.b <= 1.0f &&
-        color.a >= 0.0f && color.a <= 1.0f;
+    return isfinite(color.r) && isfinite(color.g) && isfinite(color.b) && isfinite(color.a) && color.r >= 0.0f &&
+           color.r <= 1.0f && color.g >= 0.0f && color.g <= 1.0f && color.b >= 0.0f && color.b <= 1.0f &&
+           color.a >= 0.0f && color.a <= 1.0f;
 }
 
 static bool valid_style(const tc_ui_style* style) {
-    return style &&
-        valid_style_color(style->background) &&
-        valid_style_color(style->foreground) &&
-        valid_style_color(style->border) &&
-        valid_style_color(style->accent) &&
-        isfinite(style->padding_left) && style->padding_left >= 0.0f &&
-        isfinite(style->padding_top) && style->padding_top >= 0.0f &&
-        isfinite(style->padding_right) && style->padding_right >= 0.0f &&
-        isfinite(style->padding_bottom) && style->padding_bottom >= 0.0f &&
-        isfinite(style->spacing) && style->spacing >= 0.0f &&
-        isfinite(style->border_width) && style->border_width >= 0.0f &&
-        isfinite(style->corner_radius) && style->corner_radius >= 0.0f &&
-        isfinite(style->font_size) && style->font_size > 0.0f &&
-        isfinite(style->min_width) && style->min_width >= 0.0f &&
-        isfinite(style->min_height) && style->min_height >= 0.0f &&
-        style->font_role >= TC_UI_FONT_BODY && style->font_role <= TC_UI_FONT_MONOSPACE;
+    return style && valid_style_color(style->background) && valid_style_color(style->foreground) &&
+           valid_style_color(style->border) && valid_style_color(style->accent) && isfinite(style->padding_left) &&
+           style->padding_left >= 0.0f && isfinite(style->padding_top) && style->padding_top >= 0.0f &&
+           isfinite(style->padding_right) && style->padding_right >= 0.0f && isfinite(style->padding_bottom) &&
+           style->padding_bottom >= 0.0f && isfinite(style->spacing) && style->spacing >= 0.0f &&
+           isfinite(style->border_width) && style->border_width >= 0.0f && isfinite(style->corner_radius) &&
+           style->corner_radius >= 0.0f && isfinite(style->font_size) && style->font_size > 0.0f &&
+           isfinite(style->min_width) && style->min_width >= 0.0f && isfinite(style->min_height) &&
+           style->min_height >= 0.0f && style->font_role >= TC_UI_FONT_BODY && style->font_role <= TC_UI_FONT_MONOSPACE;
 }
 
 bool tc_ui_internal_valid_style_override(const tc_ui_style_override* style_override) {
@@ -347,34 +280,32 @@ bool tc_ui_internal_valid_style_override(const tc_ui_style_override* style_overr
         return false;
     }
     fields = style_override->fields;
-    return
-        ((fields & TC_UI_STYLE_BACKGROUND) == 0 || valid_style_color(style_override->value.background)) &&
-        ((fields & TC_UI_STYLE_FOREGROUND) == 0 || valid_style_color(style_override->value.foreground)) &&
-        ((fields & TC_UI_STYLE_BORDER) == 0 || valid_style_color(style_override->value.border)) &&
-        ((fields & TC_UI_STYLE_ACCENT) == 0 || valid_style_color(style_override->value.accent)) &&
-        ((fields & TC_UI_STYLE_PADDING_LEFT) == 0 ||
+    return ((fields & TC_UI_STYLE_BACKGROUND) == 0 || valid_style_color(style_override->value.background)) &&
+           ((fields & TC_UI_STYLE_FOREGROUND) == 0 || valid_style_color(style_override->value.foreground)) &&
+           ((fields & TC_UI_STYLE_BORDER) == 0 || valid_style_color(style_override->value.border)) &&
+           ((fields & TC_UI_STYLE_ACCENT) == 0 || valid_style_color(style_override->value.accent)) &&
+           ((fields & TC_UI_STYLE_PADDING_LEFT) == 0 ||
             (isfinite(style_override->value.padding_left) && style_override->value.padding_left >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_PADDING_TOP) == 0 ||
+           ((fields & TC_UI_STYLE_PADDING_TOP) == 0 ||
             (isfinite(style_override->value.padding_top) && style_override->value.padding_top >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_PADDING_RIGHT) == 0 ||
+           ((fields & TC_UI_STYLE_PADDING_RIGHT) == 0 ||
             (isfinite(style_override->value.padding_right) && style_override->value.padding_right >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_PADDING_BOTTOM) == 0 ||
+           ((fields & TC_UI_STYLE_PADDING_BOTTOM) == 0 ||
             (isfinite(style_override->value.padding_bottom) && style_override->value.padding_bottom >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_SPACING) == 0 ||
+           ((fields & TC_UI_STYLE_SPACING) == 0 ||
             (isfinite(style_override->value.spacing) && style_override->value.spacing >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_BORDER_WIDTH) == 0 ||
+           ((fields & TC_UI_STYLE_BORDER_WIDTH) == 0 ||
             (isfinite(style_override->value.border_width) && style_override->value.border_width >= 0.0f)) &&
-        (!(fields & TC_UI_STYLE_CORNER_RADIUS) ||
+           (!(fields & TC_UI_STYLE_CORNER_RADIUS) ||
             (isfinite(style_override->value.corner_radius) && style_override->value.corner_radius >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_FONT_SIZE) == 0 ||
+           ((fields & TC_UI_STYLE_FONT_SIZE) == 0 ||
             (isfinite(style_override->value.font_size) && style_override->value.font_size > 0.0f)) &&
-        ((fields & TC_UI_STYLE_MIN_WIDTH) == 0 ||
+           ((fields & TC_UI_STYLE_MIN_WIDTH) == 0 ||
             (isfinite(style_override->value.min_width) && style_override->value.min_width >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_MIN_HEIGHT) == 0 ||
+           ((fields & TC_UI_STYLE_MIN_HEIGHT) == 0 ||
             (isfinite(style_override->value.min_height) && style_override->value.min_height >= 0.0f)) &&
-        ((fields & TC_UI_STYLE_FONT_ROLE) == 0 ||
-            (style_override->value.font_role >= TC_UI_FONT_BODY &&
-                style_override->value.font_role <= TC_UI_FONT_MONOSPACE));
+           ((fields & TC_UI_STYLE_FONT_ROLE) == 0 || (style_override->value.font_role >= TC_UI_FONT_BODY &&
+                                                      style_override->value.font_role <= TC_UI_FONT_MONOSPACE));
 }
 
 static bool valid_theme(const tc_ui_theme* theme) {
@@ -384,8 +315,7 @@ static bool valid_theme(const tc_ui_theme* theme) {
     }
     for (index = 0; index < TC_UI_STYLE_ROLE_COUNT; ++index) {
         const tc_ui_role_style* role = &theme->roles[index];
-        if (!valid_style(&role->base) ||
-            !tc_ui_internal_valid_style_override(&role->hovered) ||
+        if (!valid_style(&role->base) || !tc_ui_internal_valid_style_override(&role->hovered) ||
             !tc_ui_internal_valid_style_override(&role->pressed) ||
             !tc_ui_internal_valid_style_override(&role->focused) ||
             !tc_ui_internal_valid_style_override(&role->disabled) ||
@@ -398,21 +328,36 @@ static bool valid_theme(const tc_ui_theme* theme) {
 
 static void apply_style_override(tc_ui_style* style, const tc_ui_style_override* style_override) {
     const tc_ui_style_field_mask fields = style_override->fields;
-    if ((fields & TC_UI_STYLE_BACKGROUND) != 0) style->background = style_override->value.background;
-    if ((fields & TC_UI_STYLE_FOREGROUND) != 0) style->foreground = style_override->value.foreground;
-    if ((fields & TC_UI_STYLE_BORDER) != 0) style->border = style_override->value.border;
-    if ((fields & TC_UI_STYLE_ACCENT) != 0) style->accent = style_override->value.accent;
-    if ((fields & TC_UI_STYLE_PADDING_LEFT) != 0) style->padding_left = style_override->value.padding_left;
-    if ((fields & TC_UI_STYLE_PADDING_TOP) != 0) style->padding_top = style_override->value.padding_top;
-    if ((fields & TC_UI_STYLE_PADDING_RIGHT) != 0) style->padding_right = style_override->value.padding_right;
-    if ((fields & TC_UI_STYLE_PADDING_BOTTOM) != 0) style->padding_bottom = style_override->value.padding_bottom;
-    if ((fields & TC_UI_STYLE_SPACING) != 0) style->spacing = style_override->value.spacing;
-    if ((fields & TC_UI_STYLE_BORDER_WIDTH) != 0) style->border_width = style_override->value.border_width;
-    if ((fields & TC_UI_STYLE_FONT_SIZE) != 0) style->font_size = style_override->value.font_size;
-    if ((fields & TC_UI_STYLE_MIN_WIDTH) != 0) style->min_width = style_override->value.min_width;
-    if ((fields & TC_UI_STYLE_MIN_HEIGHT) != 0) style->min_height = style_override->value.min_height;
-    if ((fields & TC_UI_STYLE_CORNER_RADIUS) != 0) style->corner_radius = style_override->value.corner_radius;
-    if ((fields & TC_UI_STYLE_FONT_ROLE) != 0) style->font_role = style_override->value.font_role;
+    if ((fields & TC_UI_STYLE_BACKGROUND) != 0)
+        style->background = style_override->value.background;
+    if ((fields & TC_UI_STYLE_FOREGROUND) != 0)
+        style->foreground = style_override->value.foreground;
+    if ((fields & TC_UI_STYLE_BORDER) != 0)
+        style->border = style_override->value.border;
+    if ((fields & TC_UI_STYLE_ACCENT) != 0)
+        style->accent = style_override->value.accent;
+    if ((fields & TC_UI_STYLE_PADDING_LEFT) != 0)
+        style->padding_left = style_override->value.padding_left;
+    if ((fields & TC_UI_STYLE_PADDING_TOP) != 0)
+        style->padding_top = style_override->value.padding_top;
+    if ((fields & TC_UI_STYLE_PADDING_RIGHT) != 0)
+        style->padding_right = style_override->value.padding_right;
+    if ((fields & TC_UI_STYLE_PADDING_BOTTOM) != 0)
+        style->padding_bottom = style_override->value.padding_bottom;
+    if ((fields & TC_UI_STYLE_SPACING) != 0)
+        style->spacing = style_override->value.spacing;
+    if ((fields & TC_UI_STYLE_BORDER_WIDTH) != 0)
+        style->border_width = style_override->value.border_width;
+    if ((fields & TC_UI_STYLE_FONT_SIZE) != 0)
+        style->font_size = style_override->value.font_size;
+    if ((fields & TC_UI_STYLE_MIN_WIDTH) != 0)
+        style->min_width = style_override->value.min_width;
+    if ((fields & TC_UI_STYLE_MIN_HEIGHT) != 0)
+        style->min_height = style_override->value.min_height;
+    if ((fields & TC_UI_STYLE_CORNER_RADIUS) != 0)
+        style->corner_radius = style_override->value.corner_radius;
+    if ((fields & TC_UI_STYLE_FONT_ROLE) != 0)
+        style->font_role = style_override->value.font_role;
 }
 
 static tc_ui_style default_base_style(void) {
@@ -432,18 +377,19 @@ static tc_ui_style default_base_style(void) {
     return style;
 }
 
-static tc_ui_style_override color_override(
-    tc_ui_style_field_mask field,
-    tc_ui_color color
-) {
+static tc_ui_style_override color_override(tc_ui_style_field_mask field, tc_ui_color color) {
     tc_ui_style_override result;
     memset(&result, 0, sizeof(result));
     result.value = default_base_style();
     result.fields = field;
-    if (field == TC_UI_STYLE_BACKGROUND) result.value.background = color;
-    if (field == TC_UI_STYLE_FOREGROUND) result.value.foreground = color;
-    if (field == TC_UI_STYLE_BORDER) result.value.border = color;
-    if (field == TC_UI_STYLE_ACCENT) result.value.accent = color;
+    if (field == TC_UI_STYLE_BACKGROUND)
+        result.value.background = color;
+    if (field == TC_UI_STYLE_FOREGROUND)
+        result.value.foreground = color;
+    if (field == TC_UI_STYLE_BORDER)
+        result.value.border = color;
+    if (field == TC_UI_STYLE_ACCENT)
+        result.value.accent = color;
     return result;
 }
 
@@ -458,10 +404,7 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     base = default_base_style();
     for (index = 0; index < TC_UI_STYLE_ROLE_COUNT; ++index) {
         theme->roles[index].base = base;
-        theme->roles[index].disabled = color_override(
-            TC_UI_STYLE_FOREGROUND,
-            style_color(0.52f, 0.54f, 0.58f, 1.0f)
-        );
+        theme->roles[index].disabled = color_override(TC_UI_STYLE_FOREGROUND, style_color(0.52f, 0.54f, 0.58f, 1.0f));
     }
 
     theme->roles[TC_UI_STYLE_PANEL].base.background = style_color(0.16f, 0.17f, 0.19f, 1.0f);
@@ -480,24 +423,16 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_BUTTON].base.border_width = 0.0f;
     theme->roles[TC_UI_STYLE_BUTTON].base.min_width = 0.0f;
     theme->roles[TC_UI_STYLE_BUTTON].base.min_height = 28.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].hovered = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.29f, 0.30f, 0.34f, 1.0f)
-    );
-    theme->roles[TC_UI_STYLE_BUTTON].pressed = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.18f, 0.34f, 0.54f, 1.0f)
-    );
-    theme->roles[TC_UI_STYLE_BUTTON].focused = color_override(
-        TC_UI_STYLE_BORDER,
-        style_color(0.48f, 0.72f, 1.0f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_BUTTON].hovered =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.29f, 0.30f, 0.34f, 1.0f));
+    theme->roles[TC_UI_STYLE_BUTTON].pressed =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.18f, 0.34f, 0.54f, 1.0f));
+    theme->roles[TC_UI_STYLE_BUTTON].focused =
+        color_override(TC_UI_STYLE_BORDER, style_color(0.48f, 0.72f, 1.0f, 1.0f));
     theme->roles[TC_UI_STYLE_BUTTON].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
     theme->roles[TC_UI_STYLE_BUTTON].focused.value.border_width = 1.0f;
-    theme->roles[TC_UI_STYLE_BUTTON].disabled = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.20f, 0.21f, 0.23f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_BUTTON].disabled =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.20f, 0.21f, 0.23f, 1.0f));
     theme->roles[TC_UI_STYLE_BUTTON].disabled.fields |= TC_UI_STYLE_FOREGROUND;
     theme->roles[TC_UI_STYLE_BUTTON].disabled.value.foreground = style_color(0.55f, 0.57f, 0.61f, 1.0f);
 
@@ -510,10 +445,8 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_width = 160.0f;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.min_height = 34.0f;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].base.corner_radius = 3.0f;
-    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused = color_override(
-        TC_UI_STYLE_BORDER,
-        style_color(0.38f, 0.62f, 0.92f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_TEXT_INPUT].focused =
+        color_override(TC_UI_STYLE_BORDER, style_color(0.38f, 0.62f, 0.92f, 1.0f));
     theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
     theme->roles[TC_UI_STYLE_TEXT_INPUT].focused.value.border_width = 1.0f;
 
@@ -529,10 +462,8 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_TAB].base.border = style_color(0.34f, 0.36f, 0.40f, 1.0f);
     theme->roles[TC_UI_STYLE_TAB].base.padding_left = 8.0f;
     theme->roles[TC_UI_STYLE_TAB].base.font_size = 13.0f;
-    theme->roles[TC_UI_STYLE_TAB].checked = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.20f, 0.26f, 0.34f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_TAB].checked =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.20f, 0.26f, 0.34f, 1.0f));
 
     theme->roles[TC_UI_STYLE_CHECKBOX].base.background = style_color(0.15f, 0.16f, 0.18f, 1.0f);
     theme->roles[TC_UI_STYLE_CHECKBOX].base.border = style_color(0.36f, 0.38f, 0.42f, 1.0f);
@@ -541,26 +472,17 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
     theme->roles[TC_UI_STYLE_CHECKBOX].base.min_height = 18.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].base.corner_radius = 3.0f;
     theme->roles[TC_UI_STYLE_CHECKBOX].base.border_width = 1.0f;
-    theme->roles[TC_UI_STYLE_CHECKBOX].checked = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.18f, 0.58f, 0.34f, 1.0f)
-    );
-    theme->roles[TC_UI_STYLE_CHECKBOX].focused = color_override(
-        TC_UI_STYLE_BORDER,
-        style_color(0.48f, 0.72f, 1.0f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_CHECKBOX].checked =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.18f, 0.58f, 0.34f, 1.0f));
+    theme->roles[TC_UI_STYLE_CHECKBOX].focused =
+        color_override(TC_UI_STYLE_BORDER, style_color(0.48f, 0.72f, 1.0f, 1.0f));
     theme->roles[TC_UI_STYLE_CHECKBOX].focused.fields |= TC_UI_STYLE_BORDER_WIDTH;
     theme->roles[TC_UI_STYLE_CHECKBOX].focused.value.border_width = 2.0f;
-    theme->roles[TC_UI_STYLE_CHECKBOX].disabled = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.11f, 0.12f, 0.14f, 1.0f)
-    );
-    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.fields |=
-        TC_UI_STYLE_BORDER | TC_UI_STYLE_FOREGROUND;
-    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.border =
-        style_color(0.25f, 0.26f, 0.29f, 1.0f);
-    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.foreground =
-        style_color(0.50f, 0.52f, 0.55f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.11f, 0.12f, 0.14f, 1.0f));
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.fields |= TC_UI_STYLE_BORDER | TC_UI_STYLE_FOREGROUND;
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.border = style_color(0.25f, 0.26f, 0.29f, 1.0f);
+    theme->roles[TC_UI_STYLE_CHECKBOX].disabled.value.foreground = style_color(0.50f, 0.52f, 0.55f, 1.0f);
 
     theme->roles[TC_UI_STYLE_PROGRESS].base.background = style_color(0.09f, 0.10f, 0.12f, 1.0f);
     theme->roles[TC_UI_STYLE_PROGRESS].base.min_width = 120.0f;
@@ -574,10 +496,8 @@ void tc_ui_theme_init_default(tc_ui_theme* theme) {
 
     theme->roles[TC_UI_STYLE_SEPARATOR].base.background = style_color(0.24f, 0.25f, 0.28f, 1.0f);
     theme->roles[TC_UI_STYLE_SEPARATOR].base.border_width = 1.0f;
-    theme->roles[TC_UI_STYLE_SEPARATOR].hovered = color_override(
-        TC_UI_STYLE_BACKGROUND,
-        style_color(0.25f, 0.58f, 0.88f, 1.0f)
-    );
+    theme->roles[TC_UI_STYLE_SEPARATOR].hovered =
+        color_override(TC_UI_STYLE_BACKGROUND, style_color(0.25f, 0.58f, 0.88f, 1.0f));
     theme->roles[TC_UI_STYLE_SEPARATOR].hovered.fields |= TC_UI_STYLE_BORDER_WIDTH;
     theme->roles[TC_UI_STYLE_SEPARATOR].hovered.value.border_width = 2.0f;
 }
@@ -594,10 +514,7 @@ tc_widget_slot* tc_ui_internal_resolve_slot(tc_ui_document* document, tc_widget_
     return slot;
 }
 
-const tc_widget_slot* tc_ui_internal_resolve_slot_const(
-    const tc_ui_document* document,
-    tc_widget_handle handle
-) {
+const tc_widget_slot* tc_ui_internal_resolve_slot_const(const tc_ui_document* document, tc_widget_handle handle) {
     const tc_widget_slot* slot;
     if (!document || tc_widget_handle_is_invalid(handle) || handle.index >= document->slot_count) {
         return NULL;
@@ -612,8 +529,7 @@ const tc_widget_slot* tc_ui_internal_resolve_slot_const(
 bool tc_ui_internal_widget_is_live_pointer(const tc_widget* widget) {
     const tc_widget_slot* slot;
     tc_ui_document* document;
-    if (!widget || tc_ui_document_handle_is_invalid(widget->document) ||
-        tc_widget_handle_is_invalid(widget->handle)) {
+    if (!widget || tc_ui_document_handle_is_invalid(widget->document) || tc_widget_handle_is_invalid(widget->handle)) {
         return false;
     }
     document = tc_ui_internal_resolve_document(widget->document);
@@ -640,11 +556,9 @@ void tc_ui_internal_remove_child_at(tc_widget* parent, size_t index) {
     }
     child = parent->children[index];
     if (index + 1 < parent->child_count) {
-        memmove(
-            &parent->children[index],
-            &parent->children[index + 1],
-            (parent->child_count - index - 1) * sizeof(tc_widget*)
-        );
+        memmove(&parent->children[index],
+                &parent->children[index + 1],
+                (parent->child_count - index - 1) * sizeof(tc_widget*));
     }
     parent->child_count -= 1;
     if (child && child->parent == parent) {
@@ -657,10 +571,7 @@ bool tc_ui_internal_detach_widget(tc_widget* widget) {
     if (!widget || !widget->parent) {
         return false;
     }
-    tc_ui_internal_invalidate_subtree_interaction_state(
-        widget,
-        TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
-    );
+    tc_ui_internal_invalidate_subtree_interaction_state(widget, TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
     index = tc_ui_internal_find_child_index(widget->parent, widget);
     if (index == SIZE_MAX) {
         tc_log_error("[termin-gui-native] widget parent link is not mirrored by its parent child list");
@@ -685,10 +596,7 @@ void tc_ui_internal_remove_root_references(tc_ui_document* document, tc_widget_h
     document->root_count = write_index;
 }
 
-size_t tc_ui_internal_find_overlay_index(
-    const tc_ui_document* document,
-    tc_widget_handle handle
-) {
+size_t tc_ui_internal_find_overlay_index(const tc_ui_document* document, tc_widget_handle handle) {
     size_t index;
     if (!document) {
         return SIZE_MAX;
@@ -706,11 +614,9 @@ void tc_ui_internal_remove_overlay_at(tc_ui_document* document, size_t index) {
         return;
     }
     if (index + 1 < document->overlay_count) {
-        memmove(
-            &document->overlays[index],
-            &document->overlays[index + 1],
-            (document->overlay_count - index - 1) * sizeof(*document->overlays)
-        );
+        memmove(&document->overlays[index],
+                &document->overlays[index + 1],
+                (document->overlay_count - index - 1) * sizeof(*document->overlays));
     }
     document->overlay_count -= 1;
 }
@@ -747,11 +653,10 @@ void tc_ui_internal_clear_document_state_references(tc_ui_document* document, tc
 }
 
 static bool append_free_slot(tc_ui_document* document, uint32_t index) {
-    if (!tc_ui_internal_reserve_array(
-            (void**)&document->free_slots,
-            sizeof(uint32_t),
-            &document->free_slot_capacity,
-            document->free_slot_count + 1)) {
+    if (!tc_ui_internal_reserve_array((void**)&document->free_slots,
+                                      sizeof(uint32_t),
+                                      &document->free_slot_capacity,
+                                      document->free_slot_count + 1)) {
         return false;
     }
     document->free_slots[document->free_slot_count++] = index;
@@ -765,34 +670,26 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
     bool ok = true;
 
     if (!slot) {
-        tc_log_error(
-            "[termin-gui-native] cannot destroy invalid widget handle index=%u generation=%u",
-            handle.index,
-            handle.generation
-        );
+        tc_log_error("[termin-gui-native] cannot destroy invalid widget handle index=%u generation=%u",
+                     handle.index,
+                     handle.generation);
         return false;
     }
     if (slot->destroying) {
-        tc_log_error(
-            "[termin-gui-native] recursive destroy cycle at widget handle index=%u generation=%u",
-            handle.index,
-            handle.generation
-        );
+        tc_log_error("[termin-gui-native] recursive destroy cycle at widget handle index=%u generation=%u",
+                     handle.index,
+                     handle.generation);
         return false;
     }
 
     widget = slot->widget;
     slot->destroying = true;
-    tc_ui_internal_invalidate_subtree_interaction_state(
-        widget,
-        TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE
-    );
+    tc_ui_internal_invalidate_subtree_interaction_state(widget, TC_UI_POINTER_CANCEL_SUBTREE_INEFFECTIVE);
 
     if (recursive) {
         while (widget->child_count > 0) {
             tc_widget* child = widget->children[widget->child_count - 1];
-            if (!child || child->parent != widget ||
-                !tc_ui_document_handle_eq(child->document, document->handle)) {
+            if (!child || child->parent != widget || !tc_ui_document_handle_eq(child->document, document->handle)) {
                 tc_log_error("[termin-gui-native] invalid canonical child link during recursive destroy");
                 tc_ui_internal_remove_child_at(widget, widget->child_count - 1);
                 ok = false;
@@ -801,8 +698,7 @@ static bool destroy_widget_inner(tc_ui_document* document, tc_widget_handle hand
             {
                 tc_widget_handle child_handle = child->handle;
                 if (!destroy_widget_inner(document, child_handle, true)) {
-                    tc_widget* remaining = tc_ui_document_resolve_widget(
-                        document->handle, child_handle);
+                    tc_widget* remaining = tc_ui_document_resolve_widget(document->handle, child_handle);
                     if (remaining && remaining->parent == widget) {
                         tc_ui_internal_detach_widget(remaining);
                     }
@@ -872,10 +768,7 @@ tc_ui_document_handle tc_ui_document_create(void) {
         tc_log_error("[termin-gui-native] failed to allocate UI document pool slot");
         return handle;
     }
-    slot = (tc_ui_document_pool_slot*)tc_pool_get(
-        &g_ui_document_pool,
-        document_base_handle(handle)
-    );
+    slot = (tc_ui_document_pool_slot*)tc_pool_get(&g_ui_document_pool, document_base_handle(handle));
     document = (tc_ui_document*)calloc(1, sizeof(tc_ui_document));
     if (!document) {
         tc_log_error("[termin-gui-native] failed to allocate UI document");
@@ -900,14 +793,9 @@ bool tc_ui_document_is_valid(tc_ui_document_handle document) {
     return tc_ui_internal_resolve_document(document) != NULL;
 }
 
-bool tc_ui_document_set_debug_name(
-    tc_ui_document_handle document_handle,
-    const char* debug_name
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_set_debug_name"
-    );
+bool tc_ui_document_set_debug_name(tc_ui_document_handle document_handle, const char* debug_name) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_debug_name");
     if (!document || !debug_name) {
         if (document) {
             tc_log_error("[termin-gui-native] UI document debug name cannot be null");
@@ -919,10 +807,7 @@ bool tc_ui_document_set_debug_name(
 }
 
 const char* tc_ui_document_debug_name(tc_ui_document_handle document_handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_debug_name"
-    );
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_debug_name");
     return document ? document->debug_name : NULL;
 }
 
@@ -937,15 +822,11 @@ size_t tc_ui_document_pool_capacity(void) {
 bool tc_ui_document_info_at(size_t pool_index, tc_ui_document_info* out_info) {
     tc_ui_document_pool_slot* slot;
     tc_ui_document* document;
-    if (!out_info || !g_ui_document_pool_initialized ||
-        pool_index >= g_ui_document_pool.capacity ||
+    if (!out_info || !g_ui_document_pool_initialized || pool_index >= g_ui_document_pool.capacity ||
         g_ui_document_pool.states[pool_index] != TC_SLOT_OCCUPIED) {
         return false;
     }
-    slot = (tc_ui_document_pool_slot*)tc_pool_get_unchecked(
-        &g_ui_document_pool,
-        (uint32_t)pool_index
-    );
+    slot = (tc_ui_document_pool_slot*)tc_pool_get_unchecked(&g_ui_document_pool, (uint32_t)pool_index);
     document = slot->document;
     if (!document) {
         tc_log_error("[termin-gui-native] occupied UI document slot %zu has no document", pool_index);
@@ -961,17 +842,13 @@ bool tc_ui_document_info_at(size_t pool_index, tc_ui_document_info* out_info) {
 }
 
 const tc_ui_theme* tc_ui_document_theme(tc_ui_document_handle document_handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_theme"
-    );
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_theme");
     return document ? &document->theme : NULL;
 }
 
 bool tc_ui_document_set_theme(tc_ui_document_handle document_handle, const tc_ui_theme* theme) {
     size_t index;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_set_theme");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_theme");
     if (!document || !theme) {
         tc_log_error("[termin-gui-native] cannot set null UI document theme");
         return false;
@@ -988,33 +865,26 @@ bool tc_ui_document_set_theme(tc_ui_document_handle document_handle, const tc_ui
     for (index = 0; index < document->slot_count; ++index) {
         tc_widget_slot* slot = &document->slots[index];
         if (slot->widget && !slot->destroying) {
-            tc_widget_mark_dirty(
-                slot->widget,
-                TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE
-            );
+            tc_widget_mark_dirty(slot->widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
         }
     }
     return true;
 }
 
 uint64_t tc_ui_document_theme_revision(tc_ui_document_handle document_handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_theme_revision");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_theme_revision");
     return document ? document->theme_revision : 0;
 }
 
-static bool same_presentation_metrics(
-    const tc_ui_presentation_metrics* lhs,
-    const tc_ui_presentation_metrics* rhs
-) {
-    return lhs->density_scale == rhs->density_scale &&
-        lhs->font_scale == rhs->font_scale &&
-        lhs->physical_extent.width == rhs->physical_extent.width &&
-        lhs->physical_extent.height == rhs->physical_extent.height &&
-        lhs->physical_safe_insets.left == rhs->physical_safe_insets.left &&
-        lhs->physical_safe_insets.top == rhs->physical_safe_insets.top &&
-        lhs->physical_safe_insets.right == rhs->physical_safe_insets.right &&
-        lhs->physical_safe_insets.bottom == rhs->physical_safe_insets.bottom;
+static bool same_presentation_metrics(const tc_ui_presentation_metrics* lhs, const tc_ui_presentation_metrics* rhs) {
+    return lhs->density_scale == rhs->density_scale && lhs->font_scale == rhs->font_scale &&
+           lhs->physical_extent.width == rhs->physical_extent.width &&
+           lhs->physical_extent.height == rhs->physical_extent.height &&
+           lhs->physical_safe_insets.left == rhs->physical_safe_insets.left &&
+           lhs->physical_safe_insets.top == rhs->physical_safe_insets.top &&
+           lhs->physical_safe_insets.right == rhs->physical_safe_insets.right &&
+           lhs->physical_safe_insets.bottom == rhs->physical_safe_insets.bottom;
 }
 
 static void invalidate_presentation_layout(tc_ui_document* document) {
@@ -1023,10 +893,7 @@ static void invalidate_presentation_layout(tc_ui_document* document) {
     for (index = 0; index < document->slot_count; ++index) {
         tc_widget* widget = document->slots[index].widget;
         if (widget && !document->slots[index].destroying) {
-            tc_widget_mark_dirty(
-                widget,
-                TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT
-            );
+            tc_widget_mark_dirty(widget, TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
         }
     }
 }
@@ -1038,36 +905,26 @@ static void advance_presentation_revision(tc_ui_document* document) {
     }
 }
 
-bool tc_ui_document_set_presentation_metrics(
-    tc_ui_document_handle document_handle,
-    const tc_ui_presentation_metrics* metrics
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_set_presentation_metrics"
-    );
+bool tc_ui_document_set_presentation_metrics(tc_ui_document_handle document_handle,
+                                             const tc_ui_presentation_metrics* metrics) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_presentation_metrics");
     if (!document) {
         return false;
     }
     if (!tc_ui_presentation_metrics_is_valid(metrics)) {
-        tc_log_error(
-            "[termin-gui-native] UI document '%s' rejected invalid "
-            "presentation metrics: density/font scales and physical extents "
-            "must be finite and positive, and safe insets must be finite, "
-            "non-negative and bounded by the physical extent",
-            document->debug_name
-        );
+        tc_log_error("[termin-gui-native] UI document '%s' rejected invalid "
+                     "presentation metrics: density/font scales and physical extents "
+                     "must be finite and positive, and safe insets must be finite, "
+                     "non-negative and bounded by the physical extent",
+                     document->debug_name);
         return false;
     }
-    if (document->has_presentation_metrics &&
-        same_presentation_metrics(&document->presentation_metrics, metrics)) {
+    if (document->has_presentation_metrics && same_presentation_metrics(&document->presentation_metrics, metrics)) {
         return true;
     }
     if (document->has_presentation_metrics) {
-        tc_ui_document_cancel_pointer_interaction(
-            document_handle,
-            TC_UI_POINTER_CANCEL_CAPTURE_REPLACED
-        );
+        tc_ui_document_cancel_pointer_interaction(document_handle, TC_UI_POINTER_CANCEL_CAPTURE_REPLACED);
     }
     document->presentation_metrics = *metrics;
     document->has_presentation_metrics = true;
@@ -1076,39 +933,28 @@ bool tc_ui_document_set_presentation_metrics(
     return true;
 }
 
-bool tc_ui_document_has_presentation_metrics(
-    tc_ui_document_handle document_handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_has_presentation_metrics"
-    );
+bool tc_ui_document_has_presentation_metrics(tc_ui_document_handle document_handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_has_presentation_metrics");
     return document && document->has_presentation_metrics;
 }
 
-bool tc_ui_document_presentation_metrics(
-    tc_ui_document_handle document_handle,
-    tc_ui_presentation_metrics* out_metrics
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_presentation_metrics"
-    );
+bool tc_ui_document_presentation_metrics(tc_ui_document_handle document_handle,
+                                         tc_ui_presentation_metrics* out_metrics) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_presentation_metrics");
     if (!document) {
         return false;
     }
     if (!out_metrics) {
-        tc_log_error(
-            "[termin-gui-native] UI document presentation metrics output "
-            "cannot be null");
+        tc_log_error("[termin-gui-native] UI document presentation metrics output "
+                     "cannot be null");
         return false;
     }
     if (!document->has_presentation_metrics) {
-        tc_log_error(
-            "[termin-gui-native] UI document '%s' has no explicit "
-            "presentation metrics",
-            document->debug_name
-        );
+        tc_log_error("[termin-gui-native] UI document '%s' has no explicit "
+                     "presentation metrics",
+                     document->debug_name);
         memset(out_metrics, 0, sizeof(*out_metrics));
         return false;
     }
@@ -1116,107 +962,69 @@ bool tc_ui_document_presentation_metrics(
     return true;
 }
 
-uint64_t tc_ui_document_presentation_revision(
-    tc_ui_document_handle document_handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_presentation_revision"
-    );
+uint64_t tc_ui_document_presentation_revision(tc_ui_document_handle document_handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_presentation_revision");
     return document ? document->presentation_revision : 0;
 }
 
-bool tc_ui_document_set_root_layout_policy(
-    tc_ui_document_handle document_handle,
-    tc_ui_root_layout_policy policy
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_set_root_layout_policy"
-    );
+bool tc_ui_document_set_root_layout_policy(tc_ui_document_handle document_handle, tc_ui_root_layout_policy policy) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_root_layout_policy");
     if (!document) {
         return false;
     }
-    if (policy != TC_UI_ROOT_LAYOUT_FULL_VIEWPORT &&
-        policy != TC_UI_ROOT_LAYOUT_SAFE_AREA) {
-        tc_log_error(
-            "[termin-gui-native] UI document '%s' rejected unknown root "
-            "layout policy %d",
-            document->debug_name,
-            (int)policy
-        );
+    if (policy != TC_UI_ROOT_LAYOUT_FULL_VIEWPORT && policy != TC_UI_ROOT_LAYOUT_SAFE_AREA) {
+        tc_log_error("[termin-gui-native] UI document '%s' rejected unknown root "
+                     "layout policy %d",
+                     document->debug_name,
+                     (int)policy);
         return false;
     }
     if (document->root_layout_policy == policy) {
         return true;
     }
-    tc_ui_document_cancel_pointer_interaction(
-        document_handle,
-        TC_UI_POINTER_CANCEL_CAPTURE_REPLACED
-    );
+    tc_ui_document_cancel_pointer_interaction(document_handle, TC_UI_POINTER_CANCEL_CAPTURE_REPLACED);
     document->root_layout_policy = policy;
     advance_presentation_revision(document);
     invalidate_presentation_layout(document);
     return true;
 }
 
-tc_ui_root_layout_policy tc_ui_document_root_layout_policy(
-    tc_ui_document_handle document_handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_root_layout_policy"
-    );
-    return document
-        ? document->root_layout_policy
-        : TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
+tc_ui_root_layout_policy tc_ui_document_root_layout_policy(tc_ui_document_handle document_handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_root_layout_policy");
+    return document ? document->root_layout_policy : TC_UI_ROOT_LAYOUT_FULL_VIEWPORT;
 }
 
-bool tc_ui_document_presentation_layout_rect(
-    tc_ui_document_handle document_handle,
-    tc_ui_rect* out_rect
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_presentation_layout_rect"
-    );
+bool tc_ui_document_presentation_layout_rect(tc_ui_document_handle document_handle, tc_ui_rect* out_rect) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_presentation_layout_rect");
     if (!document) {
         return false;
     }
     if (!out_rect) {
-        tc_log_error(
-            "[termin-gui-native] UI document presentation layout rect output "
-            "cannot be null");
+        tc_log_error("[termin-gui-native] UI document presentation layout rect output "
+                     "cannot be null");
         return false;
     }
     if (!document->has_presentation_metrics) {
-        tc_log_error(
-            "[termin-gui-native] UI document '%s' cannot derive a root layout "
-            "rect without explicit presentation metrics",
-            document->debug_name
-        );
+        tc_log_error("[termin-gui-native] UI document '%s' cannot derive a root layout "
+                     "rect without explicit presentation metrics",
+                     document->debug_name);
         memset(out_rect, 0, sizeof(*out_rect));
         return false;
     }
     if (document->root_layout_policy == TC_UI_ROOT_LAYOUT_SAFE_AREA) {
-        return tc_ui_presentation_metrics_logical_safe_rect(
-            &document->presentation_metrics,
-            out_rect
-        );
+        return tc_ui_presentation_metrics_logical_safe_rect(&document->presentation_metrics, out_rect);
     }
-    return tc_ui_presentation_metrics_logical_viewport(
-        &document->presentation_metrics,
-        out_rect
-    );
+    return tc_ui_presentation_metrics_logical_viewport(&document->presentation_metrics, out_rect);
 }
 
-uint32_t tc_ui_document_widget_style_state(
-    tc_ui_document_handle document_handle,
-    const tc_widget* widget
-) {
+uint32_t tc_ui_document_widget_style_state(tc_ui_document_handle document_handle, const tc_widget* widget) {
     uint32_t state = 0;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_widget_style_state");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_widget_style_state");
     if (!document || !widget || !tc_ui_document_handle_eq(widget->document, document_handle) ||
         !tc_ui_internal_widget_is_live_pointer(widget)) {
         return 0;
@@ -1236,25 +1044,18 @@ uint32_t tc_ui_document_widget_style_state(
     return state;
 }
 
-static bool apply_inherited_style_ancestors(
-    const tc_ui_document* document,
-    const tc_widget* ancestor,
-    size_t depth,
-    tc_ui_style* style
-) {
+static bool apply_inherited_style_ancestors(const tc_ui_document* document,
+                                            const tc_widget* ancestor,
+                                            size_t depth,
+                                            tc_ui_style* style) {
     if (!ancestor) {
         return true;
     }
-    if (depth >= document->live_count ||
-        !tc_ui_document_handle_eq(ancestor->document, document->handle)) {
+    if (depth >= document->live_count || !tc_ui_document_handle_eq(ancestor->document, document->handle)) {
         tc_log_error("[termin-gui-native] invalid canonical tree while resolving widget style");
         return false;
     }
-    if (!apply_inherited_style_ancestors(
-            document,
-            ancestor->parent,
-            depth + 1,
-            style)) {
+    if (!apply_inherited_style_ancestors(document, ancestor->parent, depth + 1, style)) {
         return false;
     }
     if ((ancestor->style_override.flags & TC_UI_STYLE_OVERRIDE_INHERIT) != 0) {
@@ -1263,21 +1064,15 @@ static bool apply_inherited_style_ancestors(
     return true;
 }
 
-bool tc_ui_document_resolve_style(
-    tc_ui_document_handle document_handle,
-    const tc_widget* widget,
-    uint32_t extra_state_flags,
-    tc_ui_style* out_style
-) {
-    const uint32_t all_states = TC_UI_STYLE_STATE_HOVERED |
-        TC_UI_STYLE_STATE_PRESSED |
-        TC_UI_STYLE_STATE_FOCUSED |
-        TC_UI_STYLE_STATE_DISABLED |
-        TC_UI_STYLE_STATE_CHECKED;
+bool tc_ui_document_resolve_style(tc_ui_document_handle document_handle,
+                                  const tc_widget* widget,
+                                  uint32_t extra_state_flags,
+                                  tc_ui_style* out_style) {
+    const uint32_t all_states = TC_UI_STYLE_STATE_HOVERED | TC_UI_STYLE_STATE_PRESSED | TC_UI_STYLE_STATE_FOCUSED |
+                                TC_UI_STYLE_STATE_DISABLED | TC_UI_STYLE_STATE_CHECKED;
     const tc_ui_role_style* role;
     uint32_t state;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_resolve_style");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_resolve_style");
 
     if (!document || !widget || !out_style) {
         tc_log_error("[termin-gui-native] cannot resolve style with null arguments");
@@ -1300,11 +1095,16 @@ bool tc_ui_document_resolve_style(
     role = &document->theme.roles[widget->style_role];
     *out_style = role->base;
     state = tc_ui_document_widget_style_state(document_handle, widget) | extra_state_flags;
-    if ((state & TC_UI_STYLE_STATE_HOVERED) != 0) apply_style_override(out_style, &role->hovered);
-    if ((state & TC_UI_STYLE_STATE_PRESSED) != 0) apply_style_override(out_style, &role->pressed);
-    if ((state & TC_UI_STYLE_STATE_FOCUSED) != 0) apply_style_override(out_style, &role->focused);
-    if ((state & TC_UI_STYLE_STATE_CHECKED) != 0) apply_style_override(out_style, &role->checked);
-    if ((state & TC_UI_STYLE_STATE_DISABLED) != 0) apply_style_override(out_style, &role->disabled);
+    if ((state & TC_UI_STYLE_STATE_HOVERED) != 0)
+        apply_style_override(out_style, &role->hovered);
+    if ((state & TC_UI_STYLE_STATE_PRESSED) != 0)
+        apply_style_override(out_style, &role->pressed);
+    if ((state & TC_UI_STYLE_STATE_FOCUSED) != 0)
+        apply_style_override(out_style, &role->focused);
+    if ((state & TC_UI_STYLE_STATE_CHECKED) != 0)
+        apply_style_override(out_style, &role->checked);
+    if ((state & TC_UI_STYLE_STATE_DISABLED) != 0)
+        apply_style_override(out_style, &role->disabled);
 
     if (!apply_inherited_style_ancestors(document, widget->parent, 0, out_style)) {
         return false;
@@ -1319,10 +1119,7 @@ void tc_ui_document_destroy(tc_ui_document_handle document_handle) {
     if (tc_ui_document_handle_is_invalid(document_handle)) {
         return;
     }
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle,
-        "tc_ui_document_destroy"
-    );
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_destroy");
     if (!document) {
         return;
     }
@@ -1349,10 +1146,7 @@ void tc_ui_document_destroy(tc_ui_document_handle document_handle) {
     free(document->layout_prepare_entries);
     free(document->free_slots);
     free(document->slots);
-    pool_slot = (tc_ui_document_pool_slot*)tc_pool_get(
-        &g_ui_document_pool,
-        document_base_handle(document_handle)
-    );
+    pool_slot = (tc_ui_document_pool_slot*)tc_pool_get(&g_ui_document_pool, document_base_handle(document_handle));
     if (pool_slot) {
         pool_slot->document = NULL;
     }
@@ -1362,12 +1156,10 @@ void tc_ui_document_destroy(tc_ui_document_handle document_handle) {
     }
 }
 
-static tc_widget_handle attach_widget(
-    tc_ui_document* document,
-    tc_widget* widget,
-    tc_widget_deleter deleter,
-    tc_widget_ownership_policy ownership
-) {
+static tc_widget_handle attach_widget(tc_ui_document* document,
+                                      tc_widget* widget,
+                                      tc_widget_deleter deleter,
+                                      tc_widget_ownership_policy ownership) {
     uint32_t index;
     tc_widget_slot* slot;
     tc_widget_handle handle;
@@ -1375,8 +1167,7 @@ static tc_widget_handle attach_widget(
         tc_log_error("[termin-gui-native] cannot attach widget without document/widget");
         return tc_widget_handle_invalid();
     }
-    if (!tc_ui_document_handle_is_invalid(widget->document) ||
-        !tc_widget_handle_is_invalid(widget->handle)) {
+    if (!tc_ui_document_handle_is_invalid(widget->document) || !tc_widget_handle_is_invalid(widget->handle)) {
         tc_log_error("[termin-gui-native] cannot adopt widget that already belongs to a document");
         return tc_widget_handle_invalid();
     }
@@ -1393,10 +1184,7 @@ static tc_widget_handle attach_widget(
             return tc_widget_handle_invalid();
         }
         if (!tc_ui_internal_reserve_array(
-                (void**)&document->slots,
-                sizeof(tc_widget_slot),
-                &document->slot_capacity,
-                document->slot_count + 1)) {
+                (void**)&document->slots, sizeof(tc_widget_slot), &document->slot_capacity, document->slot_count + 1)) {
             return tc_widget_handle_invalid();
         }
         index = (uint32_t)document->slot_count++;
@@ -1416,13 +1204,9 @@ static tc_widget_handle attach_widget(
     return handle;
 }
 
-tc_widget_handle tc_ui_document_adopt_widget(
-    tc_ui_document_handle document_handle,
-    tc_widget* widget,
-    tc_widget_deleter deleter
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_adopt_widget");
+tc_widget_handle
+tc_ui_document_adopt_widget(tc_ui_document_handle document_handle, tc_widget* widget, tc_widget_deleter deleter) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_adopt_widget");
     if (!deleter) {
         tc_log_error("[termin-gui-native] owned widget adoption requires a deleter");
         return tc_widget_handle_invalid();
@@ -1430,12 +1214,9 @@ tc_widget_handle tc_ui_document_adopt_widget(
     return attach_widget(document, widget, deleter, TC_WIDGET_OWNED);
 }
 
-tc_widget_handle tc_ui_document_attach_borrowed_widget(
-    tc_ui_document_handle document_handle,
-    tc_widget* widget
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_attach_borrowed_widget");
+tc_widget_handle tc_ui_document_attach_borrowed_widget(tc_ui_document_handle document_handle, tc_widget* widget) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_attach_borrowed_widget");
     return attach_widget(document, widget, NULL, TC_WIDGET_BORROWED);
 }
 
@@ -1445,70 +1226,63 @@ bool tc_ui_document_is_alive(tc_ui_document_handle document_handle, tc_widget_ha
     return slot && !slot->destroying;
 }
 
-tc_widget* tc_ui_document_resolve_widget(
-    tc_ui_document_handle document_handle,
-    tc_widget_handle handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_resolve_widget");
+tc_widget* tc_ui_document_resolve_widget(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_resolve_widget");
     if (!document || tc_widget_handle_is_invalid(handle)) {
         return NULL;
     }
     tc_widget_slot* slot = tc_ui_internal_resolve_slot(document, handle);
     if (!slot || slot->destroying) {
         tc_log_error("[termin-gui-native] stale widget handle (%u, %u) in document (%u, %u)",
-                     handle.index, handle.generation,
-                     document_handle.index, document_handle.generation);
+                     handle.index,
+                     handle.generation,
+                     document_handle.index,
+                     document_handle.generation);
     }
     return slot && !slot->destroying ? slot->widget : NULL;
 }
 
-const tc_widget* tc_ui_document_resolve_widget_const(
-    tc_ui_document_handle document_handle,
-    tc_widget_handle handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_resolve_widget_const");
+const tc_widget* tc_ui_document_resolve_widget_const(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_resolve_widget_const");
     if (!document || tc_widget_handle_is_invalid(handle)) {
         return NULL;
     }
     const tc_widget_slot* slot = tc_ui_internal_resolve_slot_const(document, handle);
     if (!slot || slot->destroying) {
         tc_log_error("[termin-gui-native] stale widget handle (%u, %u) in document (%u, %u)",
-                     handle.index, handle.generation,
-                     document_handle.index, document_handle.generation);
+                     handle.index,
+                     handle.generation,
+                     document_handle.index,
+                     document_handle.generation);
     }
     return slot && !slot->destroying ? slot->widget : NULL;
 }
 
 bool tc_ui_document_destroy_widget(tc_ui_document_handle document_handle, tc_widget_handle handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_destroy_widget");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_destroy_widget");
     return destroy_widget_inner(document, handle, false);
 }
 
-bool tc_ui_document_destroy_widget_recursive(
-    tc_ui_document_handle document_handle,
-    tc_widget_handle handle
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_destroy_widget_recursive");
+bool tc_ui_document_destroy_widget_recursive(tc_ui_document_handle document_handle, tc_widget_handle handle) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_destroy_widget_recursive");
     return destroy_widget_inner(document, handle, true);
 }
 
 size_t tc_ui_document_live_widget_count(tc_ui_document_handle document_handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_live_widget_count");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_live_widget_count");
     return document ? document->live_count : 0;
 }
 
-void tc_ui_document_set_text_measurer(
-    tc_ui_document_handle document_handle,
-    tc_ui_text_measure_fn measure,
-    void* user_data
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_set_text_measurer");
+void tc_ui_document_set_text_measurer(tc_ui_document_handle document_handle,
+                                      tc_ui_text_measure_fn measure,
+                                      void* user_data) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_text_measurer");
     if (!document) {
         tc_log_error("[termin-gui-native] cannot configure text measurement on null document");
         return;
@@ -1519,28 +1293,24 @@ void tc_ui_document_set_text_measurer(
     document->text_measure_failure_logged = false;
 }
 
-bool tc_ui_document_measure_text(
-    tc_ui_document_handle document_handle,
-    const char* text_utf8,
-    size_t text_byte_length,
-    float font_size,
-    tc_ui_text_metrics* out_metrics
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_measure_text");
+bool tc_ui_document_measure_text(tc_ui_document_handle document_handle,
+                                 const char* text_utf8,
+                                 size_t text_byte_length,
+                                 float font_size,
+                                 tc_ui_text_metrics* out_metrics) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_measure_text");
     float physical_font_size;
     float inverse_density;
-    if (!document || !out_metrics || (!text_utf8 && text_byte_length > 0) ||
-        !isfinite(font_size) || font_size <= 0.0f) {
+    if (!document || !out_metrics || (!text_utf8 && text_byte_length > 0) || !isfinite(font_size) ||
+        font_size <= 0.0f) {
         tc_log_error("[termin-gui-native] invalid text measurement request");
         return false;
     }
     memset(out_metrics, 0, sizeof(*out_metrics));
     if (!document->has_presentation_metrics) {
-        tc_log_error(
-            "[termin-gui-native] UI document '%s' cannot measure logical text "
-            "without explicit presentation metrics",
-            document->debug_name);
+        tc_log_error("[termin-gui-native] UI document '%s' cannot measure logical text "
+                     "without explicit presentation metrics",
+                     document->debug_name);
         return false;
     }
     if (!document->measure_text) {
@@ -1550,25 +1320,19 @@ bool tc_ui_document_measure_text(
         }
         return false;
     }
-    physical_font_size = font_size *
-        tc_ui_presentation_metrics_effective_font_scale(
-            &document->presentation_metrics);
+    physical_font_size = font_size * tc_ui_presentation_metrics_effective_font_scale(&document->presentation_metrics);
     inverse_density = 1.0f / document->presentation_metrics.density_scale;
     if (!isfinite(physical_font_size) || physical_font_size <= 0.0f) {
-        tc_log_error(
-            "[termin-gui-native] effective physical font size is invalid");
+        tc_log_error("[termin-gui-native] effective physical font size is invalid");
         return false;
     }
-    if (!document->measure_text(
-            document->text_measurer_user_data,
-            text_utf8 ? text_utf8 : "",
-            text_byte_length,
-            physical_font_size,
-            out_metrics) ||
-        !valid_text_metric(out_metrics->width) ||
-        !valid_text_metric(out_metrics->height) ||
-        !valid_text_metric(out_metrics->ascent) ||
-        !valid_text_metric(out_metrics->descent) ||
+    if (!document->measure_text(document->text_measurer_user_data,
+                                text_utf8 ? text_utf8 : "",
+                                text_byte_length,
+                                physical_font_size,
+                                out_metrics) ||
+        !valid_text_metric(out_metrics->width) || !valid_text_metric(out_metrics->height) ||
+        !valid_text_metric(out_metrics->ascent) || !valid_text_metric(out_metrics->descent) ||
         !valid_text_metric(out_metrics->line_height)) {
         if (!document->text_measure_failure_logged) {
             tc_log_error("[termin-gui-native] text measurement service failed");
@@ -1585,14 +1349,11 @@ bool tc_ui_document_measure_text(
     return true;
 }
 
-void tc_ui_document_set_clipboard(
-    tc_ui_document_handle document_handle,
-    tc_ui_clipboard_get_text_fn get_text,
-    tc_ui_clipboard_set_text_fn set_text,
-    void* user_data
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_set_clipboard");
+void tc_ui_document_set_clipboard(tc_ui_document_handle document_handle,
+                                  tc_ui_clipboard_get_text_fn get_text,
+                                  tc_ui_clipboard_set_text_fn set_text,
+                                  void* user_data) {
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_clipboard");
     if (!document) {
         tc_log_error("[termin-gui-native] cannot configure clipboard on null document");
         return;
@@ -1604,8 +1365,8 @@ void tc_ui_document_set_clipboard(
 
 const char* tc_ui_document_clipboard_text(tc_ui_document_handle document_handle) {
     const char* text;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_clipboard_text");
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_clipboard_text");
     if (!document || !document->clipboard_get_text) {
         return NULL;
     }
@@ -1616,21 +1377,15 @@ const char* tc_ui_document_clipboard_text(tc_ui_document_handle document_handle)
     return text;
 }
 
-bool tc_ui_document_set_clipboard_text(
-    tc_ui_document_handle document_handle,
-    const char* text_utf8,
-    size_t text_byte_length
-) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_set_clipboard_text");
+bool tc_ui_document_set_clipboard_text(tc_ui_document_handle document_handle,
+                                       const char* text_utf8,
+                                       size_t text_byte_length) {
+    tc_ui_document* document =
+        tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_set_clipboard_text");
     if (!document || !document->clipboard_set_text || (!text_utf8 && text_byte_length > 0)) {
         return false;
     }
-    if (!document->clipboard_set_text(
-        document->clipboard_user_data,
-        text_utf8 ? text_utf8 : "",
-        text_byte_length
-    )) {
+    if (!document->clipboard_set_text(document->clipboard_user_data, text_utf8 ? text_utf8 : "", text_byte_length)) {
         tc_log_error("[termin-gui-native] clipboard setter failed");
         return false;
     }
@@ -1638,8 +1393,7 @@ bool tc_ui_document_set_clipboard_text(
 }
 
 bool tc_ui_document_add_root(tc_ui_document_handle document_handle, tc_widget_handle handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_add_root");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_add_root");
     tc_widget* widget = tc_ui_document_resolve_widget(document_handle, handle);
     size_t index;
     if (!widget) {
@@ -1660,10 +1414,7 @@ bool tc_ui_document_add_root(tc_ui_document_handle document_handle, tc_widget_ha
         }
     }
     if (!tc_ui_internal_reserve_array(
-            (void**)&document->roots,
-            sizeof(tc_widget_handle),
-            &document->root_capacity,
-            document->root_count + 1)) {
+            (void**)&document->roots, sizeof(tc_widget_handle), &document->root_capacity, document->root_count + 1)) {
         return false;
     }
     document->roots[document->root_count++] = handle;
@@ -1672,8 +1423,7 @@ bool tc_ui_document_add_root(tc_ui_document_handle document_handle, tc_widget_ha
 
 bool tc_ui_document_remove_root(tc_ui_document_handle document_handle, tc_widget_handle handle) {
     size_t before;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_remove_root");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_remove_root");
     if (!document) {
         return false;
     }
@@ -1683,26 +1433,18 @@ bool tc_ui_document_remove_root(tc_ui_document_handle document_handle, tc_widget
 }
 
 size_t tc_ui_document_root_count(tc_ui_document_handle document_handle) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_root_count");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_root_count");
     return document ? document->root_count : 0;
 }
 
 tc_widget_handle tc_ui_document_root_at(tc_ui_document_handle document_handle, size_t index) {
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_root_at");
-    return document && index < document->root_count
-        ? document->roots[index]
-        : tc_widget_handle_invalid();
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_root_at");
+    return document && index < document->root_count ? document->roots[index] : tc_widget_handle_invalid();
 }
 
-void tc_ui_document_paint_roots(
-    tc_ui_document_handle document_handle,
-    tc_ui_paint_context* context
-) {
+void tc_ui_document_paint_roots(tc_ui_document_handle document_handle, tc_ui_paint_context* context) {
     size_t index;
-    tc_ui_document* document = tc_ui_internal_resolve_document_checked(
-        document_handle, "tc_ui_document_paint_roots");
+    tc_ui_document* document = tc_ui_internal_resolve_document_checked(document_handle, "tc_ui_document_paint_roots");
     if (!document) {
         tc_log_error("[termin-gui-native] cannot paint roots of null document");
         return;

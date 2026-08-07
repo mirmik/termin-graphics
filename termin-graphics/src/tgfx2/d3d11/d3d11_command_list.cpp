@@ -13,229 +13,168 @@ extern "C" {
 
 namespace tgfx {
 
-namespace {
+    namespace {
 
-uint32_t effective_stage_mask(const BoundResourceBinding& binding) {
-    return binding.slot.stage_mask == TC_SHADER_STAGE_NONE
-        ? TC_SHADER_STAGE_ALL_GRAPHICS
-        : binding.slot.stage_mask;
-}
+        uint32_t effective_stage_mask(const BoundResourceBinding& binding) {
+            return binding.slot.stage_mask == TC_SHADER_STAGE_NONE ? TC_SHADER_STAGE_ALL_GRAPHICS
+                                                                   : binding.slot.stage_mask;
+        }
 
-UINT d3d11_slot(const BoundResourceBinding& binding) {
-    return static_cast<UINT>(
-        binding.slot.placement.d3d11.register_index +
-        binding.value.array_element);
-}
+        UINT d3d11_slot(const BoundResourceBinding& binding) {
+            return static_cast<UINT>(binding.slot.placement.d3d11.register_index + binding.value.array_element);
+        }
 
-UINT d3d11_sampler_slot_for_sampled_texture(const BoundResourceBinding& binding) {
-    const UINT base = static_cast<UINT>(
-        binding.slot.placement.d3d11.register_index);
-    if (binding.slot.placement.d3d11.scalar_sampler_for_texture_array) {
-        return base;
-    }
-    return static_cast<UINT>(base + binding.value.array_element);
-}
+        UINT d3d11_sampler_slot_for_sampled_texture(const BoundResourceBinding& binding) {
+            const UINT base = static_cast<UINT>(binding.slot.placement.d3d11.register_index);
+            if (binding.slot.placement.d3d11.scalar_sampler_for_texture_array) {
+                return base;
+            }
+            return static_cast<UINT>(base + binding.value.array_element);
+        }
 
-bool validate_d3d11_placement(
-    const BoundResourceBinding& binding,
-    D3D11RegisterClass expected,
-    const char* kind_name
-) {
-    const BackendBoundResourceSlot& slot = binding.slot;
-    if (slot.placement.kind != BackendPlacementKind::D3D11Register) {
-        tc::Log::error(
-            "D3D11CommandList::bind_resource_set: %s resource '%s' has "
-            "non-D3D11 placement kind=%u",
-            kind_name,
-            bound_resource_debug_name(binding),
-            static_cast<unsigned>(slot.placement.kind));
-        return false;
-    }
-    if (slot.placement.d3d11.register_class == expected) {
-        return true;
-    }
-    tc::Log::error(
-        "D3D11CommandList::bind_resource_set: %s resource '%s' has "
-        "D3D11 class=%u, expected class=%u",
-        kind_name,
-        bound_resource_debug_name(binding),
-        static_cast<unsigned>(slot.placement.d3d11.register_class),
-        static_cast<unsigned>(expected));
-    return false;
-}
+        bool validate_d3d11_placement(const BoundResourceBinding& binding,
+                                      D3D11RegisterClass expected,
+                                      const char* kind_name) {
+            const BackendBoundResourceSlot& slot = binding.slot;
+            if (slot.placement.kind != BackendPlacementKind::D3D11Register) {
+                tc::Log::error("D3D11CommandList::bind_resource_set: %s resource '%s' has "
+                               "non-D3D11 placement kind=%u",
+                               kind_name,
+                               bound_resource_debug_name(binding),
+                               static_cast<unsigned>(slot.placement.kind));
+                return false;
+            }
+            if (slot.placement.d3d11.register_class == expected) {
+                return true;
+            }
+            tc::Log::error("D3D11CommandList::bind_resource_set: %s resource '%s' has "
+                           "D3D11 class=%u, expected class=%u",
+                           kind_name,
+                           bound_resource_debug_name(binding),
+                           static_cast<unsigned>(slot.placement.d3d11.register_class),
+                           static_cast<unsigned>(expected));
+            return false;
+        }
 
-bool validate_d3d11_slot(
-    const BoundResourceBinding& binding,
-    UINT slot,
-    UINT limit,
-    const char* kind_name
-) {
-    if (slot < limit) {
-        return true;
-    }
-    tc::Log::error(
-        "D3D11CommandList::bind_resource_set: %s resource '%s' resolved to "
-        "out-of-range D3D11 slot=%u limit=%u",
-        kind_name,
-        bound_resource_debug_name(binding),
-        slot,
-        limit);
-    return false;
-}
+        bool validate_d3d11_slot(const BoundResourceBinding& binding, UINT slot, UINT limit, const char* kind_name) {
+            if (slot < limit) {
+                return true;
+            }
+            tc::Log::error("D3D11CommandList::bind_resource_set: %s resource '%s' resolved to "
+                           "out-of-range D3D11 slot=%u limit=%u",
+                           kind_name,
+                           bound_resource_debug_name(binding),
+                           slot,
+                           limit);
+            return false;
+        }
 
-} // namespace
+    } // namespace
 
-D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
-    : device_(device), ctx_(device.immediate_context()) {
-}
+    D3D11CommandList::D3D11CommandList(D3D11RenderDevice& device)
+        : device_(device),
+          ctx_(device.immediate_context()) {}
 
-void D3D11CommandList::set_constant_buffer(
-    uint32_t stage_mask,
-    UINT slot,
-    ID3D11Buffer* buffer) {
-    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx_->VSSetConstantBuffers(slot, 1, &buffer);
+    void D3D11CommandList::set_constant_buffer(uint32_t stage_mask, UINT slot, ID3D11Buffer* buffer) {
+        if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+            ctx_->VSSetConstantBuffers(slot, 1, &buffer);
+        }
+        if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+            ctx_->PSSetConstantBuffers(slot, 1, &buffer);
+        }
+        if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+            ctx_->GSSetConstantBuffers(slot, 1, &buffer);
+        }
     }
-    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx_->PSSetConstantBuffers(slot, 1, &buffer);
-    }
-    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx_->GSSetConstantBuffers(slot, 1, &buffer);
-    }
-}
 
-void D3D11CommandList::set_shader_resource(
-    uint32_t stage_mask,
-    UINT slot,
-    ID3D11ShaderResourceView* srv) {
-    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx_->VSSetShaderResources(slot, 1, &srv);
+    void D3D11CommandList::set_shader_resource(uint32_t stage_mask, UINT slot, ID3D11ShaderResourceView* srv) {
+        if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+            ctx_->VSSetShaderResources(slot, 1, &srv);
+        }
+        if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+            ctx_->PSSetShaderResources(slot, 1, &srv);
+        }
+        if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+            ctx_->GSSetShaderResources(slot, 1, &srv);
+        }
     }
-    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx_->PSSetShaderResources(slot, 1, &srv);
-    }
-    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx_->GSSetShaderResources(slot, 1, &srv);
-    }
-}
 
-void D3D11CommandList::set_sampler(
-    uint32_t stage_mask,
-    UINT slot,
-    ID3D11SamplerState* sampler) {
-    if (stage_mask & TC_SHADER_STAGE_VERTEX) {
-        ctx_->VSSetSamplers(slot, 1, &sampler);
+    void D3D11CommandList::set_sampler(uint32_t stage_mask, UINT slot, ID3D11SamplerState* sampler) {
+        if (stage_mask & TC_SHADER_STAGE_VERTEX) {
+            ctx_->VSSetSamplers(slot, 1, &sampler);
+        }
+        if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
+            ctx_->PSSetSamplers(slot, 1, &sampler);
+        }
+        if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
+            ctx_->GSSetSamplers(slot, 1, &sampler);
+        }
     }
-    if (stage_mask & TC_SHADER_STAGE_FRAGMENT) {
-        ctx_->PSSetSamplers(slot, 1, &sampler);
-    }
-    if (stage_mask & TC_SHADER_STAGE_GEOMETRY) {
-        ctx_->GSSetSamplers(slot, 1, &sampler);
-    }
-}
 
-void D3D11CommandList::clear_shader_resources() {
-    std::array<
-        ID3D11ShaderResourceView*,
-        D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
-    > null_srvs{};
-    const UINT count = static_cast<UINT>(null_srvs.size());
-    ctx_->VSSetShaderResources(0, count, null_srvs.data());
-    ctx_->PSSetShaderResources(0, count, null_srvs.data());
-    ctx_->GSSetShaderResources(0, count, null_srvs.data());
-}
-
-void D3D11CommandList::bind_bound_resource_binding(
-    const BoundResourceBinding& binding) {
-    const UINT slot = d3d11_slot(binding);
-    const uint32_t stage_mask = effective_stage_mask(binding);
-    if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
-        binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
-        tc::Log::error(
-            "D3D11CommandList::bind_resource_set: storage texture/UAV resource '%s' "
-            "is not supported by the D3D11 backend",
-            bound_resource_debug_name(binding));
-        return;
+    void D3D11CommandList::clear_shader_resources() {
+        std::array<ID3D11ShaderResourceView*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> null_srvs{};
+        const UINT count = static_cast<UINT>(null_srvs.size());
+        ctx_->VSSetShaderResources(0, count, null_srvs.data());
+        ctx_->PSSetShaderResources(0, count, null_srvs.data());
+        ctx_->GSSetShaderResources(0, count, null_srvs.data());
     }
-    switch (binding.value.kind) {
+
+    void D3D11CommandList::bind_bound_resource_binding(const BoundResourceBinding& binding) {
+        const UINT slot = d3d11_slot(binding);
+        const uint32_t stage_mask = effective_stage_mask(binding);
+        if (binding.slot.kind == ShaderResourceKind::StorageTexture ||
+            binding.slot.placement.d3d11.register_class == D3D11RegisterClass::U) {
+            tc::Log::error("D3D11CommandList::bind_resource_set: storage texture/UAV resource '%s' "
+                           "is not supported by the D3D11 backend",
+                           bound_resource_debug_name(binding));
+            return;
+        }
+        switch (binding.value.kind) {
         case BoundResourceKind::UniformBuffer: {
-            if (!validate_d3d11_placement(
-                    binding, D3D11RegisterClass::B, "uniform buffer") ||
+            if (!validate_d3d11_placement(binding, D3D11RegisterClass::B, "uniform buffer") ||
                 !validate_d3d11_slot(
-                    binding,
-                    slot,
-                    D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
-                    "uniform buffer")) {
+                    binding, slot, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, "uniform buffer")) {
                 break;
             }
             if (binding.value.offset != 0) {
-                tc::Log::error(
-                    "D3D11CommandList::bind_resource_set: uniform buffer "
-                    "resource '%s' has unsupported offset=%llu",
-                    bound_resource_debug_name(binding),
-                    static_cast<unsigned long long>(binding.value.offset));
+                tc::Log::error("D3D11CommandList::bind_resource_set: uniform buffer "
+                               "resource '%s' has unsupported offset=%llu",
+                               bound_resource_debug_name(binding),
+                               static_cast<unsigned long long>(binding.value.offset));
                 break;
             }
             D3D11Buffer* buf = device_.get_buffer(binding.value.buffer);
-            set_constant_buffer(
-                stage_mask, slot, buf ? buf->buffer.Get() : nullptr);
+            set_constant_buffer(stage_mask, slot, buf ? buf->buffer.Get() : nullptr);
             break;
         }
         case BoundResourceKind::SampledTexture: {
-            if (!validate_d3d11_placement(
-                    binding, D3D11RegisterClass::T, "sampled texture") ||
-                !validate_d3d11_slot(
-                    binding,
-                    slot,
-                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
-                    "sampled texture")) {
+            if (!validate_d3d11_placement(binding, D3D11RegisterClass::T, "sampled texture") ||
+                !validate_d3d11_slot(binding, slot, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, "sampled texture")) {
                 break;
             }
             D3D11Texture* tex = device_.get_texture(binding.value.texture);
-            set_shader_resource(
-                stage_mask, slot, tex ? tex->srv.Get() : nullptr);
-            const UINT sampler_slot =
-                d3d11_sampler_slot_for_sampled_texture(binding);
+            set_shader_resource(stage_mask, slot, tex ? tex->srv.Get() : nullptr);
+            const UINT sampler_slot = d3d11_sampler_slot_for_sampled_texture(binding);
             if (!validate_d3d11_slot(
-                    binding,
-                    sampler_slot,
-                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
-                    "sampled texture sampler")) {
+                    binding, sampler_slot, D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT, "sampled texture sampler")) {
                 break;
             }
-            D3D11Sampler* sampler =
-                device_.get_sampler(binding.value.sampler);
-            set_sampler(
-                stage_mask,
-                sampler_slot,
-                sampler ? sampler->sampler.Get()
-                        : device_.default_sampler_state());
+            D3D11Sampler* sampler = device_.get_sampler(binding.value.sampler);
+            set_sampler(stage_mask, sampler_slot, sampler ? sampler->sampler.Get() : device_.default_sampler_state());
             break;
         }
         case BoundResourceKind::Sampler: {
-            if (!validate_d3d11_placement(
-                    binding, D3D11RegisterClass::S, "sampler") ||
-                !validate_d3d11_slot(
-                    binding,
-                    slot,
-                    D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,
-                    "sampler")) {
+            if (!validate_d3d11_placement(binding, D3D11RegisterClass::S, "sampler") ||
+                !validate_d3d11_slot(binding, slot, D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT, "sampler")) {
                 break;
             }
-            D3D11Sampler* sampler =
-                device_.get_sampler(binding.value.sampler);
-            set_sampler(
-                stage_mask, slot, sampler ? sampler->sampler.Get() : nullptr);
+            D3D11Sampler* sampler = device_.get_sampler(binding.value.sampler);
+            set_sampler(stage_mask, slot, sampler ? sampler->sampler.Get() : nullptr);
             break;
         }
         case BoundResourceKind::StorageBuffer: {
-            if (!validate_d3d11_placement(
-                    binding, D3D11RegisterClass::T, "storage buffer") ||
-                !validate_d3d11_slot(
-                    binding,
-                    slot,
-                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
-                    "storage buffer")) {
+            if (!validate_d3d11_placement(binding, D3D11RegisterClass::T, "storage buffer") ||
+                !validate_d3d11_slot(binding, slot, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, "storage buffer")) {
                 break;
             }
             if (binding.value.offset != 0) {
@@ -256,301 +195,279 @@ void D3D11CommandList::bind_bound_resource_binding(
             set_shader_resource(stage_mask, slot, srv);
             break;
         }
-    }
-}
-
-void D3D11CommandList::begin() {
-    device_.reset_transient_uploads();
-}
-
-void D3D11CommandList::end() {
-}
-
-void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
-    // D3D11 may implicitly null an SRV when the same resource becomes an
-    // output. Re-establish a known state at every pass boundary instead of
-    // trusting the software cache across those runtime-managed hazards.
-    clear_shader_resources();
-
-    std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
-    UINT rtv_count = 0;
-    uint32_t width = 0;
-    uint32_t height = 0;
-
-    for (const auto& color : pass.colors) {
-        if (rtv_count >= rtvs.size()) {
-            tc::Log::error("D3D11CommandList::begin_render_pass: too many color attachments");
-            break;
-        }
-        auto* tex = device_.get_texture(color.texture);
-        if (!tex || !tex->rtv) {
-            tc::Log::error("D3D11CommandList::begin_render_pass: invalid color attachment");
-            continue;
-        }
-        rtvs[rtv_count++] = tex->rtv.Get();
-        width = tex->desc.width;
-        height = tex->desc.height;
-        if (color.load == LoadOp::Clear) {
-            ctx_->ClearRenderTargetView(tex->rtv.Get(), color.clear_color);
         }
     }
 
-    ID3D11DepthStencilView* dsv = nullptr;
-    if (pass.has_depth) {
-        auto* depth = device_.get_texture(pass.depth.texture);
-        if (depth && depth->dsv) {
-            dsv = depth->dsv.Get();
-            width = depth->desc.width;
-            height = depth->desc.height;
-            if (pass.depth.load == LoadOp::Clear) {
-                ctx_->ClearDepthStencilView(
-                    dsv,
-                    D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
-                    pass.depth.clear_depth,
-                    pass.depth.clear_stencil);
+    void D3D11CommandList::begin() {
+        device_.reset_transient_uploads();
+    }
+
+    void D3D11CommandList::end() {}
+
+    void D3D11CommandList::begin_render_pass(const RenderPassDesc& pass) {
+        // D3D11 may implicitly null an SRV when the same resource becomes an
+        // output. Re-establish a known state at every pass boundary instead of
+        // trusting the software cache across those runtime-managed hazards.
+        clear_shader_resources();
+
+        std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
+        UINT rtv_count = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+
+        for (const auto& color : pass.colors) {
+            if (rtv_count >= rtvs.size()) {
+                tc::Log::error("D3D11CommandList::begin_render_pass: too many color attachments");
+                break;
             }
-        } else {
-            tc::Log::error("D3D11CommandList::begin_render_pass: invalid depth attachment");
+            auto* tex = device_.get_texture(color.texture);
+            if (!tex || !tex->rtv) {
+                tc::Log::error("D3D11CommandList::begin_render_pass: invalid color attachment");
+                continue;
+            }
+            rtvs[rtv_count++] = tex->rtv.Get();
+            width = tex->desc.width;
+            height = tex->desc.height;
+            if (color.load == LoadOp::Clear) {
+                ctx_->ClearRenderTargetView(tex->rtv.Get(), color.clear_color);
+            }
+        }
+
+        ID3D11DepthStencilView* dsv = nullptr;
+        if (pass.has_depth) {
+            auto* depth = device_.get_texture(pass.depth.texture);
+            if (depth && depth->dsv) {
+                dsv = depth->dsv.Get();
+                width = depth->desc.width;
+                height = depth->desc.height;
+                if (pass.depth.load == LoadOp::Clear) {
+                    ctx_->ClearDepthStencilView(
+                        dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, pass.depth.clear_depth, pass.depth.clear_stencil);
+                }
+            } else {
+                tc::Log::error("D3D11CommandList::begin_render_pass: invalid depth attachment");
+            }
+        }
+
+        ctx_->OMSetRenderTargets(rtv_count, rtvs.data(), dsv);
+        if (width > 0 && height > 0) {
+            set_viewport(0, 0, static_cast<int>(width), static_cast<int>(height));
+            set_scissor(0, 0, static_cast<int>(width), static_cast<int>(height));
         }
     }
 
-    ctx_->OMSetRenderTargets(rtv_count, rtvs.data(), dsv);
-    if (width > 0 && height > 0) {
-        set_viewport(0, 0, static_cast<int>(width), static_cast<int>(height));
-        set_scissor(0, 0, static_cast<int>(width), static_cast<int>(height));
-    }
-}
-
-void D3D11CommandList::end_render_pass() {
-    std::array<
-        ID3D11RenderTargetView*,
-        D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT
-    > null_rtvs{};
-    ctx_->OMSetRenderTargets(
-        static_cast<UINT>(null_rtvs.size()),
-        null_rtvs.data(),
-        nullptr);
-    clear_shader_resources();
-}
-
-void D3D11CommandList::bind_pipeline(PipelineHandle pipeline) {
-    auto* pipe = device_.get_pipeline(pipeline);
-    if (!pipe) {
-        return;
-    }
-    auto* vs = device_.get_shader(pipe->desc.vertex_shader);
-    auto* fs = device_.get_shader(pipe->desc.fragment_shader);
-    auto* gs = pipe->desc.geometry_shader ? device_.get_shader(pipe->desc.geometry_shader) : nullptr;
-
-    current_pipeline_ = pipeline;
-    ctx_->IASetInputLayout(pipe->input_layout.Get());
-    ctx_->IASetPrimitiveTopology(d3d11::to_d3d_topology(pipe->desc.topology));
-    ctx_->VSSetShader(vs ? vs->vertex_shader.Get() : nullptr, nullptr, 0);
-    ctx_->PSSetShader(fs ? fs->pixel_shader.Get() : nullptr, nullptr, 0);
-    ctx_->GSSetShader(gs ? gs->geometry_shader.Get() : nullptr, nullptr, 0);
-    ctx_->RSSetState(pipe->raster_state.Get());
-    ctx_->OMSetDepthStencilState(pipe->depth_stencil_state.Get(), 0);
-    const float blend_factor[4] = {0, 0, 0, 0};
-    ctx_->OMSetBlendState(pipe->blend_state.Get(), blend_factor, 0xffffffffu);
-}
-
-void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
-                                         uint32_t /*set_index*/,
-                                         const uint32_t* dynamic_offsets,
-                                         uint32_t dynamic_offset_count) {
-    if (dynamic_offsets != nullptr || dynamic_offset_count != 0) {
-        tc::Log::error(
-            "D3D11CommandList::bind_resource_set: dynamic uniform offsets are "
-            "not supported; query supports_dynamic_uniform_offsets before binding");
-        return;
-    }
-    auto* rs = device_.get_resource_set(set);
-    if (!rs) return;
-
-    for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& binding) {
-        bind_bound_resource_binding(binding);
-    });
-}
-
-void D3D11CommandList::set_push_constants(const void* data, uint32_t size) {
-    if (size == 0) {
-        ID3D11Buffer* null_buffer = nullptr;
-        ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
-        ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
-        ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
-        return;
-    }
-    if (data == nullptr) {
-        tc::Log::error("D3D11CommandList::set_push_constants: data is null for size=%u", size);
-        return;
-    }
-    if (size > TGFX2_PUSH_CONSTANTS_MAX_BYTES) {
-        tc::Log::error(
-            "D3D11CommandList::set_push_constants: size=%u exceeds max=%u",
-            size,
-            TGFX2_PUSH_CONSTANTS_MAX_BYTES);
-        return;
+    void D3D11CommandList::end_render_pass() {
+        std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> null_rtvs{};
+        ctx_->OMSetRenderTargets(static_cast<UINT>(null_rtvs.size()), null_rtvs.data(), nullptr);
+        clear_shader_resources();
     }
 
-    const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
-    if (!push_constant_buffer_ || push_constant_buffer_size_ < padded_size) {
-        D3D11_BUFFER_DESC desc{};
-        desc.ByteWidth = padded_size;
-        desc.Usage = D3D11_USAGE_DYNAMIC;
-        desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
-        HRESULT hr = device_.native_device()->CreateBuffer(&desc, nullptr, buffer.GetAddressOf());
-        if (FAILED(hr)) {
-            tc::Log::error(
-                "D3D11CommandList::set_push_constants: CreateBuffer failed HRESULT=0x%08X size=%u",
-                static_cast<unsigned>(hr),
-                padded_size);
+    void D3D11CommandList::bind_pipeline(PipelineHandle pipeline) {
+        auto* pipe = device_.get_pipeline(pipeline);
+        if (!pipe) {
             return;
         }
-        push_constant_buffer_ = std::move(buffer);
-        push_constant_buffer_size_ = padded_size;
+        auto* vs = device_.get_shader(pipe->desc.vertex_shader);
+        auto* fs = device_.get_shader(pipe->desc.fragment_shader);
+        auto* gs = pipe->desc.geometry_shader ? device_.get_shader(pipe->desc.geometry_shader) : nullptr;
+
+        current_pipeline_ = pipeline;
+        ctx_->IASetInputLayout(pipe->input_layout.Get());
+        ctx_->IASetPrimitiveTopology(d3d11::to_d3d_topology(pipe->desc.topology));
+        ctx_->VSSetShader(vs ? vs->vertex_shader.Get() : nullptr, nullptr, 0);
+        ctx_->PSSetShader(fs ? fs->pixel_shader.Get() : nullptr, nullptr, 0);
+        ctx_->GSSetShader(gs ? gs->geometry_shader.Get() : nullptr, nullptr, 0);
+        ctx_->RSSetState(pipe->raster_state.Get());
+        ctx_->OMSetDepthStencilState(pipe->depth_stencil_state.Get(), 0);
+        const float blend_factor[4] = {0, 0, 0, 0};
+        ctx_->OMSetBlendState(pipe->blend_state.Get(), blend_factor, 0xffffffffu);
     }
 
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    HRESULT hr = ctx_->Map(push_constant_buffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) {
-        tc::Log::error(
-            "D3D11CommandList::set_push_constants: Map failed HRESULT=0x%08X size=%u",
-            static_cast<unsigned>(hr),
-            size);
-        return;
-    }
-    std::memset(mapped.pData, 0, push_constant_buffer_size_);
-    std::memcpy(mapped.pData, data, size);
-    ctx_->Unmap(push_constant_buffer_.Get(), 0);
+    void D3D11CommandList::bind_resource_set(ResourceSetHandle set,
+                                             uint32_t /*set_index*/,
+                                             const uint32_t* dynamic_offsets,
+                                             uint32_t dynamic_offset_count) {
+        if (dynamic_offsets != nullptr || dynamic_offset_count != 0) {
+            tc::Log::error("D3D11CommandList::bind_resource_set: dynamic uniform offsets are "
+                           "not supported; query supports_dynamic_uniform_offsets before binding");
+            return;
+        }
+        auto* rs = device_.get_resource_set(set);
+        if (!rs)
+            return;
 
-    ID3D11Buffer* native = push_constant_buffer_.Get();
-    ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
-    ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
-    ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
-}
-
-void D3D11CommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset) {
-    auto* buf = device_.get_buffer(buffer);
-    auto* pipe = device_.get_pipeline(current_pipeline_);
-    if (!buf || !buf->buffer || !pipe || slot >= pipe->desc.vertex_layouts.size()) {
-        return;
-    }
-    ID3D11Buffer* native = buf->buffer.Get();
-    UINT stride = pipe->desc.vertex_layouts[slot].stride;
-    UINT native_offset = static_cast<UINT>(offset);
-    ctx_->IASetVertexBuffers(slot, 1, &native, &stride, &native_offset);
-}
-
-void D3D11CommandList::bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset) {
-    auto* buf = device_.get_buffer(buffer);
-    if (!buf || !buf->buffer) return;
-    ctx_->IASetIndexBuffer(
-        buf->buffer.Get(),
-        d3d11::to_dxgi_index_format(type),
-        static_cast<UINT>(offset));
-}
-
-void D3D11CommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
-    ctx_->Draw(vertex_count, first_vertex);
-}
-
-void D3D11CommandList::draw_instanced(uint32_t vertex_count,
-                                      uint32_t instance_count,
-                                      uint32_t first_vertex,
-                                      uint32_t first_instance) {
-    ctx_->DrawInstanced(vertex_count, instance_count, first_vertex, first_instance);
-}
-
-void D3D11CommandList::draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
-    ctx_->DrawIndexed(index_count, first_index, vertex_offset);
-}
-
-void D3D11CommandList::draw_indexed_instanced(uint32_t index_count,
-                                              uint32_t instance_count,
-                                              uint32_t first_index,
-                                              int32_t vertex_offset,
-                                              uint32_t first_instance) {
-    ctx_->DrawIndexedInstanced(index_count, instance_count, first_index, vertex_offset, first_instance);
-}
-
-void D3D11CommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) {
-    ctx_->Dispatch(group_x, group_y, group_z);
-}
-
-void D3D11CommandList::copy_buffer(BufferHandle src, BufferHandle dst, uint64_t size,
-                                   uint64_t src_offset, uint64_t dst_offset) {
-    auto* s = device_.get_buffer(src);
-    auto* d = device_.get_buffer(dst);
-    if (!s || !d || !s->buffer || !d->buffer) return;
-    D3D11_BOX box{};
-    box.left = static_cast<UINT>(src_offset);
-    box.right = static_cast<UINT>(src_offset + size);
-    box.bottom = 1;
-    box.back = 1;
-    ctx_->CopySubresourceRegion(d->buffer.Get(), 0, static_cast<UINT>(dst_offset), 0, 0, s->buffer.Get(), 0, &box);
-}
-
-void D3D11CommandList::copy_texture(TextureHandle src, TextureHandle dst) {
-    auto* s = device_.get_texture(src);
-    auto* d = device_.get_texture(dst);
-    if (!s || !d || !s->texture || !d->texture) return;
-
-    const bool same_format = s->desc.format == d->desc.format;
-    const bool same_samples = s->desc.sample_count == d->desc.sample_count;
-    const bool same_extent = s->desc.width == d->desc.width &&
-                             s->desc.height == d->desc.height;
-    const bool msaa_to_single = s->desc.sample_count > 1 && d->desc.sample_count == 1;
-
-    if (msaa_to_single && same_format && same_extent &&
-        !d3d11::is_depth_format(s->desc.format)) {
-        ctx_->ResolveSubresource(
-            d->texture.Get(),
-            0,
-            s->texture.Get(),
-            0,
-            d3d11::to_dxgi_format(s->desc.format));
-        return;
+        for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& binding) {
+            bind_bound_resource_binding(binding);
+        });
     }
 
-    if (same_samples && same_format && same_extent) {
-        ctx_->CopyResource(d->texture.Get(), s->texture.Get());
-        return;
+    void D3D11CommandList::set_push_constants(const void* data, uint32_t size) {
+        if (size == 0) {
+            ID3D11Buffer* null_buffer = nullptr;
+            ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+            ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+            ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &null_buffer);
+            return;
+        }
+        if (data == nullptr) {
+            tc::Log::error("D3D11CommandList::set_push_constants: data is null for size=%u", size);
+            return;
+        }
+        if (size > TGFX2_PUSH_CONSTANTS_MAX_BYTES) {
+            tc::Log::error(
+                "D3D11CommandList::set_push_constants: size=%u exceeds max=%u", size, TGFX2_PUSH_CONSTANTS_MAX_BYTES);
+            return;
+        }
+
+        const uint32_t padded_size = std::max(16u, (size + 15u) & ~15u);
+        if (!push_constant_buffer_ || push_constant_buffer_size_ < padded_size) {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = padded_size;
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+            Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
+            HRESULT hr = device_.native_device()->CreateBuffer(&desc, nullptr, buffer.GetAddressOf());
+            if (FAILED(hr)) {
+                tc::Log::error("D3D11CommandList::set_push_constants: CreateBuffer failed HRESULT=0x%08X size=%u",
+                               static_cast<unsigned>(hr),
+                               padded_size);
+                return;
+            }
+            push_constant_buffer_ = std::move(buffer);
+            push_constant_buffer_size_ = padded_size;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        HRESULT hr = ctx_->Map(push_constant_buffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        if (FAILED(hr)) {
+            tc::Log::error("D3D11CommandList::set_push_constants: Map failed HRESULT=0x%08X size=%u",
+                           static_cast<unsigned>(hr),
+                           size);
+            return;
+        }
+        std::memset(mapped.pData, 0, push_constant_buffer_size_);
+        std::memcpy(mapped.pData, data, size);
+        ctx_->Unmap(push_constant_buffer_.Get(), 0);
+
+        ID3D11Buffer* native = push_constant_buffer_.Get();
+        ctx_->VSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
+        ctx_->PSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
+        ctx_->GSSetConstantBuffers(TGFX2_D3D11_PUSH_CONSTANTS_BINDING, 1, &native);
     }
 
-    tc::Log::error(
-        "D3D11CommandList::copy_texture: unsupported copy "
-        "src=%ux%u samples=%u format=%d dst=%ux%u samples=%u format=%d",
-        s->desc.width,
-        s->desc.height,
-        s->desc.sample_count,
-        static_cast<int>(s->desc.format),
-        d->desc.width,
-        d->desc.height,
-        d->desc.sample_count,
-        static_cast<int>(d->desc.format));
-}
+    void D3D11CommandList::bind_vertex_buffer(uint32_t slot, BufferHandle buffer, uint64_t offset) {
+        auto* buf = device_.get_buffer(buffer);
+        auto* pipe = device_.get_pipeline(current_pipeline_);
+        if (!buf || !buf->buffer || !pipe || slot >= pipe->desc.vertex_layouts.size()) {
+            return;
+        }
+        ID3D11Buffer* native = buf->buffer.Get();
+        UINT stride = pipe->desc.vertex_layouts[slot].stride;
+        UINT native_offset = static_cast<UINT>(offset);
+        ctx_->IASetVertexBuffers(slot, 1, &native, &stride, &native_offset);
+    }
 
-void D3D11CommandList::set_viewport(int x, int y, int width, int height) {
-    D3D11_VIEWPORT viewport{};
-    viewport.TopLeftX = static_cast<float>(x);
-    viewport.TopLeftY = static_cast<float>(y);
-    viewport.Width = static_cast<float>(width);
-    viewport.Height = static_cast<float>(height);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    ctx_->RSSetViewports(1, &viewport);
-}
+    void D3D11CommandList::bind_index_buffer(BufferHandle buffer, IndexType type, uint64_t offset) {
+        auto* buf = device_.get_buffer(buffer);
+        if (!buf || !buf->buffer)
+            return;
+        ctx_->IASetIndexBuffer(buf->buffer.Get(), d3d11::to_dxgi_index_format(type), static_cast<UINT>(offset));
+    }
 
-void D3D11CommandList::set_scissor(int x, int y, int width, int height) {
-    D3D11_RECT rect{};
-    rect.left = x;
-    rect.top = y;
-    rect.right = x + width;
-    rect.bottom = y + height;
-    ctx_->RSSetScissorRects(1, &rect);
-}
+    void D3D11CommandList::draw(uint32_t vertex_count, uint32_t first_vertex) {
+        ctx_->Draw(vertex_count, first_vertex);
+    }
+
+    void D3D11CommandList::draw_instanced(uint32_t vertex_count,
+                                          uint32_t instance_count,
+                                          uint32_t first_vertex,
+                                          uint32_t first_instance) {
+        ctx_->DrawInstanced(vertex_count, instance_count, first_vertex, first_instance);
+    }
+
+    void D3D11CommandList::draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
+        ctx_->DrawIndexed(index_count, first_index, vertex_offset);
+    }
+
+    void D3D11CommandList::draw_indexed_instanced(uint32_t index_count,
+                                                  uint32_t instance_count,
+                                                  uint32_t first_index,
+                                                  int32_t vertex_offset,
+                                                  uint32_t first_instance) {
+        ctx_->DrawIndexedInstanced(index_count, instance_count, first_index, vertex_offset, first_instance);
+    }
+
+    void D3D11CommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) {
+        ctx_->Dispatch(group_x, group_y, group_z);
+    }
+
+    void D3D11CommandList::copy_buffer(
+        BufferHandle src, BufferHandle dst, uint64_t size, uint64_t src_offset, uint64_t dst_offset) {
+        auto* s = device_.get_buffer(src);
+        auto* d = device_.get_buffer(dst);
+        if (!s || !d || !s->buffer || !d->buffer)
+            return;
+        D3D11_BOX box{};
+        box.left = static_cast<UINT>(src_offset);
+        box.right = static_cast<UINT>(src_offset + size);
+        box.bottom = 1;
+        box.back = 1;
+        ctx_->CopySubresourceRegion(d->buffer.Get(), 0, static_cast<UINT>(dst_offset), 0, 0, s->buffer.Get(), 0, &box);
+    }
+
+    void D3D11CommandList::copy_texture(TextureHandle src, TextureHandle dst) {
+        auto* s = device_.get_texture(src);
+        auto* d = device_.get_texture(dst);
+        if (!s || !d || !s->texture || !d->texture)
+            return;
+
+        const bool same_format = s->desc.format == d->desc.format;
+        const bool same_samples = s->desc.sample_count == d->desc.sample_count;
+        const bool same_extent = s->desc.width == d->desc.width && s->desc.height == d->desc.height;
+        const bool msaa_to_single = s->desc.sample_count > 1 && d->desc.sample_count == 1;
+
+        if (msaa_to_single && same_format && same_extent && !d3d11::is_depth_format(s->desc.format)) {
+            ctx_->ResolveSubresource(d->texture.Get(), 0, s->texture.Get(), 0, d3d11::to_dxgi_format(s->desc.format));
+            return;
+        }
+
+        if (same_samples && same_format && same_extent) {
+            ctx_->CopyResource(d->texture.Get(), s->texture.Get());
+            return;
+        }
+
+        tc::Log::error("D3D11CommandList::copy_texture: unsupported copy "
+                       "src=%ux%u samples=%u format=%d dst=%ux%u samples=%u format=%d",
+                       s->desc.width,
+                       s->desc.height,
+                       s->desc.sample_count,
+                       static_cast<int>(s->desc.format),
+                       d->desc.width,
+                       d->desc.height,
+                       d->desc.sample_count,
+                       static_cast<int>(d->desc.format));
+    }
+
+    void D3D11CommandList::set_viewport(int x, int y, int width, int height) {
+        D3D11_VIEWPORT viewport{};
+        viewport.TopLeftX = static_cast<float>(x);
+        viewport.TopLeftY = static_cast<float>(y);
+        viewport.Width = static_cast<float>(width);
+        viewport.Height = static_cast<float>(height);
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+        ctx_->RSSetViewports(1, &viewport);
+    }
+
+    void D3D11CommandList::set_scissor(int x, int y, int width, int height) {
+        D3D11_RECT rect{};
+        rect.left = x;
+        rect.top = y;
+        rect.right = x + width;
+        rect.bottom = y + height;
+        ctx_->RSSetScissorRects(1, &rect);
+    }
 
 } // namespace tgfx

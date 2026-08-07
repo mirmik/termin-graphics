@@ -5,9 +5,9 @@
 
 namespace {
 
-constexpr const char* kOwner = "termin-test-project-weathered";
+    constexpr const char* kOwner = "termin-test-project-weathered";
 
-constexpr const char* kInterfaceSource = R"slang(
+    constexpr const char* kInterfaceSource = R"slang(
 struct TestWeatheredSurfaceV1 {
     float3 base_color;
     float3 normal_world;
@@ -19,8 +19,7 @@ struct TestWeatheredSurfaceV1 {
 
 extern "C" {
 
-bool termin_project_surface_test_plugin_register()
-{
+bool termin_project_surface_test_plugin_register() {
     const tc_surface_contract_desc descriptor = {
         TC_SURFACE_CONTRACT_DESCRIPTOR_ABI_VERSION,
         {"test.surface.weathered", 1u},
@@ -32,14 +31,11 @@ bool termin_project_surface_test_plugin_register()
     return tc_surface_contract_registry_register(kOwner, &descriptor);
 }
 
-size_t termin_project_surface_test_plugin_unregister_owner()
-{
+size_t termin_project_surface_test_plugin_unregister_owner() {
     return tc_runtime_type_registry_unregister_owner(kOwner);
 }
 
-const char* termin_project_surface_test_plugin_owner()
-{
+const char* termin_project_surface_test_plugin_owner() {
     return kOwner;
 }
-
 }

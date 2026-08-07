@@ -2,8 +2,8 @@
 
 GUARD_TEST_MAIN();
 
-#include <termin/render/frame_pass.hpp>
 #include <termin/render/builtin_passes.hpp>
+#include <termin/render/frame_pass.hpp>
 
 extern "C" {
 #include "render/tc_pass.h"
@@ -12,37 +12,37 @@ extern "C" {
 
 namespace {
 
-constexpr const char* kOwnershipProbePassType = "OwnershipProbePass";
-int g_probe_alive = 0;
-int g_probe_lifecycle_destroyed = 0;
-int g_probe_destroyed = 0;
+    constexpr const char* kOwnershipProbePassType = "OwnershipProbePass";
+    int g_probe_alive = 0;
+    int g_probe_lifecycle_destroyed = 0;
+    int g_probe_destroyed = 0;
 
-class OwnershipProbePass : public termin::CxxFramePass {
-public:
-    OwnershipProbePass() {
-        ++g_probe_alive;
-        pass_name_set("OwnershipProbe");
-        link_to_type_registry(kOwnershipProbePassType);
-    }
+    class OwnershipProbePass : public termin::CxxFramePass {
+    public:
+        OwnershipProbePass() {
+            ++g_probe_alive;
+            pass_name_set("OwnershipProbe");
+            link_to_type_registry(kOwnershipProbePassType);
+        }
 
-    ~OwnershipProbePass() override {
-        --g_probe_alive;
-        ++g_probe_destroyed;
-    }
+        ~OwnershipProbePass() override {
+            --g_probe_alive;
+            ++g_probe_destroyed;
+        }
 
-    void destroy() override {
-        ++g_probe_lifecycle_destroyed;
-    }
-};
+        void destroy() override {
+            ++g_probe_lifecycle_destroyed;
+        }
+    };
 
-void register_ownership_probe_pass() {
-    if (!tc_pass_registry_has("CxxFramePass")) {
-        termin::register_builtin_render_pass_types();
+    void register_ownership_probe_pass() {
+        if (!tc_pass_registry_has("CxxFramePass")) {
+            termin::register_builtin_render_pass_types();
+        }
+        auto descriptor = termin::FramePassTypeDescriptorBuilder::native<OwnershipProbePass>(kOwnershipProbePassType,
+                                                                                             "termin-render-test");
+        REQUIRE(descriptor.commit());
     }
-    auto descriptor = termin::FramePassTypeDescriptorBuilder::native<OwnershipProbePass>(
-        kOwnershipProbePassType, "termin-render-test");
-    REQUIRE(descriptor.commit());
-}
 
 } // namespace
 
@@ -170,10 +170,7 @@ TEST_CASE("Pipeline shutdown destroys every live slot through the normal teardow
     tc_pass* pass = tc_pass_registry_create(kOwnershipProbePassType);
     REQUIRE(pass != nullptr);
     REQUIRE(tc_pipeline_adopt_pass(pipeline, pass, pass->deleter));
-    tc_pipeline_set_render_cache(
-        pipeline,
-        &cache_destroyed,
-        [](void* value) { ++*static_cast<int*>(value); });
+    tc_pipeline_set_render_cache(pipeline, &cache_destroyed, [](void* value) { ++*static_cast<int*>(value); });
     REQUIRE(tc_pipeline_get_frame_graph(pipeline) != nullptr);
 
     tc_pipeline_pool_shutdown();

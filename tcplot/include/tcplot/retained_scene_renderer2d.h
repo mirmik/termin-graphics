@@ -26,40 +26,25 @@ typedef struct tc_retained_scene_renderer2d_timings {
  * arguments must outlive the renderer. gpu_host is a tcplot::GpuHost* kept
  * opaque here so this header remains usable from a C ABI consumer.
  */
-TCPLOT_API tc_retained_scene_renderer2d*
-tc_retained_scene_renderer2d_create(
-    void* gpu_host,
-    tc_visual_scene_handle scene);
+TCPLOT_API tc_retained_scene_renderer2d* tc_retained_scene_renderer2d_create(void* gpu_host,
+                                                                             tc_visual_scene_handle scene);
 
-TCPLOT_API void tc_retained_scene_renderer2d_destroy(
-    tc_retained_scene_renderer2d* renderer);
+TCPLOT_API void tc_retained_scene_renderer2d_destroy(tc_retained_scene_renderer2d* renderer);
 
 TCPLOT_API void tc_retained_scene_renderer2d_set_clear_color(
-    tc_retained_scene_renderer2d* renderer,
-    float r,
-    float g,
-    float b,
-    float a);
+    tc_retained_scene_renderer2d* renderer, float r, float g, float b, float a);
 
-TCPLOT_API int tc_retained_scene_renderer2d_set_msaa_samples(
-    tc_retained_scene_renderer2d* renderer,
-    int samples);
-TCPLOT_API int tc_retained_scene_renderer2d_msaa_samples(
-    const tc_retained_scene_renderer2d* renderer);
+TCPLOT_API int tc_retained_scene_renderer2d_set_msaa_samples(tc_retained_scene_renderer2d* renderer, int samples);
+TCPLOT_API int tc_retained_scene_renderer2d_msaa_samples(const tc_retained_scene_renderer2d* renderer);
 
 /* Returns the tgfx texture handle id, or zero after a logged failure. */
-TCPLOT_API uint32_t tc_retained_scene_renderer2d_render(
-    tc_retained_scene_renderer2d* renderer,
-    int width,
-    int height);
+TCPLOT_API uint32_t tc_retained_scene_renderer2d_render(tc_retained_scene_renderer2d* renderer, int width, int height);
 
 /* Snapshot for the last successful render call. */
-TCPLOT_API int tc_retained_scene_renderer2d_last_timings(
-    const tc_retained_scene_renderer2d* renderer,
-    tc_retained_scene_renderer2d_timings* out_timings);
+TCPLOT_API int tc_retained_scene_renderer2d_last_timings(const tc_retained_scene_renderer2d* renderer,
+                                                         tc_retained_scene_renderer2d_timings* out_timings);
 
-TCPLOT_API void tc_retained_scene_renderer2d_release_gpu(
-    tc_retained_scene_renderer2d* renderer);
+TCPLOT_API void tc_retained_scene_renderer2d_release_gpu(tc_retained_scene_renderer2d* renderer);
 
 #ifdef __cplusplus
 }

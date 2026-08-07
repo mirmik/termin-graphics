@@ -1,37 +1,32 @@
 // tc_scene_skybox.c - Scene skybox implementation
 #include "core/tc_scene_skybox.h"
 #include "core/tc_scene.h"
-#include <tgfx/resources/tc_mesh.h>
-#include <tgfx/resources/tc_mesh_registry.h>
-#include <tgfx/resources/tc_material.h>
-#include <tgfx/resources/tc_material_registry.h>
-#include <tcbase/tc_resource.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tcbase/tc_resource.h>
+#include <tgfx/resources/tc_material.h>
+#include <tgfx/resources/tc_material_registry.h>
+#include <tgfx/resources/tc_mesh.h>
+#include <tgfx/resources/tc_mesh_registry.h>
 
 // Skybox cube geometry - 8 vertices, 12 triangles
 static const float SKYBOX_VERTICES[8 * 3] = {
-    -1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f,
+    -1.0f, -1.0f, 1.0f,  1.0f, -1.0f, 1.0f,  1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,
 };
 
 static const uint32_t SKYBOX_INDICES[12 * 3] = {
-    0, 1, 2,  0, 2, 3,  // back
-    4, 6, 5,  4, 7, 6,  // front
-    0, 4, 5,  0, 5, 1,  // bottom
-    3, 2, 6,  3, 6, 7,  // top
-    1, 5, 6,  1, 6, 2,  // right
-    0, 3, 7,  0, 7, 4,  // left
+    0, 1, 2, 0, 2, 3, // back
+    4, 6, 5, 4, 7, 6, // front
+    0, 4, 5, 0, 5, 1, // bottom
+    3, 2, 6, 3, 6, 7, // top
+    1, 5, 6, 1, 6, 2, // right
+    0, 3, 7, 0, 7, 4, // left
 };
 
 static void release_mesh_handle(tc_mesh_handle* handle) {
-    if (!handle || tc_mesh_handle_is_invalid(*handle)) return;
+    if (!handle || tc_mesh_handle_is_invalid(*handle))
+        return;
     tc_mesh* mesh = tc_mesh_get(*handle);
     if (mesh) {
         tc_mesh_release(mesh);
@@ -40,7 +35,8 @@ static void release_mesh_handle(tc_mesh_handle* handle) {
 }
 
 static void release_material_handle(tc_material_handle* handle) {
-    if (!handle || tc_material_handle_is_invalid(*handle)) return;
+    if (!handle || tc_material_handle_is_invalid(*handle))
+        return;
     tc_material* material = tc_material_get(*handle);
     if (material) {
         tc_material_release(material);
@@ -108,7 +104,8 @@ static tc_mesh_handle create_skybox_cube_mesh(void) {
 }
 
 void tc_scene_skybox_init(tc_scene_skybox* skybox) {
-    if (!skybox) return;
+    if (!skybox)
+        return;
     skybox->type = TC_SKYBOX_GRADIENT;
     // Solid color: blue-ish default
     skybox->color[0] = 0.5f;
@@ -127,13 +124,15 @@ void tc_scene_skybox_init(tc_scene_skybox* skybox) {
 }
 
 void tc_scene_skybox_free(tc_scene_skybox* skybox) {
-    if (!skybox) return;
+    if (!skybox)
+        return;
     release_mesh_handle(&skybox->mesh);
     release_material_handle(&skybox->material);
 }
 
 tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox) {
-    if (!skybox) return NULL;
+    if (!skybox)
+        return NULL;
     if (!tc_mesh_handle_is_invalid(skybox->mesh)) {
         return tc_mesh_get(skybox->mesh);
     }

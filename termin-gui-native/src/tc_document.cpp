@@ -6,37 +6,35 @@
 
 namespace termin::gui_native {
 
-tc_widget_handle TcDocument::adopt(Widget* widget) const {
-    return tc_ui_document_adopt_widget(
-        handle_, widget ? widget->c_widget() : nullptr, &Widget::delete_owned_widget);
-}
+    tc_widget_handle TcDocument::adopt(Widget* widget) const {
+        return tc_ui_document_adopt_widget(
+            handle_, widget ? widget->c_widget() : nullptr, &Widget::delete_owned_widget);
+    }
 
-tc::trent TcDocument::serialize() const {
-    tc_value value = tc_ui_document_serialize(handle_);
-    if (value.type != TC_VALUE_DICT) {
-        tc_value_free(&value);
-        throw std::runtime_error("failed to serialize native UI document");
+    tc::trent TcDocument::serialize() const {
+        tc_value value = tc_ui_document_serialize(handle_);
+        if (value.type != TC_VALUE_DICT) {
+            tc_value_free(&value);
+            throw std::runtime_error("failed to serialize native UI document");
+        }
+        return tc::trent::adopt(value);
     }
-    return tc::trent::adopt(value);
-}
 
-void TcDocument::restore(const tc::trent& serialized) const {
-    if (!register_builtin_widget_types()) {
-        throw std::runtime_error("failed to register built-in native UI widget types");
+    void TcDocument::restore(const tc::trent& serialized) const {
+        if (!register_builtin_widget_types()) {
+            throw std::runtime_error("failed to register built-in native UI widget types");
+        }
+        if (!tc_ui_document_restore(handle_, serialized.raw())) {
+            throw std::runtime_error("failed to restore native UI document");
+        }
     }
-    if (!tc_ui_document_restore(handle_, serialized.raw())) {
-        throw std::runtime_error("failed to restore native UI document");
-    }
-}
 
-tc_ui_style TcDocument::resolve_style(
-    const Widget& widget, uint32_t extra_state_flags) const {
-    tc_ui_style style{};
-    if (!tc_ui_document_resolve_style(
-            handle_, widget.c_widget(), extra_state_flags, &style)) {
-        throw std::runtime_error("failed to resolve native UI widget style");
+    tc_ui_style TcDocument::resolve_style(const Widget& widget, uint32_t extra_state_flags) const {
+        tc_ui_style style{};
+        if (!tc_ui_document_resolve_style(handle_, widget.c_widget(), extra_state_flags, &style)) {
+            throw std::runtime_error("failed to resolve native UI widget style");
+        }
+        return style;
     }
-    return style;
-}
 
 } // namespace termin::gui_native
