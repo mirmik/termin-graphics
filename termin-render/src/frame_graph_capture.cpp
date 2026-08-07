@@ -21,6 +21,7 @@ extern "C" {
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <tuple>
 
 namespace termin {
 
@@ -36,6 +37,24 @@ static_assert(sizeof(PresenterPushData) == 16,
               "PresenterPushData must match the shader push block");
 
 } // namespace
+
+std::pair<int, int> bounded_frame_graph_capture_dimensions(
+    int width, int height, std::uint32_t max_long_edge
+) {
+    if (width <= 0 || height <= 0 || max_long_edge == 0) {
+        return {width, height};
+    }
+    const int long_edge = std::max(width, height);
+    if (long_edge <= static_cast<int>(max_long_edge)) {
+        return {width, height};
+    }
+    const double scale = static_cast<double>(max_long_edge) /
+        static_cast<double>(long_edge);
+    return {
+        std::max(1, static_cast<int>(std::lround(width * scale))),
+        std::max(1, static_cast<int>(std::lround(height * scale))),
+    };
+}
 
 FrameGraphCapture::~FrameGraphCapture() {
     release();
@@ -164,7 +183,8 @@ void FrameGraphCapture::capture_direct_via_ctx2(
     tgfx::TextureHandle src_tex,
     int width,
     int height,
-    tgfx::PixelFormat format
+    tgfx::PixelFormat format,
+    std::uint32_t max_long_edge
 ) {
     if (!ctx2 || !src_tex) {
         return;
@@ -198,6 +218,8 @@ void FrameGraphCapture::capture_direct_via_ctx2(
         width = static_cast<int>(src_desc.width);
         height = static_cast<int>(src_desc.height);
     }
+    std::tie(width, height) = bounded_frame_graph_capture_dimensions(
+        width, height, max_long_edge);
     if (width <= 0 || height <= 0) {
         tc_log(TC_LOG_ERROR,
             "[FrameGraphCapture] invalid capture size for texture %u: requested=%dx%d source=%ux%u",

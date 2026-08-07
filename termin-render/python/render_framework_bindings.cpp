@@ -583,7 +583,8 @@ void bind_render_framework(nb::module_& m) {
              &FrameGraphCapture::capture_direct_via_ctx2,
              nb::arg("ctx2"), nb::arg("src_tex"),
              nb::arg("width"), nb::arg("height"),
-             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm)
+             nb::arg("format") = tgfx::PixelFormat::RGBA8_UNorm,
+             nb::arg("max_long_edge") = 0)
         .def("has_capture", &FrameGraphCapture::has_capture)
         .def("reset_capture", &FrameGraphCapture::reset_capture)
         .def_prop_ro("capture_tex", &FrameGraphCapture::capture_tex)
