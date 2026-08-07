@@ -13,6 +13,13 @@ public struct TerminScopeAttribute
 #define TERMIN_NATIVE_CLIP_Y_UP 0
 #endif
 
+// Only Vulkan currently exposes the native multiview view index to Slang
+// shader stages. Other backends compile multiview sources as their supported
+// mono equivalent and reject multiview execution at the render-device layer.
+#ifndef TERMIN_SHADER_TARGET_VULKAN
+#define TERMIN_SHADER_TARGET_VULKAN 0
+#endif
+
 public float4 termin_to_native_clip(float4 clip)
 {
 #if TERMIN_NATIVE_CLIP_Y_UP
