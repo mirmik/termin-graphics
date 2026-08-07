@@ -19,6 +19,8 @@ extern "C" {
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <exception>
+#include <limits>
 
 namespace termin {
 
@@ -93,6 +95,68 @@ void FrameGraphCapture::ensure_capture_tex(
 
 bool FrameGraphCapture::is_depth() const {
     return tgfx::is_depth_format(format_);
+}
+
+bool FrameGraphCapture::read_color_rgba_float(std::vector<float>& out) const {
+    out.clear();
+    if (!device_ || !capture_tex_ || !captured_ || is_depth()
+            || width_ <= 0 || height_ <= 0) {
+        return false;
+    }
+    const size_t pixel_count = static_cast<size_t>(width_)
+        * static_cast<size_t>(height_);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] color readback dimensions overflow: %dx%d",
+            width_, height_);
+        return false;
+    }
+    out.resize(pixel_count * 4);
+    try {
+        if (device_->read_texture_rgba_float(capture_tex_, out.data())) {
+            return true;
+        }
+    } catch (const std::exception& error) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] exact color readback threw: %s",
+            error.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] exact color readback threw an unknown exception");
+    }
+    tc_log(TC_LOG_ERROR,
+        "[FrameGraphCapture] exact color readback failed for %dx%d format=%u",
+        width_, height_, static_cast<unsigned>(format_));
+    out.clear();
+    return false;
+}
+
+bool FrameGraphCapture::read_depth_float(std::vector<float>& out) const {
+    out.clear();
+    if (!device_ || !capture_tex_ || !captured_ || !is_depth()
+            || width_ <= 0 || height_ <= 0) {
+        return false;
+    }
+    const size_t pixel_count = static_cast<size_t>(width_)
+        * static_cast<size_t>(height_);
+    out.resize(pixel_count);
+    try {
+        if (device_->read_texture_depth_float(capture_tex_, out.data())) {
+            return true;
+        }
+    } catch (const std::exception& error) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] exact depth readback threw: %s",
+            error.what());
+    } catch (...) {
+        tc_log(TC_LOG_ERROR,
+            "[FrameGraphCapture] exact depth readback threw an unknown exception");
+    }
+    tc_log(TC_LOG_ERROR,
+        "[FrameGraphCapture] exact depth readback failed for %dx%d format=%u",
+        width_, height_, static_cast<unsigned>(format_));
+    out.clear();
+    return false;
 }
 
 void FrameGraphCapture::capture_direct_via_ctx2(
