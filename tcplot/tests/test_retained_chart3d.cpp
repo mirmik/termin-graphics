@@ -316,9 +316,14 @@ int main() {
             find_plot_payload(first_render_snapshot, surface);
         const tcplot::PlotScene3DRenderItemPayload* first_scatter_payload =
             find_plot_payload(first_render_snapshot, scatter);
+        const tcplot::PlotScene3DRenderItemPayload* first_grid_payload =
+            find_plot_payload(
+                first_render_snapshot,
+                tc_retained_chart3d_grid_part(chart));
         require(
             first_surface_payload && first_surface_payload->item &&
-                first_scatter_payload && first_scatter_payload->item,
+                first_scatter_payload && first_scatter_payload->item &&
+                first_grid_payload && first_grid_payload->item,
             "PlotScene3D payload lookup failed");
         require(
             first_surface_payload->item->z ==
@@ -333,6 +338,10 @@ int main() {
                 first_scatter_payload->item->draw_vertex_count == 18 &&
                 first_scatter_payload->item->draw_vertices.size() ==
                     18u * 19u &&
+                first_grid_payload->item->draw_vertex_count >= 6 &&
+                first_grid_payload->item->draw_vertex_count % 2 == 0 &&
+                first_grid_payload->item->draw_vertices.size() ==
+                    first_grid_payload->item->draw_vertex_count * 19u &&
                 first_surface_payload->frame.x_label == "x",
             "PlotScene3D payload lost item or chart values");
         const float expected_scatter_cross_size = static_cast<float>(
@@ -404,6 +413,28 @@ int main() {
                     scatter_tasks.at(scatter_plan.task_index).final_shader),
             "PlotScene3D scatter task planning failed");
 
+        termin::RenderItemEncoderCapabilities grid_capabilities{};
+        require(
+            termin::get_render_item_encoder_capabilities(
+                tcplot::PLOT_RENDER_ITEM_KIND_GRID,
+                grid_capabilities) &&
+                grid_capabilities.phase_mask == TC_PHASE_OPAQUE &&
+                grid_capabilities.requires_draw_context &&
+                !grid_capabilities.consumes_common_resources,
+            "PlotScene3D grid encoder capabilities are invalid");
+        termin::RenderItemTaskPlanningRequest grid_planning = surface_planning;
+        grid_planning.item = grid_render_item;
+        grid_planning.item_index = 2;
+        grid_planning.source_draw_index = 2;
+        termin::RenderTaskList grid_tasks;
+        const termin::RenderItemTaskPlanningResult grid_plan =
+            termin::plan_render_item_task(grid_planning, grid_tasks);
+        require(
+            grid_plan.accepted() && grid_tasks.size() == 1 &&
+                !tc_shader_handle_is_invalid(
+                    grid_tasks.at(grid_plan.task_index).final_shader),
+            "PlotScene3D grid task planning failed");
+
         auto malformed_surface_data =
             std::make_shared<tcplot::PlotScene3DItemRenderData>(
                 *first_surface_payload->item);
@@ -451,6 +482,26 @@ int main() {
             !termin::submit_render_item_draw(
                 host.ctx(), malformed_scatter_item, malformed_submission),
             "PlotScene3D scatter encoder accepted a malformed draw stream");
+
+        auto malformed_grid_data =
+            std::make_shared<tcplot::PlotScene3DItemRenderData>(
+                *first_grid_payload->item);
+        malformed_grid_data->draw_vertices.clear();
+        malformed_grid_data->draw_vertex_count = 0;
+        tcplot::PlotScene3DRenderItemPayload malformed_grid_payload =
+            *first_grid_payload;
+        malformed_grid_payload.item = std::move(malformed_grid_data);
+        tc_render_item malformed_grid_item = *grid_render_item;
+        malformed_grid_item.source.adapter_data = reinterpret_cast<uintptr_t>(
+            &malformed_grid_payload);
+        malformed_submission.shader_handle =
+            grid_tasks.at(grid_plan.task_index).final_shader;
+        malformed_submission.debug_pass_name =
+            "PlotScene3D malformed grid test";
+        require(
+            !termin::submit_render_item_draw(
+                host.ctx(), malformed_grid_item, malformed_submission),
+            "PlotScene3D grid encoder accepted a malformed draw stream");
 
         termin::RenderItemTaskPlanningContract unsupported_surface_contract =
             surface_contract;
@@ -556,6 +607,10 @@ int main() {
             "PlotScene3D publication after geometry mutation failed");
         const tcplot::PlotScene3DRenderItemPayload* changed_surface_payload =
             find_plot_payload(geometry_changed_snapshot, surface);
+        const tcplot::PlotScene3DRenderItemPayload* changed_grid_payload =
+            find_plot_payload(
+                geometry_changed_snapshot,
+                tc_retained_chart3d_grid_part(chart));
         require(
             changed_surface_payload && changed_surface_payload->item &&
                 changed_surface_payload->item->z ==
@@ -565,6 +620,14 @@ int main() {
                     first_surface_payload->geometry_revision + 1 &&
                 changed_surface_payload->item != first_surface_payload->item,
             "geometry mutation must publish a new immutable item payload");
+        require(
+            changed_grid_payload && changed_grid_payload->item &&
+                changed_grid_payload->item != first_grid_payload->item &&
+                changed_grid_payload->geometry_revision ==
+                    first_grid_payload->geometry_revision + 1 &&
+                changed_grid_payload->frame.bounds_max[2] == 1.25 &&
+                first_grid_payload->frame.bounds_max[2] == 1.0,
+            "chart bounds mutation must replace the immutable grid stream");
         require(
             first_surface_payload->item->z ==
                 std::vector<double>(std::begin(z), std::end(z)) &&
@@ -660,15 +723,58 @@ int main() {
         require(
             first_render_texture != 0,
             "initial retained render failed");
+        const std::size_t labeled_pixel_count =
+            count_non_clear_pixels(host, first_render_texture, 320, 240);
         require(
-            count_non_clear_pixels(host, first_render_texture, 320, 240) > 100,
+            labeled_pixel_count > 100,
             "PlotScene3D retained encoders produced no visible output");
         const auto surface_rendered = snapshot(chart, surface);
         const auto scatter_rendered = snapshot(chart, scatter);
+        const auto grid_rendered = snapshot(
+            chart,
+            tc_retained_chart3d_grid_part(chart));
         require(
             surface_rendered.gpu_revision != 0 &&
-                scatter_rendered.gpu_revision != 0,
+                scatter_rendered.gpu_revision != 0 &&
+                grid_rendered.gpu_revision != 0,
             "render must synchronize item GPU revisions");
+
+        tc_grid_item3d_style grid_style{};
+        const tc_plot_item3d_handle grid =
+            tc_retained_chart3d_grid_part(chart);
+        require(
+            tc_retained_chart3d_grid_get_style(chart, grid, &grid_style) != 0 &&
+                grid_style.labels_visible != 0,
+            "failed to read the retained grid style");
+        grid_style.labels_visible = 0;
+        require(
+            tc_retained_chart3d_grid_set_style(chart, grid, &grid_style) != 0,
+            "failed to disable retained grid labels");
+        termin::RenderItemSnapshot hidden_grid_snapshot;
+        require(
+            render_item_source.publish(hidden_grid_snapshot, {}),
+            "PlotScene3D publication after grid style mutation failed");
+        const tcplot::PlotScene3DRenderItemPayload* hidden_grid_payload =
+            find_plot_payload(hidden_grid_snapshot, grid);
+        require(
+            hidden_grid_payload && hidden_grid_payload->item &&
+                hidden_grid_payload->item->grid_style.labels_visible == 0 &&
+                hidden_grid_payload->style_revision ==
+                    first_grid_payload->style_revision + 1 &&
+                first_grid_payload->item->grid_style.labels_visible != 0,
+            "grid style mutation altered an older snapshot payload");
+        const uint32_t hidden_labels_texture =
+            tc_retained_chart3d_render(chart, 320, 240);
+        require(
+            hidden_labels_texture != 0 &&
+                labeled_pixel_count > count_non_clear_pixels(
+                    host, hidden_labels_texture, 320, 240),
+            "chart-owned grid labels produced no visible annotation pixels");
+        grid_style.labels_visible = 1;
+        require(
+            tc_retained_chart3d_grid_set_style(chart, grid, &grid_style) != 0 &&
+                tc_retained_chart3d_render(chart, 320, 240) != 0,
+            "failed to restore retained grid labels");
 
         surface_style.wireframe = 1;
         require(
@@ -770,14 +876,20 @@ int main() {
         tc_retained_chart3d_release_gpu(chart);
         require(
             snapshot(chart, surface).gpu_revision == 0 &&
-                snapshot(chart, scatter).gpu_revision == 0,
+                snapshot(chart, scatter).gpu_revision == 0 &&
+                snapshot(
+                    chart,
+                    tc_retained_chart3d_grid_part(chart)).gpu_revision == 0,
             "GPU release must invalidate item GPU revisions");
         require(
             tc_retained_chart3d_render(chart, 512, 256) != 0,
             "render after GPU release failed");
         require(
             snapshot(chart, surface).gpu_revision != 0 &&
-                snapshot(chart, scatter).gpu_revision != 0,
+                snapshot(chart, scatter).gpu_revision != 0 &&
+                snapshot(
+                    chart,
+                    tc_retained_chart3d_grid_part(chart)).gpu_revision != 0,
             "render after GPU release must rebuild item resources");
 
         require(

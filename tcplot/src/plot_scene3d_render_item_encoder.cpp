@@ -15,6 +15,8 @@
 #include <tgfx2/builtin_shader_sources.hpp>
 #include <tgfx2/render_context.hpp>
 
+#include "tcplot/axes.hpp"
+
 extern "C"
 {
 #include <tgfx/resources/tc_shader_registry.h>
@@ -99,10 +101,33 @@ namespace tcplot
             }
         }
 
+        void append_line_vertex(std::vector<float>& vertices,
+                                float x,
+                                float y,
+                                float z,
+                                float r,
+                                float g,
+                                float b,
+                                float a)
+        {
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+            vertices.push_back(r);
+            vertices.push_back(g);
+            vertices.push_back(b);
+            vertices.push_back(a);
+            for (uint32_t index = 0; index < 12; ++index)
+            {
+                vertices.push_back(0.0f);
+            }
+        }
+
         bool is_encoded_plot_item_kind(uint32_t kind)
         {
             return kind == PLOT_RENDER_ITEM_KIND_SURFACE ||
-                   kind == PLOT_RENDER_ITEM_KIND_SCATTER;
+                   kind == PLOT_RENDER_ITEM_KIND_SCATTER ||
+                   kind == PLOT_RENDER_ITEM_KIND_GRID;
         }
 
         bool
@@ -116,7 +141,9 @@ namespace tcplot
             return (item.kind == PLOT_RENDER_ITEM_KIND_SURFACE &&
                     payload.item->kind == TC_PLOT_ITEM3D_SURFACE) ||
                    (item.kind == PLOT_RENDER_ITEM_KIND_SCATTER &&
-                    payload.item->kind == TC_PLOT_ITEM3D_SCATTER);
+                    payload.item->kind == TC_PLOT_ITEM3D_SCATTER) ||
+                   (item.kind == PLOT_RENDER_ITEM_KIND_GRID &&
+                    payload.item->kind == TC_PLOT_ITEM3D_GRID);
         }
 
         termin::RenderItemTaskRejection plan_plot_scene3d_shader(
@@ -414,6 +441,84 @@ namespace tcplot
             return true;
         }
 
+        bool encode_grid(tgfx::RenderContext2& context,
+                         const tc_render_item& item,
+                         const termin::RenderItemDrawSubmitRequest& request,
+                         void*)
+        {
+            const char* pass_name = request.debug_pass_name
+                                        ? request.debug_pass_name
+                                        : "PlotScene3DGrid";
+            if (item.kind != PLOT_RENDER_ITEM_KIND_GRID)
+            {
+                tc::Log::error(
+                    "[%s] PlotScene3D grid encoder received item kind %u",
+                    pass_name,
+                    item.kind);
+                return false;
+            }
+            if (request.phase != TC_PHASE_OPAQUE || request.material_phase)
+            {
+                tc::Log::error("[%s] PlotScene3D grid encoder requires "
+                               "opaque no-material submission",
+                               pass_name);
+                return false;
+            }
+            if (!request.device || !request.draw_context ||
+                request.draw_context->viewport_width <= 0 ||
+                request.draw_context->viewport_height <= 0)
+            {
+                tc::Log::error("[%s] PlotScene3D grid encoder requires a "
+                               "device and sized draw context",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DRenderItemPayload* payload =
+                plot_scene3d_render_item_payload(item);
+            if (!payload || !payload->item ||
+                payload->item->kind != TC_PLOT_ITEM3D_GRID)
+            {
+                tc::Log::error("[%s] PlotScene3D grid encoder received a "
+                               "malformed payload",
+                               pass_name);
+                return false;
+            }
+            const PlotScene3DItemRenderData& data = *payload->item;
+            if (data.draw_vertex_count == 0 ||
+                data.draw_vertices.size() !=
+                    static_cast<size_t>(data.draw_vertex_count) *
+                        kPlot3DFloatsPerVertex ||
+                data.draw_vertices.size() >
+                    std::numeric_limits<uint32_t>::max() / sizeof(float))
+            {
+                tc::Log::error("[%s] PlotScene3D grid encoder received an "
+                               "invalid draw stream",
+                               pass_name);
+                return false;
+            }
+
+            tgfx::VertexLayoutDesc layout{};
+            if (!prepare_plot_scene3d_draw(
+                    context, request, *payload, data, false, pass_name, layout))
+            {
+                return false;
+            }
+
+            context.set_cull(tgfx::CullMode::None);
+            context.set_depth_write(true);
+            context.set_depth_test(true);
+            context.set_depth_func(tgfx::CompareOp::Less);
+            context.set_blend(true);
+            context.draw_transient_arrays(
+                data.draw_vertices.data(),
+                static_cast<uint32_t>(data.draw_vertices.size() *
+                                      sizeof(float)),
+                data.draw_vertex_count,
+                layout,
+                tgfx::PrimitiveTopology::LineList);
+            return true;
+        }
+
     } // namespace
 
     void build_plot_scene3d_surface_draw_stream(PlotScene3DItemRenderData& data)
@@ -564,6 +669,103 @@ namespace tcplot
             data.draw_vertices.size() / kPlot3DFloatsPerVertex);
     }
 
+    void build_plot_scene3d_grid_draw_stream(
+        PlotScene3DItemRenderData& data,
+        const PlotScene3DFrameRenderState& frame)
+    {
+        data.draw_vertices.clear();
+        data.draw_vertex_count = 0;
+        if (data.kind != TC_PLOT_ITEM3D_GRID)
+        {
+            tc::Log::error("[PlotScene3DGrid] cannot build a grid draw stream "
+                           "for a non-grid item");
+            return;
+        }
+
+        const tc_grid_item3d_style& style = data.grid_style;
+        constexpr size_t kAxisCount = 3;
+        constexpr size_t kVerticesPerLine = 2;
+        constexpr size_t kMaximumTickCount = 8;
+        data.draw_vertices.reserve(
+            (kAxisCount * kMaximumTickCount + kAxisCount) *
+            kVerticesPerLine * kPlot3DFloatsPerVertex);
+
+        for (size_t axis = 0; axis < kAxisCount; ++axis)
+        {
+            size_t other_axes[2]{};
+            size_t other_index = 0;
+            for (size_t candidate = 0; candidate < kAxisCount; ++candidate)
+            {
+                if (candidate != axis)
+                {
+                    other_axes[other_index++] = candidate;
+                }
+            }
+            for (double tick : axes::nice_ticks(
+                     frame.bounds_min[axis], frame.bounds_max[axis], 8))
+            {
+                std::array<double, 3> start{};
+                std::array<double, 3> end{};
+                start[axis] = tick;
+                end[axis] = tick;
+                start[other_axes[0]] = frame.bounds_min[other_axes[0]];
+                end[other_axes[0]] = frame.bounds_max[other_axes[0]];
+                start[other_axes[1]] = frame.bounds_min[other_axes[1]];
+                end[other_axes[1]] = frame.bounds_min[other_axes[1]];
+                append_line_vertex(
+                    data.draw_vertices,
+                    static_cast<float>(start[0]),
+                    static_cast<float>(start[1]),
+                    static_cast<float>(start[2]),
+                    style.grid_r,
+                    style.grid_g,
+                    style.grid_b,
+                    style.grid_a);
+                append_line_vertex(
+                    data.draw_vertices,
+                    static_cast<float>(end[0]),
+                    static_cast<float>(end[1]),
+                    static_cast<float>(end[2]),
+                    style.grid_r,
+                    style.grid_g,
+                    style.grid_b,
+                    style.grid_a);
+            }
+        }
+
+        const float axis_colors[3][3] = {
+            {style.x_axis_r, style.x_axis_g, style.x_axis_b},
+            {style.y_axis_r, style.y_axis_g, style.y_axis_b},
+            {style.z_axis_r, style.z_axis_g, style.z_axis_b},
+        };
+        for (size_t axis = 0; axis < kAxisCount; ++axis)
+        {
+            std::array<double, 3> start = frame.bounds_min;
+            std::array<double, 3> end = start;
+            end[axis] = frame.bounds_max[axis];
+            append_line_vertex(
+                data.draw_vertices,
+                static_cast<float>(start[0]),
+                static_cast<float>(start[1]),
+                static_cast<float>(start[2]),
+                axis_colors[axis][0],
+                axis_colors[axis][1],
+                axis_colors[axis][2],
+                1.0f);
+            append_line_vertex(
+                data.draw_vertices,
+                static_cast<float>(end[0]),
+                static_cast<float>(end[1]),
+                static_cast<float>(end[2]),
+                axis_colors[axis][0],
+                axis_colors[axis][1],
+                axis_colors[axis][2],
+                1.0f);
+        }
+        data.draw_vertex_count = static_cast<uint32_t>(
+            data.draw_vertices.size() / kPlot3DFloatsPerVertex);
+    }
+
     void ensure_plot_scene3d_render_item_encoders_registered()
     {
         static std::once_flag once;
@@ -600,6 +802,15 @@ namespace tcplot
                                    PLOT_RENDER_ITEM_KIND_SCATTER, descriptor))
                            {
                                tc::Log::error("[PlotScene3DScatter] failed to "
+                                              "register RenderItem encoder");
+                           }
+
+                           descriptor.encode = encode_grid;
+                           descriptor.debug_name = "PlotScene3DGrid";
+                           if (!termin::register_render_item_draw_encoder(
+                                   PLOT_RENDER_ITEM_KIND_GRID, descriptor))
+                           {
+                               tc::Log::error("[PlotScene3DGrid] failed to "
                                               "register RenderItem encoder");
                            }
                        });
