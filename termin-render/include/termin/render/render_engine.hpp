@@ -83,7 +83,7 @@ private:
     std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
     // Reused between executions. invalidate_keep_capacity() defines the
     // frame/view ownership boundary while retaining payload allocations.
-    std::vector<RenderSceneItemSnapshot> render_item_snapshot_scratch_;
+    std::vector<RenderItemSnapshot> render_item_snapshot_scratch_;
 
 public:
     void set_graphics_host(tgfx::GraphicsHost& graphics_host);

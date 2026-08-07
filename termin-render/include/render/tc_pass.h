@@ -2,9 +2,6 @@
 #define TC_PASS_H
 
 #include <tc_types.h>
-#include <core/tc_entity_pool.h>
-#include <core/tc_scene_pool.h>
-#include <core/tc_dlist.h>
 #include <inspect/tc_runtime_type_registry.h>
 #include <render/tc_pipeline_pool.h>
 #include <stdbool.h>
@@ -17,30 +14,12 @@ extern "C" {
 
 typedef struct tc_pass tc_pass;
 typedef struct tc_pass_vtable tc_pass_vtable;
-typedef struct tc_execute_context tc_execute_context;
 typedef void (*tc_pass_deleter)(tc_pass* pass);
 
 typedef enum tc_pass_kind {
     TC_NATIVE_PASS = 0,
     TC_EXTERNAL_PASS = 1
 } tc_pass_kind;
-
-struct tc_execute_context {
-    void* graphics;
-    void* reads_fbos;
-    void* writes_fbos;
-    int rect_x;
-    int rect_y;
-    int rect_width;
-    int rect_height;
-    tc_scene_handle scene;
-    const char* viewport_name;
-    tc_entity_handle internal_entities;
-    void* camera;
-    void* lights;
-    size_t light_count;
-    uint64_t layer_mask;
-};
 
 struct tc_pass_vtable {
     void (*execute)(tc_pass* self, void* ctx);

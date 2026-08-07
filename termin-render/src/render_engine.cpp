@@ -1071,13 +1071,13 @@ void RenderEngine::render_scene_pipeline_offscreen(
     // One lazy snapshot per logical render target/view. The map owns stable
     // storage until every pass in this execution has completed.
     render_item_snapshot_scratch_.resize(render_target_contexts.size());
-    std::unordered_map<const RenderTargetContext*, RenderSceneItemSnapshot*>
+    std::unordered_map<const RenderTargetContext*, RenderItemSnapshot*>
         render_item_snapshots;
     render_item_snapshots.reserve(render_target_contexts.size());
     size_t snapshot_index = 0;
     for (const auto& [name, target] : render_target_contexts) {
         (void)name;
-        RenderSceneItemSnapshot& snapshot =
+        RenderItemSnapshot& snapshot =
             render_item_snapshot_scratch_[snapshot_index++];
         snapshot.invalidate_keep_capacity();
         render_item_snapshots.emplace(&target, &snapshot);
@@ -1356,9 +1356,9 @@ void RenderEngine::render_scene_pipeline_offscreen(
         RenderEngineTimingStats& stats = render_engine_timing_stats();
         for (const auto& [target, snapshot] : render_item_snapshots) {
             (void)target;
-            const RenderSceneItemSnapshotCounters& counters = snapshot->counters();
-            stats.render_item_scene_traversals += counters.scene_traversals;
-            stats.render_item_producers += counters.drawable_producers;
+            const RenderItemSnapshotCounters& counters = snapshot->counters();
+            stats.render_item_scene_traversals += counters.source_traversals;
+            stats.render_item_producers += counters.producers;
             stats.render_items += counters.emitted_items;
         }
         stats.calls += 1;

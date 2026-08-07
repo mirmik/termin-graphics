@@ -22,7 +22,7 @@ class RenderContext2;
 namespace termin {
 
 class ShadowMapArrayResource;
-class RenderSceneItemSnapshot;
+class RenderItemSnapshot;
 struct FrameGraphCaptureRequest;
 
 // Per-resource tgfx2 texture map. Passes that draw through ctx2
@@ -78,7 +78,7 @@ public:
     uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
     // Borrowed from RenderEngine for this scene/view execution. Immutable
     // after its first successful collection and shared by all geometry passes.
-    RenderSceneItemSnapshot* render_item_snapshot = nullptr;
+    RenderItemSnapshot* render_item_snapshot = nullptr;
     // Frame-local debugger requests for this pass. These pointers are valid
     // only until the enclosing RenderEngine execution returns.
     std::vector<FrameGraphCaptureRequest*> debug_internal_capture_requests;

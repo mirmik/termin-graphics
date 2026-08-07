@@ -31,7 +31,6 @@ bool collect_items(
     for (int phase_variant = 0; phase_variant < 2; ++phase_variant) {
         tc_render_item item{};
         item.kind = TC_RENDER_ITEM_KIND_LINE_BATCH;
-        item.component = component;
         item.geometry_id = 17;
         item.payload.line_batch.points = g_points;
         item.payload.line_batch.point_count = 2;
@@ -66,26 +65,32 @@ int main()
     request.scene = scene;
     request.scene_filter_flags = TC_SCENE_FILTER_NONE;
 
-    termin::RenderSceneItemSnapshot first_view;
-    assert(first_view.collect(request));
+    termin::RenderItemSnapshot first_view;
+    assert(termin::collect_scene_render_item_snapshot(first_view, request));
     assert(g_collect_calls == 1);
-    assert(first_view.counters().scene_traversals == 1);
-    assert(first_view.counters().drawable_producers == 1);
+    assert(first_view.counters().source_traversals == 1);
+    assert(first_view.counters().producers == 1);
     assert(first_view.counters().emitted_items == 2);
     assert(first_view.item_count() == 2);
+    assert(first_view.item(0)->source.domain_id ==
+           TC_RENDER_ITEM_SOURCE_DOMAIN_SCENE);
+    assert(first_view.item(0)->source.object_id != 0);
+    assert(first_view.item(0)->source.generation == entity.generation);
+    assert(termin::render_scene_item_component(*first_view.item(0)) ==
+           &component);
     assert(first_view.item(0)->payload.line_batch.points ==
            first_view.item(1)->payload.line_batch.points);
     assert(first_view.storage().line_batch_points.size() == 1);
 
     first_view.invalidate_keep_capacity();
-    assert(first_view.collect(request));
+    assert(termin::collect_scene_render_item_snapshot(first_view, request));
     assert(g_collect_calls == 2);
     assert(first_view.storage().line_batch_points.size() == 1);
 
-    termin::RenderSceneItemSnapshot second_view;
-    assert(second_view.collect(request));
+    termin::RenderItemSnapshot second_view;
+    assert(termin::collect_scene_render_item_snapshot(second_view, request));
     assert(g_collect_calls == 3);
-    assert(second_view.counters().scene_traversals == 1);
+    assert(second_view.counters().source_traversals == 1);
 
     // Editor-only geometry must be rejected before its producer is called for
     // service phases that it does not advertise (notably the normal pass).

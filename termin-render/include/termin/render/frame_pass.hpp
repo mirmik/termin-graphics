@@ -18,6 +18,7 @@
 #endif
 
 extern "C" {
+#include <core/tc_scene_pool.h>
 #include "render/tc_pass.h"
 }
 
