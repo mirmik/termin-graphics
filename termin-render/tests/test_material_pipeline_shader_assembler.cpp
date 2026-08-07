@@ -1034,6 +1034,39 @@ TEST_CASE("material mesh input selection follows static compact shader contract"
     tc_shader_shutdown();
 }
 
+TEST_CASE("material mesh input selection preserves authored vertex attributes") {
+    tc_shader_init();
+
+    termin::TcShaderCreateInfo create_info{};
+    create_info.sources.vertex = "void main() {}";
+    create_info.sources.fragment = "void main() {}";
+    create_info.sources.name = "authored-vertex-color";
+    create_info.uuid = "authored-vertex-color-input-selection";
+    create_info.language = TC_SHADER_LANGUAGE_GLSL;
+    tc_shader_contract_vertex_input inputs[2]{};
+    std::snprintf(inputs[0].semantic, sizeof(inputs[0].semantic), "%s", "position");
+    inputs[0].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    inputs[0].required = 1u;
+    std::snprintf(inputs[1].semantic, sizeof(inputs[1].semantic), "%s", "color");
+    inputs[1].type = TC_SHADER_CONTRACT_VALUE_FLOAT3;
+    inputs[1].required = 1u;
+    tc_shader_contract_desc contract{};
+    contract.schema_version = TC_SHADER_CONTRACT_SCHEMA_VERSION;
+    contract.source_kind = TC_SHADER_CONTRACT_SOURCE_DECLARED;
+    contract.vertex_inputs = inputs;
+    contract.vertex_input_count = 2u;
+    create_info.declared_contract = &contract;
+
+    termin::TcShader shader = termin::TcShader::from_sources(create_info);
+    REQUIRE(shader.is_valid());
+    CHECK(
+        termin::material_mesh_vertex_input_for_shader(
+            shader.get(), termin::MaterialMeshVertexInput::FullMaterial)
+        == termin::MaterialMeshVertexInput::FullMaterial);
+
+    tc_shader_shutdown();
+}
+
 TEST_CASE("material mesh input selection follows skinned compact shader contract") {
     tc_shader_init();
 
