@@ -95,7 +95,8 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Environment:"
             echo "  ANDROID_NDK_HOME or ANDROID_NDK_ROOT"
-            echo "                        Android NDK root if --ndk is omitted"
+            echo "                        Android NDK root if --ndk is omitted; otherwise"
+            echo "                        Build/androidNdkRoot from Termin user settings"
             echo "  ANDROID_ABI           Default ABI if --abi is omitted"
             echo "  ANDROID_PLATFORM      Default API/platform if --platform is omitted"
             echo "  BUILD_JOBS            Parallel build jobs (default: nproc)"
@@ -116,8 +117,25 @@ if [[ $NO_PARALLEL -eq 1 ]]; then
 fi
 
 if [[ -z "$ANDROID_NDK_VALUE" ]]; then
+    PY_EXEC="${PYTHON_BIN:-${PYTHON_EXECUTABLE:-}}"
+    if [[ -z "$PY_EXEC" ]]; then
+        PY_EXEC="$(command -v python3 || command -v python || true)"
+    fi
+    if [[ -n "$PY_EXEC" ]]; then
+        if ! ANDROID_NDK_VALUE="$(
+            "$PY_EXEC" "$SCRIPT_DIR/build-system/read-termin-user-setting.py" \
+                "Build/androidNdkRoot"
+        )"; then
+            echo "WARNING: Failed to read Build/androidNdkRoot from Termin user settings." >&2
+            ANDROID_NDK_VALUE=""
+        fi
+    fi
+fi
+
+if [[ -z "$ANDROID_NDK_VALUE" ]]; then
     echo "ERROR: Android NDK not found." >&2
-    echo "  Set ANDROID_NDK_HOME/ANDROID_NDK_ROOT or pass --ndk /path/to/ndk." >&2
+    echo "  Pass --ndk, set ANDROID_NDK_HOME/ANDROID_NDK_ROOT, or configure" >&2
+    echo "  Build/androidNdkRoot in ~/.config/termin/settings.json." >&2
     exit 1
 fi
 

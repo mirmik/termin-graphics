@@ -20,10 +20,10 @@ $HostPython = if ($env:TERMIN_HOST_PYTHON) {
 } else {
     Join-Path $TerminRoot "sdk\bin\termin_python.exe"
 }
-$ShaderCompiler = if ($env:TERMIN_SHADER_COMPILER) {
-    $env:TERMIN_SHADER_COMPILER
+$ShaderCompiler = if ($env:TERMIN_SHADERC) {
+    $env:TERMIN_SHADERC
 } else {
-    Join-Path $TerminRoot "sdk\bin\termin_shaderc.exe"
+    $null
 }
 
 $Abi = if ($env:ANDROID_ABI) { $env:ANDROID_ABI } else { "arm64-v8a" }
@@ -31,8 +31,11 @@ $Platform = if ($env:ANDROID_PLATFORM) { $env:ANDROID_PLATFORM } else { "android
 $AndroidSdkRoot = if ($env:TERMIN_ANDROID_SDK_ROOT) {
     $env:TERMIN_ANDROID_SDK_ROOT
 } else {
-    Join-Path $TerminRoot "sdk\android"
+    $null
 }
+$SystemAndroidSdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $null }
+$AndroidNdkRoot = if ($env:ANDROID_NDK_HOME) { $env:ANDROID_NDK_HOME } elseif ($env:ANDROID_NDK_ROOT) { $env:ANDROID_NDK_ROOT } else { $null }
+$JavaHome = if ($env:JAVA_HOME) { $env:JAVA_HOME } else { $null }
 $NdkVersion = if ($env:TERMIN_ANDROID_NDK_VERSION) {
     $env:TERMIN_ANDROID_NDK_VERSION
 } else {
@@ -65,8 +68,8 @@ $AppLabel = if ($env:TERMIN_ANDROID_APP_LABEL) {
 }
 $VersionCode = if ($env:TERMIN_ANDROID_VERSION_CODE) { $env:TERMIN_ANDROID_VERSION_CODE } else { "1" }
 $VersionName = if ($env:TERMIN_ANDROID_VERSION_NAME) { $env:TERMIN_ANDROID_VERSION_NAME } else { "0.1.0" }
-$GradleBin = if ($env:GRADLE_BIN) { $env:GRADLE_BIN } else { "gradle" }
-$AdbBin = if ($env:ADB) { $env:ADB } else { "adb" }
+$GradleBin = if ($env:GRADLE_BIN) { $env:GRADLE_BIN } else { $null }
+$AdbBin = if ($env:ADB) { $env:ADB } else { $null }
 $Variant = "debug"
 $InstallApk = $false
 $LaunchOpenXR = $false
@@ -125,6 +128,33 @@ while ($index -lt $Arguments.Count) {
             $NdkVersion = $Matches[1]
             break
         }
+        "^--ndk-root$" {
+            $AndroidNdkRoot = Require-OptionValue $argument $index
+            $consumedValue = $true
+            break
+        }
+        "^--ndk-root=(.*)$" {
+            $AndroidNdkRoot = $Matches[1]
+            break
+        }
+        "^--android-home$" {
+            $SystemAndroidSdkRoot = Require-OptionValue $argument $index
+            $consumedValue = $true
+            break
+        }
+        "^--android-home=(.*)$" {
+            $SystemAndroidSdkRoot = $Matches[1]
+            break
+        }
+        "^--java-home$" {
+            $JavaHome = Require-OptionValue $argument $index
+            $consumedValue = $true
+            break
+        }
+        "^--java-home=(.*)$" {
+            $JavaHome = $Matches[1]
+            break
+        }
         "^--gradle$" {
             $GradleBin = Require-OptionValue $argument $index
             $consumedValue = $true
@@ -132,6 +162,15 @@ while ($index -lt $Arguments.Count) {
         }
         "^--gradle=(.*)$" {
             $GradleBin = $Matches[1]
+            break
+        }
+        "^--shader-compiler$" {
+            $ShaderCompiler = Require-OptionValue $argument $index
+            $consumedValue = $true
+            break
+        }
+        "^--shader-compiler=(.*)$" {
+            $ShaderCompiler = $Matches[1]
             break
         }
         "^--assets-dir$" {
@@ -242,12 +281,16 @@ if ($ShowHelp) {
     Write-Output "  --platform API"
     Write-Output "  --sdk-root DIR"
     Write-Output "  --ndk-version VER"
+    Write-Output "  --ndk-root DIR"
+    Write-Output "  --android-home DIR"
+    Write-Output "  --java-home DIR"
     Write-Output "  --assets-dir DIR"
     Write-Output "  --application-id ID"
     Write-Output "  --app-label LABEL"
     Write-Output "  --version-code CODE"
     Write-Output "  --version-name NAME"
     Write-Output "  --gradle PATH"
+    Write-Output "  --shader-compiler PATH"
     Write-Output "  --variant debug|release"
     if ($IsQuest) {
         Write-Output "  --adb PATH"
@@ -256,6 +299,64 @@ if ($ShowHelp) {
     }
     Write-Output "  --help, -h"
     exit 0
+}
+
+$SettingsRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $HOME "AppData\Roaming" }
+$SettingsPath = Join-Path $SettingsRoot "termin\settings.json"
+$TerminSettings = $null
+if (Test-Path -LiteralPath $SettingsPath -PathType Leaf) {
+    try {
+        $TerminSettings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
+    } catch {
+        Write-Warning "Failed to read Termin user settings '$SettingsPath': $_"
+    }
+}
+
+function Get-BuildSetting {
+    param([string]$Name)
+    if ($null -eq $TerminSettings -or $null -eq $TerminSettings.Build) {
+        return $null
+    }
+    $Property = $TerminSettings.Build.PSObject.Properties[$Name]
+    if ($null -eq $Property -or [string]::IsNullOrWhiteSpace([string]$Property.Value)) {
+        return $null
+    }
+    return [string]$Property.Value
+}
+
+if ([string]::IsNullOrWhiteSpace($AndroidSdkRoot)) { $AndroidSdkRoot = Get-BuildSetting "androidSdkRoot" }
+if ([string]::IsNullOrWhiteSpace($SystemAndroidSdkRoot)) { $SystemAndroidSdkRoot = Get-BuildSetting "androidHome" }
+if ([string]::IsNullOrWhiteSpace($AndroidNdkRoot)) { $AndroidNdkRoot = Get-BuildSetting "androidNdkRoot" }
+if ([string]::IsNullOrWhiteSpace($JavaHome)) { $JavaHome = Get-BuildSetting "javaHome" }
+if ([string]::IsNullOrWhiteSpace($GradleBin)) { $GradleBin = Get-BuildSetting "gradle" }
+if ([string]::IsNullOrWhiteSpace($ShaderCompiler)) { $ShaderCompiler = Get-BuildSetting "shaderCompiler" }
+if ([string]::IsNullOrWhiteSpace($AdbBin)) { $AdbBin = Get-BuildSetting "adb" }
+
+if ([string]::IsNullOrWhiteSpace($AndroidSdkRoot)) { $AndroidSdkRoot = Join-Path $TerminRoot "sdk\android" }
+if ([string]::IsNullOrWhiteSpace($GradleBin)) { $GradleBin = "gradle" }
+if ([string]::IsNullOrWhiteSpace($ShaderCompiler)) { $ShaderCompiler = Join-Path $TerminRoot "sdk\bin\termin_shaderc.exe" }
+if ([string]::IsNullOrWhiteSpace($AdbBin) -and -not [string]::IsNullOrWhiteSpace($SystemAndroidSdkRoot)) {
+    $SdkAdb = Join-Path $SystemAndroidSdkRoot "platform-tools\adb.exe"
+    if (Test-Path -LiteralPath $SdkAdb -PathType Leaf) { $AdbBin = $SdkAdb }
+}
+if ([string]::IsNullOrWhiteSpace($AdbBin)) { $AdbBin = "adb" }
+if ([string]::IsNullOrWhiteSpace($SystemAndroidSdkRoot)) {
+    throw "Google Android SDK location is not configured. Set ANDROID_HOME/ANDROID_SDK_ROOT, pass --android-home, or configure Build/androidHome."
+}
+if (-not (Test-Path -LiteralPath (Join-Path $SystemAndroidSdkRoot "platforms") -PathType Container)) {
+    throw "Google Android SDK has no platforms directory: $SystemAndroidSdkRoot"
+}
+$env:ANDROID_HOME = $SystemAndroidSdkRoot
+$env:ANDROID_SDK_ROOT = $SystemAndroidSdkRoot
+if (-not [string]::IsNullOrWhiteSpace($AndroidNdkRoot) -and -not (Test-Path -LiteralPath (Join-Path $AndroidNdkRoot "build\cmake\android.toolchain.cmake") -PathType Leaf)) {
+    throw "Android NDK has no CMake toolchain: $AndroidNdkRoot"
+}
+if (-not [string]::IsNullOrWhiteSpace($JavaHome)) {
+    $JavaExecutable = Join-Path $JavaHome "bin\java.exe"
+    if (-not (Test-Path -LiteralPath $JavaExecutable -PathType Leaf)) {
+        throw "Java home has no executable bin/java.exe: $JavaHome"
+    }
+    $env:JAVA_HOME = $JavaHome
 }
 
 $GradleTask = switch ($Variant) {
@@ -362,6 +463,9 @@ Write-Output "Project:         $PlatformDir"
 Write-Output "Task:            $GradleTask"
 Write-Output "Variant:         $Variant"
 Write-Output "Termin SDK root: $AndroidSdkRoot"
+Write-Output "Android SDK:      $SystemAndroidSdkRoot"
+Write-Output "Android NDK:      $(if ($AndroidNdkRoot) { $AndroidNdkRoot } else { '<SDK-managed version>' })"
+Write-Output "Java home:        $(if ($JavaHome) { $JavaHome } else { '<Gradle/default>' })"
 Write-Output "ABI:             $Abi"
 Write-Output "Platform:        $Platform"
 Write-Output "NDK version:     $NdkVersion"
@@ -381,6 +485,9 @@ $gradleArguments = @(
     "-PterminAndroidPlatform=$Platform",
     "-PterminAndroidNdkVersion=$NdkVersion"
 )
+if (-not [string]::IsNullOrWhiteSpace($AndroidNdkRoot)) {
+    $gradleArguments += "-PterminAndroidNdkRoot=$AndroidNdkRoot"
+}
 if ($IsQuest) {
     $gradleArguments += "-PterminOpenXRAssetsDir=$AssetsDir"
 } else {
