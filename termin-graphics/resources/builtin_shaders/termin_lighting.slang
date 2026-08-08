@@ -39,6 +39,7 @@ public float3 get_camera_position() { return lighting.u_camera_light_count.xyz; 
 public int get_shadow_method() { return int(lighting.u_shadow_settings.x); }
 public float get_shadow_softness() { return lighting.u_shadow_settings.y; }
 public float get_shadow_bias() { return lighting.u_shadow_settings.z; }
+public bool has_environment_lighting() { return lighting.u_shadow_settings.w > 0.5; }
 public int get_light_cascade_count(int i) { return int(lighting.u_lights[i].outer_cascade.y); }
 public bool get_light_cascade_blend(int i) { return lighting.u_lights[i].outer_cascade.z > 0.5; }
 public float get_light_blend_distance(int i) { return lighting.u_lights[i].outer_cascade.w; }
