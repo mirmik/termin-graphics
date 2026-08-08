@@ -11,6 +11,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -379,6 +380,13 @@ namespace tgfx {
 
         std::array<VkFence, kFrameSlotCount> frame_fences_ = {};
         std::array<bool, kFrameSlotCount> frame_fence_in_flight_ = {};
+        std::array<VkQueryPool, kFrameSlotCount> gpu_timestamp_pools_ = {};
+        std::array<VkCommandBuffer, kFrameSlotCount> gpu_timestamp_begin_cbs_ = {};
+        std::array<VkCommandBuffer, kFrameSlotCount> gpu_timestamp_end_cbs_ = {};
+        std::array<std::int64_t, kFrameSlotCount> gpu_timestamp_frames_ = {};
+        std::deque<GpuFrameTiming> completed_gpu_timings_;
+        double gpu_timestamp_period_ns_ = 0.0;
+        uint32_t gpu_timestamp_valid_bits_ = 0;
         PendingDestroyQueue pending_destroy_current_;
         std::array<PendingDestroyQueue, kFrameSlotCount> pending_destroy_slots_;
 
@@ -527,6 +535,7 @@ namespace tgfx {
 
         std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) override;
         void submit(ICommandList& cmd) override;
+        bool take_completed_gpu_frame_timing(GpuFrameTiming& out) override;
         void present() override;
 
         // Texture-to-texture presentation path. Render surfaces must expose
@@ -565,6 +574,7 @@ namespace tgfx {
         VkInstance instance() const {
             return instance_;
         }
+
         VkPhysicalDevice physical_device() const {
             return physical_device_;
         }
@@ -746,6 +756,8 @@ namespace tgfx {
         void create_allocator();
         void create_command_pool();
         void create_descriptor_pool();
+        void create_gpu_timestamp_pools();
+        bool record_gpu_timestamp_commands(uint32_t slot);
         ResourceSetHandle create_resolved_resource_set(VkDescriptorSetLayout layout,
                                                        const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings,
                                                        uintptr_t resource_layout_token,
@@ -774,6 +786,7 @@ namespace tgfx {
         void complete_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
         void destroy_pixel_readbacks(std::vector<PendingPixelReadback>& pending);
         void prepare_frame_slot(uint32_t slot, SubmitStats* stats);
+        void complete_gpu_frame_timing(uint32_t slot);
     };
 
 } // namespace tgfx

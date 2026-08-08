@@ -58,17 +58,46 @@ namespace tgfx {
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(cmd_, &bi);
+        gpu_timing_frame_number_ = -1;
+        gpu_timing_open_ = false;
         if (vulkan_stats_enabled()) {
             record_start_ = std::chrono::steady_clock::now();
         }
     }
 
     void VulkanCommandList::end() {
+        if (gpu_timing_open_) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] GPU frame timing was not closed before command-list end");
+            end_gpu_frame_timing();
+        }
         vkEndCommandBuffer(cmd_);
         if (vulkan_stats_enabled()) {
             auto dt = std::chrono::steady_clock::now() - record_start_;
             vulkan_stats_increment(g_record_us, std::chrono::duration_cast<std::chrono::microseconds>(dt).count());
         }
+    }
+
+    bool VulkanCommandList::begin_gpu_frame_timing(std::int64_t frame_number) {
+        if (gpu_timing_open_ || frame_number < 0) {
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] Refusing invalid GPU frame timing begin: frame=%lld open=%d",
+                   static_cast<long long>(frame_number),
+                   gpu_timing_open_ ? 1 : 0);
+            return false;
+        }
+        if (!device_.capabilities().supports_timestamp_queries) {
+            return false;
+        }
+        gpu_timing_frame_number_ = frame_number;
+        gpu_timing_open_ = true;
+        return true;
+    }
+
+    void VulkanCommandList::end_gpu_frame_timing() {
+        if (!gpu_timing_open_) {
+            return;
+        }
+        gpu_timing_open_ = false;
     }
 
     // --- Render pass ---

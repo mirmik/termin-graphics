@@ -28,6 +28,11 @@ struct tc_shader;
 
 namespace tgfx {
 
+    struct GpuFrameTiming {
+        std::int64_t frame_number = -1;
+        double duration_ms = 0.0;
+    };
+
     class IRenderDevice {
     private:
         termin::ShaderArtifactResolver shader_artifact_resolver_;
@@ -130,6 +135,13 @@ namespace tgfx {
         // --- Command submission ---
         virtual std::unique_ptr<ICommandList> create_command_list(QueueType queue = QueueType::Graphics) = 0;
         virtual void submit(ICommandList& cmd) = 0;
+
+        // Pop one timing whose GPU submission has completed. This never waits
+        // for GPU work; backends publish results while recycling frame slots.
+        virtual bool take_completed_gpu_frame_timing(GpuFrameTiming& out) {
+            (void)out;
+            return false;
+        }
 
         // --- Present / sync ---
         virtual void present() = 0;

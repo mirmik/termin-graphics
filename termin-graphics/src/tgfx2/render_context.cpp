@@ -128,6 +128,10 @@ namespace tgfx {
     void RenderContext2::begin_frame() {
         cmd_ = device_.create_command_list();
         cmd_->begin();
+        const tc_frame_profile* profiler_frame = tc_profiler_current_frame();
+        if (profiler_frame && device_.capabilities().supports_timestamp_queries) {
+            cmd_->begin_gpu_frame_timing(profiler_frame->frame_number);
+        }
     }
 
     void RenderContext2::end_frame() {
@@ -139,9 +143,14 @@ namespace tgfx {
             tc_profiler_begin_section("RenderContext2::end_frame");
         if (profile)
             tc_profiler_begin_section("RenderContext2::submit");
+        cmd_->end_gpu_frame_timing();
         cmd_->end();
         device_.submit(*cmd_);
         cmd_.reset();
+        GpuFrameTiming gpu_timing;
+        while (device_.take_completed_gpu_frame_timing(gpu_timing)) {
+            tc_profiler_publish_gpu_frame_timing(static_cast<int>(gpu_timing.frame_number), gpu_timing.duration_ms);
+        }
         if (profile)
             tc_profiler_end_section();
 

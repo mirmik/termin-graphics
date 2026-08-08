@@ -4,6 +4,7 @@
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
+#include "tgfx2/vulkan/internal/gpu_timestamp_math.hpp"
 #include "tgfx2/vulkan/internal/image_transition_sync.hpp"
 #include "tgfx2/vulkan/vulkan_command_list.hpp"
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
@@ -242,13 +243,23 @@ namespace tgfx {
         caps_.max_texture_units = props.limits.maxBoundDescriptorSets;
         caps_.supports_compute = true;
         caps_.supports_geometry_shaders = features.geometryShader;
-        caps_.supports_timestamp_queries = (props.limits.timestampComputeAndGraphics != 0);
+        uint32_t queue_family_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &queue_family_count, nullptr);
+        std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+        vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &queue_family_count, queue_families.data());
+        gpu_timestamp_period_ns_ = static_cast<double>(props.limits.timestampPeriod);
+        gpu_timestamp_valid_bits_ =
+            graphics_family_ < queue_families.size() ? queue_families[graphics_family_].timestampValidBits : 0;
+        caps_.supports_timestamp_queries = props.limits.timestampComputeAndGraphics != 0 &&
+                                           gpu_timestamp_period_ns_ > 0.0 && gpu_timestamp_valid_bits_ > 0;
         caps_.supports_multisample_resolve = true;
         caps_.supports_dynamic_uniform_offsets = true;
         caps_.supports_storage_textures = true;
         caps_.supports_texture_arrays = props.limits.maxImageArrayLayers > 1;
         caps_.supports_multiview = multiview_enabled_;
         caps_.max_multiview_views = max_multiview_views_;
+        gpu_timestamp_frames_.fill(-1);
+        create_gpu_timestamp_pools();
 
         // Subscribe to registry destroy-hooks so per-device tc_texture /
         // tc_mesh / tc_shader caches get invalidated before a slot is recycled. The
@@ -360,6 +371,22 @@ namespace tgfx {
         for (VkFence fence : frame_fences_) {
             if (fence)
                 vkDestroyFence(device_, fence, nullptr);
+        }
+        std::array<VkCommandBuffer, kFrameSlotCount * 2> timestamp_command_buffers{};
+        uint32_t timestamp_command_buffer_count = 0;
+        for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
+            if (gpu_timestamp_begin_cbs_[i] != VK_NULL_HANDLE)
+                timestamp_command_buffers[timestamp_command_buffer_count++] = gpu_timestamp_begin_cbs_[i];
+            if (gpu_timestamp_end_cbs_[i] != VK_NULL_HANDLE)
+                timestamp_command_buffers[timestamp_command_buffer_count++] = gpu_timestamp_end_cbs_[i];
+        }
+        if (timestamp_command_buffer_count > 0) {
+            vkFreeCommandBuffers(
+                device_, command_pool_, timestamp_command_buffer_count, timestamp_command_buffers.data());
+        }
+        for (VkQueryPool pool : gpu_timestamp_pools_) {
+            if (pool)
+                vkDestroyQueryPool(device_, pool, nullptr);
         }
         if (default_sampler_)
             vkDestroySampler(device_, default_sampler_, nullptr);
@@ -727,6 +754,58 @@ namespace tgfx {
             if (vkCreateDescriptorPool(device_, &ci, nullptr, &descriptor_pools_[i]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create descriptor pool");
             }
+        }
+    }
+
+    void VulkanRenderDevice::create_gpu_timestamp_pools() {
+        if (!caps_.supports_timestamp_queries) {
+            return;
+        }
+
+        VkQueryPoolCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        ci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        ci.queryCount = 2;
+        for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
+            const VkResult result = vkCreateQueryPool(device_, &ci, nullptr, &gpu_timestamp_pools_[i]);
+            if (result == VK_SUCCESS) {
+                continue;
+            }
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] Failed to create GPU timestamp query pool for slot %u: VkResult=%d",
+                   i,
+                   static_cast<int>(result));
+            for (VkQueryPool& pool : gpu_timestamp_pools_) {
+                if (pool != VK_NULL_HANDLE) {
+                    vkDestroyQueryPool(device_, pool, nullptr);
+                    pool = VK_NULL_HANDLE;
+                }
+            }
+            caps_.supports_timestamp_queries = false;
+            return;
+        }
+
+        std::array<VkCommandBuffer, kFrameSlotCount * 2> command_buffers{};
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = command_pool_;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = static_cast<uint32_t>(command_buffers.size());
+        const VkResult allocate_result = vkAllocateCommandBuffers(device_, &ai, command_buffers.data());
+        if (allocate_result != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] Failed to allocate GPU timestamp command buffers: VkResult=%d",
+                   static_cast<int>(allocate_result));
+            for (VkQueryPool& pool : gpu_timestamp_pools_) {
+                vkDestroyQueryPool(device_, pool, nullptr);
+                pool = VK_NULL_HANDLE;
+            }
+            caps_.supports_timestamp_queries = false;
+            return;
+        }
+        for (uint32_t i = 0; i < kFrameSlotCount; ++i) {
+            gpu_timestamp_begin_cbs_[i] = command_buffers[i * 2];
+            gpu_timestamp_end_cbs_[i] = command_buffers[i * 2 + 1];
         }
     }
 
@@ -1426,6 +1505,112 @@ namespace tgfx {
         return std::make_unique<VulkanCommandList>(*this);
     }
 
+    bool VulkanRenderDevice::record_gpu_timestamp_commands(uint32_t slot) {
+        if (!caps_.supports_timestamp_queries || slot >= kFrameSlotCount) {
+            return false;
+        }
+        const VkQueryPool pool = gpu_timestamp_pools_[slot];
+        const VkCommandBuffer begin_cb = gpu_timestamp_begin_cbs_[slot];
+        const VkCommandBuffer end_cb = gpu_timestamp_end_cbs_[slot];
+        if (pool == VK_NULL_HANDLE || begin_cb == VK_NULL_HANDLE || end_cb == VK_NULL_HANDLE) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] Incomplete GPU timestamp resources for frame slot %u", slot);
+            return false;
+        }
+
+        VkCommandBufferBeginInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkResetCommandBuffer(begin_cb, 0);
+        if (vkBeginCommandBuffer(begin_cb, &bi) != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] Failed to begin GPU timestamp prefix command buffer");
+            return false;
+        }
+        vkCmdResetQueryPool(begin_cb, pool, 0, 2);
+        vkCmdWriteTimestamp(begin_cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, pool, 0);
+        if (vkEndCommandBuffer(begin_cb) != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] Failed to end GPU timestamp prefix command buffer");
+            return false;
+        }
+
+        vkResetCommandBuffer(end_cb, 0);
+        if (vkBeginCommandBuffer(end_cb, &bi) != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] Failed to begin GPU timestamp suffix command buffer");
+            return false;
+        }
+        VkMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        // Execution dependency only: the suffix timestamp must not pass any
+        // command from the upload/render command buffers submitted before it.
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = 0;
+        vkCmdPipelineBarrier(end_cb,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                             0,
+                             1,
+                             &barrier,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr);
+        vkCmdWriteTimestamp(end_cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, pool, 1);
+        if (vkEndCommandBuffer(end_cb) != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR, "[tgfx2/vulkan] Failed to end GPU timestamp suffix command buffer");
+            return false;
+        }
+        return true;
+    }
+
+    void VulkanRenderDevice::complete_gpu_frame_timing(uint32_t slot) {
+        const std::int64_t frame_number = gpu_timestamp_frames_[slot];
+        if (frame_number < 0) {
+            return;
+        }
+        gpu_timestamp_frames_[slot] = -1;
+
+        std::array<std::uint64_t, 4> values{};
+        const VkResult result = vkGetQueryPoolResults(device_,
+                                                      gpu_timestamp_pools_[slot],
+                                                      0,
+                                                      2,
+                                                      sizeof(values),
+                                                      values.data(),
+                                                      sizeof(std::uint64_t) * 2,
+                                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        if (result != VK_SUCCESS) {
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] Failed to read completed GPU timestamps for frame %lld: VkResult=%d",
+                   static_cast<long long>(frame_number),
+                   static_cast<int>(result));
+            return;
+        }
+        if (values[1] == 0 || values[3] == 0) {
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] GPU timestamps unavailable after fence completion for frame %lld",
+                   static_cast<long long>(frame_number));
+            return;
+        }
+
+        double duration_ms = 0.0;
+        if (!vulkan_detail::gpu_timestamp_duration_ms(
+                values[0], values[2], gpu_timestamp_valid_bits_, gpu_timestamp_period_ns_, duration_ms)) {
+            tc_log(TC_LOG_ERROR,
+                   "[tgfx2/vulkan] Invalid GPU timestamp duration for frame %lld",
+                   static_cast<long long>(frame_number));
+            return;
+        }
+        completed_gpu_timings_.push_back({frame_number, duration_ms});
+    }
+
+    bool VulkanRenderDevice::take_completed_gpu_frame_timing(GpuFrameTiming& out) {
+        if (completed_gpu_timings_.empty()) {
+            return false;
+        }
+        out = completed_gpu_timings_.front();
+        completed_gpu_timings_.pop_front();
+        return true;
+    }
+
     void VulkanRenderDevice::prepare_frame_slot(uint32_t slot, SubmitStats* stats) {
         using Clock = std::chrono::steady_clock;
         auto measured = [stats](double SubmitStats::*field, auto&& operation) {
@@ -1445,6 +1630,7 @@ namespace tgfx {
                 frame_fence_in_flight_[slot] = false;
             }
         });
+        complete_gpu_frame_timing(slot);
         measured(&SubmitStats::readback_cleanup_us, [&] { complete_pixel_readbacks(pixel_readbacks_slots_[slot]); });
         measured(&SubmitStats::destroy_cleanup_us, [&] { drain_pending_destroy(pending_destroy_slots_[slot]); });
         measured(&SubmitStats::descriptor_cleanup_us, [&] {
@@ -1481,8 +1667,13 @@ namespace tgfx {
         // ONE vkQueueSubmit. Queue-submit ordering guarantees immediate_cb's
         // GPU work completes before the main cb starts — no explicit barrier
         // needed for the "staging → device UBO, then draw reads UBO" pattern.
-        VkCommandBuffer cbs[2];
+        VkCommandBuffer cbs[4];
         uint32_t cb_count = 0;
+        const std::int64_t gpu_timing_frame_number = vcmd.gpu_timing_frame_number();
+        const bool gpu_timing_recorded = gpu_timing_frame_number >= 0 && record_gpu_timestamp_commands(submitted_slot);
+        if (gpu_timing_recorded) {
+            cbs[cb_count++] = gpu_timestamp_begin_cbs_[submitted_slot];
+        }
         VkCommandBuffer submitted_immediate_cb = VK_NULL_HANDLE;
         if (immediate_cb_open_) {
             vkEndCommandBuffer(immediate_cb_);
@@ -1492,6 +1683,9 @@ namespace tgfx {
             immediate_cb_ = VK_NULL_HANDLE; // next frame allocates a fresh one
         }
         cbs[cb_count++] = main_cb;
+        if (gpu_timing_recorded) {
+            cbs[cb_count++] = gpu_timestamp_end_cbs_[submitted_slot];
+        }
 
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1508,6 +1702,7 @@ namespace tgfx {
                     .count());
         }
         frame_fence_in_flight_[submitted_slot] = true;
+        gpu_timestamp_frames_[submitted_slot] = gpu_timing_recorded ? gpu_timing_frame_number : -1;
 
         // Defer-free the immediate cb we just submitted — it's in-flight on
         // the graphics queue, so vkFreeCommandBuffers can only run after the

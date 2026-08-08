@@ -1098,6 +1098,11 @@ int main(int argc, char** argv) {
     // --- Draw ---
     auto cmd = device->create_command_list();
     cmd->begin();
+    const bool gpu_timing_recorded = !caps.supports_timestamp_queries || cmd->begin_gpu_frame_timing(4242);
+    if (!gpu_timing_recorded) {
+        fprintf(stderr, "Vulkan advertised timestamp queries but failed to begin frame timing\n");
+        return 1;
+    }
 
     tgfx::RenderPassDesc pass;
     tgfx::ColorAttachmentDesc color_att;
@@ -1116,8 +1121,30 @@ int main(int argc, char** argv) {
     cmd->draw_indexed(3);
     cmd->end_render_pass();
 
+    cmd->end_gpu_frame_timing();
     cmd->end();
     device->submit(*cmd);
+
+    bool gpu_timing_ok = !caps.supports_timestamp_queries;
+    if (caps.supports_timestamp_queries) {
+        // Recycle all frame slots. Query collection happens only after the
+        // corresponding fence completes and must not add another GPU wait.
+        for (int i = 0; i < 6; ++i) {
+            auto advance = device->create_command_list();
+            advance->begin();
+            advance->end();
+            device->submit(*advance);
+        }
+        tgfx::GpuFrameTiming timing;
+        while (device->take_completed_gpu_frame_timing(timing)) {
+            if (timing.frame_number == 4242 && std::isfinite(timing.duration_ms) && timing.duration_ms >= 0.0) {
+                gpu_timing_ok = true;
+            }
+        }
+        if (!gpu_timing_ok) {
+            fprintf(stderr, "Vulkan GPU timestamp timing was not published after frame-slot recycle\n");
+        }
+    }
 
     printf("Draw submitted\n");
 
@@ -1434,16 +1461,17 @@ int main(int argc, char** argv) {
 
     printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, "
            "Texture encoding sampling: %d, Ordered MRT: %d, Slang artifacts: %d, "
-           "Ring overflow fallback: %d\n",
+           "Ring overflow fallback: %d, GPU timestamp: %d\n",
            center_drawn,
            corner_is_blue,
            bound_resource_ok,
            texture_encoding_sampling_ok,
            ordered_mrt_ok,
            slang_artifact_ok,
-           ring_ubo_overflow_ok);
+           ring_ubo_overflow_ok,
+           gpu_timing_ok);
     if (center_drawn && corner_is_blue && bound_resource_ok && texture_encoding_sampling_ok && ordered_mrt_ok &&
-        slang_artifact_ok && ring_ubo_overflow_ok) {
+        slang_artifact_ok && ring_ubo_overflow_ok && gpu_timing_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {

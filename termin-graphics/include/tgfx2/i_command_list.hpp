@@ -40,6 +40,16 @@ namespace tgfx {
         virtual void begin() = 0;
         virtual void end() = 0;
 
+        // Record a backend GPU timestamp interval and associate it with an
+        // opaque host-profiler frame number. Unsupported backends return false.
+        // The result is deliberately asynchronous and is collected from the
+        // render device only after the submission fence has completed.
+        virtual bool begin_gpu_frame_timing(std::int64_t frame_number) {
+            (void)frame_number;
+            return false;
+        }
+        virtual void end_gpu_frame_timing() {}
+
         // Render pass
         virtual void begin_render_pass(const RenderPassDesc& pass) = 0;
         virtual void begin_multiview_render_pass(const MultiviewRenderPassDesc&) {

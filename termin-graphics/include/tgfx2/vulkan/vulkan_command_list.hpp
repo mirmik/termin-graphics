@@ -21,6 +21,8 @@ namespace tgfx {
         MultiviewColorFinalState current_pass_color_final_state_ = MultiviewColorFinalState::ShaderRead;
         TextureHandle current_pass_depth_attachment_{};
         std::chrono::steady_clock::time_point record_start_{};
+        std::int64_t gpu_timing_frame_number_ = -1;
+        bool gpu_timing_open_ = false;
 
         void begin_render_pass_impl(const RenderPassDesc& pass,
                                     uint32_t view_count,
@@ -32,6 +34,8 @@ namespace tgfx {
 
         void begin() override;
         void end() override;
+        bool begin_gpu_frame_timing(std::int64_t frame_number) override;
+        void end_gpu_frame_timing() override;
 
         void begin_render_pass(const RenderPassDesc& pass) override;
         void begin_multiview_render_pass(const MultiviewRenderPassDesc& pass) override;
@@ -73,6 +77,10 @@ namespace tgfx {
 
         VkCommandBuffer command_buffer() const {
             return cmd_;
+        }
+
+        std::int64_t gpu_timing_frame_number() const {
+            return gpu_timing_open_ ? -1 : gpu_timing_frame_number_;
         }
 
         // Color attachments of the currently-open render pass. Stashed in
