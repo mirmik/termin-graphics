@@ -82,6 +82,30 @@ static const tc_shader_abi_resource_decl k_shader_abi_resources[] = {
         k_shadow_maps_aliases,
         sizeof(k_shadow_maps_aliases) / sizeof(k_shadow_maps_aliases[0]),
     },
+    {
+        TC_SHADER_ABI_RESOURCE_IBL_DIFFUSE_IRRADIANCE,
+        "ibl_diffuse_irradiance",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_PASS,
+        NULL,
+        0,
+    },
+    {
+        TC_SHADER_ABI_RESOURCE_IBL_PREFILTERED_SPECULAR,
+        "ibl_prefiltered_specular",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_PASS,
+        NULL,
+        0,
+    },
+    {
+        TC_SHADER_ABI_RESOURCE_IBL_BRDF_LUT,
+        "ibl_brdf_lut",
+        TC_SHADER_RESOURCE_TEXTURE,
+        TC_SHADER_RESOURCE_SCOPE_PASS,
+        NULL,
+        0,
+    },
 };
 
 static uint32_t shader_abi_resource_count(void) {

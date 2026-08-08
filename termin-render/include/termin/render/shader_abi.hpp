@@ -20,6 +20,9 @@ namespace termin {
         Lighting,
         ShadowBlock,
         ShadowMaps,
+        IblDiffuseIrradiance,
+        IblPrefilteredSpecular,
+        IblBrdfLut,
     };
 
     struct ShaderAbiResourceDecl {
