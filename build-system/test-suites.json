@@ -478,6 +478,12 @@
       "roots": ["termin-build-tools/tests"]
     },
     {
+      "id": "repository-scripts-tests",
+      "module": "termin-build-tools",
+      "executor": "pytest",
+      "roots": ["scripts/tests"]
+    },
+    {
       "id": "termin-cli-tests",
       "module": "termin-cli",
       "executor": "pytest",
