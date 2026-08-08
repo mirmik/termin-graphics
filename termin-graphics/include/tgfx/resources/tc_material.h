@@ -139,6 +139,20 @@ typedef struct tc_material_texture {
     uint8_t expected_encoding; // tc_texture_encoding
 } tc_material_texture;
 
+// Symbolic source for a material texture slot. The graphics resource layer
+// deliberately does not interpret these strings; render adapters resolve them
+// against the current scene/target context at submission time.
+#define TC_MATERIAL_TEXTURE_SOURCE_KIND_MAX 32
+#define TC_MATERIAL_TEXTURE_SOURCE_NAME_MAX 128
+#define TC_MATERIAL_TEXTURE_SOURCE_CHANNEL_MAX 32
+
+typedef struct tc_material_texture_source {
+    char uniform_name[TC_UNIFORM_NAME_MAX];
+    char kind[TC_MATERIAL_TEXTURE_SOURCE_KIND_MAX];
+    char source_name[TC_MATERIAL_TEXTURE_SOURCE_NAME_MAX];
+    char channel[TC_MATERIAL_TEXTURE_SOURCE_CHANNEL_MAX];
+} tc_material_texture_source;
+
 // ============================================================================
 // Material phase
 // ============================================================================
@@ -202,6 +216,11 @@ typedef struct tc_material {
     // Texture handles for inspector (asset references, separate from phase textures)
     tc_material_texture texture_handles[TC_MATERIAL_MAX_TEXTURES];
     size_t texture_handle_count;
+
+    // Persistent symbolic bindings such as a render-target color attachment.
+    // They override the phase's ordinary/default texture during rendering.
+    tc_material_texture_source texture_sources[TC_MATERIAL_MAX_TEXTURES];
+    size_t texture_source_count;
 } tc_material;
 
 // ============================================================================
@@ -277,6 +296,16 @@ TGFX_API void tc_material_set_uniform(tc_material* mat, const char* name, tc_uni
 // is accepted with a warning; zero is reserved for structural failure or no
 // phases, otherwise the return value is the number of updated phases.
 TGFX_API size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_handle texture);
+
+// Set/replace a symbolic source for a declared material texture slot.
+TGFX_API bool tc_material_set_texture_source(tc_material* mat,
+                                             const char* uniform_name,
+                                             const char* kind,
+                                             const char* source_name,
+                                             const char* channel);
+TGFX_API bool tc_material_clear_texture_source(tc_material* mat, const char* uniform_name);
+TGFX_API const tc_material_texture_source*
+tc_material_find_texture_source(const tc_material* mat, const char* uniform_name);
 
 // Get color from default phase
 TGFX_API bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a);

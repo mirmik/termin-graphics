@@ -679,7 +679,8 @@ namespace termin {
         }
 
         if (phase) {
-            bound_any |= apply_material_phase_ubo(phase, shader, device, ctx);
+            bound_any |=
+                apply_material_phase_ubo(phase, shader, device, ctx, resources.material_texture_sources);
         }
 
         if (resources.shadow_sampler) {

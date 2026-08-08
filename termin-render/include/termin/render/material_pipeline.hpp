@@ -9,6 +9,7 @@
 
 #include "termin/render/frame_uniforms.hpp"
 #include "termin/render/material_pipeline_shader_assembler.hpp"
+#include "termin/render/material_texture_source.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/vertex_transform_contracts.hpp"
 #include "tgfx/tgfx_shader_handle.hpp"
@@ -71,6 +72,8 @@ namespace termin {
         const tgfx::TextureHandle* shadow_maps = nullptr;
         uint32_t shadow_map_count = 0;
         tgfx::SamplerHandle shadow_sampler;
+
+        const ResolvedMaterialTextureSources* material_texture_sources = nullptr;
     };
 
     static_assert(std::is_standard_layout_v<MaterialPipelineUniformUpload>);

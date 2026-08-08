@@ -1143,6 +1143,7 @@ namespace termin {
             ctx.view = rt_ctx.view;
             ctx.render_target_name = rt_ctx.name;
             ctx.render_item_snapshot = execution_target.render_items;
+            ctx.material_texture_sources = &rt_ctx.material_texture_sources;
             ctx.capabilities = execution_target.capabilities;
             for (FrameGraphCaptureRequest* request : debug_capture_requests) {
                 if (!request || request->kind != FrameGraphCaptureRequestKind::InternalSymbol || request->paused ||

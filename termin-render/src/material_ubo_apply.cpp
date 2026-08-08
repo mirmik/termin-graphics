@@ -15,6 +15,7 @@
 #include <vector>
 
 extern "C" {
+#include "tgfx/resources/tc_material_registry.h"
 #include "tgfx/resources/tc_shader_registry.h"
 }
 
@@ -50,6 +51,27 @@ namespace termin {
                            shader_debug_name(shader),
                            resource_name ? resource_name : "<null>",
                            reason ? reason : "required by material phase");
+        }
+
+        void log_unresolved_texture_source_once(const tc_material* material,
+                                                const tc_material_texture_source& source) {
+            static std::mutex mutex;
+            static std::unordered_set<std::string> emitted;
+            const char* material_name = material && material->header.name ? material->header.name : "<unnamed>";
+            const std::string key = std::string(material_name) + "\n" + source.uniform_name + "\n" + source.kind +
+                                    "\n" + source.source_name + "\n" + source.channel;
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (!emitted.insert(key).second)
+                    return;
+            }
+            tc::Log::error("[MaterialPipeline] material '%s' texture '%s' cannot resolve %s source '%s' channel '%s' "
+                           "in the current render context",
+                           material_name,
+                           source.uniform_name,
+                           source.kind,
+                           source.source_name,
+                           source.channel);
         }
 
         inline bool type_is(const char* type, const char* expected) {
@@ -303,7 +325,8 @@ namespace termin {
     bool apply_material_phase_ubo(tc_material_phase* phase,
                                   const tc_shader* shader,
                                   tgfx::IRenderDevice& device,
-                                  tgfx::RenderContext2& ctx) {
+                                  tgfx::RenderContext2& ctx,
+                                  const ResolvedMaterialTextureSources* texture_sources) {
         if (!phase || !shader)
             return false;
 
@@ -370,6 +393,38 @@ namespace termin {
                                                        rb ? "reflected material resource is not a texture"
                                                           : "material texture has no reflected texture resource");
                 }
+            }
+        }
+
+
+        const tc_material* material = tc_material_get(phase->owner_material);
+        if (material) {
+            for (size_t i = 0; i < material->texture_source_count; ++i) {
+                const tc_material_texture_source& source = material->texture_sources[i];
+                tgfx::TextureHandle resolved;
+                if (texture_sources) {
+                    for (const ResolvedMaterialTextureSource& candidate : *texture_sources) {
+                        if (candidate.kind == source.kind && candidate.source_name == source.source_name &&
+                            candidate.channel == source.channel) {
+                            resolved = candidate.texture;
+                            break;
+                        }
+                    }
+                }
+                if (!resolved) {
+                    log_unresolved_texture_source_once(material, source);
+                    continue;
+                }
+                const tc_shader_resource_binding* rb = tc_shader_find_resource_binding(shader, source.uniform_name);
+                if (!rb || rb->kind != TC_SHADER_RESOURCE_TEXTURE) {
+                    log_missing_material_resource_once(shader,
+                                                       source.uniform_name,
+                                                       rb ? "symbolic material resource is not a texture"
+                                                          : "symbolic material texture has no reflected resource");
+                    continue;
+                }
+                ctx.bind_texture(rb, resolved);
+                bound_any = true;
             }
         }
         return bound_any;

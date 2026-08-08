@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include <termin/render/material_texture_source.hpp>
 #include <termin/render/render_export.hpp>
 
 extern "C" {
@@ -32,6 +33,7 @@ namespace termin {
     RENDER_CORE_API bool apply_material_phase_ubo(tc_material_phase* phase,
                                                   const tc_shader* shader,
                                                   tgfx::IRenderDevice& device,
-                                                  tgfx::RenderContext2& ctx);
+                                                  tgfx::RenderContext2& ctx,
+                                                  const ResolvedMaterialTextureSources* texture_sources = nullptr);
 
 } // namespace termin

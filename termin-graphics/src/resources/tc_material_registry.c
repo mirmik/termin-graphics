@@ -702,8 +702,93 @@ size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_ha
         th->texture = texture;
     }
 
+    // An explicit ordinary texture assignment replaces a symbolic source.
+    tc_material_clear_texture_source(mat, name);
+
     mat->header.version++;
     return mat->phase_count;
+}
+
+const tc_material_texture_source*
+tc_material_find_texture_source(const tc_material* mat, const char* uniform_name) {
+    if (!mat || !uniform_name)
+        return NULL;
+    for (size_t i = 0; i < mat->texture_source_count; ++i) {
+        if (strcmp(mat->texture_sources[i].uniform_name, uniform_name) == 0)
+            return &mat->texture_sources[i];
+    }
+    return NULL;
+}
+
+bool tc_material_clear_texture_source(tc_material* mat, const char* uniform_name) {
+    if (!mat || !uniform_name)
+        return false;
+    for (size_t i = 0; i < mat->texture_source_count; ++i) {
+        if (strcmp(mat->texture_sources[i].uniform_name, uniform_name) != 0)
+            continue;
+        if (i + 1 < mat->texture_source_count) {
+            memmove(&mat->texture_sources[i],
+                    &mat->texture_sources[i + 1],
+                    (mat->texture_source_count - i - 1) * sizeof(mat->texture_sources[0]));
+        }
+        --mat->texture_source_count;
+        memset(&mat->texture_sources[mat->texture_source_count], 0, sizeof(mat->texture_sources[0]));
+        mat->header.version++;
+        return true;
+    }
+    return false;
+}
+
+bool tc_material_set_texture_source(tc_material* mat,
+                                    const char* uniform_name,
+                                    const char* kind,
+                                    const char* source_name,
+                                    const char* channel) {
+    if (!mat || !uniform_name || !uniform_name[0] || !kind || !kind[0] || !source_name || !source_name[0] ||
+        !channel || !channel[0]) {
+        tc_log(TC_LOG_ERROR, "tc_material_set_texture_source: all fields are required");
+        return false;
+    }
+    if (strlen(uniform_name) >= TC_UNIFORM_NAME_MAX || strlen(kind) >= TC_MATERIAL_TEXTURE_SOURCE_KIND_MAX ||
+        strlen(source_name) >= TC_MATERIAL_TEXTURE_SOURCE_NAME_MAX ||
+        strlen(channel) >= TC_MATERIAL_TEXTURE_SOURCE_CHANNEL_MAX) {
+        tc_log(TC_LOG_ERROR, "tc_material_set_texture_source: one or more fields exceed their fixed capacity");
+        return false;
+    }
+
+    bool declared = false;
+    for (size_t phase_index = 0; phase_index < mat->phase_count && !declared; ++phase_index) {
+        const tc_material_texture* slot = tc_material_phase_find_texture(&mat->phases[phase_index], uniform_name);
+        declared = slot && slot->is_declared;
+    }
+    if (!declared) {
+        tc_log(TC_LOG_ERROR,
+               "tc_material_set_texture_source: slot '%s' is not present in canonical schema",
+               uniform_name);
+        return false;
+    }
+
+    tc_material_texture_source* source = NULL;
+    for (size_t i = 0; i < mat->texture_source_count; ++i) {
+        if (strcmp(mat->texture_sources[i].uniform_name, uniform_name) == 0) {
+            source = &mat->texture_sources[i];
+            break;
+        }
+    }
+    if (!source) {
+        if (mat->texture_source_count >= TC_MATERIAL_MAX_TEXTURES) {
+            tc_log(TC_LOG_ERROR, "tc_material_set_texture_source: source capacity exceeded for '%s'", uniform_name);
+            return false;
+        }
+        source = &mat->texture_sources[mat->texture_source_count++];
+    }
+    memset(source, 0, sizeof(*source));
+    strncpy(source->uniform_name, uniform_name, sizeof(source->uniform_name) - 1);
+    strncpy(source->kind, kind, sizeof(source->kind) - 1);
+    strncpy(source->source_name, source_name, sizeof(source->source_name) - 1);
+    strncpy(source->channel, channel, sizeof(source->channel) - 1);
+    mat->header.version++;
+    return true;
 }
 
 bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a) {
@@ -848,6 +933,10 @@ tc_material_handle tc_material_copy(tc_material_handle src, const char* new_uuid
     dst_mat->texture_handle_count = src_mat->texture_handle_count;
     for (size_t i = 0; i < src_mat->texture_handle_count; i++) {
         dst_mat->texture_handles[i] = src_mat->texture_handles[i];
+    }
+    dst_mat->texture_source_count = src_mat->texture_source_count;
+    for (size_t i = 0; i < src_mat->texture_source_count; ++i) {
+        dst_mat->texture_sources[i] = src_mat->texture_sources[i];
     }
 
     // Copy metadata

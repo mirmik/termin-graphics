@@ -310,6 +310,19 @@ namespace termin {
             return m ? tc_material_set_texture(m, name, tex_handle) : 0;
         }
 
+        bool set_texture_source(const char* uniform_name,
+                                const char* kind,
+                                const char* source_name,
+                                const char* channel) {
+            tc_material* m = get();
+            return m && tc_material_set_texture_source(m, uniform_name, kind, source_name, channel);
+        }
+
+        bool clear_texture_source(const char* uniform_name) {
+            tc_material* m = get();
+            return m && tc_material_clear_texture_source(m, uniform_name);
+        }
+
         const char* active_phase_mark() const {
             tc_material* m = get();
             return m ? m->active_phase_mark : "";

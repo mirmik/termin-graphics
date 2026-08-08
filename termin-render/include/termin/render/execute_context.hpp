@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <termin/render/frame_pass.hpp>
+#include <termin/render/material_texture_source.hpp>
 #include <termin/render/render_camera.hpp>
 #include <termin/render/render_execution_capabilities.hpp>
 #include <termin/render/render_export.hpp>
@@ -65,6 +66,7 @@ namespace termin {
         // Borrowed from RenderEngine for this scene/view execution. Immutable
         // after its first successful collection and shared by all geometry passes.
         const RenderItemSnapshot* render_item_snapshot = nullptr;
+        const ResolvedMaterialTextureSources* material_texture_sources = nullptr;
         // Adapter-owned typed services borrowed for this execution. Generic
         // execution forwards the registry without interpreting its contents.
         const RenderExecutionCapabilities* capabilities = nullptr;

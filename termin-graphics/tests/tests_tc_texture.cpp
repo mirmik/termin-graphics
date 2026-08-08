@@ -207,3 +207,24 @@ TEST_CASE("material texture slots warn and bind encoding mismatches") {
     CHECK(tc_material_phase_set_texture(&unchecked, "manual", srgb));
     tc_texture_shutdown();
 }
+
+TEST_CASE("material texture sources remain symbolic until an ordinary texture replaces them") {
+    tc_texture_init();
+    tc_material material{};
+    material.phase_count = 1;
+    REQUIRE(tc_material_phase_declare_texture_slot(&material.phases[0], "u_input"));
+
+    REQUIRE(tc_material_set_texture_source(
+        &material, "u_input", "render_target", "Panel Texture", "color"));
+    REQUIRE_EQ(material.texture_source_count, 1u);
+    const tc_material_texture_source* source = tc_material_find_texture_source(&material, "u_input");
+    REQUIRE(source != nullptr);
+    CHECK_EQ(std::string(source->kind), "render_target");
+    CHECK_EQ(std::string(source->source_name), "Panel Texture");
+    CHECK_EQ(std::string(source->channel), "color");
+
+    REQUIRE_EQ(tc_material_set_texture(&material, "u_input", tc_texture_get_white_1x1()), 1u);
+    CHECK_EQ(material.texture_source_count, 0u);
+    CHECK(tc_material_find_texture_source(&material, "u_input") == nullptr);
+    tc_texture_shutdown();
+}

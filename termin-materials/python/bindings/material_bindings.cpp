@@ -1295,6 +1295,38 @@ namespace termin {
                 nb::arg("name"),
                 nb::arg("texture"),
                 "Set a material texture transactionally across all phases.")
+            .def("set_texture_source",
+                 [](TcMaterial& self,
+                    const char* uniform_name,
+                    const char* kind,
+                    const char* source_name,
+                    const char* channel) {
+                     if (!self.set_texture_source(uniform_name, kind, source_name, channel)) {
+                         throw std::runtime_error(std::string("failed to set texture source for '") + uniform_name +
+                                                  "'");
+                     }
+                 },
+                 nb::arg("uniform_name"),
+                 nb::arg("kind"),
+                 nb::arg("source_name"),
+                 nb::arg("channel"))
+            .def("clear_texture_source", &TcMaterial::clear_texture_source, nb::arg("uniform_name"))
+            .def_prop_ro("texture_sources",
+                         [](TcMaterial& self) -> nb::dict {
+                             nb::dict result;
+                             const tc_material* material = self.get();
+                             if (!material)
+                                 return result;
+                             for (size_t i = 0; i < material->texture_source_count; ++i) {
+                                 const tc_material_texture_source& source = material->texture_sources[i];
+                                 nb::dict value;
+                                 value["kind"] = source.kind;
+                                 value["target"] = source.source_name;
+                                 value["channel"] = source.channel;
+                                 result[source.uniform_name] = std::move(value);
+                             }
+                             return result;
+                         })
             // Phase access
             .def_prop_rw("active_phase_mark", &TcMaterial::active_phase_mark, &TcMaterial::set_active_phase_mark)
             // uniforms property for Material API compatibility (aggregated from all phases)

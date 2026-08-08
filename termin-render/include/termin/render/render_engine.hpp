@@ -10,6 +10,7 @@
 #include "termin/render/render_execution_capabilities.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/render_item_snapshot.hpp"
+#include "termin/render/material_texture_source.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include <termin/geom/rect2.hpp>
 #include <tgfx2/enums.hpp>
@@ -67,6 +68,9 @@ namespace termin {
         // External graph inputs keyed by External RT slot name. These are
         // supplied by RenderTarget.pipeline_params.
         std::unordered_map<std::string, tgfx::TextureHandle> external_textures;
+
+        // Scene-local resolutions for symbolic material texture sources.
+        ResolvedMaterialTextureSources material_texture_sources;
     };
 
     // One immutable input bundle for a logical render target. Every pointer is
