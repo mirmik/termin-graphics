@@ -43,6 +43,19 @@ TEST_CASE("shader ABI exposes canonical resource contracts") {
     CHECK(shadows.canonical_name == "shadow_maps");
     CHECK(shadows.kind == TC_SHADER_RESOURCE_TEXTURE);
     CHECK(shadows.scope == TC_SHADER_RESOURCE_SCOPE_PASS);
+
+    for (ShaderAbiResourceId id : {ShaderAbiResourceId::IblDiffuseIrradiance,
+                                   ShaderAbiResourceId::IblPrefilteredSpecular,
+                                   ShaderAbiResourceId::IblBrdfLut}) {
+        const ShaderAbiResourceDecl& ibl = shader_abi_resource(id);
+        CHECK(ibl.kind == TC_SHADER_RESOURCE_TEXTURE);
+        CHECK(ibl.scope == TC_SHADER_RESOURCE_SCOPE_PASS);
+    }
+    CHECK(shader_abi_resource(ShaderAbiResourceId::IblDiffuseIrradiance).canonical_name ==
+          "ibl_diffuse_irradiance");
+    CHECK(shader_abi_resource(ShaderAbiResourceId::IblPrefilteredSpecular).canonical_name ==
+          "ibl_prefiltered_specular");
+    CHECK(shader_abi_resource(ShaderAbiResourceId::IblBrdfLut).canonical_name == "ibl_brdf_lut");
 }
 
 TEST_CASE("shader ABI lookup accepts documented legacy aliases only") {
