@@ -1039,20 +1039,26 @@ namespace termin {
             }
         }
 
-        tc_profiler_begin_section("Execute Passes");
-        for (size_t i = 0; i < schedule_count; i++) {
-            tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
-            if (!pass || !pass->enabled || pass->passthrough) {
-                continue;
-            }
+        struct PreparedPass {
+            size_t schedule_index = 0;
+            tc_pass* pass = nullptr;
+            const RenderTargetContext* render_target = nullptr;
+            ExecuteContext context;
+            tc_raster_pass_contract raster_contract{};
+            tc_raster_resolve_contract resolve_contract{};
+            bool has_raster_contract = false;
+            bool has_resolve_contract = false;
+            std::string canonical_raster_target;
+            std::string canonical_resolve_source;
+            std::string canonical_resolve_target;
+            double preparation_ms = 0.0;
+        };
 
-            const char* pass_name = pass->pass_name ? pass->pass_name : "UnnamedPass";
-            tc_profiler_begin_section(pass_name);
-            const auto pass_begin = RenderTimingClock::now();
-
-            // Per-pass state reset — no-op on backends with explicit state
-            // (Vulkan), restores GL baseline on OpenGL.
-            device->reset_state();
+        const auto prepare_pass = [&](size_t i, tc_pass* pass) -> PreparedPass {
+            const auto preparation_begin = RenderTimingClock::now();
+            PreparedPass prepared;
+            prepared.schedule_index = i;
+            prepared.pass = pass;
 
             std::string pass_render_target_name = default_target;
             if (pass->viewport_name && pass->viewport_name[0] != '\0') {
@@ -1064,12 +1070,11 @@ namespace termin {
                 rt_it = default_it;
             }
             const RenderTargetContext& rt_ctx = rt_it->second;
+            prepared.render_target = &rt_ctx;
             const RenderExecutionTarget& execution_target = execution.targets.at(rt_it->first);
 
             std::vector<const char*> reads = collect_pass_dependencies(pass, tc_pass_get_reads);
             std::vector<const char*> writes = collect_pass_dependencies(pass, tc_pass_get_writes);
-            size_t read_count = reads.size();
-            size_t write_count = writes.size();
 
             Tex2Map pass_tex2_reads;
             Tex2Map pass_tex2_writes;
@@ -1151,8 +1156,6 @@ namespace termin {
                 auto it = resources.find(name);
                 if (it != resources.end() && it->second) {
                     pass_frame_graph_resources[name] = it->second;
-                    // A registered resource may expose a generic sampled view.
-                    // This keeps debugger/blit passes independent of its type.
                     const FrameGraphResourceSampledTexture sampled = frame_graph_resource_sampled_texture(*it->second);
                     if (sampled.texture) {
                         if (sampled.kind == FrameGraphResourceSampledTextureKind::Depth) {
@@ -1164,21 +1167,17 @@ namespace termin {
                 }
             };
 
-            for (size_t j = 0; j < read_count; j++) {
-                const char* read_name = reads[j];
+            for (const char* read_name : reads) {
                 if (is_external_color_output(read_name)) {
-                    if (rt_ctx.output_color_tex) {
+                    if (rt_ctx.output_color_tex)
                         pass_tex2_reads[read_name] = rt_ctx.output_color_tex;
-                    }
-                    if (rt_ctx.output_depth_tex) {
+                    if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_reads[read_name] = rt_ctx.output_depth_tex;
-                    }
                     continue;
                 }
                 if (is_external_depth_output(read_name)) {
-                    if (rt_ctx.output_depth_tex) {
+                    if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_reads[read_name] = rt_ctx.output_depth_tex;
-                    }
                     continue;
                 }
                 collect_frame_graph_resource(read_name);
@@ -1187,45 +1186,31 @@ namespace termin {
                     pass_tex2_reads[read_name] = ext_it->second;
                     continue;
                 }
-                tgfx::TextureHandle color_handle = resolve_color_resource(read_name);
-                if (color_handle) {
+                if (tgfx::TextureHandle color_handle = resolve_color_resource(read_name))
                     pass_tex2_reads[read_name] = color_handle;
-                }
-                tgfx::TextureHandle depth_handle = resolve_depth_resource(read_name);
-                if (depth_handle) {
+                if (tgfx::TextureHandle depth_handle = resolve_depth_resource(read_name))
                     pass_tex2_depth_reads[read_name] = depth_handle;
-                }
             }
 
-            for (size_t j = 0; j < write_count; j++) {
-                const char* write_name = writes[j];
+            for (const char* write_name : writes) {
                 if (is_external_color_output(write_name)) {
-                    // OUTPUT/DISPLAY come straight from RenderTargetContext's
-                    // owned native textures — no FBO wrap needed anymore.
-                    if (rt_ctx.output_color_tex) {
+                    if (rt_ctx.output_color_tex)
                         pass_tex2_writes[write_name] = rt_ctx.output_color_tex;
-                    }
-                    if (rt_ctx.output_depth_tex) {
+                    if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
-                    }
                 } else if (is_external_depth_output(write_name)) {
-                    if (rt_ctx.output_depth_tex) {
+                    if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
-                    }
                 } else {
                     collect_frame_graph_resource(write_name);
-                    tgfx::TextureHandle color_handle = resolve_color_resource(write_name);
-                    if (color_handle) {
+                    if (tgfx::TextureHandle color_handle = resolve_color_resource(write_name))
                         pass_tex2_writes[write_name] = color_handle;
-                    }
-                    tgfx::TextureHandle depth_handle = resolve_depth_resource(write_name);
-                    if (depth_handle) {
+                    if (tgfx::TextureHandle depth_handle = resolve_depth_resource(write_name))
                         pass_tex2_depth_writes[write_name] = depth_handle;
-                    }
                 }
             }
 
-            ExecuteContext ctx;
+            ExecuteContext& ctx = prepared.context;
             ctx.ctx2 = ctx2;
             ctx.tex2_reads = std::move(pass_tex2_reads);
             ctx.tex2_writes = std::move(pass_tex2_writes);
@@ -1242,38 +1227,262 @@ namespace termin {
                     !request->capture || request->pass_index >= pipeline.pass_count()) {
                     continue;
                 }
-                if (pipeline.get_pass_at(request->pass_index) == pass) {
+                if (pipeline.get_pass_at(request->pass_index) == pass)
                     ctx.debug_internal_capture_requests.push_back(request);
-                }
             }
 
-            tc_pass_execute(pass, &ctx);
+            prepared.has_raster_contract =
+                tc_pass_get_raster_contract(pass, &ctx, &prepared.raster_contract) &&
+                prepared.raster_contract.struct_size >= sizeof(tc_raster_pass_contract) &&
+                prepared.raster_contract.target_resource && prepared.raster_contract.target_resource[0];
+            if (prepared.has_raster_contract) {
+                const char* canonical =
+                    tc_frame_graph_canonical_resource(fg, prepared.raster_contract.target_resource);
+                prepared.canonical_raster_target = canonical ? canonical : prepared.raster_contract.target_resource;
+            }
+            prepared.has_resolve_contract =
+                tc_pass_get_raster_resolve_contract(pass, &ctx, &prepared.resolve_contract) &&
+                prepared.resolve_contract.struct_size >= sizeof(tc_raster_resolve_contract) &&
+                prepared.resolve_contract.source_resource && prepared.resolve_contract.source_resource[0] &&
+                prepared.resolve_contract.target_resource && prepared.resolve_contract.target_resource[0];
+            if (prepared.has_resolve_contract) {
+                const char* canonical_source =
+                    tc_frame_graph_canonical_resource(fg, prepared.resolve_contract.source_resource);
+                const char* canonical_target =
+                    tc_frame_graph_canonical_resource(fg, prepared.resolve_contract.target_resource);
+                prepared.canonical_resolve_source =
+                    canonical_source ? canonical_source : prepared.resolve_contract.source_resource;
+                prepared.canonical_resolve_target =
+                    canonical_target ? canonical_target : prepared.resolve_contract.target_resource;
+            }
+            prepared.preparation_ms = timing_ms(preparation_begin, RenderTimingClock::now());
+            return prepared;
+        };
 
+        std::vector<PreparedPass> prepared_passes;
+        prepared_passes.reserve(schedule_count);
+        for (size_t i = 0; i < schedule_count; ++i) {
+            tc_pass* pass = tc_frame_graph_schedule_at(fg, i);
+            if (!pass || !pass->enabled || pass->passthrough)
+                continue;
+            prepared_passes.push_back(prepare_pass(i, pass));
+        }
+
+        const auto has_resource_capture_boundary = [&](size_t schedule_index) {
+            for (size_t boundary : debug_capture_boundaries) {
+                if (boundary == schedule_index)
+                    return true;
+            }
+            return false;
+        };
+
+        const tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
+        const auto raster_targets_match = [](const PreparedPass& a, const PreparedPass& b) {
+            if (!a.has_raster_contract || !b.has_raster_contract || !a.raster_contract.fusion_eligible ||
+                !b.raster_contract.fusion_eligible || a.canonical_raster_target != b.canonical_raster_target ||
+                a.context.render_target_name != b.context.render_target_name ||
+                a.context.render_rect.width != b.context.render_rect.width ||
+                a.context.render_rect.height != b.context.render_rect.height ||
+                a.raster_contract.view_count != b.raster_contract.view_count ||
+                a.raster_contract.has_color != b.raster_contract.has_color ||
+                a.raster_contract.has_depth != b.raster_contract.has_depth ||
+                b.raster_contract.color_load != TC_RASTER_LOAD ||
+                (b.raster_contract.has_depth && b.raster_contract.depth_load != TC_RASTER_LOAD)) {
+                return false;
+            }
+            const char* a_target = a.raster_contract.target_resource;
+            const char* b_target = b.raster_contract.target_resource;
+            const auto a_color = a.context.tex2_writes.find(a_target);
+            const auto b_color = b.context.tex2_writes.find(b_target);
+            const auto a_depth = a.context.tex2_depth_writes.find(a_target);
+            const auto b_depth = b.context.tex2_depth_writes.find(b_target);
+            return (a_color == a.context.tex2_writes.end() ? tgfx::TextureHandle{} : a_color->second) ==
+                       (b_color == b.context.tex2_writes.end() ? tgfx::TextureHandle{} : b_color->second) &&
+                   (a_depth == a.context.tex2_depth_writes.end() ? tgfx::TextureHandle{} : a_depth->second) ==
+                       (b_depth == b.context.tex2_depth_writes.end() ? tgfx::TextureHandle{} : b_depth->second);
+        };
+
+        const auto lookup_color_read = [](const PreparedPass& prepared, const char* resource) {
+            const auto it = prepared.context.tex2_reads.find(resource);
+            return it == prepared.context.tex2_reads.end() ? tgfx::TextureHandle{} : it->second;
+        };
+        const auto lookup_color_write = [](const PreparedPass& prepared, const char* resource) {
+            const auto it = prepared.context.tex2_writes.find(resource);
+            return it == prepared.context.tex2_writes.end() ? tgfx::TextureHandle{} : it->second;
+        };
+        const auto texture_is_read_after = [&](tgfx::TextureHandle texture, size_t first_later_pass) {
+            if (!texture)
+                return false;
+            for (size_t i = first_later_pass; i < prepared_passes.size(); ++i) {
+                for (const auto& [_, read] : prepared_passes[i].context.tex2_reads) {
+                    if (read == texture)
+                        return true;
+                }
+                for (const auto& [_, read] : prepared_passes[i].context.tex2_depth_reads) {
+                    if (read == texture)
+                        return true;
+                }
+            }
+            return false;
+        };
+
+        const auto record_pass_timing = [&](PreparedPass& prepared, double execute_ms) {
+            const char* pass_name =
+                prepared.pass->pass_name ? prepared.pass->pass_name : "UnnamedPass";
+            const double pass_ms = prepared.preparation_ms + execute_ms;
+            pass_total_ms += pass_ms;
+            RenderPassTimingStats& pass_stats = local_pass_stats[pass_name];
+            pass_stats.count += 1;
+            pass_stats.total_ms += pass_ms;
+        };
+
+        const auto capture_after_pass = [&](const PreparedPass& prepared) {
             for (size_t request_index = 0; request_index < debug_capture_requests.size(); ++request_index) {
                 FrameGraphCaptureRequest* request = debug_capture_requests[request_index];
                 if (!request || request->kind != FrameGraphCaptureRequestKind::Resource || request->paused ||
                     request->status != FrameGraphCaptureRequestStatus::Pending) {
                     continue;
                 }
-                if (debug_capture_boundaries[request_index] == i) {
-                    capture_debug_resource(*request, rt_ctx);
+                if (debug_capture_boundaries[request_index] == prepared.schedule_index)
+                    capture_debug_resource(*request, *prepared.render_target);
+            }
+        };
+
+        const auto execute_standalone = [&](PreparedPass& prepared) {
+            const char* pass_name = prepared.pass->pass_name ? prepared.pass->pass_name : "UnnamedPass";
+            tc_profiler_begin_section(pass_name);
+            const auto execute_begin = RenderTimingClock::now();
+            device->reset_state();
+            tc_pass_execute(prepared.pass, &prepared.context);
+            capture_after_pass(prepared);
+            if (sync_mode == TC_RENDER_SYNC_FLUSH)
+                device->flush();
+            else if (sync_mode == TC_RENDER_SYNC_FINISH)
+                device->finish();
+            const double execute_ms = timing_ms(execute_begin, RenderTimingClock::now());
+            tc_profiler_end_section();
+            record_pass_timing(prepared, execute_ms);
+        };
+
+        tc_profiler_begin_section("Execute Passes");
+        size_t prepared_index = 0;
+        while (prepared_index < prepared_passes.size()) {
+            size_t group_end = prepared_index + 1;
+            if (ctx2 && sync_mode == TC_RENDER_SYNC_NONE && prepared_passes[prepared_index].has_raster_contract &&
+                prepared_passes[prepared_index].raster_contract.fusion_eligible) {
+                while (group_end < prepared_passes.size() &&
+                       !has_resource_capture_boundary(prepared_passes[group_end - 1].schedule_index) &&
+                       raster_targets_match(prepared_passes[group_end - 1], prepared_passes[group_end])) {
+                    ++group_end;
                 }
             }
 
-            // Per-pass sync — no-op on explicit-submission backends.
-            tc_render_sync_mode sync_mode = tc_project_settings_get_render_sync_mode();
-            if (sync_mode == TC_RENDER_SYNC_FLUSH) {
-                device->flush();
-            } else if (sync_mode == TC_RENDER_SYNC_FINISH) {
-                device->finish();
+            PreparedPass* absorbed_resolve = nullptr;
+            if (ctx2 && sync_mode == TC_RENDER_SYNC_NONE && group_end < prepared_passes.size() &&
+                !has_resource_capture_boundary(prepared_passes[group_end - 1].schedule_index)) {
+                PreparedPass& candidate = prepared_passes[group_end];
+                PreparedPass& last_raster = prepared_passes[group_end - 1];
+                if (candidate.has_resolve_contract && candidate.resolve_contract.fusion_eligible &&
+                    last_raster.has_raster_contract && last_raster.raster_contract.fusion_eligible &&
+                    candidate.canonical_resolve_source == last_raster.canonical_raster_target &&
+                    candidate.resolve_contract.view_count == last_raster.raster_contract.view_count) {
+                    const tgfx::TextureHandle source =
+                        lookup_color_read(candidate, candidate.resolve_contract.source_resource);
+                    const tgfx::TextureHandle target =
+                        lookup_color_write(candidate, candidate.resolve_contract.target_resource);
+                    const tgfx::TextureHandle raster_color =
+                        lookup_color_write(last_raster, last_raster.raster_contract.target_resource);
+                    if (source && target && source == raster_color)
+                        absorbed_resolve = &candidate;
+                }
             }
 
-            tc_profiler_end_section();
-            const double pass_ms = timing_ms(pass_begin, RenderTimingClock::now());
-            pass_total_ms += pass_ms;
-            RenderPassTimingStats& pass_stats = local_pass_stats[pass_name];
-            pass_stats.count += 1;
-            pass_stats.total_ms += pass_ms;
+            if (group_end - prepared_index < 2 && !absorbed_resolve) {
+                PreparedPass& prepared = prepared_passes[prepared_index];
+                execute_standalone(prepared);
+                ++prepared_index;
+                continue;
+            }
+
+            PreparedPass& first = prepared_passes[prepared_index];
+            const char* target = first.raster_contract.target_resource;
+            const auto color_it = first.context.tex2_writes.find(target);
+            const auto depth_it = first.context.tex2_depth_writes.find(target);
+            const tgfx::TextureHandle color =
+                color_it == first.context.tex2_writes.end() ? tgfx::TextureHandle{} : color_it->second;
+            const tgfx::TextureHandle depth =
+                depth_it == first.context.tex2_depth_writes.end() ? tgfx::TextureHandle{} : depth_it->second;
+
+            tgfx::RenderPassDesc base_scope;
+            if (first.raster_contract.has_color && color) {
+                tgfx::ColorAttachmentDesc attachment;
+                attachment.texture = color;
+                attachment.load = first.raster_contract.color_load == TC_RASTER_CLEAR ? tgfx::LoadOp::Clear
+                                                                                      : tgfx::LoadOp::Load;
+                if (absorbed_resolve) {
+                    attachment.resolve_texture =
+                        lookup_color_write(*absorbed_resolve, absorbed_resolve->resolve_contract.target_resource);
+                    if (!texture_is_read_after(color, group_end + 1))
+                        attachment.store = tgfx::StoreOp::DontCare;
+                }
+                base_scope.colors.push_back(attachment);
+            }
+            if (first.raster_contract.has_depth && depth) {
+                base_scope.has_depth = true;
+                base_scope.depth.texture = depth;
+                base_scope.depth.load = first.raster_contract.depth_load == TC_RASTER_CLEAR ? tgfx::LoadOp::Clear
+                                                                                            : tgfx::LoadOp::Load;
+                if (absorbed_resolve && !texture_is_read_after(depth, group_end + 1))
+                    base_scope.depth.store = tgfx::StoreOp::DontCare;
+            }
+
+            device->reset_state();
+            bool scope_open = false;
+            if (first.raster_contract.view_count > 1) {
+                tgfx::MultiviewRenderPassDesc scope;
+                scope.colors = base_scope.colors;
+                scope.depth = base_scope.depth;
+                scope.has_depth = base_scope.has_depth;
+                scope.view_count = first.raster_contract.view_count;
+                scope_open = ctx2->begin_multiview_pass(scope);
+            } else {
+                scope_open = ctx2->begin_pass(base_scope);
+            }
+            if (!scope_open) {
+                tc::Log::error("RenderEngine: failed to open fused raster scope for resource '%s'",
+                               first.canonical_raster_target.c_str());
+                execute_standalone(first);
+                ++prepared_index;
+                continue;
+            }
+
+            for (size_t member_index = prepared_index; member_index < group_end; ++member_index) {
+                PreparedPass& prepared = prepared_passes[member_index];
+                const char* pass_name = prepared.pass->pass_name ? prepared.pass->pass_name : "UnnamedPass";
+                tc_profiler_begin_section(pass_name);
+                const auto execute_begin = RenderTimingClock::now();
+                ctx2->begin_logical_pass();
+                if (!tc_pass_record_raster(prepared.pass, &prepared.context)) {
+                    tc::Log::error("RenderEngine: fused raster pass '%s' failed to record", pass_name);
+                }
+                const double execute_ms = timing_ms(execute_begin, RenderTimingClock::now());
+                tc_profiler_end_section();
+                record_pass_timing(prepared, execute_ms);
+            }
+            ctx2->end_pass();
+            for (size_t member_index = prepared_index; member_index < group_end; ++member_index)
+                capture_after_pass(prepared_passes[member_index]);
+            if (absorbed_resolve) {
+                const char* pass_name = absorbed_resolve->pass->pass_name ? absorbed_resolve->pass->pass_name
+                                                                          : "UnnamedPass";
+                tc_profiler_begin_section(pass_name);
+                tc_profiler_end_section();
+                record_pass_timing(*absorbed_resolve, 0.0);
+                capture_after_pass(*absorbed_resolve);
+                prepared_index = group_end + 1;
+            } else {
+                prepared_index = group_end;
+            }
         }
         tc_profiler_end_section();
 

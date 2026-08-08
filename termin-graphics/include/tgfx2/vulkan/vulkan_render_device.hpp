@@ -612,7 +612,8 @@ namespace tgfx {
                                                uint32_t sample_count,
                                                LoadOp depth_load,
                                                StoreOp depth_store,
-                                               uint32_t view_mask = 0);
+                                               uint32_t view_mask = 0,
+                                               uint32_t color_resolve_mask = 0);
 
         // Get or create a VkFramebuffer
         VkFramebuffer get_or_create_framebuffer(VkRenderPass render_pass,

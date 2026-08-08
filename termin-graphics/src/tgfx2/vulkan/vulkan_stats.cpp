@@ -30,6 +30,8 @@ namespace tgfx {
 
     // Incremented from vulkan_command_list.cpp's per-command methods.
     std::atomic<uint64_t> g_draw_count{0};
+    std::atomic<uint64_t> g_render_pass_count{0};
+    std::atomic<uint64_t> g_attachment_resolve_count{0};
     std::atomic<uint64_t> g_bind_pipeline_count{0};
     std::atomic<uint64_t> g_bind_rset_count{0};
     std::atomic<uint64_t> g_bind_vbo_count{0};

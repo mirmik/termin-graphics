@@ -415,6 +415,13 @@ if(TERMIN_RENDER_BUILD_TESTS)
     target_link_libraries(termin_render_pass_ownership_test PRIVATE termin_render)
     add_test(NAME termin_render_pass_ownership_test COMMAND termin_render_pass_ownership_test)
 
+    add_executable(termin_render_raster_pass_contract_test tests/test_raster_pass_contract.cpp)
+    target_include_directories(termin_render_raster_pass_contract_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_render_raster_pass_contract_test PRIVATE termin_render)
+    add_test(NAME termin_render_raster_pass_contract_test COMMAND termin_render_raster_pass_contract_test)
+
     add_executable(termin_render_pipeline_template_test tests/test_pipeline_template.cpp)
     target_include_directories(termin_render_pipeline_template_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard

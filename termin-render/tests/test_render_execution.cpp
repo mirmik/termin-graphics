@@ -114,8 +114,135 @@ namespace {
     bool g_resource_alias_executed = false;
     bool g_external_alias_producer_executed = false;
     bool g_external_alias_consumer_executed = false;
+    int g_raster_probe_execute_count = 0;
+    int g_raster_probe_record_count = 0;
+    int g_resolve_probe_execute_count = 0;
 
     constexpr const char* kExternalAliasIntermediate = "ExternalAliasIntermediate";
+
+    class RasterTargetInitializer final : public termin::CxxFramePass {
+    public:
+        RasterTargetInitializer() {
+            pass_name_set("RasterTargetInitializer");
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {"raster_target_0"};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec{"raster_target_0", "fbo", std::pair<int, int>{16, 16}}};
+        }
+
+        void execute(termin::ExecuteContext&) override {}
+    };
+
+    class RasterFusionProbe final : public termin::CxxFramePass {
+    private:
+        std::string input_;
+        std::string output_;
+        tc_raster_load_intent load_;
+
+    public:
+        RasterFusionProbe(std::string input, std::string output, tc_raster_load_intent load)
+            : input_(std::move(input)), output_(std::move(output)), load_(load) {
+            pass_name_set(output_);
+        }
+
+        std::set<const char*> compute_reads() const override {
+            return {input_.c_str()};
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {output_.c_str()};
+        }
+
+        std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
+            return {{input_, output_}};
+        }
+
+        bool get_raster_contract(termin::ExecuteContext&,
+                                 tc_raster_pass_contract& contract) const override {
+            contract.target_resource = output_.c_str();
+            contract.view_count = 1;
+            contract.color_load = load_;
+            contract.depth_load = TC_RASTER_LOAD;
+            contract.has_color = true;
+            contract.has_depth = false;
+            contract.fusion_eligible = true;
+            return true;
+        }
+
+        bool record_raster(termin::ExecuteContext&) override {
+            ++g_raster_probe_record_count;
+            return true;
+        }
+
+        void execute(termin::ExecuteContext&) override {
+            ++g_raster_probe_execute_count;
+        }
+    };
+
+    class MsaaTargetInitializer final : public termin::CxxFramePass {
+    public:
+        MsaaTargetInitializer() {
+            pass_name_set("MsaaTargetInitializer");
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {"msaa_target_0"};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec{"msaa_target_0",
+                                         "fbo",
+                                         std::pair<int, int>{16, 16},
+                                         std::nullopt,
+                                         std::nullopt,
+                                         std::string{"rgba16f"},
+                                         4}};
+        }
+
+        void execute(termin::ExecuteContext&) override {}
+    };
+
+    class ResolveFusionProbe final : public termin::CxxFramePass {
+    public:
+        ResolveFusionProbe() {
+            pass_name_set("ResolveFusionProbe");
+        }
+
+        std::set<const char*> compute_reads() const override {
+            return {"msaa_target_2"};
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {"resolved_target"};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec{"resolved_target",
+                                         "fbo",
+                                         std::pair<int, int>{16, 16},
+                                         std::nullopt,
+                                         std::nullopt,
+                                         std::string{"rgba16f"},
+                                         1}};
+        }
+
+        bool get_raster_resolve_contract(termin::ExecuteContext&,
+                                         tc_raster_resolve_contract& contract) const override {
+            contract.source_resource = "msaa_target_2";
+            contract.target_resource = "resolved_target";
+            contract.view_count = 1;
+            contract.fusion_eligible = true;
+            return true;
+        }
+
+        void execute(termin::ExecuteContext&) override {
+            ++g_resolve_probe_execute_count;
+        }
+    };
 
     class ExternalAliasProducer final : public termin::CxxFramePass {
     public:
@@ -494,6 +621,71 @@ TEST_CASE("generic execution allocates and binds registered non-texture resource
     pipeline.destroy();
     CHECK(g_resource_destroy_count == 1);
     CHECK(termin::unregister_frame_graph_resource_type(kTestResourceType));
+}
+
+TEST_CASE("adjacent compatible raster passes record inside one physical scope") {
+    termin::RenderPipeline pipeline("raster-fusion-execution-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new RasterTargetInitializer())->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("raster_target_0", "raster_target_1", TC_RASTER_CLEAR))->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("raster_target_1", "raster_target_2", TC_RASTER_LOAD))->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "RasterFusionTarget";
+    target.render_rect = {0, 0, 16, 16};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    g_raster_probe_execute_count = 0;
+    g_raster_probe_record_count = 0;
+    termin::RenderEngine engine;
+    engine.execute_pipeline(execution);
+    CHECK(g_raster_probe_execute_count == 0);
+    CHECK(g_raster_probe_record_count == 2);
+
+    pipeline.destroy();
+}
+
+TEST_CASE("compatible resolve is absorbed into the fused raster scope") {
+    termin::RenderPipeline pipeline("raster-resolve-fusion-execution-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new MsaaTargetInitializer())->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("msaa_target_0", "msaa_target_1", TC_RASTER_CLEAR))->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("msaa_target_1", "msaa_target_2", TC_RASTER_LOAD))->tc_pass_ptr());
+    pipeline.add_pass((new ResolveFusionProbe())->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "RasterResolveFusionTarget";
+    target.render_rect = {0, 0, 16, 16};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    g_raster_probe_execute_count = 0;
+    g_raster_probe_record_count = 0;
+    g_resolve_probe_execute_count = 0;
+    termin::RenderEngine engine;
+    engine.execute_pipeline(execution);
+    CHECK(g_raster_probe_execute_count == 0);
+    CHECK(g_raster_probe_record_count == 2);
+    CHECK(g_resolve_probe_execute_count == 0);
+
+    pipeline.destroy();
 }
 
 TEST_CASE("generic execution rejects an unknown serialized resource kind") {

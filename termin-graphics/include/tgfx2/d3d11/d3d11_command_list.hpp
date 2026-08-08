@@ -3,6 +3,8 @@
 #include "tgfx2/d3d11/d3d11_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
 
+#include <vector>
+
 namespace tgfx {
 
     class TGFX2_TYPE_API D3D11CommandList : public ICommandList {
@@ -61,6 +63,11 @@ namespace tgfx {
         PipelineHandle current_pipeline_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> push_constant_buffer_;
         uint32_t push_constant_buffer_size_ = 0;
+        struct PendingColorResolve {
+            TextureHandle source;
+            TextureHandle destination;
+        };
+        std::vector<PendingColorResolve> pending_color_resolves_;
     };
 
 } // namespace tgfx

@@ -94,6 +94,7 @@ namespace tgfx {
         PixelFormat depth_format_ = PixelFormat::Undefined;
         uint32_t sample_count_ = 1;
         uint32_t view_count_ = 1;
+        uint32_t color_resolve_mask_ = 0;
 
         bool in_pass_ = false;
         bool pipeline_dirty_ = true;
@@ -235,6 +236,10 @@ namespace tgfx {
         // descriptor; no backend render pass is opened in that case.
         bool begin_pass(const RenderPassDesc& pass);
         bool begin_multiview_pass(const MultiviewRenderPassDesc& pass);
+        // Begin a new logical pass inside the active physical render scope.
+        // Attachment bindings and contents are preserved; pass-local resource,
+        // vertex/index and pipeline caches are reset.
+        void begin_logical_pass();
         void end_pass();
         // Insert an attachment read/write ordering point while preserving the
         // active render pass and tile-local contents.

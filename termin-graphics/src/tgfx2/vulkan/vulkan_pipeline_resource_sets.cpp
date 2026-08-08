@@ -306,7 +306,8 @@ namespace tgfx {
                                                         desc.sample_count,
                                                         LoadOp::Clear,
                                                         StoreOp::Store,
-                                                        view_mask);
+                                                        view_mask,
+                                                        desc.color_resolve_mask);
         }
 
         // Shader stages

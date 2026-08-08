@@ -209,6 +209,7 @@ namespace tgfx {
         // output. Re-establish a known state at every pass boundary instead of
         // trusting the software cache across those runtime-managed hazards.
         clear_shader_resources();
+        pending_color_resolves_.clear();
 
         std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
         UINT rtv_count = 0;
@@ -230,6 +231,18 @@ namespace tgfx {
             height = tex->desc.height;
             if (color.load == LoadOp::Clear) {
                 ctx_->ClearRenderTargetView(tex->rtv.Get(), color.clear_color);
+            }
+            if (color.resolve_texture) {
+                auto* resolve = device_.get_texture(color.resolve_texture);
+                if (!resolve || !resolve->texture || color.resolve_texture == color.texture ||
+                    !has_flag(resolve->desc.usage, TextureUsage::ColorAttachment) || tex->desc.sample_count <= 1 ||
+                    resolve->desc.sample_count != 1 || resolve->desc.format != tex->desc.format ||
+                    resolve->desc.width != tex->desc.width || resolve->desc.height != tex->desc.height ||
+                    resolve->desc.array_layers != 1 || tex->desc.array_layers != 1) {
+                    tc::Log::error("D3D11CommandList::begin_render_pass: incompatible color resolve attachment");
+                    continue;
+                }
+                pending_color_resolves_.push_back({color.texture, color.resolve_texture});
             }
         }
 
@@ -259,6 +272,20 @@ namespace tgfx {
     void D3D11CommandList::end_render_pass() {
         std::array<ID3D11RenderTargetView*, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> null_rtvs{};
         ctx_->OMSetRenderTargets(static_cast<UINT>(null_rtvs.size()), null_rtvs.data(), nullptr);
+        for (const PendingColorResolve& pending : pending_color_resolves_) {
+            auto* source = device_.get_texture(pending.source);
+            auto* destination = device_.get_texture(pending.destination);
+            if (!source || !destination) {
+                tc::Log::error("D3D11CommandList::end_render_pass: resolve texture disappeared");
+                continue;
+            }
+            ctx_->ResolveSubresource(destination->texture.Get(),
+                                     0,
+                                     source->texture.Get(),
+                                     0,
+                                     d3d11::to_dxgi_format(source->desc.format));
+        }
+        pending_color_resolves_.clear();
         clear_shader_resources();
     }
 

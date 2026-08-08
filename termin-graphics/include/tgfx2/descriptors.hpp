@@ -96,12 +96,20 @@ namespace tgfx {
         // Vulkan render-pass compatibility includes the multiview view mask, so
         // mono and multiview pipelines must remain distinct cache identities.
         uint32_t view_count = 1;
+        // Bit N is set when color attachment N has a single-sample resolve
+        // target in the render pass this pipeline is used with. Vulkan render
+        // pass compatibility includes resolve attachment references.
+        uint32_t color_resolve_mask = 0;
     };
 
     // --- Render pass ---
 
     struct ColorAttachmentDesc {
         TextureHandle texture;
+        // Optional single-sample target resolved from texture when the
+        // physical render pass ends. The source must be multisampled; source
+        // and destination format, extent and layer count must match.
+        TextureHandle resolve_texture;
         LoadOp load = LoadOp::Clear;
         StoreOp store = StoreOp::Store;
         float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};

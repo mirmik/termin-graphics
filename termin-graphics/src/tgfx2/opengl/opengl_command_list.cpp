@@ -36,6 +36,25 @@ namespace tgfx {
     // --- Render pass ---
 
     void OpenGLCommandList::begin_render_pass(const RenderPassDesc& pass) {
+        pending_color_resolves_.clear();
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            const auto& color = pass.colors[i];
+            if (!color.resolve_texture)
+                continue;
+            auto* source = device_.get_texture(color.texture);
+            auto* destination = device_.get_texture(color.resolve_texture);
+            if (!source || !destination || color.resolve_texture == color.texture ||
+                !has_flag(destination->desc.usage, TextureUsage::ColorAttachment) ||
+                source->desc.sample_count <= 1 || destination->desc.sample_count != 1 ||
+                destination->desc.format != source->desc.format || destination->desc.width != source->desc.width ||
+                destination->desc.height != source->desc.height || source->desc.array_layers != 1 ||
+                destination->desc.array_layers != 1) {
+                tc::Log::error("OpenGLCommandList::begin_render_pass: incompatible color resolve attachment");
+                continue;
+            }
+            pending_color_resolves_.push_back(
+                {color.resolve_texture, static_cast<uint32_t>(i), source->desc.width, source->desc.height});
+        }
         // Bind FBO (0 = default framebuffer if no textures specified)
         current_fbo_ = device_.get_or_create_fbo(pass);
         glBindFramebuffer(GL_FRAMEBUFFER, current_fbo_);
@@ -119,10 +138,33 @@ namespace tgfx {
     }
 
     void OpenGLCommandList::end_render_pass() {
-        // Restore default framebuffer
-        if (current_fbo_ != 0) {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        for (const PendingColorResolve& pending : pending_color_resolves_) {
+            RenderPassDesc destination_pass;
+            ColorAttachmentDesc destination_attachment;
+            destination_attachment.texture = pending.destination;
+            destination_attachment.load = LoadOp::DontCare;
+            destination_attachment.store = StoreOp::Store;
+            destination_pass.colors.push_back(destination_attachment);
+            const GLuint destination_fbo = device_.get_or_create_fbo(destination_pass);
+
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, current_fbo_);
+            glReadBuffer(static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + pending.source_index));
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, destination_fbo);
+            glDrawBuffer(GL_COLOR_ATTACHMENT0);
+            glBlitFramebuffer(0,
+                              0,
+                              static_cast<GLint>(pending.width),
+                              static_cast<GLint>(pending.height),
+                              0,
+                              0,
+                              static_cast<GLint>(pending.width),
+                              static_cast<GLint>(pending.height),
+                              GL_COLOR_BUFFER_BIT,
+                              GL_NEAREST);
         }
+        pending_color_resolves_.clear();
+        // Restore default framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         current_fbo_ = 0;
         in_render_pass_ = false;
     }

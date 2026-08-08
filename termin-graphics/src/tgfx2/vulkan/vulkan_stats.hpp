@@ -64,6 +64,8 @@ namespace tgfx {
     extern std::atomic<uint64_t> g_pipeline_create_us;
 
     extern std::atomic<uint64_t> g_draw_count;
+    extern std::atomic<uint64_t> g_render_pass_count;
+    extern std::atomic<uint64_t> g_attachment_resolve_count;
     extern std::atomic<uint64_t> g_bind_pipeline_count;
     extern std::atomic<uint64_t> g_bind_rset_count;
     extern std::atomic<uint64_t> g_bind_vbo_count;

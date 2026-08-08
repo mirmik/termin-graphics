@@ -4,6 +4,7 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/tgfx2_api.h"
 #include <glad/glad.h>
+#include <vector>
 
 namespace tgfx {
 
@@ -17,6 +18,13 @@ namespace tgfx {
         GLenum current_index_type_ = GL_UNSIGNED_INT;
         uint64_t current_index_offset_ = 0;
         bool in_render_pass_ = false;
+        struct PendingColorResolve {
+            TextureHandle destination;
+            uint32_t source_index = 0;
+            uint32_t width = 0;
+            uint32_t height = 0;
+        };
+        std::vector<PendingColorResolve> pending_color_resolves_;
 
         // Pending push constants range (offset/size within the device's
         // ring buffer). Consumed by draw / draw_indexed via glBindBufferRange

@@ -254,6 +254,29 @@ TEST_CASE("PipelineCache retries a failed creation instead of caching an invalid
     CHECK(device.create_pipeline_count == 2u);
 }
 
+TEST_CASE("PipelineCache treats color resolve topology as Vulkan-compatible identity") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+
+    tgfx::PipelineCacheLookupKey key;
+    key.vertex_shader = tgfx::ShaderHandle{1};
+    key.fragment_shader = tgfx::ShaderHandle{2};
+    key.color_format_count = 1;
+    key.color_formats[0] = tgfx::PixelFormat::RGBA16F;
+    key.sample_count = 4;
+
+    const tgfx::PipelineHandle without_resolve = cache.get(key);
+    key.color_resolve_mask = 1;
+    const tgfx::PipelineHandle with_resolve = cache.get(key);
+
+    CHECK(without_resolve);
+    CHECK(with_resolve);
+    CHECK(without_resolve != with_resolve);
+    REQUIRE(device.created_pipeline_descs.size() == 2u);
+    CHECK(device.created_pipeline_descs[0].color_resolve_mask == 0u);
+    CHECK(device.created_pipeline_descs[1].color_resolve_mask == 1u);
+}
+
 TEST_CASE("PipelineCache rejects missing required shaders before backend creation") {
     PipelineCacheStatsDevice device;
     tgfx::PipelineCache cache(device);
@@ -486,6 +509,45 @@ TEST_CASE("RenderContext2 rejects incompatible MRT attachments before backend re
     }
     CHECK_FALSE(context.begin_pass(pass));
     CHECK(device.last_command_list->begin_render_pass_count == 0u);
+    context.end_frame();
+}
+
+TEST_CASE("RenderContext2 validates and forwards single-sample color resolves") {
+    PipelineCacheStatsDevice device;
+    tgfx::PipelineCache cache(device);
+    tgfx::RenderContext2 context(device, cache);
+
+    tgfx::TextureDesc source_desc;
+    source_desc.width = 64;
+    source_desc.height = 32;
+    source_desc.sample_count = 4;
+    source_desc.format = tgfx::PixelFormat::RGBA16F;
+    source_desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const tgfx::TextureHandle source = device.create_texture(source_desc);
+
+    tgfx::TextureDesc resolve_desc = source_desc;
+    resolve_desc.sample_count = 1;
+    const tgfx::TextureHandle resolve = device.create_texture(resolve_desc);
+
+    tgfx::RenderPassDesc pass;
+    pass.colors.resize(1);
+    pass.colors[0].texture = source;
+    pass.colors[0].resolve_texture = resolve;
+
+    context.begin_frame();
+    REQUIRE(context.begin_pass(pass));
+    REQUIRE(device.last_command_list->begin_render_pass_count == 1u);
+    CHECK(device.last_command_list->last_render_pass.colors[0].resolve_texture == resolve);
+    context.begin_logical_pass();
+    CHECK(device.last_command_list->begin_render_pass_count == 1u);
+    CHECK(device.last_command_list->end_render_pass_count == 0u);
+    context.end_pass();
+
+    resolve_desc.sample_count = 4;
+    const tgfx::TextureHandle multisampled_destination = device.create_texture(resolve_desc);
+    pass.colors[0].resolve_texture = multisampled_destination;
+    CHECK_FALSE(context.begin_pass(pass));
+    CHECK(device.last_command_list->begin_render_pass_count == 1u);
     context.end_frame();
 }
 

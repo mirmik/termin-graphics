@@ -54,7 +54,8 @@ namespace tgfx {
                a.blend.dst_alpha == b.blend.dst_alpha && a.blend.alpha_op == b.blend.alpha_op &&
                a.color_mask.r == b.color_mask.r && a.color_mask.g == b.color_mask.g &&
                a.color_mask.b == b.color_mask.b && a.color_mask.a == b.color_mask.a &&
-               a.depth_format == b.depth_format && a.sample_count == b.sample_count && a.view_count == b.view_count;
+               a.depth_format == b.depth_format && a.sample_count == b.sample_count && a.view_count == b.view_count &&
+               a.color_resolve_mask == b.color_resolve_mask;
     }
 
     PipelineCacheKey::PipelineCacheKey(const PipelineCacheLookupKey& lookup)
@@ -113,6 +114,7 @@ namespace tgfx {
         hash_combine(h, std::hash<int>{}(static_cast<int>(k.depth_format)));
         hash_combine(h, std::hash<uint32_t>{}(k.sample_count));
         hash_combine(h, std::hash<uint32_t>{}(k.view_count));
+        hash_combine(h, std::hash<uint32_t>{}(k.color_resolve_mask));
 
         return h;
     }
@@ -155,6 +157,18 @@ namespace tgfx {
             tc_log(TC_LOG_ERROR,
                    "PipelineCache: invalid graphics pipeline view count %u; backend call skipped",
                    key.view_count);
+            return {};
+        }
+        const uint32_t valid_resolve_mask = key.color_format_count == 32
+                                                  ? 0xffffffffu
+                                                  : ((1u << key.color_format_count) - 1u);
+        if ((key.color_resolve_mask & ~valid_resolve_mask) != 0 ||
+            (key.color_resolve_mask != 0 && key.sample_count <= 1)) {
+            tc_log(TC_LOG_ERROR,
+                   "PipelineCache: invalid color resolve mask=0x%x for %u colors at %u samples; backend call skipped",
+                   key.color_resolve_mask,
+                   key.color_format_count,
+                   key.sample_count);
             return {};
         }
         for (uint32_t i = 0; i < key.color_format_count; ++i) {
@@ -203,6 +217,7 @@ namespace tgfx {
         desc.depth_format = key.depth_format;
         desc.sample_count = key.sample_count;
         desc.view_count = key.view_count;
+        desc.color_resolve_mask = key.color_resolve_mask;
 
         auto handle = device_.create_pipeline(desc);
         ++create_pipeline_count_;

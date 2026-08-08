@@ -145,7 +145,8 @@ namespace tgfx {
             return true;
         };
 
-        for (const auto& color : pass.colors) {
+        for (size_t color_index = 0; color_index < pass.colors.size(); ++color_index) {
+            const auto& color = pass.colors[color_index];
             if (!color.texture) {
                 tc::Log::error("VulkanCommandList::begin_render_pass: null color attachment in ordered MRT set");
                 return;
@@ -161,6 +162,26 @@ namespace tgfx {
             }
             if (!validate_extent(texture->desc, "color")) {
                 return;
+            }
+            if (color.resolve_texture) {
+                const auto* resolve = device_.get_texture(color.resolve_texture);
+                const uint32_t source_samples = texture->desc.sample_count == 0 ? 1 : texture->desc.sample_count;
+                const uint32_t resolve_samples = resolve && resolve->desc.sample_count != 0 ? resolve->desc.sample_count : 1;
+                bool resolve_aliases_attachment = pass.has_depth && color.resolve_texture == pass.depth.texture;
+                for (size_t other = 0; other < pass.colors.size(); ++other) {
+                    resolve_aliases_attachment = resolve_aliases_attachment ||
+                                                 color.resolve_texture == pass.colors[other].texture ||
+                                                 (other < color_index &&
+                                                  color.resolve_texture == pass.colors[other].resolve_texture);
+                }
+                if (!resolve || resolve_aliases_attachment ||
+                    !has_flag(resolve->desc.usage, TextureUsage::ColorAttachment) || source_samples <= 1 ||
+                    resolve_samples != 1 || resolve->desc.format != texture->desc.format ||
+                    resolve->desc.width != texture->desc.width || resolve->desc.height != texture->desc.height ||
+                    resolve->desc.array_layers != texture->desc.array_layers) {
+                    tc::Log::error("VulkanCommandList::begin_render_pass: incompatible color resolve attachment");
+                    return;
+                }
             }
         }
         if (pass.has_depth) {
@@ -195,6 +216,7 @@ namespace tgfx {
         std::vector<LoadOp> color_loads;
         std::vector<StoreOp> color_stores;
         std::vector<VkImageView> views;
+        uint32_t color_resolve_mask = 0;
         uint32_t width = 0, height = 0;
 
         uint32_t sample_count = 1;
@@ -225,6 +247,28 @@ namespace tgfx {
                 tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             }
             current_pass_color_attachments_.push_back(c.texture);
+        }
+
+        // Resolve attachments follow all multisample color attachments in the
+        // native render-pass/framebuffer ordering. Missing resolve slots use
+        // VK_ATTACHMENT_UNUSED and therefore have no framebuffer view.
+        for (size_t i = 0; i < pass.colors.size(); ++i) {
+            const auto& c = pass.colors[i];
+            if (!c.resolve_texture)
+                continue;
+            auto* tex = device_.get_texture(c.resolve_texture);
+            color_resolve_mask |= (1u << i);
+            views.push_back(tex->view);
+            if (tex->current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+                device_.transition_image_layout(cmd_,
+                                                tex->image,
+                                                tex->current_layout,
+                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                VK_IMAGE_ASPECT_COLOR_BIT,
+                                                tex->desc.array_layers);
+                tex->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            }
+            current_pass_color_attachments_.push_back(c.resolve_texture);
         }
 
         PixelFormat depth_fmt = PixelFormat::D24_UNorm_S8_UInt;
@@ -271,7 +315,8 @@ namespace tgfx {
                                                     sample_count,
                                                     depth_load,
                                                     pass.depth.store,
-                                                    view_count > 1 ? ((1u << view_count) - 1u) : 0u);
+                                                    view_count > 1 ? ((1u << view_count) - 1u) : 0u,
+                                                    color_resolve_mask);
         if (rp == VK_NULL_HANDLE) {
             tc::Log::error("VulkanCommandList::begin_render_pass: failed to resolve render-pass contract");
             return;
@@ -290,6 +335,10 @@ namespace tgfx {
             cv.color = {{c.clear_color[0], c.clear_color[1], c.clear_color[2], c.clear_color[3]}};
             clears.push_back(cv);
         }
+        for (const auto& c : pass.colors) {
+            if (c.resolve_texture)
+                clears.push_back(VkClearValue{});
+        }
         if (pass.has_depth) {
             VkClearValue cv{};
             cv.depthStencil = {pass.depth.clear_depth, pass.depth.clear_stencil};
@@ -305,6 +354,11 @@ namespace tgfx {
         rp_bi.pClearValues = clears.data();
 
         vkCmdBeginRenderPass(cmd_, &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
+        vulkan_stats_increment(g_render_pass_count);
+        for (uint32_t mask = color_resolve_mask; mask != 0; mask >>= 1) {
+            if ((mask & 1u) != 0)
+                vulkan_stats_increment(g_attachment_resolve_count);
+        }
         in_render_pass_ = true;
 
         // Auto-set viewport. No Y-flip trick here: it makes the render-pass

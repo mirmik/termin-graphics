@@ -598,6 +598,72 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     return pass_ok;
 }
 
+static bool render_color_resolve_smoke(tgfx::IRenderDevice& device, bool multiview) {
+    constexpr uint32_t kSize = 16;
+    tgfx::TextureDesc source_desc;
+    source_desc.width = kSize;
+    source_desc.height = kSize;
+    source_desc.array_layers = multiview ? 2u : 1u;
+    source_desc.sample_count = 4;
+    source_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    source_desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const tgfx::TextureHandle source = device.create_texture(source_desc);
+
+    tgfx::TextureDesc resolve_desc = source_desc;
+    resolve_desc.sample_count = 1;
+    resolve_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    const tgfx::TextureHandle resolve = device.create_texture(resolve_desc);
+    if (!source || !resolve) {
+        device.destroy(source);
+        device.destroy(resolve);
+        return false;
+    }
+
+    tgfx::ColorAttachmentDesc color;
+    color.texture = source;
+    color.resolve_texture = resolve;
+    color.load = tgfx::LoadOp::Clear;
+    color.store = tgfx::StoreOp::DontCare;
+    color.clear_color[0] = 0.25f;
+    color.clear_color[1] = 0.50f;
+    color.clear_color[2] = 0.75f;
+    color.clear_color[3] = 1.00f;
+
+    auto cmd = device.create_command_list();
+    cmd->begin();
+    if (multiview) {
+        tgfx::MultiviewRenderPassDesc pass;
+        pass.colors.push_back(color);
+        pass.view_count = 2;
+        cmd->begin_multiview_render_pass(pass);
+    } else {
+        tgfx::RenderPassDesc pass;
+        pass.colors.push_back(color);
+        cmd->begin_render_pass(pass);
+    }
+    cmd->end_render_pass();
+    cmd->end();
+    device.submit(*cmd);
+    device.wait_idle();
+
+    float pixel[4] = {};
+    const bool read_ok = device.read_pixel_rgba8(resolve, kSize / 2, kSize / 2, pixel);
+    const bool pixel_ok = read_ok && std::abs(pixel[0] - 0.25f) < 0.02f &&
+                          std::abs(pixel[1] - 0.50f) < 0.02f && std::abs(pixel[2] - 0.75f) < 0.02f &&
+                          std::abs(pixel[3] - 1.00f) < 0.02f;
+    printf("Vulkan %s color resolve: %s (%.3f %.3f %.3f %.3f)\n",
+           multiview ? "multiview" : "mono",
+           pixel_ok ? "ok" : "failed",
+           pixel[0],
+           pixel[1],
+           pixel[2],
+           pixel[3]);
+
+    device.destroy(source);
+    device.destroy(resolve);
+    return pixel_ok;
+}
+
 static bool render_texture_encoding_sampling_smoke(tgfx::IRenderDevice& device) {
     constexpr uint32_t kSize = 4;
 
@@ -1211,6 +1277,17 @@ int main(int argc, char** argv) {
     if (!ordered_mrt_ok) {
         fprintf(stderr, "Vulkan ordered MRT smoke failed\n");
     }
+    const bool color_resolve_ok = render_color_resolve_smoke(*device, false);
+    if (!color_resolve_ok) {
+        fprintf(stderr, "Vulkan mono color resolve smoke failed\n");
+    }
+    bool multiview_color_resolve_ok = true;
+    if (caps.supports_multiview && caps.max_multiview_views >= 2) {
+        multiview_color_resolve_ok = render_color_resolve_smoke(*device, true);
+        if (!multiview_color_resolve_ok) {
+            fprintf(stderr, "Vulkan multiview color resolve smoke failed\n");
+        }
+    }
 
     // --- Generated Slang artifact smoke ---
     bool slang_artifact_ok = true;
@@ -1460,18 +1537,21 @@ int main(int argc, char** argv) {
     device.reset();
 
     printf("\nCenter drawn: %d, Corner is blue: %d, Bound resources: %d, "
-           "Texture encoding sampling: %d, Ordered MRT: %d, Slang artifacts: %d, "
+           "Texture encoding sampling: %d, Ordered MRT: %d, Mono resolve: %d, Multiview resolve: %d, "
+           "Slang artifacts: %d, "
            "Ring overflow fallback: %d, GPU timestamp: %d\n",
            center_drawn,
            corner_is_blue,
            bound_resource_ok,
            texture_encoding_sampling_ok,
            ordered_mrt_ok,
+           color_resolve_ok,
+           multiview_color_resolve_ok,
            slang_artifact_ok,
            ring_ubo_overflow_ok,
            gpu_timing_ok);
     if (center_drawn && corner_is_blue && bound_resource_ok && texture_encoding_sampling_ok && ordered_mrt_ok &&
-        slang_artifact_ok && ring_ubo_overflow_ok && gpu_timing_ok) {
+        color_resolve_ok && multiview_color_resolve_ok && slang_artifact_ok && ring_ubo_overflow_ok && gpu_timing_ok) {
         printf("VULKAN SMOKE TEST PASSED\n");
         return 0;
     } else {

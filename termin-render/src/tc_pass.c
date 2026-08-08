@@ -290,6 +290,9 @@ static void external_destroy(tc_pass* p) {
 
 static const tc_pass_vtable g_external_vtable = {
     .execute = external_execute,
+    .get_raster_contract = NULL,
+    .record_raster = NULL,
+    .get_raster_resolve_contract = NULL,
     .get_reads = external_get_reads,
     .get_writes = external_get_writes,
     .get_inplace_aliases = external_get_inplace_aliases,

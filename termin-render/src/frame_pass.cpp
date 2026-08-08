@@ -95,6 +95,35 @@ namespace termin {
         self->execute(*cpp_ctx);
     }
 
+    bool CxxFramePass::_cb_get_raster_contract(tc_pass* p,
+                                               void* ctx,
+                                               tc_raster_pass_contract* out_contract) {
+        CxxFramePass* self = from_tc(p);
+        if (!self || !ctx || !out_contract)
+            return false;
+        *out_contract = {};
+        out_contract->struct_size = sizeof(*out_contract);
+        return self->get_raster_contract(*static_cast<ExecuteContext*>(ctx), *out_contract);
+    }
+
+    bool CxxFramePass::_cb_record_raster(tc_pass* p, void* ctx) {
+        CxxFramePass* self = from_tc(p);
+        if (!self || !ctx)
+            return false;
+        return self->record_raster(*static_cast<ExecuteContext*>(ctx));
+    }
+
+    bool CxxFramePass::_cb_get_raster_resolve_contract(tc_pass* p,
+                                                       void* ctx,
+                                                       tc_raster_resolve_contract* out_contract) {
+        CxxFramePass* self = from_tc(p);
+        if (!self || !ctx || !out_contract)
+            return false;
+        *out_contract = {};
+        out_contract->struct_size = sizeof(*out_contract);
+        return self->get_raster_resolve_contract(*static_cast<ExecuteContext*>(ctx), *out_contract);
+    }
+
     size_t CxxFramePass::_cb_get_reads(tc_pass* p, const char** out, size_t max) {
         CxxFramePass* self = from_tc(p);
         if (!self)
@@ -190,6 +219,9 @@ namespace termin {
 
     const tc_pass_vtable CxxFramePass::_cpp_vtable = {
         .execute = CxxFramePass::_cb_execute,
+        .get_raster_contract = CxxFramePass::_cb_get_raster_contract,
+        .record_raster = CxxFramePass::_cb_record_raster,
+        .get_raster_resolve_contract = CxxFramePass::_cb_get_raster_resolve_contract,
         .get_reads = CxxFramePass::_cb_get_reads,
         .get_writes = CxxFramePass::_cb_get_writes,
         .get_inplace_aliases = CxxFramePass::_cb_get_inplace_aliases,

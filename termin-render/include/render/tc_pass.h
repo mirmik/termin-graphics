@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <tc_types.h>
 
 #ifdef __cplusplus
@@ -21,8 +22,46 @@ typedef enum tc_pass_kind {
     TC_EXTERNAL_PASS = 1
 } tc_pass_kind;
 
+// Backend-neutral description of a pass which can record into an already
+// active raster scope.  The descriptor is borrowed for the duration of one
+// invocation; in particular, target_resource is owned by the pass.
+typedef enum tc_raster_load_intent {
+    TC_RASTER_LOAD = 0,
+    TC_RASTER_CLEAR = 1
+} tc_raster_load_intent;
+
+typedef struct tc_raster_pass_contract {
+    // Set to sizeof(tc_raster_pass_contract) by producers. Consumers must not
+    // read fields beyond the advertised size when mixing ABI revisions.
+    uint32_t struct_size;
+    // Canonical frame-graph resource naming the complete render target (color
+    // plus its associated depth attachment, when present).
+    const char* target_resource;
+    uint32_t view_count;
+    tc_raster_load_intent color_load;
+    tc_raster_load_intent depth_load;
+    bool has_color;
+    bool has_depth;
+    bool fusion_eligible;
+} tc_raster_pass_contract;
+
+// Optional description of a standalone resolve pass which an executor may
+// absorb into the end of a compatible raster scope. The pass keeps its normal
+// execute callback as the fallback; there is deliberately no separate record
+// callback for a consumed resolve.
+typedef struct tc_raster_resolve_contract {
+    uint32_t struct_size;
+    const char* source_resource;
+    const char* target_resource;
+    uint32_t view_count;
+    bool fusion_eligible;
+} tc_raster_resolve_contract;
+
 struct tc_pass_vtable {
     void (*execute)(tc_pass* self, void* ctx);
+    bool (*get_raster_contract)(tc_pass* self, void* ctx, tc_raster_pass_contract* out_contract);
+    bool (*record_raster)(tc_pass* self, void* ctx);
+    bool (*get_raster_resolve_contract)(tc_pass* self, void* ctx, tc_raster_resolve_contract* out_contract);
     // Dependency enumeration uses a count/fill contract. Implementations return
     // the complete item count even when out is NULL or max_count is smaller.
     size_t (*get_reads)(tc_pass* self, const char** out_reads, size_t max_count);
@@ -89,6 +128,40 @@ static inline void tc_pass_execute(tc_pass* p, void* ctx) {
     if (p && p->enabled && !p->passthrough && p->vtable && p->vtable->execute) {
         p->vtable->execute(p, ctx);
     }
+}
+
+static inline bool
+tc_pass_get_raster_contract(tc_pass* p, void* ctx, tc_raster_pass_contract* out_contract) {
+    if (!out_contract)
+        return false;
+    memset(out_contract, 0, sizeof(*out_contract));
+    out_contract->struct_size = sizeof(*out_contract);
+    if (p && p->enabled && !p->passthrough && p->vtable && p->vtable->get_raster_contract) {
+        return p->vtable->get_raster_contract(p, ctx, out_contract);
+    }
+    return false;
+}
+
+// Returns false for a standalone-only pass.  Callers must have opened the
+// scope described by tc_pass_get_raster_contract before invoking this helper.
+static inline bool tc_pass_record_raster(tc_pass* p, void* ctx) {
+    if (p && p->enabled && !p->passthrough && p->vtable && p->vtable->record_raster) {
+        return p->vtable->record_raster(p, ctx);
+    }
+    return false;
+}
+
+static inline bool tc_pass_get_raster_resolve_contract(tc_pass* p,
+                                                       void* ctx,
+                                                       tc_raster_resolve_contract* out_contract) {
+    if (!out_contract)
+        return false;
+    memset(out_contract, 0, sizeof(*out_contract));
+    out_contract->struct_size = sizeof(*out_contract);
+    if (p && p->enabled && !p->passthrough && p->vtable && p->vtable->get_raster_resolve_contract) {
+        return p->vtable->get_raster_resolve_contract(p, ctx, out_contract);
+    }
+    return false;
 }
 
 static inline const char* tc_pass_type_name(const tc_pass* p) {

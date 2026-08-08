@@ -66,6 +66,12 @@ namespace tgfx {
             if (!texture)
                 command_fail("render pass references an invalid color texture");
             colors[index].view = texture->view;
+            if (source.resolve_texture) {
+                const WebGpuTexture* resolve = device_.textures_.get(source.resolve_texture.id);
+                if (!resolve)
+                    command_fail("render pass references an invalid color resolve texture");
+                colors[index].resolveTarget = resolve->view;
+            }
             colors[index].loadOp = load_op(source.load);
             colors[index].storeOp = store_op(source.store);
             colors[index].clearValue = {

@@ -269,6 +269,7 @@ namespace tgfx {
         }
 
         std::array<PixelFormat, TGFX2_MAX_COLOR_ATTACHMENTS> new_color_formats{};
+        uint32_t new_color_resolve_mask = 0;
         uint32_t expected_width = 0;
         uint32_t expected_height = 0;
         uint32_t expected_samples = 0;
@@ -335,6 +336,29 @@ namespace tgfx {
                 return false;
             }
             new_color_formats[i] = desc.format;
+
+            if (color.resolve_texture) {
+                const TextureDesc resolve_desc = device_.texture_desc(color.resolve_texture);
+                bool resolve_aliases_attachment = pass.has_depth && color.resolve_texture == pass.depth.texture;
+                for (size_t other = 0; other < pass.colors.size(); ++other) {
+                    resolve_aliases_attachment = resolve_aliases_attachment ||
+                                                 color.resolve_texture == pass.colors[other].texture ||
+                                                 (other < i && color.resolve_texture == pass.colors[other].resolve_texture);
+                }
+                if (resolve_aliases_attachment ||
+                    !has_flag(resolve_desc.usage, TextureUsage::ColorAttachment) || desc.sample_count <= 1 ||
+                    resolve_desc.sample_count != 1 || resolve_desc.format != desc.format ||
+                    resolve_desc.width != desc.width || resolve_desc.height != desc.height ||
+                    resolve_desc.array_layers != desc.array_layers ||
+                    (!multiview && resolve_desc.array_layers != 1) ||
+                    (multiview && resolve_desc.array_layers < view_count)) {
+                    tc_log(TC_LOG_ERROR,
+                           "RenderContext2::begin_pass: color resolve attachment %zu is incompatible with its source",
+                           i);
+                    return false;
+                }
+                new_color_resolve_mask |= (1u << i);
+            }
         }
 
         PixelFormat new_depth_format = PixelFormat::Undefined;
@@ -392,6 +416,10 @@ namespace tgfx {
             sample_count_ = expected_samples;
             pipeline_dirty_ = true;
         }
+        if (color_resolve_mask_ != new_color_resolve_mask) {
+            color_resolve_mask_ = new_color_resolve_mask;
+            pipeline_dirty_ = true;
+        }
         if (view_count_ != view_count) {
             view_count_ = view_count;
             pipeline_dirty_ = true;
@@ -428,6 +456,21 @@ namespace tgfx {
         last_bound_resource_layout_token_ = 0;
         pipeline_dirty_ = true;
         return true;
+    }
+
+    void RenderContext2::begin_logical_pass() {
+        if (!in_pass_) {
+            tc_log(TC_LOG_ERROR, "RenderContext2::begin_logical_pass requires an active render pass");
+            return;
+        }
+        clear_pending_binding_buckets();
+        reset_cached_vertex_buffers();
+        last_bound_ibo_ = {};
+        last_bound_ibo_offset_ = 0;
+        last_bound_index_type_ = IndexType::Uint32;
+        last_bound_pipeline_ = {};
+        last_bound_resource_layout_token_ = 0;
+        pipeline_dirty_ = true;
     }
 
     void RenderContext2::end_pass() {
@@ -1146,6 +1189,7 @@ namespace tgfx {
         key.depth_format = depth_format_;
         key.sample_count = sample_count_;
         key.view_count = view_count_;
+        key.color_resolve_mask = color_resolve_mask_;
 
         auto pipeline = cache_.get(key);
         if (!pipeline) {

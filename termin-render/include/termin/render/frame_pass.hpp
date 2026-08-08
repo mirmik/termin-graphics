@@ -85,6 +85,11 @@ namespace termin {
         static const tc_pass_vtable _cpp_vtable;
 
         static void _cb_execute(tc_pass* p, void* ctx);
+        static bool _cb_get_raster_contract(tc_pass* p, void* ctx, tc_raster_pass_contract* out_contract);
+        static bool _cb_record_raster(tc_pass* p, void* ctx);
+        static bool _cb_get_raster_resolve_contract(tc_pass* p,
+                                                    void* ctx,
+                                                    tc_raster_resolve_contract* out_contract);
         static size_t _cb_get_reads(tc_pass* p, const char** out, size_t max);
         static size_t _cb_get_writes(tc_pass* p, const char** out, size_t max);
         static size_t _cb_get_inplace_aliases(tc_pass* p, const char** out, size_t max);
@@ -196,6 +201,29 @@ namespace termin {
 
         virtual void execute(ExecuteContext& ctx) {
             (void)ctx;
+        }
+
+        // Opt-in raster ABI. Returning false keeps the pass on the legacy
+        // standalone execute() path. record_raster() is called only while the
+        // executor owns a compatible open raster scope.
+        virtual bool get_raster_contract(ExecuteContext& ctx, tc_raster_pass_contract& out_contract) const {
+            (void)ctx;
+            (void)out_contract;
+            return false;
+        }
+
+        virtual bool record_raster(ExecuteContext& ctx) {
+            (void)ctx;
+            return false;
+        }
+
+        // Opt-in resolve absorption. Returning false leaves execute() as the
+        // complete standalone resolve operation.
+        virtual bool get_raster_resolve_contract(ExecuteContext& ctx,
+                                                 tc_raster_resolve_contract& out_contract) const {
+            (void)ctx;
+            (void)out_contract;
+            return false;
         }
 
         virtual std::set<const char*> compute_reads() const {

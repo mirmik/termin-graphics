@@ -1736,6 +1736,8 @@ namespace tgfx {
         const auto now = stats_enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (stats_enabled && std::chrono::duration<double>(now - submit_stats_.window_start).count() >= 1.0) {
             uint64_t draws = g_draw_count.exchange(0, std::memory_order_relaxed);
+            uint64_t render_passes = g_render_pass_count.exchange(0, std::memory_order_relaxed);
+            uint64_t attachment_resolves = g_attachment_resolve_count.exchange(0, std::memory_order_relaxed);
             uint64_t rsets = g_resource_set_count.exchange(0, std::memory_order_relaxed);
             uint64_t pipes = g_pipeline_count.exchange(0, std::memory_order_relaxed);
             uint64_t pipe_hits = g_pipeline_cache_hit_count.exchange(0, std::memory_order_relaxed);
@@ -1755,7 +1757,8 @@ namespace tgfx {
             uint64_t pipe_rp_us = g_pipeline_renderpass_us.exchange(0, std::memory_order_relaxed);
             uint64_t pipe_create_us = g_pipeline_create_us.exchange(0, std::memory_order_relaxed);
             tc_log(TC_LOG_INFO,
-                   "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu "
+                   "[tgfx2-vulkan] submit stats: submits=%llu draws=%llu render_passes=%llu "
+                   "attachment_resolves=%llu "
                    "pipelines=%llu pipeline_cache_hit=%llu pipeline_cache_miss=%llu "
                    "new_vertex_layouts=%llu resource_sets=%llu bind_pipeline=%llu "
                    "bind_rset=%llu bind_vbo=%llu bind_ibo=%llu push_constants=%llu "
@@ -1764,6 +1767,8 @@ namespace tgfx {
                    "descriptor_cleanup_ms=%.3f",
                    static_cast<unsigned long long>(submit_stats_.submits),
                    static_cast<unsigned long long>(draws),
+                   static_cast<unsigned long long>(render_passes),
+                   static_cast<unsigned long long>(attachment_resolves),
                    static_cast<unsigned long long>(pipes),
                    static_cast<unsigned long long>(pipe_hits),
                    static_cast<unsigned long long>(pipe_misses),
@@ -1823,6 +1828,7 @@ namespace tgfx {
                                          sample_count,
                                          depth_load,
                                          StoreOp::Store,
+                                         0,
                                          0);
     }
 
@@ -1834,7 +1840,8 @@ namespace tgfx {
                                                                uint32_t sample_count,
                                                                LoadOp depth_load,
                                                                StoreOp depth_store,
-                                                               uint32_t view_mask) {
+                                                               uint32_t view_mask,
+                                                               uint32_t color_resolve_mask) {
         if (color_loads.size() != color_formats.size() || color_stores.size() != color_formats.size()) {
             tc::Log::error("VulkanRenderDevice::get_or_create_render_pass: color format/load/store counts differ");
             return VK_NULL_HANDLE;
@@ -1858,6 +1865,7 @@ namespace tgfx {
             key.push_back(static_cast<VkFormat>(static_cast<int>(depth_store) + 0x40000));
         }
         key.push_back(static_cast<VkFormat>(view_mask + 0x50000u));
+        key.push_back(static_cast<VkFormat>(color_resolve_mask + 0x60000u));
 
         auto it = render_pass_cache_.find(key);
         if (it != render_pass_cache_.end())
@@ -1866,6 +1874,8 @@ namespace tgfx {
         // Create render pass
         std::vector<VkAttachmentDescription> attachments;
         std::vector<VkAttachmentReference> color_refs;
+        std::vector<VkAttachmentReference> resolve_refs(
+            color_formats.size(), {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
 
         auto to_vk_load = [](LoadOp op) -> VkAttachmentLoadOp {
             switch (op) {
@@ -1908,6 +1918,23 @@ namespace tgfx {
             color_refs.push_back({static_cast<uint32_t>(i), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
         }
 
+        for (size_t i = 0; i < color_formats.size(); ++i) {
+            if ((color_resolve_mask & (1u << i)) == 0)
+                continue;
+            VkAttachmentDescription att{};
+            att.format = vk::to_vk_format(color_formats[i]);
+            att.samples = VK_SAMPLE_COUNT_1_BIT;
+            att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            att.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            att.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            const uint32_t attachment_index = static_cast<uint32_t>(attachments.size());
+            attachments.push_back(att);
+            resolve_refs[i] = {attachment_index, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        }
+
         VkAttachmentReference depth_ref{};
         if (has_depth) {
             VkAttachmentDescription att{};
@@ -1929,6 +1956,7 @@ namespace tgfx {
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = static_cast<uint32_t>(color_refs.size());
         subpass.pColorAttachments = color_refs.data();
+        subpass.pResolveAttachments = color_resolve_mask != 0 ? resolve_refs.data() : nullptr;
         subpass.pDepthStencilAttachment = has_depth ? &depth_ref : nullptr;
 
         // EXTERNAL→0 covers work from earlier passes/transitions. The 0→0
@@ -1966,7 +1994,8 @@ namespace tgfx {
         self_dep.srcAccessMask =
             vulkan_detail::color_attachment_accesses() | vulkan_detail::depth_stencil_attachment_accesses();
         self_dep.dstAccessMask = self_dep.srcAccessMask;
-        self_dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        self_dep.dependencyFlags =
+            VK_DEPENDENCY_BY_REGION_BIT | (view_mask != 0 ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0);
 
         const std::array<VkSubpassDependency, 2> dependencies{dep, self_dep};
 
