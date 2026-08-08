@@ -203,6 +203,18 @@ namespace tc {
         return std::nullopt;
     }
 
+    static bool socket_type_assignable(const std::string& source_type, const std::string& target_type) {
+        if (source_type == target_type) {
+            return true;
+        }
+
+        // The XR swapchain is externally owned, but its attachment shape is the
+        // same as a regular layered multiview FBO. Pass inputs that only require
+        // that attachment shape may consume it; the reverse conversion would
+        // incorrectly erase the external-ownership requirement.
+        return source_type == "external_xr_multiview_fbo" && target_type == "multiview_fbo";
+    }
+
     static void apply_target_overrides(const GraphData& graph, ResourceNaming& result) {
         for (const auto& node : graph.nodes) {
             for (const auto& inp : node.inputs) {
@@ -302,7 +314,7 @@ namespace tc {
                                         conn.from_socket + " -> " + conn.to_node_id + "." + conn.to_socket);
             }
 
-            if (*from_type != *to_type) {
+            if (!socket_type_assignable(*from_type, *to_type)) {
                 throw GraphCompileError("Invalid resource connection type: " + conn.from_node_id + "." +
                                         conn.from_socket + " (" + *from_type + ") -> " + conn.to_node_id + "." +
                                         conn.to_socket + " (" + *to_type + ")");

@@ -8,10 +8,15 @@ GUARD_TEST_MAIN();
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_engine.hpp>
 #include <termin/render/render_item_source.hpp>
+#include <tgfx2/graphics_host.hpp>
+#include <tgfx2/i_render_device.hpp>
 
 #include <cstddef>
+#include <memory>
 #include <set>
+#include <span>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -118,6 +123,128 @@ namespace {
     int g_raster_probe_record_count = 0;
     int g_resolve_probe_execute_count = 0;
 
+    struct RecordedRenderScope {
+        tgfx::RenderPassDesc pass;
+        uint32_t view_count = 1;
+    };
+
+    struct ExecutionRecordingState {
+        std::vector<RecordedRenderScope> scopes;
+        uint32_t framebuffer_local_barriers = 0;
+    };
+
+    class ExecutionRecordingCommandList final : public tgfx::ICommandList {
+    public:
+        explicit ExecutionRecordingCommandList(ExecutionRecordingState& state)
+            : state_(state) {}
+
+        void begin() override {}
+        void end() override {}
+        void begin_render_pass(const tgfx::RenderPassDesc& pass) override {
+            state_.scopes.push_back({pass, 1});
+        }
+        void begin_multiview_render_pass(const tgfx::MultiviewRenderPassDesc& pass) override {
+            tgfx::RenderPassDesc base;
+            base.colors = pass.colors;
+            base.depth = pass.depth;
+            base.has_depth = pass.has_depth;
+            state_.scopes.push_back({std::move(base), pass.view_count});
+        }
+        void end_render_pass() override {}
+        void framebuffer_local_barrier() override {
+            ++state_.framebuffer_local_barriers;
+        }
+        void bind_pipeline(tgfx::PipelineHandle) override {}
+        void bind_resource_set(tgfx::ResourceSetHandle,
+                               uint32_t = 0,
+                               const uint32_t* = nullptr,
+                               uint32_t = 0) override {}
+        void set_push_constants(const void*, uint32_t) override {}
+        void bind_vertex_buffer(uint32_t, tgfx::BufferHandle, uint64_t = 0) override {}
+        void bind_index_buffer(tgfx::BufferHandle, tgfx::IndexType, uint64_t = 0) override {}
+        void draw(uint32_t, uint32_t = 0) override {}
+        void draw_instanced(uint32_t, uint32_t, uint32_t = 0, uint32_t = 0) override {}
+        void draw_indexed(uint32_t, uint32_t = 0, int32_t = 0) override {}
+        void draw_indexed_instanced(uint32_t, uint32_t, uint32_t = 0, int32_t = 0, uint32_t = 0) override {}
+        void dispatch(uint32_t, uint32_t, uint32_t) override {}
+        void copy_buffer(tgfx::BufferHandle, tgfx::BufferHandle, uint64_t, uint64_t = 0, uint64_t = 0) override {}
+        void copy_texture(tgfx::TextureHandle, tgfx::TextureHandle) override {}
+        void set_viewport(int, int, int, int) override {}
+        void set_scissor(int, int, int, int) override {}
+
+    private:
+        ExecutionRecordingState& state_;
+    };
+
+    class ExecutionRecordingDevice final : public tgfx::IRenderDevice {
+    public:
+        ExecutionRecordingState state;
+
+        tgfx::BackendType backend_type() const override {
+            return tgfx::BackendType::Vulkan;
+        }
+        tgfx::BackendCapabilities capabilities() const override {
+            tgfx::BackendCapabilities caps;
+            caps.backend = tgfx::BackendType::Vulkan;
+            caps.supports_multiview = true;
+            caps.supports_multisample_resolve = true;
+            return caps;
+        }
+        void wait_idle() override {}
+        tgfx::BufferHandle create_buffer(const tgfx::BufferDesc&) override {
+            return tgfx::BufferHandle{next_buffer_id_++};
+        }
+        tgfx::TextureHandle create_texture(const tgfx::TextureDesc& desc) override {
+            const tgfx::TextureHandle handle{next_texture_id_++};
+            texture_descs_[handle.id] = desc;
+            return handle;
+        }
+        tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
+            return tgfx::SamplerHandle{1};
+        }
+        tgfx::ShaderHandle create_shader(const tgfx::ShaderDesc&) override {
+            return tgfx::ShaderHandle{1};
+        }
+        tgfx::PipelineHandle create_pipeline(const tgfx::PipelineDesc&) override {
+            return tgfx::PipelineHandle{1};
+        }
+        tgfx::ResourceSetHandle create_bound_resource_set(const tgfx::BoundResourceSetDesc&) override {
+            return tgfx::ResourceSetHandle{1};
+        }
+        void destroy(tgfx::BufferHandle) override {}
+        void destroy(tgfx::TextureHandle handle) override {
+            texture_descs_.erase(handle.id);
+        }
+        void destroy(tgfx::SamplerHandle) override {}
+        void destroy(tgfx::ShaderHandle) override {}
+        void destroy(tgfx::PipelineHandle) override {}
+        void destroy(tgfx::ResourceSetHandle) override {}
+        void upload_buffer(tgfx::BufferHandle, std::span<const uint8_t>, uint64_t = 0) override {}
+        void upload_texture(tgfx::TextureHandle, std::span<const uint8_t>, uint32_t = 0) override {}
+        void upload_texture_region(tgfx::TextureHandle,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   uint32_t,
+                                   std::span<const uint8_t>,
+                                   uint32_t = 0) override {}
+        void read_buffer(tgfx::BufferHandle, std::span<uint8_t>, uint64_t = 0) override {}
+        tgfx::TextureDesc texture_desc(tgfx::TextureHandle handle) const override {
+            const auto it = texture_descs_.find(handle.id);
+            return it == texture_descs_.end() ? tgfx::TextureDesc{} : it->second;
+        }
+        std::unique_ptr<tgfx::ICommandList> create_command_list(tgfx::QueueType = tgfx::QueueType::Graphics) override {
+            return std::make_unique<ExecutionRecordingCommandList>(state);
+        }
+        void submit(tgfx::ICommandList&) override {}
+        void present() override {}
+
+    private:
+        uint32_t next_buffer_id_ = 1;
+        uint32_t next_texture_id_ = 1;
+        std::unordered_map<uint32_t, tgfx::TextureDesc> texture_descs_;
+    };
+
     constexpr const char* kExternalAliasIntermediate = "ExternalAliasIntermediate";
 
     class RasterTargetInitializer final : public termin::CxxFramePass {
@@ -142,10 +269,17 @@ namespace {
         std::string input_;
         std::string output_;
         tc_raster_load_intent load_;
+        bool barrier_after_ = false;
 
     public:
-        RasterFusionProbe(std::string input, std::string output, tc_raster_load_intent load)
-            : input_(std::move(input)), output_(std::move(output)), load_(load) {
+        RasterFusionProbe(std::string input,
+                          std::string output,
+                          tc_raster_load_intent load,
+                          bool barrier_after = false)
+            : input_(std::move(input)),
+              output_(std::move(output)),
+              load_(load),
+              barrier_after_(barrier_after) {
             pass_name_set(output_);
         }
 
@@ -169,6 +303,7 @@ namespace {
             contract.depth_load = TC_RASTER_LOAD;
             contract.has_color = true;
             contract.has_depth = false;
+            contract.attachment_barrier_after = barrier_after_;
             contract.fusion_eligible = true;
             return true;
         }
@@ -181,6 +316,84 @@ namespace {
         void execute(termin::ExecuteContext&) override {
             ++g_raster_probe_execute_count;
         }
+    };
+
+    class ClearRasterProbe final : public termin::CxxFramePass {
+    private:
+        std::string resource_;
+
+    public:
+        explicit ClearRasterProbe(std::string resource)
+            : resource_(std::move(resource)) {
+            pass_name_set("ClearRasterProbe");
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {resource_.c_str()};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec{resource_,
+                                         "fbo",
+                                         std::pair<int, int>{16, 16},
+                                         std::array<double, 4>{0.25, 0.5, 0.75, 1.0},
+                                         0.5f}};
+        }
+
+        bool get_raster_contract(termin::ExecuteContext&, tc_raster_pass_contract& contract) const override {
+            contract.target_resource = resource_.c_str();
+            contract.view_count = 1;
+            contract.color_load = TC_RASTER_LOAD;
+            contract.depth_load = TC_RASTER_LOAD;
+            contract.has_color = true;
+            contract.has_depth = true;
+            contract.fusion_eligible = true;
+            return true;
+        }
+
+        bool record_raster(termin::ExecuteContext&) override {
+            ++g_raster_probe_record_count;
+            return true;
+        }
+
+        void execute(termin::ExecuteContext&) override {
+            ++g_raster_probe_execute_count;
+        }
+    };
+
+    class ClearedResourceReadProbe final : public termin::CxxFramePass {
+    private:
+        std::string input_;
+        std::string output_;
+
+    public:
+        ClearedResourceReadProbe(std::string input, std::string output)
+            : input_(std::move(input)),
+              output_(std::move(output)) {
+            pass_name_set("ClearedResourceReadProbe");
+        }
+
+        std::set<const char*> compute_reads() const override {
+            return {input_.c_str()};
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {output_.c_str()};
+        }
+
+        std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
+            return {{input_, output_}};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            return {termin::ResourceSpec{input_,
+                                         "fbo",
+                                         std::pair<int, int>{16, 16},
+                                         std::array<double, 4>{0.1, 0.2, 0.3, 1.0},
+                                         0.75f}};
+        }
+
+        void execute(termin::ExecuteContext&) override {}
     };
 
     class MsaaTargetInitializer final : public termin::CxxFramePass {
@@ -207,8 +420,14 @@ namespace {
     };
 
     class ResolveFusionProbe final : public termin::CxxFramePass {
+    private:
+        std::string target_;
+        bool declare_target_ = true;
+
     public:
-        ResolveFusionProbe() {
+        explicit ResolveFusionProbe(std::string target = "resolved_target", bool declare_target = true)
+            : target_(std::move(target)),
+              declare_target_(declare_target) {
             pass_name_set("ResolveFusionProbe");
         }
 
@@ -217,11 +436,13 @@ namespace {
         }
 
         std::set<const char*> compute_writes() const override {
-            return {"resolved_target"};
+            return {target_.c_str()};
         }
 
         std::vector<termin::ResourceSpec> get_resource_specs() const override {
-            return {termin::ResourceSpec{"resolved_target",
+            if (!declare_target_)
+                return {};
+            return {termin::ResourceSpec{target_,
                                          "fbo",
                                          std::pair<int, int>{16, 16},
                                          std::nullopt,
@@ -233,7 +454,7 @@ namespace {
         bool get_raster_resolve_contract(termin::ExecuteContext&,
                                          tc_raster_resolve_contract& contract) const override {
             contract.source_resource = "msaa_target_2";
-            contract.target_resource = "resolved_target";
+            contract.target_resource = target_.c_str();
             contract.view_count = 1;
             contract.fusion_eligible = true;
             return true;
@@ -654,6 +875,126 @@ TEST_CASE("adjacent compatible raster passes record inside one physical scope") 
     pipeline.destroy();
 }
 
+TEST_CASE("compatible raster clear metadata becomes the physical scope load operation") {
+    termin::RenderPipeline pipeline("raster-deferred-clear-execution-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ClearRasterProbe("clear_target"))->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "RasterDeferredClearTarget";
+    target.render_rect = {0, 0, 16, 16};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    g_raster_probe_execute_count = 0;
+    g_raster_probe_record_count = 0;
+    engine.execute_pipeline(execution);
+
+    CHECK(g_raster_probe_execute_count == 0);
+    CHECK(g_raster_probe_record_count == 1);
+    REQUIRE(recording_device->state.scopes.size() == 1);
+    const tgfx::RenderPassDesc& scope = recording_device->state.scopes.front().pass;
+    REQUIRE(scope.colors.size() == 1);
+    CHECK(scope.colors.front().load == tgfx::LoadOp::Clear);
+    CHECK(scope.colors.front().clear_color[0] == guard::Approx(0.25f));
+    CHECK(scope.colors.front().clear_color[1] == guard::Approx(0.5f));
+    CHECK(scope.colors.front().clear_color[2] == guard::Approx(0.75f));
+    CHECK(scope.has_depth);
+    CHECK(scope.depth.load == tgfx::LoadOp::Clear);
+    CHECK(scope.depth.clear_depth == guard::Approx(0.5f));
+
+    pipeline.destroy();
+}
+
+TEST_CASE("resource read before raster write keeps the standalone clear") {
+    termin::RenderPipeline pipeline("raster-read-before-clear-execution-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ClearedResourceReadProbe("clear_target", "clear_target_after_read"))->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe(
+                           "clear_target_after_read", "clear_target_after_raster", TC_RASTER_LOAD))
+                          ->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "RasterReadBeforeClearTarget";
+    target.render_rect = {0, 0, 16, 16};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 2);
+    const tgfx::RenderPassDesc& clear_scope = recording_device->state.scopes[0].pass;
+    REQUIRE(clear_scope.colors.size() == 1);
+    CHECK(clear_scope.colors.front().load == tgfx::LoadOp::Clear);
+    CHECK(clear_scope.has_depth);
+    CHECK(clear_scope.depth.load == tgfx::LoadOp::Clear);
+    const tgfx::RenderPassDesc& raster_scope = recording_device->state.scopes[1].pass;
+    REQUIRE(raster_scope.colors.size() == 1);
+    CHECK(raster_scope.colors.front().load == tgfx::LoadOp::Load);
+
+    pipeline.destroy();
+}
+
+TEST_CASE("fused logical raster boundary records the requested attachment barrier") {
+    termin::RenderPipeline pipeline("raster-fusion-barrier-execution-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new RasterTargetInitializer())->tc_pass_ptr());
+    pipeline.add_pass(
+        (new RasterFusionProbe("raster_target_0", "raster_target_1", TC_RASTER_CLEAR, true))->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("raster_target_1", "raster_target_2", TC_RASTER_LOAD))->tc_pass_ptr());
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "RasterFusionBarrierTarget";
+    target.render_rect = {0, 0, 16, 16};
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    CHECK(recording_device->state.framebuffer_local_barriers == 1);
+
+    pipeline.destroy();
+}
+
 TEST_CASE("compatible resolve is absorbed into the fused raster scope") {
     termin::RenderPipeline pipeline("raster-resolve-fusion-execution-test");
     REQUIRE(pipeline.is_valid());
@@ -684,6 +1025,57 @@ TEST_CASE("compatible resolve is absorbed into the fused raster scope") {
     CHECK(g_raster_probe_execute_count == 0);
     CHECK(g_raster_probe_record_count == 2);
     CHECK(g_resolve_probe_execute_count == 0);
+
+    pipeline.destroy();
+}
+
+TEST_CASE("first-access resolve suppresses an external target preclear") {
+    termin::RenderPipeline pipeline("external-resolve-clear-elision-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new MsaaTargetInitializer())->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("msaa_target_0", "msaa_target_1", TC_RASTER_CLEAR))->tc_pass_ptr());
+    pipeline.add_pass((new RasterFusionProbe("msaa_target_1", "msaa_target_2", TC_RASTER_LOAD))->tc_pass_ptr());
+    pipeline.add_pass((new ResolveFusionProbe("OUTPUT", false))->tc_pass_ptr());
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA16F;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "ExternalResolveClearElisionTarget";
+    target.render_rect = {0, 0, 16, 16};
+    target.output_color_tex = output;
+    target.output_color_format = tgfx::PixelFormat::RGBA16F;
+    target.clear_color_enabled = true;
+    target.clear_color[0] = 0.8f;
+    target.clear_color[1] = 0.2f;
+    target.clear_color[2] = 0.1f;
+    target.clear_color[3] = 1.0f;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1);
+    const tgfx::RenderPassDesc& scope = recording_device->state.scopes.front().pass;
+    REQUIRE(scope.colors.size() == 1);
+    CHECK(scope.colors.front().resolve_texture == output);
 
     pipeline.destroy();
 }

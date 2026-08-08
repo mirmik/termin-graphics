@@ -30,6 +30,7 @@ namespace {
             contract.depth_load = TC_RASTER_CLEAR;
             contract.has_color = true;
             contract.has_depth = true;
+            contract.attachment_barrier_after = true;
             contract.fusion_eligible = eligible;
             return true;
         }
@@ -78,6 +79,7 @@ TEST_CASE("raster pass ABI keeps standalone execution separate from recording") 
     CHECK(contract.view_count == 1);
     CHECK(contract.color_load == TC_RASTER_LOAD);
     CHECK(contract.depth_load == TC_RASTER_CLEAR);
+    CHECK(contract.attachment_barrier_after);
     CHECK(contract.fusion_eligible);
 
     CHECK(tc_pass_record_raster(pass.tc_pass_ptr(), &context));

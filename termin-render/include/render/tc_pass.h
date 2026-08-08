@@ -42,6 +42,11 @@ typedef struct tc_raster_pass_contract {
     tc_raster_load_intent depth_load;
     bool has_color;
     bool has_depth;
+    // Preserve an attachment-ordering boundary when this logical pass is
+    // followed by another pass inside the same physical raster scope. This is
+    // the fused-scope equivalent of a pass-local barrier between neighboring
+    // draws.
+    bool attachment_barrier_after;
     bool fusion_eligible;
 } tc_raster_pass_contract;
 
