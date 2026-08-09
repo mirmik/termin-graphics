@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from termin.geombase import Mat44, Mat44f
+from termin.geombase import LinearColor, Mat44, Mat44f, SrgbColor, Vec4
 from termin.materials import TcMaterial
 from tgfx import ShaderLanguage
 
@@ -59,3 +59,29 @@ def test_set_param_rejects_ambiguous_raw_mat4_buffer() -> None:
         phase.set_param("u_transform", c_order_matrix)
 
     assert "u_transform" not in phase.uniforms
+
+
+def test_set_param_preserves_distinct_color_kinds() -> None:
+    phase = _phase()
+
+    phase.set_param("u_authored", SrgbColor(0.25, 0.5, 0.75, 1.0))
+    phase.set_param("u_radiance", LinearColor(2.0, 1.5, 0.5, 0.75))
+    phase.set_param("u_numeric", Vec4(0.25, 0.5, 0.75, 1.0))
+
+    assert isinstance(phase.uniforms["u_authored"], SrgbColor)
+    assert isinstance(phase.uniforms["u_radiance"], LinearColor)
+    assert isinstance(phase.uniforms["u_numeric"], Vec4)
+    assert phase.get_uniform_srgb_color("u_authored").g == pytest.approx(0.5)
+    assert phase.get_uniform_linear_color("u_radiance").r == pytest.approx(2.0)
+
+
+def test_color_uniform_kind_cannot_change_in_place() -> None:
+    phase = _phase()
+    phase.set_uniform_srgb_color("u_color", SrgbColor(0.1, 0.2, 0.3, 1.0))
+
+    with pytest.raises(RuntimeError, match="linear color uniform"):
+        phase.set_uniform_linear_color("u_color", LinearColor(0.1, 0.2, 0.3, 1.0))
+
+    stored = phase.uniforms["u_color"]
+    assert isinstance(stored, SrgbColor)
+    assert stored.r == pytest.approx(0.1)

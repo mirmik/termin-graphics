@@ -1,3 +1,4 @@
+#include <termin/geom/color.hpp>
 #include <termin/materials/shader_parser.hpp>
 #include <termin/materials/surface_contract_registry.h>
 
@@ -184,9 +185,9 @@ namespace termin {
             std::smatch legacy_match;
             const std::regex constructor_shape(R"(^\s*(\w+)\s*\([^()]*\)\s*$)");
             if (std::regex_match(val, legacy_match, constructor_shape) && legacy_match[1].str() == "Color") {
-                throw std::runtime_error(
-                    "Legacy Color(...) constructor is not supported for property type '" + property_type +
-                    "'; use SrgbColor(...) or LinearColor(...) matching the declared type");
+                throw std::runtime_error("Legacy Color(...) constructor is not supported for property type '" +
+                                         property_type +
+                                         "'; use SrgbColor(...) or LinearColor(...) matching the declared type");
             }
 
             if (property_type == "Float") {
@@ -213,8 +214,8 @@ namespace termin {
                     const std::string constructor_type = match[1].str();
                     if (constructor_type != property_type) {
                         throw std::runtime_error("Default constructor '" + constructor_type +
-                                                 "(...)' does not match property type '" + property_type +
-                                                 "'; use " + property_type + "(...)");
+                                                 "(...)' does not match property type '" + property_type + "'; use " +
+                                                 property_type + "(...)");
                     }
                     inner = match[2].str();
                 } else {
@@ -886,8 +887,20 @@ ConstantBuffer<DrawData> draw_data;
                     count = 2;
                 else if (property_type == "Vec3")
                     count = 3;
-                // Vec4 / SrgbColor / LinearColor → 4.
-                write_float_array(dst, *arr, count);
+                // Vec4 / SrgbColor / LinearColor → 4. Keep conversion local so
+                // malformed values never partially modify the destination.
+                if (arr->size() < count)
+                    return false;
+                if (property_type == "SrgbColor") {
+                    const LinearColor linear = srgb_to_linear(SrgbColor{static_cast<float>((*arr)[0]),
+                                                                        static_cast<float>((*arr)[1]),
+                                                                        static_cast<float>((*arr)[2]),
+                                                                        static_cast<float>((*arr)[3])});
+                    const float values[4] = {linear.r, linear.g, linear.b, linear.a};
+                    std::memcpy(dst, values, sizeof(values));
+                } else {
+                    write_float_array(dst, *arr, count);
+                }
                 return true;
             }
             if (property_type == "Mat4") {
@@ -909,12 +922,10 @@ ConstantBuffer<DrawData> draw_data;
 
     namespace {
 
-        // Two property_type strings are "compatible" for std140 packing if they
-        // pack to the same std140 slot layout. This is needed because the
-        // runtime value side (tc_uniform_value → MaterialProperty) doesn't know
-        // whether the original declaration was a color or Vec4 — values retain
-        // their semantic type even though they occupy a vec4 slot. Similarly, Float/Int can be written
-        // through the same 4-byte slot. Bool fields also accept Int values because
+        // Two property_type strings are "compatible" for std140 packing only
+        // when their coercion is explicitly supported. Color semantic types are
+        // intentionally exact even though they occupy a vec4 slot. Float/Int can
+        // be written through the same 4-byte slot. Bool fields also accept Int values because
         // editor/runtime material APIs commonly expose bool toggles through integer
         // setters; they are normalized to 0/1 by pack_one().
         bool property_types_compatible(const std::string& a, const std::string& b) {

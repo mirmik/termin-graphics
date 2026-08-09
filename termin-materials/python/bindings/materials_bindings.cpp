@@ -6,6 +6,7 @@
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/stl/vector.h>
 #include <tcbase/tc_log.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/materials/shader_parser.hpp>
 #include <termin/materials/surface_contract_registry.hpp>
 
@@ -63,6 +64,12 @@ namespace termin {
                             vec.push_back(nb::cast<double>(item));
                         }
                         self->default_value = vec;
+                    } else if (nb::isinstance<SrgbColor>(default_val)) {
+                        const SrgbColor value = nb::cast<SrgbColor>(default_val);
+                        self->default_value = std::vector<double>{value.r, value.g, value.b, value.a};
+                    } else if (nb::isinstance<LinearColor>(default_val)) {
+                        const LinearColor value = nb::cast<LinearColor>(default_val);
+                        self->default_value = std::vector<double>{value.r, value.g, value.b, value.a};
                     }
                 },
                 nb::arg("name"),
@@ -136,6 +143,12 @@ namespace termin {
                             vec.push_back(nb::cast<double>(item));
                         }
                         self.default_value = vec;
+                    } else if (nb::isinstance<SrgbColor>(val)) {
+                        const SrgbColor value = nb::cast<SrgbColor>(val);
+                        self.default_value = std::vector<double>{value.r, value.g, value.b, value.a};
+                    } else if (nb::isinstance<LinearColor>(val)) {
+                        const LinearColor value = nb::cast<LinearColor>(val);
+                        self.default_value = std::vector<double>{value.r, value.g, value.b, value.a};
                     }
                 });
 

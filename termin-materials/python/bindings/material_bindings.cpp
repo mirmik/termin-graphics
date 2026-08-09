@@ -8,6 +8,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <tcbase/tc_log.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/geom/vec2.hpp>
 #include <tgfx/tgfx_material_handle.hpp>
 #include <tgfx/tgfx_shader_handle.hpp>
@@ -104,6 +105,14 @@ namespace termin {
                 break;
             case TC_UNIFORM_VEC4:
                 result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
+                break;
+            case TC_UNIFORM_SRGB_COLOR:
+                result[nb::cast(name)] =
+                    SrgbColor{u.data.srgb_color.r, u.data.srgb_color.g, u.data.srgb_color.b, u.data.srgb_color.a};
+                break;
+            case TC_UNIFORM_LINEAR_COLOR:
+                result[nb::cast(name)] = LinearColor{
+                    u.data.linear_color.r, u.data.linear_color.g, u.data.linear_color.b, u.data.linear_color.a};
                 break;
             case TC_UNIFORM_MAT4: {
                 Mat44f value;
@@ -513,6 +522,13 @@ namespace termin {
                 shader_uniforms.insert(shader_uniforms.end(),
                                        shader_phase.material_uniforms.begin(),
                                        shader_phase.material_uniforms.end());
+                const auto set_uniform_or_throw =
+                    [phase](const std::string& name, tc_uniform_type type, const void* value) {
+                        if (!tc_material_phase_set_uniform(phase, name.c_str(), type, value)) {
+                            tc::Log::error("create_material_from_parsed failed to set uniform '%s'", name.c_str());
+                            throw std::runtime_error("failed to set uniform '" + name + "'");
+                        }
+                    };
 
                 // Apply uniforms from defaults
                 for (const auto& prop : shader_uniforms) {
@@ -521,21 +537,24 @@ namespace termin {
 
                     if (std::holds_alternative<bool>(prop.default_value)) {
                         int val = std::get<bool>(prop.default_value) ? 1 : 0;
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
+                        set_uniform_or_throw(prop.name, TC_UNIFORM_BOOL, &val);
                     } else if (std::holds_alternative<int>(prop.default_value)) {
                         int val = std::get<int>(prop.default_value);
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_INT, &val);
+                        set_uniform_or_throw(prop.name, TC_UNIFORM_INT, &val);
                     } else if (std::holds_alternative<double>(prop.default_value)) {
                         float val = static_cast<float>(std::get<double>(prop.default_value));
-                        tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_FLOAT, &val);
+                        set_uniform_or_throw(prop.name, TC_UNIFORM_FLOAT, &val);
                     } else if (std::holds_alternative<std::vector<double>>(prop.default_value)) {
                         const auto& vec = std::get<std::vector<double>>(prop.default_value);
                         if (vec.size() == 3) {
                             float arr[3] = {(float)vec[0], (float)vec[1], (float)vec[2]};
-                            tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC3, arr);
+                            set_uniform_or_throw(prop.name, TC_UNIFORM_VEC3, arr);
                         } else if (vec.size() == 4) {
                             float arr[4] = {(float)vec[0], (float)vec[1], (float)vec[2], (float)vec[3]};
-                            tc_material_phase_set_uniform(phase, prop.name.c_str(), TC_UNIFORM_VEC4, arr);
+                            const tc_uniform_type type = prop.property_type == "SrgbColor"     ? TC_UNIFORM_SRGB_COLOR
+                                                         : prop.property_type == "LinearColor" ? TC_UNIFORM_LINEAR_COLOR
+                                                                                               : TC_UNIFORM_VEC4;
+                            set_uniform_or_throw(prop.name, type, arr);
                         }
                     }
                 }
@@ -548,21 +567,37 @@ namespace termin {
                         nb::object val = nb::borrow<nb::object>(item.second);
                         if (nb::isinstance<nb::bool_>(val)) {
                             int v = nb::cast<bool>(val) ? 1 : 0;
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
+                            set_uniform_or_throw(key, TC_UNIFORM_BOOL, &v);
                         } else if (nb::isinstance<nb::int_>(val)) {
                             int v = nb::cast<int>(val);
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_INT, &v);
+                            set_uniform_or_throw(key, TC_UNIFORM_INT, &v);
                         } else if (nb::isinstance<nb::float_>(val)) {
                             float v = nb::cast<float>(val);
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_FLOAT, &v);
+                            set_uniform_or_throw(key, TC_UNIFORM_FLOAT, &v);
                         } else if (nb::isinstance<Vec3>(val)) {
                             Vec3 v = nb::cast<Vec3>(val);
                             float arr[3] = {(float)v.x, (float)v.y, (float)v.z};
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC3, arr);
+                            set_uniform_or_throw(key, TC_UNIFORM_VEC3, arr);
                         } else if (nb::isinstance<Vec4>(val)) {
                             Vec4 v = nb::cast<Vec4>(val);
                             float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
-                            tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC4, arr);
+                            set_uniform_or_throw(key, TC_UNIFORM_VEC4, arr);
+                        } else if (nb::isinstance<SrgbColor>(val)) {
+                            const SrgbColor c = nb::cast<SrgbColor>(val);
+                            const tc_srgb_color value{c.r, c.g, c.b, c.a};
+                            if (!tc_material_phase_set_srgb_color(phase, key.c_str(), value)) {
+                                tc::Log::error("create_material_from_parsed rejected SrgbColor uniform '%s'",
+                                               key.c_str());
+                                throw std::runtime_error("uniform kind mismatch for '" + key + "'");
+                            }
+                        } else if (nb::isinstance<LinearColor>(val)) {
+                            const LinearColor c = nb::cast<LinearColor>(val);
+                            const tc_linear_color value{c.r, c.g, c.b, c.a};
+                            if (!tc_material_phase_set_linear_color(phase, key.c_str(), value)) {
+                                tc::Log::error("create_material_from_parsed rejected LinearColor uniform '%s'",
+                                               key.c_str());
+                                throw std::runtime_error("uniform kind mismatch for '" + key + "'");
+                            }
                         }
                     }
                 }
@@ -780,42 +815,52 @@ namespace termin {
                              }
                              return result;
                          })
-            .def_prop_ro("uniforms",
-                         [](tc_material_phase& p) {
-                             nb::dict result;
-                             for (size_t i = 0; i < p.uniform_count; i++) {
-                                 std::string name = p.uniforms[i].name;
-                                 tc_uniform_value& u = p.uniforms[i];
-                                 switch (u.type) {
-                                 case TC_UNIFORM_BOOL:
-                                 case TC_UNIFORM_INT:
-                                     result[nb::cast(name)] = u.data.i;
-                                     break;
-                                 case TC_UNIFORM_FLOAT:
-                                     result[nb::cast(name)] = u.data.f;
-                                     break;
-                                 case TC_UNIFORM_VEC2:
-                                     result[nb::cast(name)] = nb::make_tuple(u.data.v2[0], u.data.v2[1]);
-                                     break;
-                                 case TC_UNIFORM_VEC3:
-                                     result[nb::cast(name)] = Vec3{u.data.v3[0], u.data.v3[1], u.data.v3[2]};
-                                     break;
-                                 case TC_UNIFORM_VEC4:
-                                     result[nb::cast(name)] =
-                                         Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
-                                     break;
-                                 case TC_UNIFORM_MAT4: {
-                                     Mat44f value;
-                                     std::memcpy(value.data, u.data.m4, sizeof(value.data));
-                                     result[nb::cast(name)] = value;
-                                     break;
-                                 }
-                                 default:
-                                     break;
-                                 }
-                             }
-                             return result;
-                         })
+            .def_prop_ro(
+                "uniforms",
+                [](tc_material_phase& p) {
+                    nb::dict result;
+                    for (size_t i = 0; i < p.uniform_count; i++) {
+                        std::string name = p.uniforms[i].name;
+                        tc_uniform_value& u = p.uniforms[i];
+                        switch (u.type) {
+                        case TC_UNIFORM_BOOL:
+                        case TC_UNIFORM_INT:
+                            result[nb::cast(name)] = u.data.i;
+                            break;
+                        case TC_UNIFORM_FLOAT:
+                            result[nb::cast(name)] = u.data.f;
+                            break;
+                        case TC_UNIFORM_VEC2:
+                            result[nb::cast(name)] = nb::make_tuple(u.data.v2[0], u.data.v2[1]);
+                            break;
+                        case TC_UNIFORM_VEC3:
+                            result[nb::cast(name)] = Vec3{u.data.v3[0], u.data.v3[1], u.data.v3[2]};
+                            break;
+                        case TC_UNIFORM_VEC4:
+                            result[nb::cast(name)] = Vec4{u.data.v4[0], u.data.v4[1], u.data.v4[2], u.data.v4[3]};
+                            break;
+                        case TC_UNIFORM_SRGB_COLOR:
+                            result[nb::cast(name)] = SrgbColor{
+                                u.data.srgb_color.r, u.data.srgb_color.g, u.data.srgb_color.b, u.data.srgb_color.a};
+                            break;
+                        case TC_UNIFORM_LINEAR_COLOR:
+                            result[nb::cast(name)] = LinearColor{u.data.linear_color.r,
+                                                                 u.data.linear_color.g,
+                                                                 u.data.linear_color.b,
+                                                                 u.data.linear_color.a};
+                            break;
+                        case TC_UNIFORM_MAT4: {
+                            Mat44f value;
+                            std::memcpy(value.data, u.data.m4, sizeof(value.data));
+                            result[nb::cast(name)] = value;
+                            break;
+                        }
+                        default:
+                            break;
+                        }
+                    }
+                    return result;
+                })
             .def_prop_rw(
                 "state",
                 [](tc_material_phase& p) { return p.state; },
@@ -842,6 +887,31 @@ namespace termin {
                  [](tc_material_phase& p, const char* name, const Vec4& v) {
                      float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
                      tc_material_phase_set_uniform(&p, name, TC_UNIFORM_VEC4, arr);
+                 })
+            .def("set_uniform_srgb_color",
+                 [](tc_material_phase& p, const char* name, const SrgbColor& value) {
+                     if (!tc_material_phase_set_srgb_color(&p, name, tc_srgb_color{value.r, value.g, value.b, value.a}))
+                         throw std::runtime_error(std::string("failed to set sRGB color uniform '") + name + "'");
+                 })
+            .def("set_uniform_linear_color",
+                 [](tc_material_phase& p, const char* name, const LinearColor& value) {
+                     if (!tc_material_phase_set_linear_color(
+                             &p, name, tc_linear_color{value.r, value.g, value.b, value.a}))
+                         throw std::runtime_error(std::string("failed to set linear color uniform '") + name + "'");
+                 })
+            .def("get_uniform_srgb_color",
+                 [](const tc_material_phase& p, const char* name) -> nb::object {
+                     tc_srgb_color value;
+                     if (!tc_material_phase_get_srgb_color(&p, name, &value))
+                         return nb::none();
+                     return nb::cast(SrgbColor{value.r, value.g, value.b, value.a});
+                 })
+            .def("get_uniform_linear_color",
+                 [](const tc_material_phase& p, const char* name) -> nb::object {
+                     tc_linear_color value;
+                     if (!tc_material_phase_get_linear_color(&p, name, &value))
+                         return nb::none();
+                     return nb::cast(LinearColor{value.r, value.g, value.b, value.a});
                  })
             .def("set_texture",
                  [](tc_material_phase& p, const char* name, TcTexture& tex) {
@@ -934,6 +1004,19 @@ namespace termin {
                         Vec3 v = nb::cast<Vec3>(value);
                         float arr[3] = {(float)v.x, (float)v.y, (float)v.z};
                         tc_material_phase_set_uniform(&p, name.c_str(), TC_UNIFORM_VEC3, arr);
+                    } else if (nb::isinstance<SrgbColor>(value)) {
+                        const SrgbColor c = nb::cast<SrgbColor>(value);
+                        if (!tc_material_phase_set_srgb_color(&p, name.c_str(), tc_srgb_color{c.r, c.g, c.b, c.a})) {
+                            tc::Log::error("TcMaterialPhase.set_param('%s') rejected SrgbColor", name.c_str());
+                            throw std::runtime_error("set_param rejected SrgbColor for '" + name + "'");
+                        }
+                    } else if (nb::isinstance<LinearColor>(value)) {
+                        const LinearColor c = nb::cast<LinearColor>(value);
+                        if (!tc_material_phase_set_linear_color(
+                                &p, name.c_str(), tc_linear_color{c.r, c.g, c.b, c.a})) {
+                            tc::Log::error("TcMaterialPhase.set_param('%s') rejected LinearColor", name.c_str());
+                            throw std::runtime_error("set_param rejected LinearColor for '" + name + "'");
+                        }
                     } else if (nb::isinstance<Vec4>(value)) {
                         Vec4 v = nb::cast<Vec4>(value);
                         float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
@@ -1047,25 +1130,14 @@ namespace termin {
                      // Set color
                      if (kwargs.contains("color") && !kwargs["color"].is_none() && phase) {
                          nb::object color_obj = nb::borrow<nb::object>(kwargs["color"]);
-                         if (nb::isinstance<Vec4>(color_obj)) {
-                             Vec4 c = nb::cast<Vec4>(color_obj);
-                             tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-                         } else if (supports_python_buffer(color_obj)) {
-                             auto arr = nb::cast<nb::ndarray<float, nb::c_contig, nb::device::cpu>>(color_obj);
-                             if (arr.size() != 4) {
-                                 tc::Log::error("TcMaterial(color) expects float32 buffer size 4; got %zu", arr.size());
-                                 throw std::runtime_error("TcMaterial(color) expects float32 buffer size 4");
-                             }
-                             float* ptr = arr.data();
-                             tc_material_phase_set_color(phase, ptr[0], ptr[1], ptr[2], ptr[3]);
-                         } else if (nb::isinstance<nb::tuple>(color_obj) || nb::isinstance<nb::list>(color_obj)) {
-                             nb::sequence seq = nb::cast<nb::sequence>(color_obj);
-                             tc_material_phase_set_color(phase,
-                                                         nb::cast<float>(seq[0]),
-                                                         nb::cast<float>(seq[1]),
-                                                         nb::cast<float>(seq[2]),
-                                                         nb::cast<float>(seq[3]));
+                         if (!nb::isinstance<SrgbColor>(color_obj)) {
+                             tc::Log::error(
+                                 "TcMaterial(color) expects SrgbColor; Vec4, tuples, and buffers are rejected");
+                             throw std::invalid_argument("TcMaterial(color) expects SrgbColor");
                          }
+                         const SrgbColor c = nb::cast<SrgbColor>(color_obj);
+                         if (!tc_material_phase_set_srgb_color(phase, "u_color", tc_srgb_color{c.r, c.g, c.b, c.a}))
+                             throw std::runtime_error("failed to set typed u_color uniform");
                      }
 
                      // Set textures
@@ -1107,6 +1179,16 @@ namespace termin {
                                  Vec4 v = nb::cast<Vec4>(val);
                                  float arr[4] = {(float)v.x, (float)v.y, (float)v.z, (float)v.w};
                                  tc_material_phase_set_uniform(phase, key.c_str(), TC_UNIFORM_VEC4, arr);
+                             } else if (nb::isinstance<SrgbColor>(val)) {
+                                 const SrgbColor c = nb::cast<SrgbColor>(val);
+                                 if (!tc_material_phase_set_srgb_color(
+                                         phase, key.c_str(), tc_srgb_color{c.r, c.g, c.b, c.a}))
+                                     throw std::runtime_error("uniform kind mismatch for '" + key + "'");
+                             } else if (nb::isinstance<LinearColor>(val)) {
+                                 const LinearColor c = nb::cast<LinearColor>(val);
+                                 if (!tc_material_phase_set_linear_color(
+                                         phase, key.c_str(), tc_linear_color{c.r, c.g, c.b, c.a}))
+                                     throw std::runtime_error("uniform kind mismatch for '" + key + "'");
                              }
                          }
                      }
@@ -1247,7 +1329,7 @@ namespace termin {
             .def_prop_rw(
                 "color",
                 [](const TcMaterial& self) -> nb::object {
-                    auto c = self.color();
+                    auto c = self.uniform_srgb_color("u_color");
                     if (!c.has_value())
                         return nb::none();
                     return nb::cast(c.value());
@@ -1255,27 +1337,33 @@ namespace termin {
                 [](TcMaterial& self, nb::object val) {
                     if (val.is_none())
                         return;
-                    if (nb::isinstance<Vec4>(val)) {
-                        self.set_color(nb::cast<Vec4>(val));
-                    } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
-                        nb::sequence seq = nb::cast<nb::sequence>(val);
-                        self.set_color(nb::cast<float>(seq[0]),
-                                       nb::cast<float>(seq[1]),
-                                       nb::cast<float>(seq[2]),
-                                       nb::cast<float>(seq[3]));
+                    if (!nb::isinstance<SrgbColor>(val)) {
+                        tc::Log::error("TcMaterial.color expects SrgbColor; Vec4, tuples, and buffers are rejected");
+                        throw std::invalid_argument("TcMaterial.color expects SrgbColor");
+                    }
+                    const SrgbColor c = nb::cast<SrgbColor>(val);
+                    if (!self.set_uniform_srgb_color("u_color", c)) {
+                        tc::Log::error("TcMaterial.color failed to set typed u_color uniform");
+                        throw std::runtime_error("failed to set TcMaterial.color");
                     }
                 })
             .def(
                 "set_color",
-                [](TcMaterial& self, const Vec4& c) { self.set_color(c.x, c.y, c.z, c.w); },
+                [](TcMaterial& self, const SrgbColor& c) {
+                    if (!self.set_uniform_srgb_color("u_color", c))
+                        throw std::runtime_error("failed to set typed u_color uniform");
+                },
                 nb::arg("color"))
-            .def(
-                "set_color",
-                [](TcMaterial& self, float r, float g, float b, float a) { self.set_color(r, g, b, a); },
-                nb::arg("r"),
-                nb::arg("g"),
-                nb::arg("b"),
-                nb::arg("a") = 1.0f)
+            .def("set_uniform_srgb_color",
+                 [](TcMaterial& self, const char* name, const SrgbColor& c) {
+                     if (!self.set_uniform_srgb_color(name, c))
+                         throw std::runtime_error(std::string("failed to set sRGB color uniform '") + name + "'");
+                 })
+            .def("set_uniform_linear_color",
+                 [](TcMaterial& self, const char* name, const LinearColor& c) {
+                     if (!self.set_uniform_linear_color(name, c))
+                         throw std::runtime_error(std::string("failed to set linear color uniform '") + name + "'");
+                 })
             // Uniforms
             .def("set_uniform_float", &TcMaterial::set_uniform_float)
             .def("set_uniform_int", &TcMaterial::set_uniform_int)
@@ -1295,21 +1383,22 @@ namespace termin {
                 nb::arg("name"),
                 nb::arg("texture"),
                 "Set a material texture transactionally across all phases.")
-            .def("set_texture_source",
-                 [](TcMaterial& self,
-                    const char* uniform_name,
-                    const char* kind,
-                    const char* source_name,
-                    const char* channel) {
-                     if (!self.set_texture_source(uniform_name, kind, source_name, channel)) {
-                         throw std::runtime_error(std::string("failed to set texture source for '") + uniform_name +
-                                                  "'");
-                     }
-                 },
-                 nb::arg("uniform_name"),
-                 nb::arg("kind"),
-                 nb::arg("source_name"),
-                 nb::arg("channel"))
+            .def(
+                "set_texture_source",
+                [](TcMaterial& self,
+                   const char* uniform_name,
+                   const char* kind,
+                   const char* source_name,
+                   const char* channel) {
+                    if (!self.set_texture_source(uniform_name, kind, source_name, channel)) {
+                        throw std::runtime_error(std::string("failed to set texture source for '") + uniform_name +
+                                                 "'");
+                    }
+                },
+                nb::arg("uniform_name"),
+                nb::arg("kind"),
+                nb::arg("source_name"),
+                nb::arg("channel"))
             .def("clear_texture_source", &TcMaterial::clear_texture_source, nb::arg("uniform_name"))
             .def_prop_ro("texture_sources",
                          [](TcMaterial& self) -> nb::dict {

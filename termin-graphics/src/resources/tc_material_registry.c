@@ -400,14 +400,48 @@ bool tc_material_phase_set_uniform(tc_material_phase* phase,
                                    const void* value) {
     if (!phase || !name || !value)
         return false;
+    if (strlen(name) >= TC_UNIFORM_NAME_MAX) {
+        tc_log(TC_LOG_ERROR, "tc_material_phase_set_uniform: name '%s' exceeds fixed capacity", name);
+        return false;
+    }
 
     tc_uniform_value* uniform = tc_material_phase_find_uniform(phase, name);
+    if (uniform && uniform->type != (uint8_t)type) {
+        tc_log(TC_LOG_ERROR,
+               "tc_material_phase_set_uniform: type mismatch for '%s' (existing=%u, requested=%u)",
+               name,
+               (unsigned)uniform->type,
+               (unsigned)type);
+        return false;
+    }
+
+    // Validate the type before allocating a new slot. This keeps failed
+    // updates fully non-mutating, including uniform_count.
+    switch (type) {
+    case TC_UNIFORM_BOOL:
+    case TC_UNIFORM_INT:
+    case TC_UNIFORM_FLOAT:
+    case TC_UNIFORM_VEC2:
+    case TC_UNIFORM_VEC3:
+    case TC_UNIFORM_VEC4:
+    case TC_UNIFORM_MAT4:
+    case TC_UNIFORM_SRGB_COLOR:
+    case TC_UNIFORM_LINEAR_COLOR:
+        break;
+    default:
+        tc_log(TC_LOG_ERROR, "tc_material_phase_set_uniform: unsupported type %u for '%s'", (unsigned)type, name);
+        return false;
+    }
+
     if (!uniform) {
         if (phase->uniform_count >= TC_MATERIAL_MAX_UNIFORMS) {
+            tc_log(TC_LOG_ERROR, "tc_material_phase_set_uniform: uniform capacity exceeded for '%s'", name);
             return false;
         }
         uniform = &phase->uniforms[phase->uniform_count++];
+        memset(uniform, 0, sizeof(*uniform));
         strncpy(uniform->name, name, TC_UNIFORM_NAME_MAX - 1);
+        uniform->name[TC_UNIFORM_NAME_MAX - 1] = '\0';
     }
 
     uniform->type = (uint8_t)type;
@@ -431,14 +465,64 @@ bool tc_material_phase_set_uniform(tc_material_phase* phase,
     case TC_UNIFORM_VEC4:
         memcpy(uniform->data.v4, value, sizeof(float) * 4);
         break;
+    case TC_UNIFORM_SRGB_COLOR:
+        memcpy(&uniform->data.srgb_color, value, sizeof(tc_srgb_color));
+        break;
+    case TC_UNIFORM_LINEAR_COLOR:
+        memcpy(&uniform->data.linear_color, value, sizeof(tc_linear_color));
+        break;
     case TC_UNIFORM_MAT4:
         memcpy(uniform->data.m4, value, sizeof(float) * 16);
         break;
     default:
+        // Type was validated above; keep this defensive branch for future
+        // additions to the enum.
         return false;
     }
 
     return true;
+}
+
+bool tc_material_phase_set_srgb_color(tc_material_phase* phase, const char* name, tc_srgb_color value) {
+    return tc_material_phase_set_uniform(phase, name, TC_UNIFORM_SRGB_COLOR, &value);
+}
+
+bool tc_material_phase_set_linear_color(tc_material_phase* phase, const char* name, tc_linear_color value) {
+    return tc_material_phase_set_uniform(phase, name, TC_UNIFORM_LINEAR_COLOR, &value);
+}
+
+bool tc_material_phase_get_srgb_color(const tc_material_phase* phase, const char* name, tc_srgb_color* out_value) {
+    if (!phase || !name || !out_value)
+        return false;
+    for (size_t i = 0; i < phase->uniform_count; i++) {
+        const tc_uniform_value* uniform = &phase->uniforms[i];
+        if (strcmp(uniform->name, name) == 0) {
+            if (uniform->type != TC_UNIFORM_SRGB_COLOR) {
+                tc_log(TC_LOG_ERROR, "tc_material_phase_get_srgb_color: type mismatch for '%s'", name);
+                return false;
+            }
+            *out_value = uniform->data.srgb_color;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool tc_material_phase_get_linear_color(const tc_material_phase* phase, const char* name, tc_linear_color* out_value) {
+    if (!phase || !name || !out_value)
+        return false;
+    for (size_t i = 0; i < phase->uniform_count; i++) {
+        const tc_uniform_value* uniform = &phase->uniforms[i];
+        if (strcmp(uniform->name, name) == 0) {
+            if (uniform->type != TC_UNIFORM_LINEAR_COLOR) {
+                tc_log(TC_LOG_ERROR, "tc_material_phase_get_linear_color: type mismatch for '%s'", name);
+                return false;
+            }
+            *out_value = uniform->data.linear_color;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool tc_material_phase_set_texture(tc_material_phase* phase, const char* name, tc_texture_handle texture) {
@@ -581,7 +665,7 @@ bool tc_material_phase_accepts_texture(const tc_material_phase* phase, const cha
 bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float* g, float* b, float* a) {
     if (!phase)
         return false;
-
+    // Compatibility scaffold for callers still storing the legacy vec4.
     for (size_t i = 0; i < phase->uniform_count; i++) {
         if (strcmp(phase->uniforms[i].name, "u_color") == 0 && phase->uniforms[i].type == TC_UNIFORM_VEC4) {
             if (r)
@@ -599,9 +683,7 @@ bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float
 }
 
 void tc_material_phase_set_color(tc_material_phase* phase, float r, float g, float b, float a) {
-    if (!phase)
-        return;
-
+    // Compatibility scaffold; new callers should use the typed API.
     float color[4] = {r, g, b, a};
     tc_material_phase_set_uniform(phase, "u_color", TC_UNIFORM_VEC4, color);
 }
@@ -636,6 +718,72 @@ void tc_material_set_uniform(tc_material* mat, const char* name, tc_uniform_type
         tc_material_phase_set_uniform(&mat->phases[i], name, type, value);
     }
     // Note: uniforms are per-frame values, don't bump version
+}
+
+bool tc_material_set_srgb_color(tc_material* mat, const char* name, tc_srgb_color value) {
+    if (!mat || !name)
+        return false;
+    if (strlen(name) >= TC_UNIFORM_NAME_MAX) {
+        tc_log(TC_LOG_ERROR, "tc_material_set_srgb_color: name exceeds fixed capacity");
+        return false;
+    }
+    for (size_t i = 0; i < mat->phase_count; i++) {
+        tc_uniform_value* uniform = tc_material_phase_find_uniform(&mat->phases[i], name);
+        if (uniform && uniform->type != TC_UNIFORM_SRGB_COLOR) {
+            tc_log(TC_LOG_ERROR, "tc_material_set_srgb_color: type mismatch for '%s'", name);
+            return false;
+        }
+        if (!uniform && mat->phases[i].uniform_count >= TC_MATERIAL_MAX_UNIFORMS) {
+            tc_log(TC_LOG_ERROR, "tc_material_set_srgb_color: uniform capacity exceeded for '%s'", name);
+            return false;
+        }
+    }
+    bool updated = false;
+    for (size_t i = 0; i < mat->phase_count; i++) {
+        if (!tc_material_phase_set_srgb_color(&mat->phases[i], name, value))
+            return false;
+        updated = true;
+    }
+    return updated;
+}
+
+bool tc_material_set_linear_color(tc_material* mat, const char* name, tc_linear_color value) {
+    if (!mat || !name)
+        return false;
+    if (strlen(name) >= TC_UNIFORM_NAME_MAX) {
+        tc_log(TC_LOG_ERROR, "tc_material_set_linear_color: name exceeds fixed capacity");
+        return false;
+    }
+    for (size_t i = 0; i < mat->phase_count; i++) {
+        tc_uniform_value* uniform = tc_material_phase_find_uniform(&mat->phases[i], name);
+        if (uniform && uniform->type != TC_UNIFORM_LINEAR_COLOR) {
+            tc_log(TC_LOG_ERROR, "tc_material_set_linear_color: type mismatch for '%s'", name);
+            return false;
+        }
+        if (!uniform && mat->phases[i].uniform_count >= TC_MATERIAL_MAX_UNIFORMS) {
+            tc_log(TC_LOG_ERROR, "tc_material_set_linear_color: uniform capacity exceeded for '%s'", name);
+            return false;
+        }
+    }
+    bool updated = false;
+    for (size_t i = 0; i < mat->phase_count; i++) {
+        if (!tc_material_phase_set_linear_color(&mat->phases[i], name, value))
+            return false;
+        updated = true;
+    }
+    return updated;
+}
+
+bool tc_material_get_srgb_color(const tc_material* mat, const char* name, tc_srgb_color* out_value) {
+    if (!mat || mat->phase_count == 0)
+        return false;
+    return tc_material_phase_get_srgb_color(&mat->phases[0], name, out_value);
+}
+
+bool tc_material_get_linear_color(const tc_material* mat, const char* name, tc_linear_color* out_value) {
+    if (!mat || mat->phase_count == 0)
+        return false;
+    return tc_material_phase_get_linear_color(&mat->phases[0], name, out_value);
 }
 
 size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_handle texture) {
@@ -709,8 +857,7 @@ size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_ha
     return mat->phase_count;
 }
 
-const tc_material_texture_source*
-tc_material_find_texture_source(const tc_material* mat, const char* uniform_name) {
+const tc_material_texture_source* tc_material_find_texture_source(const tc_material* mat, const char* uniform_name) {
     if (!mat || !uniform_name)
         return NULL;
     for (size_t i = 0; i < mat->texture_source_count; ++i) {
@@ -739,13 +886,10 @@ bool tc_material_clear_texture_source(tc_material* mat, const char* uniform_name
     return false;
 }
 
-bool tc_material_set_texture_source(tc_material* mat,
-                                    const char* uniform_name,
-                                    const char* kind,
-                                    const char* source_name,
-                                    const char* channel) {
-    if (!mat || !uniform_name || !uniform_name[0] || !kind || !kind[0] || !source_name || !source_name[0] ||
-        !channel || !channel[0]) {
+bool tc_material_set_texture_source(
+    tc_material* mat, const char* uniform_name, const char* kind, const char* source_name, const char* channel) {
+    if (!mat || !uniform_name || !uniform_name[0] || !kind || !kind[0] || !source_name || !source_name[0] || !channel ||
+        !channel[0]) {
         tc_log(TC_LOG_ERROR, "tc_material_set_texture_source: all fields are required");
         return false;
     }
@@ -762,9 +906,8 @@ bool tc_material_set_texture_source(tc_material* mat,
         declared = slot && slot->is_declared;
     }
     if (!declared) {
-        tc_log(TC_LOG_ERROR,
-               "tc_material_set_texture_source: slot '%s' is not present in canonical schema",
-               uniform_name);
+        tc_log(
+            TC_LOG_ERROR, "tc_material_set_texture_source: slot '%s' is not present in canonical schema", uniform_name);
         return false;
     }
 

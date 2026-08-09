@@ -6,6 +6,7 @@
 #include "tgfx/resources/tc_texture.h"
 #include "tgfx/tc_handle.h"
 #include "tgfx/tgfx_api.h"
+#include <geom/tc_color.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -105,7 +106,11 @@ typedef enum tc_uniform_type {
     TC_UNIFORM_VEC3 = 5,
     TC_UNIFORM_VEC4 = 6,
     TC_UNIFORM_MAT4 = 7,
-    TC_UNIFORM_FLOAT_ARRAY = 8
+    TC_UNIFORM_FLOAT_ARRAY = 8,
+    // Keep these values appended: tc_uniform_type is persisted in material
+    // data and TC_UNIFORM_VEC4 remains a distinct storage kind.
+    TC_UNIFORM_SRGB_COLOR = 9,
+    TC_UNIFORM_LINEAR_COLOR = 10
 } tc_uniform_type;
 
 #define TC_UNIFORM_NAME_MAX 64
@@ -122,6 +127,8 @@ typedef struct tc_uniform_value {
         float v2[2];
         float v3[3];
         float v4[4];
+        tc_srgb_color srgb_color;
+        tc_linear_color linear_color;
         float m4[16];
         float arr[TC_UNIFORM_ARRAY_MAX];
     } data;
@@ -251,6 +258,15 @@ static inline tc_material_texture* tc_material_phase_find_texture(tc_material_ph
 TGFX_API bool
 tc_material_phase_set_uniform(tc_material_phase* phase, const char* name, tc_uniform_type type, const void* value);
 
+// Typed color uniforms. The uniform name is explicit so color space is never
+// inferred from a conventional name such as "u_color".
+TGFX_API bool tc_material_phase_set_srgb_color(tc_material_phase* phase, const char* name, tc_srgb_color value);
+TGFX_API bool tc_material_phase_set_linear_color(tc_material_phase* phase, const char* name, tc_linear_color value);
+TGFX_API bool
+tc_material_phase_get_srgb_color(const tc_material_phase* phase, const char* name, tc_srgb_color* out_value);
+TGFX_API bool
+tc_material_phase_get_linear_color(const tc_material_phase* phase, const char* name, tc_linear_color* out_value);
+
 // Add or update texture in phase
 TGFX_API bool tc_material_phase_set_texture(tc_material_phase* phase, const char* name, tc_texture_handle texture);
 
@@ -291,6 +307,10 @@ TGFX_API tc_material_phase* tc_material_find_phase(tc_material* mat, const char*
 
 // Set uniform on all phases
 TGFX_API void tc_material_set_uniform(tc_material* mat, const char* name, tc_uniform_type type, const void* value);
+TGFX_API bool tc_material_set_srgb_color(tc_material* mat, const char* name, tc_srgb_color value);
+TGFX_API bool tc_material_set_linear_color(tc_material* mat, const char* name, tc_linear_color value);
+TGFX_API bool tc_material_get_srgb_color(const tc_material* mat, const char* name, tc_srgb_color* out_value);
+TGFX_API bool tc_material_get_linear_color(const tc_material* mat, const char* name, tc_linear_color* out_value);
 
 // Set texture on all phases and store handle for inspector. Encoding mismatch
 // is accepted with a warning; zero is reserved for structural failure or no
@@ -298,14 +318,11 @@ TGFX_API void tc_material_set_uniform(tc_material* mat, const char* name, tc_uni
 TGFX_API size_t tc_material_set_texture(tc_material* mat, const char* name, tc_texture_handle texture);
 
 // Set/replace a symbolic source for a declared material texture slot.
-TGFX_API bool tc_material_set_texture_source(tc_material* mat,
-                                             const char* uniform_name,
-                                             const char* kind,
-                                             const char* source_name,
-                                             const char* channel);
+TGFX_API bool tc_material_set_texture_source(
+    tc_material* mat, const char* uniform_name, const char* kind, const char* source_name, const char* channel);
 TGFX_API bool tc_material_clear_texture_source(tc_material* mat, const char* uniform_name);
-TGFX_API const tc_material_texture_source*
-tc_material_find_texture_source(const tc_material* mat, const char* uniform_name);
+TGFX_API const tc_material_texture_source* tc_material_find_texture_source(const tc_material* mat,
+                                                                           const char* uniform_name);
 
 // Get color from default phase
 TGFX_API bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a);

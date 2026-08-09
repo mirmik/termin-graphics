@@ -16,6 +16,7 @@ extern "C" {
 
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_string.h>
+#include <termin/geom/color.hpp>
 #include <termin/geom/mat44.hpp>
 #include <termin/geom/vec3.hpp>
 #include <termin/geom/vec4.hpp>
@@ -244,6 +245,8 @@ namespace termin {
             return std::nullopt;
         }
 
+        // Legacy numeric scaffold. Vec4 has no color-space meaning and is not
+        // accepted by the typed color APIs below.
         void set_color(const Vec4& rgba) {
             tc_material* m = get();
             if (m) {
@@ -260,6 +263,34 @@ namespace termin {
             if (m) {
                 tc_material_set_color(m, r, g, b, a);
             }
+        }
+
+        bool set_uniform_srgb_color(const char* name, SrgbColor value) {
+            tc_material* m = get();
+            return m && tc_material_set_srgb_color(m, name, tc_srgb_color{value.r, value.g, value.b, value.a});
+        }
+
+        bool set_uniform_linear_color(const char* name, LinearColor value) {
+            tc_material* m = get();
+            return m && tc_material_set_linear_color(m, name, tc_linear_color{value.r, value.g, value.b, value.a});
+        }
+
+        std::optional<SrgbColor> uniform_srgb_color(const char* name) const {
+            tc_material* m = get();
+            tc_srgb_color value{};
+            if (m && tc_material_get_srgb_color(m, name, &value)) {
+                return SrgbColor{value.r, value.g, value.b, value.a};
+            }
+            return std::nullopt;
+        }
+
+        std::optional<LinearColor> uniform_linear_color(const char* name) const {
+            tc_material* m = get();
+            tc_linear_color value{};
+            if (m && tc_material_get_linear_color(m, name, &value)) {
+                return LinearColor{value.r, value.g, value.b, value.a};
+            }
+            return std::nullopt;
         }
 
         void set_uniform_float(const char* name, float value) {
@@ -310,10 +341,8 @@ namespace termin {
             return m ? tc_material_set_texture(m, name, tex_handle) : 0;
         }
 
-        bool set_texture_source(const char* uniform_name,
-                                const char* kind,
-                                const char* source_name,
-                                const char* channel) {
+        bool
+        set_texture_source(const char* uniform_name, const char* kind, const char* source_name, const char* channel) {
             tc_material* m = get();
             return m && tc_material_set_texture_source(m, uniform_name, kind, source_name, channel);
         }

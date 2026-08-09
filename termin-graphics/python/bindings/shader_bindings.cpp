@@ -13,6 +13,7 @@
 #include "tgfx/tgfx_shader_handle.hpp"
 #include "tgfx/tgfx_shader_program_handle.hpp"
 #include "tgfx2/builtin_shader_sources.hpp"
+#include <termin/geom/color.hpp>
 
 namespace nb = nanobind;
 
@@ -195,6 +196,24 @@ namespace tgfx_bindings {
                 default_text = nb::cast<std::string>(object);
                 return;
             }
+            if (property_type == "SrgbColor") {
+                if (!nb::isinstance<SrgbColor>(object)) {
+                    throw_property_default_error(name, property_type, "default must be SrgbColor");
+                }
+                const SrgbColor color = nb::cast<SrgbColor>(object);
+                default_value.type = TC_UNIFORM_SRGB_COLOR;
+                default_value.data.srgb_color = tc_srgb_color{color.r, color.g, color.b, color.a};
+                return;
+            }
+            if (property_type == "LinearColor") {
+                if (!nb::isinstance<LinearColor>(object)) {
+                    throw_property_default_error(name, property_type, "default must be LinearColor");
+                }
+                const LinearColor color = nb::cast<LinearColor>(object);
+                default_value.type = TC_UNIFORM_LINEAR_COLOR;
+                default_value.data.linear_color = tc_linear_color{color.r, color.g, color.b, color.a};
+                return;
+            }
 
             size_t expected_size = 0;
             tc_uniform_type uniform_type = TC_UNIFORM_NONE;
@@ -204,7 +223,7 @@ namespace tgfx_bindings {
             } else if (property_type == "Vec3") {
                 expected_size = 3;
                 uniform_type = TC_UNIFORM_VEC3;
-            } else if (property_type == "Vec4" || property_type == "Color") {
+            } else if (property_type == "Vec4") {
                 expected_size = 4;
                 uniform_type = TC_UNIFORM_VEC4;
             } else if (property_type == "Mat4") {
@@ -214,7 +233,7 @@ namespace tgfx_bindings {
                 throw_property_default_error(name, property_type, "has an unsupported default type");
             }
 
-            if (!nb::isinstance<nb::tuple>(object) && !nb::isinstance<nb::list>(object)) {
+            if (property_type == "Vec4" && !nb::isinstance<nb::tuple>(object) && !nb::isinstance<nb::list>(object)) {
                 throw_property_default_error(name, property_type, "default must be a sequence");
             }
             nb::sequence sequence = nb::cast<nb::sequence>(object);

@@ -1,5 +1,6 @@
 // material_ubo_apply.cpp - Apply material phase resources by reflected names.
 #include "termin/render/material_ubo_apply.hpp"
+#include "termin/geom/color.hpp"
 #include "termin/render/shader_abi.hpp"
 #include "termin/render/tgfx2_bridge.hpp"
 
@@ -53,8 +54,7 @@ namespace termin {
                            reason ? reason : "required by material phase");
         }
 
-        void log_unresolved_texture_source_once(const tc_material* material,
-                                                const tc_material_texture_source& source) {
+        void log_unresolved_texture_source_once(const tc_material* material, const tc_material_texture_source& source) {
             static std::mutex mutex;
             static std::unordered_set<std::string> emitted;
             const char* material_name = material && material->header.name ? material->header.name : "<unnamed>";
@@ -92,6 +92,10 @@ namespace termin {
                 return "Vec3";
             case TC_UNIFORM_VEC4:
                 return "Vec4";
+            case TC_UNIFORM_SRGB_COLOR:
+                return "SrgbColor";
+            case TC_UNIFORM_LINEAR_COLOR:
+                return "LinearColor";
             case TC_UNIFORM_MAT4:
                 return "Mat4";
             default:
@@ -123,7 +127,8 @@ namespace termin {
             if (type_is(type, "Vec3")) {
                 return 12u;
             }
-            if (type_is(type, "Vec4") || type_is(type, "Color")) {
+            if (type_is(type, "Vec4") || type_is(type, "Color") || type_is(type, "SrgbColor") ||
+                type_is(type, "LinearColor")) {
                 return 16u;
             }
             if (type_is(type, "Mat4")) {
@@ -232,9 +237,32 @@ namespace termin {
             }
             return incompatible_type();
         }
-        if (type_is(field_type, "Vec4") || type_is(field_type, "Color")) {
+        if (type_is(field_type, "Vec4")) {
             if (uniform.type == TC_UNIFORM_VEC4) {
                 write_float_array(dst, uniform.data.v4, 4);
+                return true;
+            }
+            return incompatible_type();
+        }
+        if (type_is(field_type, "SrgbColor")) {
+            if (uniform.type == TC_UNIFORM_SRGB_COLOR) {
+                const termin::LinearColor linear = termin::srgb_to_linear(termin::SrgbColor{uniform.data.srgb_color.r,
+                                                                                            uniform.data.srgb_color.g,
+                                                                                            uniform.data.srgb_color.b,
+                                                                                            uniform.data.srgb_color.a});
+                const float values[4] = {linear.r, linear.g, linear.b, linear.a};
+                write_float_array(dst, values, 4);
+                return true;
+            }
+            return incompatible_type();
+        }
+        if (type_is(field_type, "LinearColor")) {
+            if (uniform.type == TC_UNIFORM_LINEAR_COLOR) {
+                const float values[4] = {uniform.data.linear_color.r,
+                                         uniform.data.linear_color.g,
+                                         uniform.data.linear_color.b,
+                                         uniform.data.linear_color.a};
+                write_float_array(dst, values, 4);
                 return true;
             }
             return incompatible_type();
@@ -395,7 +423,6 @@ namespace termin {
                 }
             }
         }
-
 
         const tc_material* material = tc_material_get(phase->owner_material);
         if (material) {

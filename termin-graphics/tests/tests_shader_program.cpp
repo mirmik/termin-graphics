@@ -5,6 +5,7 @@
 #include <string>
 
 #include <tcbase/tc_log.h>
+#include <tgfx/resources/tc_material.h>
 #include <tgfx/tgfx_shader_handle.hpp>
 #include <tgfx/tgfx_shader_program_handle.hpp>
 
@@ -102,6 +103,41 @@ TEST_CASE("shader program registry owns canonical payload and phase shaders") {
 
     tc_shader_program_shutdown();
     tc_shader_shutdown();
+}
+
+TEST_CASE("material color storage preserves exact semantic kind") {
+    tc_material_phase phase{};
+    const tc_srgb_color authored{0.25f, 0.5f, 0.75f, 0.4f};
+    REQUIRE(tc_material_phase_set_srgb_color(&phase, "tint", authored));
+
+    tc_srgb_color restored{};
+    REQUIRE(tc_material_phase_get_srgb_color(&phase, "tint", &restored));
+    CHECK_EQ(restored.r, authored.r);
+    CHECK_EQ(restored.g, authored.g);
+    CHECK_EQ(restored.b, authored.b);
+    CHECK_EQ(restored.a, authored.a);
+    REQUIRE_EQ(phase.uniform_count, 1u);
+    CHECK_EQ(phase.uniforms[0].type, static_cast<uint8_t>(TC_UNIFORM_SRGB_COLOR));
+
+    const tc_linear_color wrong_kind{1.0f, 1.0f, 1.0f, 1.0f};
+    CHECK_FALSE(tc_material_phase_set_linear_color(&phase, "tint", wrong_kind));
+    tc_linear_color not_restored{};
+    CHECK_FALSE(tc_material_phase_get_linear_color(&phase, "tint", &not_restored));
+    REQUIRE(tc_material_phase_get_srgb_color(&phase, "tint", &restored));
+    CHECK_EQ(restored.r, authored.r);
+}
+
+TEST_CASE("material-wide typed color update rejects atomically") {
+    tc_material material{};
+    material.phase_count = 2;
+    const float raw[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    REQUIRE(tc_material_phase_set_uniform(&material.phases[1], "tint", TC_UNIFORM_VEC4, raw));
+
+    const tc_srgb_color authored{0.25f, 0.5f, 0.75f, 1.0f};
+    CHECK_FALSE(tc_material_set_srgb_color(&material, "tint", authored));
+    CHECK_EQ(material.phases[0].uniform_count, 0u);
+    REQUIRE_EQ(material.phases[1].uniform_count, 1u);
+    CHECK_EQ(material.phases[1].uniforms[0].type, static_cast<uint8_t>(TC_UNIFORM_VEC4));
 }
 
 TEST_CASE("shader program declare is canonical by UUID") {
