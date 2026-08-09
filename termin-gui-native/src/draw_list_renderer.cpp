@@ -104,7 +104,10 @@ namespace termin::gui_native {
         tgfx::TextureDesc desc{};
         desc.width = source.width;
         desc.height = source.height;
-        desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        // ColorPickerSurface stores authored sRGB bytes. The texture format
+        // owns the decode to linear working space before filtering and UI
+        // composition, matching solid SrgbColor preview swatches.
+        desc.format = tgfx::PixelFormat::RGBA8_sRGB;
         desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
         target.texture = device.create_texture(desc);
         if (!target.texture) {

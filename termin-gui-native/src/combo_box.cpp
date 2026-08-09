@@ -64,8 +64,11 @@ namespace termin::gui_native {
                 rect_contains(bounds(), event->x, event->y)) {
                 const int index = static_cast<int>((event->y - bounds().y + scroll_y_) / owner_.item_height_);
                 if (index >= 0 && index < static_cast<int>(owner_.items_.size())) {
-                    owner_.set_selected_index(index);
+                    // A changed callback may synchronously rebuild its inspector,
+                    // destroying both the owner and this popup. Dismiss first and
+                    // do not touch either widget after emitting the change.
                     owner_.hide_popup(document);
+                    owner_.set_selected_index(index);
                 }
                 return TC_UI_EVENT_HANDLED;
             }

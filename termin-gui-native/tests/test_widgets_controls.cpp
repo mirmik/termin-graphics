@@ -768,6 +768,37 @@ namespace termin_gui_native_test {
         assert(tc_ui_document_live_widget_count(document.get()) == 0);
 
         tc_ui_document_destroy(document_handle);
+
+        tc_ui_document_handle destructive_handle = tc_ui_document_create();
+        TcDocument destructive_document(destructive_handle);
+        install_test_text_measurer(destructive_document);
+        DocumentBuilder destructive_ui(destructive_document);
+        auto& destructive_combo = destructive_ui.make_root<ComboBox>();
+        destructive_combo.add_item("First");
+        destructive_combo.add_item("Second");
+        destructive_document.layout_roots(tc_ui_rect{10.0f, 10.0f, 180.0f, 34.0f});
+        const tc_widget_handle destructive_combo_handle = destructive_combo.handle();
+        destructive_combo.changed().connect(
+            [&destructive_document, destructive_combo_handle](ComboBox&, int, const std::string&) {
+                assert(tc_ui_document_destroy_widget_recursive(destructive_document.get(), destructive_combo_handle));
+            });
+
+        pointer = {};
+        pointer.type = TC_UI_POINTER_DOWN;
+        pointer.x = 20.0f;
+        pointer.y = 20.0f;
+        assert(destructive_document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+        const tc_widget_handle destructive_popup_handle = tc_ui_document_overlay_at(destructive_document.get(), 0);
+        const tc_widget* destructive_popup =
+            tc_ui_document_resolve_widget_const(destructive_document.get(), destructive_popup_handle);
+        assert(destructive_popup);
+        pointer.x = destructive_popup->bounds.x + 10.0f;
+        pointer.y = destructive_popup->bounds.y + 10.0f;
+        assert(destructive_document.dispatch_pointer_event(pointer) == TC_UI_EVENT_HANDLED);
+        assert(!tc_ui_document_is_alive(destructive_document.get(), destructive_combo_handle));
+        assert(!tc_ui_document_is_alive(destructive_document.get(), destructive_popup_handle));
+        assert(tc_ui_document_live_widget_count(destructive_document.get()) == 0);
+        tc_ui_document_destroy(destructive_handle);
     }
 
     void test_icon_image_and_canvas_media_contracts() {
@@ -791,8 +822,11 @@ namespace termin_gui_native_test {
         int custom_paints = 0;
         canvas.set_paint_callback([&custom_paints](Canvas&, tc_ui_paint_context* context) {
             ++custom_paints;
-            tc_ui_painter_draw_line(
-                context, tc_ui_point{0.0f, 0.0f}, tc_ui_point{1.0f, 1.0f}, tc_ui_srgb_color{1.0f, 0.0f, 0.0f, 1.0f}, 1.0f);
+            tc_ui_painter_draw_line(context,
+                                    tc_ui_point{0.0f, 0.0f},
+                                    tc_ui_point{1.0f, 1.0f},
+                                    tc_ui_srgb_color{1.0f, 0.0f, 0.0f, 1.0f},
+                                    1.0f);
         });
         root.add_fixed_child(icon, 28.0f);
         root.add_fixed_child(image, 80.0f);

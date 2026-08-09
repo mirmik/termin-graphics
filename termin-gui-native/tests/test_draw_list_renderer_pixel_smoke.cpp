@@ -125,11 +125,9 @@ namespace {
                                        tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
-            tc_ui_painter_fill_rect(
-                painter, tc_ui_rect{100.0f, 84.0f, 8.0f, 8.0f}, tc_ui_srgb_color{128.0f / 255.0f,
-                                                                                128.0f / 255.0f,
-                                                                                128.0f / 255.0f,
-                                                                                1.0f});
+            tc_ui_painter_fill_rect(painter,
+                                    tc_ui_rect{100.0f, 84.0f, 8.0f, 8.0f},
+                                    tc_ui_srgb_color{128.0f / 255.0f, 128.0f / 255.0f, 128.0f / 255.0f, 1.0f});
             tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
             tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
             tc_ui_painter_fill_rect(
@@ -266,7 +264,9 @@ namespace {
         ProbeDocument identity_last;
         identity_last.probe->order_color = tc_ui_srgb_color{0.9f, 0.05f, 0.05f, 1.0f};
 
-        termin::gui_native::ColorPicker color_picker;
+        const termin::SrgbColor picker_srgb{0x92 / 255.0f, 0x30 / 255.0f, 0x30 / 255.0f, 1.0f};
+        auto picker_model = std::make_shared<termin::gui_native::ColorPickerModel>(picker_srgb, true);
+        termin::gui_native::ColorPicker color_picker(picker_model);
 
         const termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
         context.begin_frame();
@@ -295,8 +295,7 @@ namespace {
         const bool read_ok = device->read_texture_rgba_float(target, pixels.data());
         constexpr float srgb_mid_linear = 0.21586f;
         const auto looks_linear_mid_gray = [srgb_mid_linear](const float* pixel) {
-            return std::fabs(pixel[0] - srgb_mid_linear) < 0.025f &&
-                   std::fabs(pixel[1] - srgb_mid_linear) < 0.025f &&
+            return std::fabs(pixel[0] - srgb_mid_linear) < 0.025f && std::fabs(pixel[1] - srgb_mid_linear) < 0.025f &&
                    std::fabs(pixel[2] - srgb_mid_linear) < 0.025f;
         };
         const bool image_ok = read_ok && looks_linear_mid_gray(pixel_at(pixels, 16, 16));
@@ -310,9 +309,20 @@ namespace {
         const bool nearest_right_ok = read_ok && looks_blue(pixel_at(pixels, 16, 80));
         const bool linear_mid_ok = read_ok && looks_purple(pixel_at(pixels, 39, 80));
         const bool ordering_ok = read_ok && looks_red(pixel_at(pixels, 116, 76));
-        const float* picker_pixel = pixel_at(pixels, 96, 48);
+        constexpr float picker_left = 90.0f;
+        constexpr float picker_top = 40.0f;
+        constexpr float picker_width = 28.0f;
+        constexpr float picker_height = 20.0f;
+        const uint32_t picker_x =
+            static_cast<uint32_t>(std::floor(picker_left + picker_model->saturation() * picker_width));
+        const uint32_t picker_y =
+            static_cast<uint32_t>(std::floor(picker_top + (1.0f - picker_model->value()) * picker_height));
+        const float* picker_pixel = pixel_at(pixels, picker_x, picker_y);
+        const termin::LinearColor picker_linear = termin::srgb_to_linear(picker_srgb);
         const bool picker_texture_ok = read_ok && picker_textures_ready &&
-                                       (picker_pixel[0] > 0.1f || picker_pixel[1] > 0.1f || picker_pixel[2] > 0.1f);
+                                       std::fabs(picker_pixel[0] - picker_linear.r) < 0.04f &&
+                                       std::fabs(picker_pixel[1] - picker_linear.g) < 0.04f &&
+                                       std::fabs(picker_pixel[2] - picker_linear.b) < 0.04f;
         size_t text_signal = 0;
         uint32_t text_min_y = kHeight;
         uint32_t text_max_y = 0;
@@ -381,7 +391,7 @@ namespace {
             !picker_texture_ok || !text_ok || !scaled_geometry_ok) {
             std::fprintf(stderr,
                          "UI renderer %s pixel smoke failed: read=%d image=%d authored_gray=%d clip_in=%d clip_out=%d "
-                         "round_center=%d round_corner=%d circle=%d picker=%d "
+                         "round_center=%d round_corner=%d circle=%d picker=%d picker_rgb=(%.3f,%.3f,%.3f) "
                          "text=%d scaled=%d signal=%zu y=[%u,%u]\n",
                          tgfx::backend_name(backend),
                          read_ok,
@@ -393,6 +403,9 @@ namespace {
                          rounded_corner_ok,
                          circle_ok,
                          picker_texture_ok,
+                         picker_pixel[0],
+                         picker_pixel[1],
+                         picker_pixel[2],
                          text_ok,
                          scaled_geometry_ok,
                          text_signal,
