@@ -36,6 +36,9 @@ class Plot2D(Widget):
     def clear(self):
         self.engine.clear()
 
+    def release_gpu(self) -> None:
+        self.engine.release_gpu_resources()
+
     def fit(self):
         self.engine.fit()
 

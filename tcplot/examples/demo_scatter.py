@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 
-from tcplot import Plot2D
+from tcplot import Plot2D, SrgbColor
 from _host import run_demo
 
 
@@ -26,9 +26,13 @@ def make_plot():
 
     x_trend = np.linspace(0, 10, 100)
     y_trend = 0.3 * x_trend + 1.5
-    plot.plot(x_trend, y_trend,
-              color=(1.0, 1.0, 1.0, 0.4),
-              thickness=1.0, label="Trend")
+    plot.plot(
+        x_trend,
+        y_trend,
+        color=SrgbColor(1.0, 1.0, 1.0, 0.4),
+        thickness=1.0,
+        label="Trend",
+    )
 
     plot.data.title = "Scatter Plot with Clusters"
     plot.data.x_label = "Feature A"

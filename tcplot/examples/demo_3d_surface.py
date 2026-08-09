@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 
-from tcplot import Plot3D
+from tcplot import Plot3D, SrgbColor
 from _host import run_demo
 
 
@@ -27,8 +27,8 @@ def make_plot():
     Z = np.sin(R) / R
 
     plot.z_scale = 5.0
-    plot.surface(X, Y, Z, color=(0.12, 0.56, 0.85, 1.0))
-    plot.surface(X, Y, Z, color=(0.0, 0.0, 0.0, 1.0), wireframe=True)
+    plot.surface(X, Y, Z, color=SrgbColor(0.12, 0.56, 0.85, 1.0))
+    plot.surface(X, Y, Z, color=SrgbColor(0.0, 0.0, 0.0, 1.0), wireframe=True)
     return plot
 
 

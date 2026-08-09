@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 
-from tcplot import Plot3D
+from tcplot import Plot3D, SrgbColor
 from _host import run_demo
 
 
@@ -22,11 +22,11 @@ def make_plot():
     x1 = np.cos(t)
     y1 = np.sin(t)
     z1 = t / (2 * np.pi)
-    plot.plot(x1, y1, z1, color=(0.12, 0.47, 0.71, 1.0), label="Helix 1")
+    plot.plot(x1, y1, z1, color=SrgbColor(0.12, 0.47, 0.71, 1.0), label="Helix 1")
 
     x2 = np.cos(t + np.pi)
     y2 = np.sin(t + np.pi)
-    plot.plot(x2, y2, z1, color=(1.0, 0.50, 0.05, 1.0), label="Helix 2")
+    plot.plot(x2, y2, z1, color=SrgbColor(1.0, 0.50, 0.05, 1.0), label="Helix 2")
 
     rng = np.random.default_rng(42)
     n = 200
@@ -35,7 +35,7 @@ def make_plot():
     sx = r * np.cos(theta)
     sy = r * np.sin(theta)
     sz = rng.uniform(0, 3, n)
-    plot.scatter(sx, sy, sz, color=(0.17, 0.63, 0.17, 1.0), label="Points")
+    plot.scatter(sx, sy, sz, color=SrgbColor(0.17, 0.63, 0.17, 1.0), label="Points")
     return plot
 
 

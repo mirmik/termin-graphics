@@ -174,7 +174,10 @@ namespace tcplot_bindings {
             }
 
             void release_gpu() {
-                tc_retained_chart3d_release_gpu(chart_);
+                tc_retained_chart3d_detach_gpu_host(chart_);
+                gpu_host_.reset();
+                graphics_ = nullptr;
+                font_ = nullptr;
             }
 
         private:

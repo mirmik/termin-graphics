@@ -212,6 +212,7 @@ TCPLOT_API int tc_retained_chart3d_wheel(tc_retained_chart3d* chart, float x, fl
 
 TCPLOT_API uint32_t tc_retained_chart3d_render(tc_retained_chart3d* chart, int width, int height);
 TCPLOT_API void tc_retained_chart3d_release_gpu(tc_retained_chart3d* chart);
+TCPLOT_API void tc_retained_chart3d_detach_gpu_host(tc_retained_chart3d* chart);
 
 #ifdef __cplusplus
 }

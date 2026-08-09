@@ -26,7 +26,7 @@ namespace tcplot {
 
     class PlotScene3DRenderPipeline {
     public:
-        explicit PlotScene3DRenderPipeline(GpuHost& host);
+        PlotScene3DRenderPipeline(GpuHost& host, int sample_count);
         ~PlotScene3DRenderPipeline();
 
         PlotScene3DRenderPipeline(const PlotScene3DRenderPipeline&) = delete;
@@ -37,7 +37,6 @@ namespace tcplot {
                                         std::uint64_t selected_grid_object,
                                         std::uint32_t selected_grid_generation,
                                         tgfx::TextureHandle color,
-                                        tgfx::TextureHandle depth,
                                         int width,
                                         int height);
 

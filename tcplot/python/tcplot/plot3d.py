@@ -97,6 +97,9 @@ class Plot3D(Widget):
     def set_surface_light_dir(self, x: float, y: float, z: float) -> None:
         self._scene.set_light_direction(x, y, z)
 
+    def release_gpu(self) -> None:
+        self._scene.release_gpu()
+
     def plot(self, x, y, z, *, color=None, thickness=1.5, label=""):
         xa, ya, za = self._xyz(x, y, z)
         resolved = self._color(color)

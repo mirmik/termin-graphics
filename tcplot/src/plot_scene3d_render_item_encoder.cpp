@@ -9,6 +9,7 @@
 
 #include <tcbase/tc_log.hpp>
 #include <termin/camera/orbit_camera.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/render/material_pipeline.hpp>
 #include <termin/render/render_context.hpp>
 #include <termin/render/render_item_submission.hpp>
@@ -50,21 +51,25 @@ namespace tcplot {
                                    uint32_t column) {
             const size_t index = static_cast<size_t>(row) * data.columns + column;
             const tc_surface_item3d_style& style = data.surface_style;
+            const termin::LinearColor color =
+                termin::srgb_to_linear({style.color_r, style.color_g, style.color_b, style.color_a});
+            const termin::LinearColor grid_color = termin::srgb_to_linear(
+                {style.surface_grid_r, style.surface_grid_g, style.surface_grid_b, style.surface_grid_a});
             vertices.push_back(static_cast<float>(data.x[index]));
             vertices.push_back(static_cast<float>(data.y[index]));
             vertices.push_back(static_cast<float>(data.z[index]));
-            vertices.push_back(style.color_r);
-            vertices.push_back(style.color_g);
-            vertices.push_back(style.color_b);
-            vertices.push_back(style.color_a);
+            vertices.push_back(color.r);
+            vertices.push_back(color.g);
+            vertices.push_back(color.b);
+            vertices.push_back(color.a);
             vertices.push_back(static_cast<float>(column));
             vertices.push_back(static_cast<float>(row));
             vertices.push_back(static_cast<float>(std::max<uint32_t>(1, style.surface_grid_col_step)));
             vertices.push_back(static_cast<float>(std::max<uint32_t>(1, style.surface_grid_row_step)));
-            vertices.push_back(style.surface_grid_r);
-            vertices.push_back(style.surface_grid_g);
-            vertices.push_back(style.surface_grid_b);
-            vertices.push_back(style.surface_grid_a);
+            vertices.push_back(grid_color.r);
+            vertices.push_back(grid_color.g);
+            vertices.push_back(grid_color.b);
+            vertices.push_back(grid_color.a);
             vertices.push_back(style.surface_grid_visible != 0 ? 1.0f : 0.0f);
             vertices.push_back(std::max(style.surface_grid_width_px, 0.1f));
             vertices.push_back(static_cast<float>(data.columns - 1));
@@ -73,13 +78,15 @@ namespace tcplot {
 
         void append_scatter_vertex(
             std::vector<float>& vertices, float x, float y, float z, const tc_scatter_item3d_style& style) {
+            const termin::LinearColor color =
+                termin::srgb_to_linear({style.color_r, style.color_g, style.color_b, style.color_a});
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
-            vertices.push_back(style.color_r);
-            vertices.push_back(style.color_g);
-            vertices.push_back(style.color_b);
-            vertices.push_back(style.color_a);
+            vertices.push_back(color.r);
+            vertices.push_back(color.g);
+            vertices.push_back(color.b);
+            vertices.push_back(color.a);
             for (uint32_t index = 0; index < 12; ++index) {
                 vertices.push_back(0.0f);
             }
@@ -87,13 +94,14 @@ namespace tcplot {
 
         void append_line_vertex(
             std::vector<float>& vertices, float x, float y, float z, float r, float g, float b, float a) {
+            const termin::LinearColor color = termin::srgb_to_linear({r, g, b, a});
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
-            vertices.push_back(r);
-            vertices.push_back(g);
-            vertices.push_back(b);
-            vertices.push_back(a);
+            vertices.push_back(color.r);
+            vertices.push_back(color.g);
+            vertices.push_back(color.b);
+            vertices.push_back(color.a);
             for (uint32_t index = 0; index < 12; ++index) {
                 vertices.push_back(0.0f);
             }
@@ -188,12 +196,14 @@ namespace tcplot {
             draw.axis_shading[2] = payload.frame.axis_scale[2];
             if (surface_mode) {
                 const tc_surface_item3d_style& style = data.surface_style;
+                const termin::LinearColor surface_color =
+                    termin::srgb_to_linear({style.color_r, style.color_g, style.color_b, style.color_a});
                 draw.params[2] = style.wireframe == 0 ? 1.0f : 0.0f;
                 draw.params[3] = static_cast<float>(style.colormap) + (style.colormap_reversed != 0 ? 100.0f : 0.0f);
-                draw.surface_color[0] = style.color_r;
-                draw.surface_color[1] = style.color_g;
-                draw.surface_color[2] = style.color_b;
-                draw.surface_color[3] = style.color_a;
+                draw.surface_color[0] = surface_color.r;
+                draw.surface_color[1] = surface_color.g;
+                draw.surface_color[2] = surface_color.b;
+                draw.surface_color[3] = surface_color.a;
                 draw.axis_shading[3] = style.wireframe == 0 && payload.frame.surface_shading ? 1.0f : 0.0f;
                 draw.light_strength[0] = payload.frame.surface_light_direction[0];
                 draw.light_strength[1] = payload.frame.surface_light_direction[1];

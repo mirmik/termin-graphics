@@ -32,6 +32,8 @@
 #include <tgfx2/text3d_renderer.hpp>
 #include <tgfx2/vertex_layout.hpp>
 
+#include <termin/geom/color.hpp>
+
 #include "tcplot/axes.hpp"
 
 extern "C" {
@@ -99,15 +101,16 @@ namespace tcplot {
         void
         bind_plot3d_draw_data(tgfx::RenderContext2& ctx, const PlotEngine3D& engine, const Plot3DDrawParams& params) {
             Plot3DPushData pc{};
+            const termin::LinearColor surface_color = termin::srgb_to_linear(params.surface_color);
             std::memcpy(pc.mvp, params.mvp, sizeof(pc.mvp));
             pc.params[0] = params.z_min;
             pc.params[1] = params.z_max;
             pc.params[2] = params.surface_mode ? 1.0f : 0.0f;
             pc.params[3] = static_cast<float>(params.colormap) + (params.colormap_reversed ? 100.0f : 0.0f);
-            pc.surface_color[0] = params.surface_color.r;
-            pc.surface_color[1] = params.surface_color.g;
-            pc.surface_color[2] = params.surface_color.b;
-            pc.surface_color[3] = params.surface_color.a;
+            pc.surface_color[0] = surface_color.r;
+            pc.surface_color[1] = surface_color.g;
+            pc.surface_color[2] = surface_color.b;
+            pc.surface_color[3] = surface_color.a;
             pc.axis_shading[0] = engine.x_scale;
             pc.axis_shading[1] = engine.y_scale;
             pc.axis_shading[2] = engine.z_scale;
@@ -183,33 +186,36 @@ namespace tcplot {
 
         // Push the 7-float (pos+color) vertex for a single point.
         inline void push_vertex(std::vector<float>& verts, float x, float y, float z, const SrgbColor& c) {
+            const termin::LinearColor color = termin::srgb_to_linear(c);
             verts.push_back(x);
             verts.push_back(y);
             verts.push_back(z);
-            verts.push_back(c.r);
-            verts.push_back(c.g);
-            verts.push_back(c.b);
-            verts.push_back(c.a);
+            verts.push_back(color.r);
+            verts.push_back(color.g);
+            verts.push_back(color.b);
+            verts.push_back(color.a);
             for (int i = 0; i < 12; ++i)
                 verts.push_back(0.0f);
         }
 
         inline void push_surface_vertex(std::vector<float>& verts, const SurfaceVertexData& vertex) {
+            const termin::LinearColor color = termin::srgb_to_linear(vertex.color);
+            const termin::LinearColor grid_color = termin::srgb_to_linear(vertex.grid.color);
             verts.push_back(vertex.x);
             verts.push_back(vertex.y);
             verts.push_back(vertex.z);
-            verts.push_back(vertex.color.r);
-            verts.push_back(vertex.color.g);
-            verts.push_back(vertex.color.b);
-            verts.push_back(vertex.color.a);
+            verts.push_back(color.r);
+            verts.push_back(color.g);
+            verts.push_back(color.b);
+            verts.push_back(color.a);
             verts.push_back(vertex.grid.col);
             verts.push_back(vertex.grid.row);
             verts.push_back(vertex.grid.col_step);
             verts.push_back(vertex.grid.row_step);
-            verts.push_back(vertex.grid.color.r);
-            verts.push_back(vertex.grid.color.g);
-            verts.push_back(vertex.grid.color.b);
-            verts.push_back(vertex.grid.color.a);
+            verts.push_back(grid_color.r);
+            verts.push_back(grid_color.g);
+            verts.push_back(grid_color.b);
+            verts.push_back(grid_color.a);
             verts.push_back(vertex.grid.visible ? 1.0f : 0.0f);
             verts.push_back(vertex.grid.width_px);
             verts.push_back(vertex.grid.max_col);

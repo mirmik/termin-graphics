@@ -13,6 +13,8 @@
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
+#include <termin/geom/color.hpp>
+
 #include <termin/render/builtin_passes.hpp>
 #include <termin/render/execute_context.hpp>
 #include <termin/render/frame_pass.hpp>
@@ -62,10 +64,13 @@ namespace {
         std::vector<float> pixels(static_cast<std::size_t>(width) * height * 4u, 0.0f);
         require(host.device().read_texture_rgba_float(texture, pixels.data()),
                 "failed to read retained Chart3D encoder output");
+        const termin::LinearColor clear =
+            termin::srgb_to_linear(termin::SrgbColor{0.08f, 0.09f, 0.11f, 1.0f});
         std::size_t count = 0;
         for (std::size_t index = 0; index + 3 < pixels.size(); index += 4) {
-            if (std::abs(pixels[index + 0] - 0.08f) > 0.03f || std::abs(pixels[index + 1] - 0.09f) > 0.03f ||
-                std::abs(pixels[index + 2] - 0.11f) > 0.03f) {
+            if (std::abs(pixels[index + 0] - clear.r) > 0.03f ||
+                std::abs(pixels[index + 1] - clear.g) > 0.03f ||
+                std::abs(pixels[index + 2] - clear.b) > 0.03f) {
                 ++count;
             }
         }
@@ -309,12 +314,16 @@ int main() {
                 "PlotScene3D payload lost item or chart values");
         const float expected_scatter_cross_size =
             static_cast<float>(std::sqrt(1.25 * 1.25 + 0.75 * 0.75 + 0.5 * 0.5) * 0.008 * (scatter_style.size / 4.0));
+        const termin::LinearColor expected_scatter_color = termin::srgb_to_linear(
+            termin::SrgbColor{scatter_style.color_r, scatter_style.color_g, scatter_style.color_b, scatter_style.color_a});
         require(std::abs(first_scatter_payload->item->draw_vertices[0] - (-0.5f - expected_scatter_cross_size)) <
                         1e-6f &&
                     first_scatter_payload->item->draw_vertices[1] == 0.5f &&
                     first_scatter_payload->item->draw_vertices[2] == 0.25f &&
-                    first_scatter_payload->item->draw_vertices[3] == scatter_style.color_r,
-                "PlotScene3D scatter stream lost legacy cross geometry semantics");
+                    std::abs(first_scatter_payload->item->draw_vertices[3] - expected_scatter_color.r) < 1e-6f &&
+                    std::abs(first_scatter_payload->item->draw_vertices[4] - expected_scatter_color.g) < 1e-6f &&
+                    std::abs(first_scatter_payload->item->draw_vertices[5] - expected_scatter_color.b) < 1e-6f,
+                "PlotScene3D scatter stream lost geometry or linear color semantics");
 
         termin::RenderItemEncoderCapabilities surface_capabilities{};
         require(
@@ -554,6 +563,10 @@ int main() {
 
         const uint32_t first_render_texture = tc_retained_chart3d_render(chart, 320, 240);
         require(first_render_texture != 0, "initial retained render failed");
+        tgfx::TextureHandle first_render_handle{};
+        first_render_handle.id = first_render_texture;
+        require(host.device().texture_desc(first_render_handle).sample_count == 1,
+                "RetainedChart3D must publish a resolved single-sample texture");
         const std::size_t labeled_pixel_count = count_non_clear_pixels(host, first_render_texture, 320, 240);
         require(labeled_pixel_count > 100, "PlotScene3D retained encoders produced no visible output");
         const auto surface_rendered = snapshot(chart, surface);
@@ -562,6 +575,19 @@ int main() {
         require(surface_rendered.gpu_revision != 0 && scatter_rendered.gpu_revision != 0 &&
                     grid_rendered.gpu_revision != 0,
                 "render must synchronize item GPU revisions");
+
+        require(tc_retained_chart3d_set_msaa_samples(chart, 2) != 0 &&
+                    tc_retained_chart3d_set_msaa_samples(chart, 3) == 0,
+                "retained Chart3D MSAA validation failed");
+        const uint32_t two_sample_render_texture = tc_retained_chart3d_render(chart, 320, 240);
+        tgfx::TextureHandle two_sample_render_handle{};
+        two_sample_render_handle.id = two_sample_render_texture;
+        const std::size_t two_sample_labeled_pixel_count =
+            count_non_clear_pixels(host, two_sample_render_texture, 320, 240);
+        require(two_sample_render_texture != 0 &&
+                    host.device().texture_desc(two_sample_render_handle).sample_count == 1 &&
+                    two_sample_labeled_pixel_count > 100,
+                "MSAA Chart3D render was not resolved to a visible single-sample output");
 
         tc_grid_item3d_style grid_style{};
         const tc_plot_item3d_handle grid = tc_retained_chart3d_grid_part(chart);
@@ -581,7 +607,7 @@ int main() {
                 "grid style mutation altered an older snapshot payload");
         const uint32_t hidden_labels_texture = tc_retained_chart3d_render(chart, 320, 240);
         require(hidden_labels_texture != 0 &&
-                    labeled_pixel_count > count_non_clear_pixels(host, hidden_labels_texture, 320, 240),
+                    two_sample_labeled_pixel_count > count_non_clear_pixels(host, hidden_labels_texture, 320, 240),
                 "chart-owned grid labels produced no visible annotation pixels");
         grid_style.labels_visible = 1;
         require(tc_retained_chart3d_grid_set_style(chart, grid, &grid_style) != 0 &&
@@ -687,6 +713,13 @@ int main() {
                 "reused slot must not recycle the previous generation's payload");
         require(tc_retained_chart3d_destroy_item(chart, scatter) == 0,
                 "stale handle must not destroy replacement item");
+
+        tc_retained_chart3d_detach_gpu_host(chart);
+        require(snapshot(chart, surface).gpu_revision == 0 && snapshot(chart, replacement).gpu_revision == 0,
+                "GPU-host detach must preserve CPU items and invalidate their GPU revisions");
+        require(tc_retained_chart3d_attach_gpu_host(chart, &host) != 0 &&
+                    tc_retained_chart3d_render(chart, 320, 240) != 0,
+                "detached retained chart did not reattach and render");
 
         tc_retained_chart3d_destroy(other);
         tc_retained_chart3d_destroy(chart);

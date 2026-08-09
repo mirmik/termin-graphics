@@ -193,7 +193,7 @@ namespace {
         }
 
         ~RetainedChart3D() {
-            release_gpu();
+            detach_gpu_host();
         }
 
         std::uint64_t scene_id() const {
@@ -203,10 +203,9 @@ namespace {
         void attach(tcplot::GpuHost& host) {
             if (host_ == &host)
                 return;
-            release_gpu();
-            render_pipeline_.reset();
+            detach_gpu_host();
             host_ = &host;
-            render_pipeline_ = std::make_unique<tcplot::PlotScene3DRenderPipeline>(host);
+            render_pipeline_ = std::make_unique<tcplot::PlotScene3DRenderPipeline>(host, msaa_samples_);
         }
 
         std::size_t item_count() const {
@@ -534,6 +533,10 @@ namespace {
                 return;
             msaa_samples_ = samples;
             release_targets();
+            render_pipeline_.reset();
+            if (host_) {
+                render_pipeline_ = std::make_unique<tcplot::PlotScene3DRenderPipeline>(*host_, msaa_samples_);
+            }
         }
 
         int msaa_samples() const {
@@ -648,7 +651,7 @@ namespace {
             }
 
             const tcplot::PlotScene3DRenderResult render_result = render_pipeline_->execute(
-                item_snapshot, scene_id_, grid_part_.index, grid_part_.generation, color_, depth_, width, height);
+                item_snapshot, scene_id_, grid_part_.index, grid_part_.generation, color_, width, height);
             for (const tcplot::PlotScene3DRenderedItem& rendered_item : render_result.rendered_items) {
                 if (rendered_item.object_id >= slots_.size()) {
                     continue;
@@ -668,6 +671,12 @@ namespace {
             if (render_pipeline_)
                 render_pipeline_->release_gpu();
             release_targets();
+        }
+
+        void detach_gpu_host() {
+            release_gpu();
+            render_pipeline_.reset();
+            host_ = nullptr;
         }
 
     private:
@@ -825,32 +834,23 @@ namespace {
         }
 
         void ensure_offscreen(int width, int height) {
-            if (width_ == width && height_ == height && color_.id != 0 && depth_.id != 0) {
+            if (width_ == width && height_ == height && color_.id != 0) {
                 return;
             }
             if (color_.id != 0)
                 host_->device().destroy(color_);
-            if (depth_.id != 0)
-                host_->device().destroy(depth_);
 
             tgfx::TextureDesc color_desc;
             color_desc.width = static_cast<std::uint32_t>(width);
             color_desc.height = static_cast<std::uint32_t>(height);
             color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
             color_desc.usage =
-                tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
-            color_desc.sample_count = static_cast<std::uint32_t>(msaa_samples_);
+                tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc |
+                tgfx::TextureUsage::CopyDst;
+            color_desc.sample_count = 1;
             color_ = host_->device().create_texture(color_desc);
-
-            tgfx::TextureDesc depth_desc;
-            depth_desc.width = static_cast<std::uint32_t>(width);
-            depth_desc.height = static_cast<std::uint32_t>(height);
-            depth_desc.format = tgfx::PixelFormat::D24_UNorm;
-            depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment;
-            depth_desc.sample_count = static_cast<std::uint32_t>(msaa_samples_);
-            depth_ = host_->device().create_texture(depth_desc);
-            if (color_.id == 0 || depth_.id == 0) {
-                throw std::runtime_error("failed to create retained Chart3D attachments");
+            if (color_.id == 0) {
+                throw std::runtime_error("failed to create retained Chart3D output texture");
             }
             width_ = width;
             height_ = height;
@@ -860,11 +860,8 @@ namespace {
             if (host_) {
                 if (color_.id != 0)
                     host_->device().destroy(color_);
-                if (depth_.id != 0)
-                    host_->device().destroy(depth_);
             }
             color_ = {};
-            depth_ = {};
             width_ = 0;
             height_ = 0;
         }
@@ -888,7 +885,6 @@ namespace {
         float drag_x_ = 0;
         float drag_y_ = 0;
         tgfx::TextureHandle color_{};
-        tgfx::TextureHandle depth_{};
         int width_ = 0;
         int height_ = 0;
         int msaa_samples_ = 4;
@@ -1359,6 +1355,15 @@ void tc_retained_chart3d_release_gpu(tc_retained_chart3d* chart) {
         return;
     logged("release_gpu", false, [&] {
         chart->value.release_gpu();
+        return true;
+    });
+}
+
+void tc_retained_chart3d_detach_gpu_host(tc_retained_chart3d* chart) {
+    if (!chart)
+        return;
+    logged("detach_gpu_host", false, [&] {
+        chart->value.detach_gpu_host();
         return true;
     });
 }

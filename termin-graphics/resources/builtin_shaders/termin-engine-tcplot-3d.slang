@@ -29,6 +29,19 @@ struct VertexOutput {
     float4 surface_grid_opts : TEXCOORD4;
 };
 
+float srgb_channel_to_linear(float value) {
+    return value <= 0.04045
+        ? value / 12.92
+        : pow((value + 0.055) / 1.055, 2.4);
+}
+
+float3 srgb_to_linear(float3 value) {
+    return float3(
+        srgb_channel_to_linear(value.r),
+        srgb_channel_to_linear(value.g),
+        srgb_channel_to_linear(value.b));
+}
+
 float3 jet(float t) {
     t = clamp(t, 0.0, 1.0);
     float r;
@@ -123,7 +136,9 @@ float3 map_surface_color(float t, float map_id) {
     } else if (id == 5) {
         result = tcplot3d_draw.u_surface_color.rgb;
     }
-    return result;
+    // Palette control points are authored/display-referred sRGB values.
+    // Solid color is decoded on the CPU together with other SrgbColor inputs.
+    return id == 5 ? result : srgb_to_linear(result);
 }
 
 float grid_line_mask(float coord, float step, float max_coord, float width_px) {

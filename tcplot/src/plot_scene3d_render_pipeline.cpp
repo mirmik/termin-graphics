@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <tcbase/tc_log.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/render/execute_context.hpp>
 #include <termin/render/frame_pass.hpp>
 #include <termin/render/render_engine.hpp>
@@ -15,6 +16,7 @@
 #include <termin/render/render_item_snapshot.hpp>
 #include <termin/render/render_item_submission.hpp>
 #include <termin/render/render_task.hpp>
+#include <termin/render/resource_spec.hpp>
 #include <tgfx2/font_atlas.hpp>
 #include <tgfx2/render_context.hpp>
 
@@ -26,6 +28,7 @@ namespace tcplot {
     namespace {
 
         constexpr const char* kGeometryResource = "PlotScene3DGeometry";
+        constexpr const char* kCompositedResource = "PlotScene3DComposited";
         constexpr const char* kOutputResource = "OUTPUT";
         constexpr const char* kGeometryPassName = "RetainedChart3D/Geometry";
         constexpr const char* kChromePassName = "RetainedChart3D/Chrome";
@@ -34,6 +37,7 @@ namespace tcplot {
             bool success = true;
             bool geometry_executed = false;
             bool chrome_executed = false;
+            bool resolve_executed = false;
             std::vector<PlotScene3DRenderedItem> rendered_items;
         };
 
@@ -83,12 +87,27 @@ namespace tcplot {
 
         class PlotScene3DGeometryPass final : public termin::CxxFramePass {
         public:
-            PlotScene3DGeometryPass() {
+            explicit PlotScene3DGeometryPass(int sample_count)
+                : sample_count_(sample_count) {
                 pass_name_set(kGeometryPassName);
             }
 
             std::set<const char*> compute_writes() const override {
                 return {kGeometryResource};
+            }
+
+            std::vector<termin::ResourceSpec> get_resource_specs() const override {
+                const termin::LinearColor clear_color =
+                    termin::srgb_to_linear(termin::SrgbColor{0.08f, 0.09f, 0.11f, 1.0f});
+                return {termin::ResourceSpec{
+                    kGeometryResource,
+                    "fbo",
+                    std::nullopt,
+                    clear_color,
+                    1.0f,
+                    std::nullopt,
+                    sample_count_,
+                }};
             }
 
             std::vector<std::string> get_internal_symbols() const override {
@@ -226,6 +245,7 @@ namespace tcplot {
             }
 
         private:
+            int sample_count_ = 1;
             std::vector<std::string> internal_symbols_;
         };
 
@@ -240,11 +260,11 @@ namespace tcplot {
             }
 
             std::set<const char*> compute_writes() const override {
-                return {kOutputResource};
+                return {kCompositedResource};
             }
 
             std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
-                return {{kGeometryResource, kOutputResource}};
+                return {{kGeometryResource, kCompositedResource}};
             }
 
             std::vector<std::string> get_internal_symbols() const override {
@@ -280,13 +300,13 @@ namespace tcplot {
                 }
 
                 const termin::FrameGraphColorAttachment color_attachment{
-                    kOutputResource,
+                    kCompositedResource,
                     tgfx::LoadOp::Load,
                     tgfx::StoreOp::Store,
                     {0.0f, 0.0f, 0.0f, 0.0f},
                 };
                 const termin::FrameGraphDepthAttachment depth_attachment{
-                    kOutputResource,
+                    kCompositedResource,
                     tgfx::LoadOp::Load,
                     tgfx::StoreOp::Store,
                     1.0f,
@@ -324,21 +344,61 @@ namespace tcplot {
             PlotScene3DChartChromeRenderer chrome_renderer_;
         };
 
+        class PlotScene3DResolvePass final : public termin::CxxFramePass {
+        public:
+            PlotScene3DResolvePass() {
+                pass_name_set("RetainedChart3D/Resolve");
+            }
+
+            std::set<const char*> compute_reads() const override {
+                return {kCompositedResource};
+            }
+
+            std::set<const char*> compute_writes() const override {
+                return {kOutputResource};
+            }
+
+            void execute(termin::ExecuteContext& context) override {
+                const PlotScene3DRenderServices* services =
+                    require_plot_services(context, "RetainedChart3D/Resolve");
+                if (!services) {
+                    return;
+                }
+                if (!context.ctx2) {
+                    tc::Log::error("[RetainedChart3D/Resolve] render context is missing");
+                    services->report->success = false;
+                    return;
+                }
+                const auto source = context.tex2_reads.find(kCompositedResource);
+                const auto target = context.tex2_writes.find(kOutputResource);
+                if (source == context.tex2_reads.end() || !source->second || target == context.tex2_writes.end() ||
+                    !target->second) {
+                    tc::Log::error("[RetainedChart3D/Resolve] source or output texture is missing");
+                    services->report->success = false;
+                    return;
+                }
+                context.ctx2->blit(source->second, target->second);
+                services->report->resolve_executed = true;
+            }
+        };
+
     } // namespace
 
     class PlotScene3DRenderPipeline::Impl {
     public:
-        explicit Impl(GpuHost& host)
+        Impl(GpuHost& host, int sample_count)
             : host_(&host),
               pipeline_("RetainedChart3D") {
             if (!pipeline_.is_valid()) {
                 throw std::runtime_error("failed to create RetainedChart3D render pipeline");
             }
             engine_.set_graphics_host(host.graphics());
-            auto* geometry_pass = new PlotScene3DGeometryPass();
+            auto* geometry_pass = new PlotScene3DGeometryPass(sample_count);
             pipeline_.add_pass(geometry_pass->tc_pass_ptr());
             chrome_pass_ = new PlotScene3DChromePass();
             pipeline_.add_pass(chrome_pass_->tc_pass_ptr());
+            auto* resolve_pass = new PlotScene3DResolvePass();
+            pipeline_.add_pass(resolve_pass->tc_pass_ptr());
         }
 
         ~Impl() {
@@ -351,7 +411,6 @@ namespace tcplot {
                                         std::uint64_t selected_grid_object,
                                         std::uint32_t selected_grid_generation,
                                         tgfx::TextureHandle color,
-                                        tgfx::TextureHandle depth,
                                         int width,
                                         int height) {
             PlotScene3DExecutionReport report;
@@ -370,12 +429,8 @@ namespace tcplot {
             target.name = "RetainedChart3DTarget";
             target.render_rect = {0, 0, width, height};
             target.output_color.texture = color;
-            target.output_depth_tex = depth;
-            target.output_depth_format = tgfx::PixelFormat::D24_UNorm;
-            target.clear_color_enabled = true;
-            target.clear_linear_color = termin::LinearColor{0.08f, 0.09f, 0.11f, 1.0f};
-            target.clear_depth_enabled = true;
-            target.clear_depth = 1.0f;
+            target.clear_color_enabled = false;
+            target.clear_depth_enabled = false;
 
             termin::RenderExecution execution;
             execution.pipeline = &pipeline_;
@@ -389,7 +444,8 @@ namespace tcplot {
             engine_.execute_pipeline(execution);
 
             PlotScene3DRenderResult result;
-            result.success = report.success && report.geometry_executed && report.chrome_executed;
+            result.success =
+                report.success && report.geometry_executed && report.chrome_executed && report.resolve_executed;
             result.rendered_items = std::move(report.rendered_items);
             return result;
         }
@@ -407,8 +463,8 @@ namespace tcplot {
         PlotScene3DChromePass* chrome_pass_ = nullptr;
     };
 
-    PlotScene3DRenderPipeline::PlotScene3DRenderPipeline(GpuHost& host)
-        : impl_(std::make_unique<Impl>(host)) {}
+    PlotScene3DRenderPipeline::PlotScene3DRenderPipeline(GpuHost& host, int sample_count)
+        : impl_(std::make_unique<Impl>(host, sample_count)) {}
 
     PlotScene3DRenderPipeline::~PlotScene3DRenderPipeline() = default;
 
@@ -417,7 +473,6 @@ namespace tcplot {
                                                                std::uint64_t selected_grid_object,
                                                                std::uint32_t selected_grid_generation,
                                                                tgfx::TextureHandle color,
-                                                               tgfx::TextureHandle depth,
                                                                int width,
                                                                int height) {
         return impl_->execute(snapshot,
@@ -425,7 +480,6 @@ namespace tcplot {
                               selected_grid_object,
                               selected_grid_generation,
                               color,
-                              depth,
                               width,
                               height);
     }
