@@ -59,3 +59,32 @@ def test_missing_pass_roundtrip_preserves_original_envelope_and_graph_contract()
     finally:
         pipeline.destroy()
         termin.bootstrap.shutdown_runtime()
+
+
+def test_pipeline_roundtrip_preserves_semantic_color_exports() -> None:
+    termin.bootstrap.bootstrap_runtime()
+    pipeline = RenderPipeline("color-export-roundtrip")
+    pipeline.set_color_export("final_color", "display_srgb", "main")
+    try:
+        serialized = pipeline.serialize()
+        assert serialized["targets"] == [
+            {
+                "viewport_name": "main",
+                "export_name": "final_color",
+                "color_content": "display_srgb",
+            }
+        ]
+        roundtrip = RenderPipeline.deserialize(serialized, object())
+        try:
+            assert roundtrip.color_exports == [
+                {
+                    "resource": "final_color",
+                    "viewport_name": "main",
+                    "color_content": "display_srgb",
+                }
+            ]
+        finally:
+            roundtrip.destroy()
+    finally:
+        pipeline.destroy()
+        termin.bootstrap.shutdown_runtime()

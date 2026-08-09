@@ -32,7 +32,11 @@ namespace termin::gui_native {
                 return window_->content_scale();
             }
 
-            void publish_frame(tgfx::TextureHandle color_texture) override {
+            tgfx::TextureEncoding destination_encoding() const override {
+                return tgfx::TextureEncoding::SRGB;
+            }
+
+            void publish_display_linear_frame(tgfx::TextureHandle color_texture) override {
                 window_->present(color_texture);
             }
 

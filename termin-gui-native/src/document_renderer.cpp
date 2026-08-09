@@ -419,7 +419,7 @@ namespace termin::gui_native {
         }
         {
             ProfilerSection profile("UI Present");
-            impl_->frame_sink->publish_frame(impl_->color_target);
+            impl_->frame_sink->publish_display_linear_frame(impl_->color_target);
         }
         ++impl_->rendered_frames;
         return true;
@@ -480,6 +480,11 @@ namespace termin::gui_native {
     tgfx::TextureHandle DocumentRenderer::color_target() const {
         impl_->require_open("color_target");
         return impl_->color_target;
+    }
+
+    tgfx::TextureEncoding DocumentRenderer::frame_sink_encoding() const {
+        impl_->require_open("frame_sink_encoding");
+        return impl_->frame_sink->destination_encoding();
     }
 
     void DocumentRenderer::wait_idle() {

@@ -5,6 +5,7 @@
 #include <span>
 
 #include <termin/gui_native/document_renderer_export.h>
+#include <tgfx/texture_encoding.h>
 #include <tgfx2/handles.hpp>
 
 namespace tgfx {
@@ -42,7 +43,10 @@ namespace termin::gui_native {
         DynamicTextureLease(DynamicTextureLease&&) noexcept;
         DynamicTextureLease& operator=(DynamicTextureLease&&) noexcept;
 
-        void set_rgba8(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
+        void set_rgba8(uint32_t width,
+                       uint32_t height,
+                       std::span<const uint8_t> pixels,
+                       tgfx::TextureEncoding encoding);
         void
         update_region_rgba8(uint32_t x, uint32_t y, uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
         void borrow(tgfx::GraphicsHost& texture_owner, tgfx::TextureHandle texture);

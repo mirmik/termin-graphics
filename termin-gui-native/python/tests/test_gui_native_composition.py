@@ -65,7 +65,9 @@ def test_offscreen_composition_renders_and_accepts_synthetic_input():
     assert activations == ["redo"]
 
     lease = DynamicTextureLease(application)
-    lease.set_rgba8(np.full((2, 3, 4), 127, dtype=np.uint8))
+    from tgfx import TextureEncoding
+
+    lease.set_rgba8(np.full((2, 3, 4), 127, dtype=np.uint8), TextureEncoding.SRGB)
     assert not lease.empty
     application.request_close()
     application.close()

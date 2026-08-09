@@ -811,6 +811,85 @@ namespace termin {
         }
         assemble_resources_ms = timing_ms(assemble_resources_begin, RenderTimingClock::now());
 
+        struct PreparedColorOutputBinding {
+            PipelineColorExport export_desc;
+            std::string canonical_resource;
+            tgfx::TextureHandle source;
+            tgfx::TextureHandle target;
+            ColorOutputBindingPlan plan;
+        };
+        std::vector<PreparedColorOutputBinding> color_output_bindings;
+        color_output_bindings.reserve(pipeline.color_exports().size());
+        for (const PipelineColorExport& color_export : pipeline.color_exports()) {
+            auto target_it = color_export.viewport_name.empty() ? default_it
+                                                                : render_target_contexts.find(color_export.viewport_name);
+            if (target_it == render_target_contexts.end()) {
+                tc::Log::error("RenderEngine: color export '%s' refers to unknown target '%s'",
+                               color_export.resource.c_str(),
+                               color_export.viewport_name.c_str());
+                continue;
+            }
+            const tgfx::TextureHandle target = target_it->second.output_color.texture;
+            if (!target) {
+                tc::Log::error("RenderEngine: color export '%s' has no physical target texture",
+                               color_export.resource.c_str());
+                continue;
+            }
+
+            tgfx::TextureHandle source;
+            auto source_it = tex2_resources.find(color_export.resource);
+            if (source_it != tex2_resources.end())
+                source = source_it->second;
+            if (!source) {
+                const char* canonical = tc_frame_graph_canonical_resource(fg, color_export.resource.c_str());
+                if (canonical) {
+                    source_it = tex2_resources.find(canonical);
+                    if (source_it != tex2_resources.end())
+                        source = source_it->second;
+                }
+            }
+            if (!source) {
+                tc::Log::error("RenderEngine: color export resource '%s' is unavailable",
+                               color_export.resource.c_str());
+                continue;
+            }
+
+            const ColorOutputBindingPlan plan = plan_color_output_binding(
+                device->texture_desc(source), color_export.content, device->texture_desc(target));
+            const char* canonical = tc_frame_graph_canonical_resource(fg, color_export.resource.c_str());
+            const std::string canonical_resource = canonical ? canonical : color_export.resource;
+            if (!plan.valid) {
+                tc::Log::error("RenderEngine: refusing to bind scene-linear export '%s' to an SDR color target",
+                               color_export.resource.c_str());
+                color_output_bindings.push_back({color_export, canonical_resource, source, target, plan});
+                continue;
+            }
+            color_output_bindings.push_back({color_export, canonical_resource, source, target, plan});
+        }
+
+        std::unordered_map<std::string, size_t> color_export_consumer_counts;
+        for (const PreparedColorOutputBinding& binding : color_output_bindings) {
+            if (binding.plan.valid)
+                ++color_export_consumer_counts[binding.canonical_resource];
+        }
+        for (PreparedColorOutputBinding& binding : color_output_bindings) {
+            if (!binding.plan.valid || binding.plan.operation != ColorOutputBindingOp::Direct)
+                continue;
+
+            // One internal result may fan out to several physical targets. It
+            // cannot be rebound directly in that case because the global
+            // resource map can name only one texture; preserve the internal
+            // producer and copy once to each consumer instead.
+            if (color_export_consumer_counts[binding.canonical_resource] != 1) {
+                binding.plan.operation = ColorOutputBindingOp::CopyOrResolve;
+                continue;
+            }
+
+            for (const char* alias : collect_alias_group(fg, binding.canonical_resource.c_str()))
+                tex2_resources[alias] = binding.target;
+            tex2_resources[binding.export_desc.resource] = binding.target;
+        }
+
         std::vector<size_t> debug_capture_boundaries(debug_capture_requests.size(), static_cast<size_t>(-1));
         for (size_t request_index = 0; request_index < debug_capture_requests.size(); ++request_index) {
             FrameGraphCaptureRequest* request = debug_capture_requests[request_index];
@@ -1641,6 +1720,23 @@ namespace termin {
             }
         }
         tc_profiler_end_section();
+
+        for (const PreparedColorOutputBinding& binding : color_output_bindings) {
+            if (!binding.plan.valid || binding.plan.operation == ColorOutputBindingOp::Direct ||
+                binding.source == binding.target) {
+                continue;
+            }
+            try {
+                // Backend blits are format-aware: they perform MSAA resolve,
+                // size/format conversion and sRGB attachment transfer as
+                // required by the binding plan.
+                ctx2->blit(binding.source, binding.target);
+            } catch (const std::exception& error) {
+                tc::Log::error("RenderEngine: color export '%s' binding failed: %s",
+                               binding.export_desc.resource.c_str(),
+                               error.what());
+            }
+        }
 
         for (FrameGraphCaptureRequest* request : debug_capture_requests) {
             if (request && !request->paused && request->status == FrameGraphCaptureRequestStatus::Pending) {

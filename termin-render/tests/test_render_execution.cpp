@@ -130,6 +130,7 @@ namespace {
 
     struct ExecutionRecordingState {
         std::vector<RecordedRenderScope> scopes;
+        std::vector<std::pair<tgfx::TextureHandle, tgfx::TextureHandle>> texture_copies;
         uint32_t framebuffer_local_barriers = 0;
     };
 
@@ -168,7 +169,9 @@ namespace {
         void draw_indexed_instanced(uint32_t, uint32_t, uint32_t = 0, int32_t = 0, uint32_t = 0) override {}
         void dispatch(uint32_t, uint32_t, uint32_t) override {}
         void copy_buffer(tgfx::BufferHandle, tgfx::BufferHandle, uint64_t, uint64_t = 0, uint64_t = 0) override {}
-        void copy_texture(tgfx::TextureHandle, tgfx::TextureHandle) override {}
+        void copy_texture(tgfx::TextureHandle src, tgfx::TextureHandle dst) override {
+            state_.texture_copies.emplace_back(src, dst);
+        }
         void set_viewport(int, int, int, int) override {}
         void set_scissor(int, int, int, int) override {}
 
@@ -695,6 +698,199 @@ namespace {
     }
 
 } // namespace
+
+TEST_CASE("color output binding planner separates direct copy transfer and scene rejection") {
+    tgfx::TextureDesc rgba16;
+    rgba16.width = 640;
+    rgba16.height = 480;
+    rgba16.format = tgfx::PixelFormat::RGBA16F;
+
+    tgfx::TextureDesc linear8 = rgba16;
+    linear8.format = tgfx::PixelFormat::RGBA8_UNorm;
+    tgfx::TextureDesc srgb8 = linear8;
+    srgb8.format = tgfx::PixelFormat::RGBA8_sRGB;
+
+    CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, rgba16).operation ==
+          termin::ColorOutputBindingOp::Direct);
+    CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, linear8).operation ==
+          termin::ColorOutputBindingOp::CopyOrResolve);
+    CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, srgb8).operation ==
+          termin::ColorOutputBindingOp::EncodeSRGB);
+    CHECK(termin::plan_color_output_binding(srgb8, termin::ColorContent::DisplaySRGB, srgb8).operation ==
+          termin::ColorOutputBindingOp::Direct);
+    CHECK(termin::plan_color_output_binding(srgb8, termin::ColorContent::DisplaySRGB, linear8).operation ==
+          termin::ColorOutputBindingOp::DecodeSRGB);
+
+    const auto rejected = termin::plan_color_output_binding(rgba16, termin::ColorContent::SceneLinear, linear8);
+    CHECK_FALSE(rejected.valid);
+    CHECK(rejected.operation == termin::ColorOutputBindingOp::RejectSceneLinear);
+    CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::SceneLinear, rgba16).operation ==
+          termin::ColorOutputBindingOp::Direct);
+
+    tgfx::TextureDesc msaa = rgba16;
+    msaa.sample_count = 4;
+    CHECK(termin::plan_color_output_binding(msaa, termin::ColorContent::DisplayLinear, rgba16).operation ==
+          termin::ColorOutputBindingOp::CopyOrResolve);
+}
+
+TEST_CASE("compatible color export is bound directly to the physical target") {
+    termin::RenderPipeline pipeline("direct-color-export-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ClearRasterProbe("final_color"))->tc_pass_ptr());
+    termin::ResourceSpec export_spec;
+    export_spec.resource = "final_color";
+    export_spec.format = "rgba16f";
+    export_spec.size = {16, 16};
+    pipeline.add_spec(export_spec);
+    pipeline.set_color_export("final_color", termin::ColorContent::DisplayLinear);
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA16F;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "DirectColorTarget";
+    target.render_rect = {0, 0, 16, 16};
+    target.output_color.texture = output;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1u);
+    REQUIRE(recording_device->state.scopes[0].pass.colors.size() == 1u);
+    CHECK(recording_device->state.scopes[0].pass.colors[0].texture == output);
+    CHECK(recording_device->state.texture_copies.empty());
+    pipeline.destroy();
+}
+
+TEST_CASE("incompatible color export records one output epilogue") {
+    termin::RenderPipeline pipeline("color-export-epilogue-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ClearRasterProbe("final_color"))->tc_pass_ptr());
+    termin::ResourceSpec export_spec;
+    export_spec.resource = "final_color";
+    export_spec.format = "rgba16f";
+    export_spec.size = {16, 16};
+    pipeline.add_spec(export_spec);
+    pipeline.set_color_export("final_color", termin::ColorContent::DisplayLinear);
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "EncodedColorTarget";
+    target.render_rect = {0, 0, 16, 16};
+    target.output_color.texture = output;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1u);
+    REQUIRE(recording_device->state.scopes[0].pass.colors.size() == 1u);
+    CHECK(recording_device->state.scopes[0].pass.colors[0].texture != output);
+    REQUIRE(recording_device->state.texture_copies.size() == 1u);
+    CHECK(recording_device->state.texture_copies[0].second == output);
+    pipeline.destroy();
+}
+
+TEST_CASE("one color export resource fans out through epilogues instead of direct rebinding") {
+    termin::RenderPipeline pipeline("color-export-fanout-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ClearRasterProbe("final_color"))->tc_pass_ptr());
+    termin::ResourceSpec export_spec;
+    export_spec.resource = "final_color";
+    export_spec.format = "rgba16f";
+    export_spec.size = {16, 16};
+    pipeline.add_spec(export_spec);
+    pipeline.set_color_export("final_color", termin::ColorContent::DisplayLinear, "TargetA");
+    pipeline.set_color_export("final_color", termin::ColorContent::DisplayLinear, "TargetB");
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA16F;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output_a = device->create_texture(output_desc);
+    const tgfx::TextureHandle output_b = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target_a;
+    target_a.name = "TargetA";
+    target_a.render_rect = {0, 0, 16, 16};
+    target_a.output_color.texture = output_a;
+    termin::RenderTargetContext target_b;
+    target_b.name = "TargetB";
+    target_b.render_rect = {0, 0, 16, 16};
+    target_b.output_color.texture = output_b;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target_a.name;
+    execution.targets.emplace(target_a.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target_a,
+                                  .render_items = &snapshot,
+                              });
+    execution.targets.emplace(target_b.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target_b,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1u);
+    REQUIRE(recording_device->state.scopes[0].pass.colors.size() == 1u);
+    const tgfx::TextureHandle internal_output = recording_device->state.scopes[0].pass.colors[0].texture;
+    CHECK(internal_output != output_a);
+    CHECK(internal_output != output_b);
+    REQUIRE(recording_device->state.texture_copies.size() == 2u);
+    CHECK(recording_device->state.texture_copies[0].first == internal_output);
+    CHECK(recording_device->state.texture_copies[0].second == output_a);
+    CHECK(recording_device->state.texture_copies[1].first == internal_output);
+    CHECK(recording_device->state.texture_copies[1].second == output_b);
+    pipeline.destroy();
+}
 
 TEST_CASE("generic pipeline executes empty and populated non-scene sources") {
     register_probe();

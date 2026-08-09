@@ -224,7 +224,11 @@ namespace termin::gui_native {
                 return {width_, height_};
             }
 
-            void publish_frame(tgfx::TextureHandle texture) override {
+            tgfx::TextureEncoding destination_encoding() const override {
+                return tgfx::TextureEncoding::Linear;
+            }
+
+            void publish_display_linear_frame(tgfx::TextureHandle texture) override {
                 latest_texture_ = texture;
                 published_width_ = width_;
                 published_height_ = height_;

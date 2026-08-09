@@ -641,6 +641,25 @@ namespace termin {
                          specs_list.append(spec_dict);
                      }
                      result["pipeline_specs"] = specs_list;
+                     nb::list targets;
+                     for (const PipelineColorExport& color_export : self.color_exports()) {
+                         nb::dict target;
+                         target["viewport_name"] = color_export.viewport_name;
+                         target["export_name"] = color_export.resource;
+                         switch (color_export.content) {
+                         case ColorContent::SceneLinear:
+                             target["color_content"] = "scene_linear";
+                             break;
+                         case ColorContent::DisplaySRGB:
+                             target["color_content"] = "display_srgb";
+                             break;
+                         default:
+                             target["color_content"] = "display_linear";
+                             break;
+                         }
+                         targets.append(std::move(target));
+                     }
+                     result["targets"] = std::move(targets);
                      nb::dict views;
                      for (const auto& [name, view] : self.cache().resource_views) {
                          nb::dict item;
@@ -762,6 +781,33 @@ namespace termin {
                             if (spec_data.contains("array_layers"))
                                 spec.array_layers = nb::cast<int>(spec_data["array_layers"]);
                             pipeline->add_spec(spec);
+                        }
+                    }
+                    if (data.contains("targets")) {
+                        nb::list targets = nb::cast<nb::list>(data["targets"]);
+                        for (size_t i = 0; i < nb::len(targets); ++i) {
+                            nb::dict target = nb::cast<nb::dict>(targets[i]);
+                            if (!target.contains("export_name")) {
+                                throw std::runtime_error("pipeline target requires 'export_name'");
+                            }
+                            const std::string resource = nb::cast<std::string>(target["export_name"]);
+                            const std::string viewport_name = target.contains("viewport_name")
+                                                                  ? nb::cast<std::string>(target["viewport_name"])
+                                                                  : "";
+                            const std::string content = target.contains("color_content")
+                                                            ? nb::cast<std::string>(target["color_content"])
+                                                            : "display_linear";
+                            ColorContent color_content;
+                            if (content == "scene_linear")
+                                color_content = ColorContent::SceneLinear;
+                            else if (content == "display_linear")
+                                color_content = ColorContent::DisplayLinear;
+                            else if (content == "display_srgb")
+                                color_content = ColorContent::DisplaySRGB;
+                            else
+                                throw std::runtime_error("unsupported pipeline target color_content '" + content +
+                                                         "'");
+                            pipeline->set_color_export(resource, color_content, viewport_name);
                         }
                     }
                     if (data.contains("resource_views")) {

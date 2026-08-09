@@ -9,6 +9,7 @@
 #include <termin/geom/color.hpp>
 #include <termin/gui_native/document_renderer_export.h>
 #include <termin/gui_native/tc_document.hpp>
+#include <tgfx/texture_encoding.h>
 #include <tgfx2/handles.hpp>
 
 namespace tgfx {
@@ -39,7 +40,10 @@ namespace termin::gui_native {
         virtual float content_scale() const {
             return 1.0f;
         }
-        virtual void publish_frame(tgfx::TextureHandle color_texture) = 0;
+        virtual tgfx::TextureEncoding destination_encoding() const = 0;
+        // The document renderer always publishes DisplayLinear. The sink owns
+        // the final transfer into its declared destination encoding.
+        virtual void publish_display_linear_frame(tgfx::TextureHandle color_texture) = 0;
     };
 
     // Environment services needed by retained document interaction. This
@@ -96,6 +100,7 @@ namespace termin::gui_native {
         bool repaint_requested() const;
         size_t rendered_frame_count() const;
         tgfx::TextureHandle color_target() const;
+        tgfx::TextureEncoding frame_sink_encoding() const;
         void wait_idle();
         void close();
         bool is_open() const;

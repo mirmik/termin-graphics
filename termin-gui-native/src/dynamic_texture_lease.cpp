@@ -19,6 +19,7 @@
 #include <tgfx2/enums.hpp>
 #include <tgfx2/graphics_host.hpp>
 #include <tgfx2/i_render_device.hpp>
+#include <tgfx2/pixel_format_utils.hpp>
 
 namespace termin::gui_native {
 
@@ -72,6 +73,7 @@ namespace termin::gui_native {
         DynamicTextureOwnership ownership = DynamicTextureOwnership::Empty;
         uint32_t width = 0;
         uint32_t height = 0;
+        tgfx::TextureEncoding encoding = tgfx::TextureEncoding::Linear;
         std::vector<CanvasBinding> bindings;
     };
 
@@ -169,6 +171,7 @@ namespace termin::gui_native {
             record.texture = {};
             record.width = 0;
             record.height = 0;
+            record.encoding = tgfx::TextureEncoding::Linear;
         }
 
         bool reset_record(DocumentRendererLeaseState& state, DynamicTextureRecord& record, const char* operation) {
@@ -297,7 +300,10 @@ namespace termin::gui_native {
         return *this;
     }
 
-    void DynamicTextureLease::set_rgba8(uint32_t width, uint32_t height, std::span<const uint8_t> pixels) {
+    void DynamicTextureLease::set_rgba8(uint32_t width,
+                                        uint32_t height,
+                                        std::span<const uint8_t> pixels,
+                                        tgfx::TextureEncoding encoding) {
         auto state = require_active(impl_ ? impl_->record : nullptr, "set_rgba8");
         auto& record = *impl_->record;
         require_byte_count(pixels, width, height);
@@ -307,7 +313,8 @@ namespace termin::gui_native {
         }
         validate_bindings(*state, record, "set_rgba8");
         auto& device = state->graphics->device();
-        if (record.ownership == DynamicTextureOwnership::Owned && record.width == width && record.height == height) {
+        if (record.ownership == DynamicTextureOwnership::Owned && record.width == width && record.height == height &&
+            record.encoding == encoding) {
             device.upload_texture(record.texture, pixels);
             state->request_repaint();
             return;
@@ -316,7 +323,7 @@ namespace termin::gui_native {
         tgfx::TextureDesc description;
         description.width = width;
         description.height = height;
-        description.format = tgfx::PixelFormat::RGBA8_UNorm;
+        description.format = tgfx::pixel_format_for_encoding(tgfx::PixelFormat::RGBA8_UNorm, encoding);
         description.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
         const tgfx::TextureHandle replacement = device.create_texture(description);
         if (!replacement) {
@@ -332,6 +339,7 @@ namespace termin::gui_native {
         record.texture = replacement;
         record.width = width;
         record.height = height;
+        record.encoding = encoding;
         record.ownership = DynamicTextureOwnership::Owned;
         apply_bindings(*state, record);
         state->request_repaint();
@@ -375,6 +383,7 @@ namespace termin::gui_native {
         record.texture = texture;
         record.width = description.width;
         record.height = description.height;
+        record.encoding = tgfx::texture_encoding_for_format(description.format);
         record.ownership = DynamicTextureOwnership::Borrowed;
         apply_bindings(*state, record);
         state->request_repaint();

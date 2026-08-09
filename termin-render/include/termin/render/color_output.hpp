@@ -4,6 +4,7 @@
 #include "termin/render/render_export.hpp"
 #include <tgfx/texture_encoding.h>
 #include <tgfx2/handles.hpp>
+#include <tgfx2/descriptors.hpp>
 #include <string>
 #include <type_traits>
 
@@ -30,6 +31,23 @@ namespace termin {
         std::string viewport_name;
         ColorContent content = ColorContent::DisplayLinear;
     };
+
+    enum class ColorOutputBindingOp : uint8_t {
+        Direct,
+        CopyOrResolve,
+        EncodeSRGB,
+        DecodeSRGB,
+        RejectSceneLinear,
+    };
+
+    struct ColorOutputBindingPlan {
+        ColorOutputBindingOp operation = ColorOutputBindingOp::CopyOrResolve;
+        bool valid = true;
+    };
+
+    RENDER_CORE_API ColorOutputBindingPlan plan_color_output_binding(const tgfx::TextureDesc& source,
+                                                                     ColorContent content,
+                                                                     const tgfx::TextureDesc& target);
 
     static_assert(std::is_standard_layout_v<ColorTarget>);
 

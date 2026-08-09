@@ -1239,7 +1239,11 @@ float4 main(VSOut input) : SV_Target {
         }
 
         if (has_flag(desc.usage, TextureUsage::ColorAttachment)) {
-            HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), nullptr, &out.rtv);
+            D3D11_RENDER_TARGET_VIEW_DESC rv{};
+            rv.Format = d3d11::to_dxgi_format(desc.format);
+            rv.ViewDimension = desc.sample_count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
+                                                     : D3D11_RTV_DIMENSION_TEXTURE2D;
+            HRESULT hr = device_->CreateRenderTargetView(out.texture.Get(), &rv, &out.rtv);
             if (FAILED(hr)) {
                 tc::Log::error("D3D11RenderDevice::register_external_texture RTV failed: HRESULT=0x%08X",
                                static_cast<unsigned>(hr));

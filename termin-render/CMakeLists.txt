@@ -63,6 +63,7 @@ set(TERMIN_RENDER_CORE_SOURCES
     src/material_pipeline_shader_assembler.cpp
     src/material_ubo_apply.cpp
     src/render_pipeline.cpp
+    src/color_output.cpp
     src/render_engine.cpp
     src/render_execution_capabilities.cpp
     src/render_item_mesh.cpp

@@ -54,10 +54,9 @@ namespace termin {
         uint64_t layer_mask = 0xFFFFFFFFFFFFFFFFULL;
         uint64_t render_category_mask = 0xFFFFFFFFFFFFFFFFULL;
 
-        // Final render target — native tgfx2 color + depth textures owned
-        // by the caller (typically a render target or legacy viewport state). Passes in the
-        // pipeline receive these through ExecuteContext::tex2_writes under
-        // the OUTPUT/DISPLAY alias.
+        // Physical color/depth destination owned by the caller. Pipeline color
+        // exports are bound directly when compatible or copied/resolved through
+        // a semantic output epilogue.
         ColorTarget output_color;
         tgfx::TextureHandle output_depth_tex;
         tgfx::PixelFormat output_depth_format = tgfx::PixelFormat::D24_UNorm;

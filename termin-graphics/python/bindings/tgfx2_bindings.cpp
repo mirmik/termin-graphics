@@ -32,6 +32,7 @@
 #include <tgfx2/i_render_device.hpp>
 #include <tgfx2/line_mesh_builder.hpp>
 #include <tgfx2/pipeline_cache.hpp>
+#include <tgfx2/pixel_format_utils.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/screen_space_line_renderer.hpp>
 #include <tgfx2/tc_mesh_bridge.hpp>
@@ -429,11 +430,12 @@ namespace tgfx_bindings {
                 [](tgfx::RenderContext2& self,
                    uint32_t w,
                    uint32_t h,
-                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) -> tgfx::TextureHandle {
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data,
+                   tgfx::TextureEncoding encoding) -> tgfx::TextureHandle {
                     tgfx::TextureDesc desc;
                     desc.width = w;
                     desc.height = h;
-                    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                    desc.format = tgfx::pixel_format_for_encoding(tgfx::PixelFormat::RGBA8_UNorm, encoding);
                     desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
                     const tgfx::TextureHandle texture = self.device().create_texture(desc);
                     if (texture && data.size() > 0) {
@@ -443,7 +445,8 @@ namespace tgfx_bindings {
                 },
                 nb::arg("width"),
                 nb::arg("height"),
-                nb::arg("data"))
+                nb::arg("data"),
+                nb::arg("encoding"))
 
             // Create an offscreen color attachment via the context's
             // device. Mirrors Tgfx2Context.create_color_attachment for
@@ -779,11 +782,12 @@ namespace tgfx_bindings {
                 [](Tgfx2ContextHolder& self,
                    uint32_t w,
                    uint32_t h,
-                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data) -> tgfx::TextureHandle {
+                   nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu> data,
+                   tgfx::TextureEncoding encoding) -> tgfx::TextureHandle {
                     tgfx::TextureDesc desc;
                     desc.width = w;
                     desc.height = h;
-                    desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+                    desc.format = tgfx::pixel_format_for_encoding(tgfx::PixelFormat::RGBA8_UNorm, encoding);
                     desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
                     auto handle = self.device->create_texture(desc);
                     if (data.size() > 0) {
@@ -793,7 +797,8 @@ namespace tgfx_bindings {
                 },
                 nb::arg("width"),
                 nb::arg("height"),
-                nb::arg("data"))
+                nb::arg("data"),
+                nb::arg("encoding"))
 
             // Full-texture re-upload.
             .def(

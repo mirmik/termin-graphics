@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <vulkan/vulkan.h>
 
@@ -35,6 +36,9 @@ namespace tgfx {
         // currentTransform differs from our deliberate identity pre-transform.
         return result == VK_ERROR_OUT_OF_DATE_KHR;
     }
+
+    TGFX2_API VkSurfaceFormatKHR
+    select_swapchain_surface_format(std::span<const VkSurfaceFormatKHR> formats) noexcept;
 
     class TGFX2_TYPE_API VulkanSwapchain {
     public:

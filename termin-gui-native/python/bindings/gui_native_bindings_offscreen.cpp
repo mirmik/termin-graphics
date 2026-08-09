@@ -325,10 +325,12 @@ void bind_gui_native_offscreen(nb::module_& m) {
             nb::arg("composition"),
             nb::keep_alive<1, 2>())
         .def("set_rgba8",
-             [](DynamicTextureLease& self, const Rgba8Array& data) {
+             [](DynamicTextureLease& self, const Rgba8Array& data, tgfx::TextureEncoding encoding) {
                  const Rgba8View view = rgba8_view(data, "DynamicTextureLease.set_rgba8");
-                 self.set_rgba8(view.width, view.height, view.pixels);
-             })
+                 self.set_rgba8(view.width, view.height, view.pixels, encoding);
+             },
+             nb::arg("data"),
+             nb::arg("encoding"))
         .def("update_region_rgba8",
              [](DynamicTextureLease& self, uint32_t x, uint32_t y, const Rgba8Array& data) {
                  const Rgba8View view = rgba8_view(data, "DynamicTextureLease.update_region_rgba8");

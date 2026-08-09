@@ -125,6 +125,11 @@ namespace {
                                        tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
+            tc_ui_painter_fill_rect(
+                painter, tc_ui_rect{100.0f, 84.0f, 8.0f, 8.0f}, tc_ui_srgb_color{128.0f / 255.0f,
+                                                                                128.0f / 255.0f,
+                                                                                128.0f / 255.0f,
+                                                                                1.0f});
             tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
             tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
             tc_ui_painter_fill_rect(
@@ -206,34 +211,35 @@ namespace {
         tgfx::TextureDesc image_desc;
         image_desc.width = 2;
         image_desc.height = 2;
-        image_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        image_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
         image_desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
         const tgfx::TextureHandle image = device->create_texture(image_desc);
         image_desc.height = 1;
+        image_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
         const tgfx::TextureHandle sampling_image = device->create_texture(image_desc);
         if (!target || !image || !sampling_image) {
             std::fprintf(stderr, "Failed to create renderer smoke textures\n");
             return 1;
         }
-        const uint8_t green_pixels[]{
-            20,
-            230,
-            30,
+        const uint8_t srgb_gray_pixels[]{
+            128,
+            128,
+            128,
             255,
-            20,
-            230,
-            30,
+            128,
+            128,
+            128,
             255,
-            20,
-            230,
-            30,
+            128,
+            128,
+            128,
             255,
-            20,
-            230,
-            30,
+            128,
+            128,
+            128,
             255,
         };
-        device->upload_texture(image, std::span<const uint8_t>(green_pixels, sizeof(green_pixels)));
+        device->upload_texture(image, std::span<const uint8_t>(srgb_gray_pixels, sizeof(srgb_gray_pixels)));
         const uint8_t sampling_pixels[]{255, 0, 0, 255, 0, 0, 255, 255};
         device->upload_texture(sampling_image, std::span<const uint8_t>(sampling_pixels, sizeof(sampling_pixels)));
 
@@ -287,7 +293,14 @@ namespace {
 
         std::vector<float> pixels(static_cast<size_t>(kWidth) * kHeight * 4u);
         const bool read_ok = device->read_texture_rgba_float(target, pixels.data());
-        const bool image_ok = read_ok && looks_green(pixel_at(pixels, 16, 16));
+        constexpr float srgb_mid_linear = 0.21586f;
+        const auto looks_linear_mid_gray = [srgb_mid_linear](const float* pixel) {
+            return std::fabs(pixel[0] - srgb_mid_linear) < 0.025f &&
+                   std::fabs(pixel[1] - srgb_mid_linear) < 0.025f &&
+                   std::fabs(pixel[2] - srgb_mid_linear) < 0.025f;
+        };
+        const bool image_ok = read_ok && looks_linear_mid_gray(pixel_at(pixels, 16, 16));
+        const bool authored_gray_ok = read_ok && looks_linear_mid_gray(pixel_at(pixels, 104, 88));
         const bool nested_clip_inside_ok = read_ok && looks_red(pixel_at(pixels, 52, 16));
         const bool nested_clip_outside_ok = read_ok && looks_black(pixel_at(pixels, 44, 16));
         const bool rounded_center_ok = read_ok && looks_blue(pixel_at(pixels, 20, 50));
@@ -364,15 +377,16 @@ namespace {
         device->destroy(target);
 
         if (painted != std::size(submissions) - 1 || !read_ok || !image_ok || !nested_clip_inside_ok ||
-            !nested_clip_outside_ok || !rounded_center_ok || !rounded_corner_ok || !circle_ok || !picker_texture_ok ||
-            !text_ok || !scaled_geometry_ok) {
+            !authored_gray_ok || !nested_clip_outside_ok || !rounded_center_ok || !rounded_corner_ok || !circle_ok ||
+            !picker_texture_ok || !text_ok || !scaled_geometry_ok) {
             std::fprintf(stderr,
-                         "UI renderer %s pixel smoke failed: read=%d image=%d clip_in=%d clip_out=%d "
+                         "UI renderer %s pixel smoke failed: read=%d image=%d authored_gray=%d clip_in=%d clip_out=%d "
                          "round_center=%d round_corner=%d circle=%d picker=%d "
                          "text=%d scaled=%d signal=%zu y=[%u,%u]\n",
                          tgfx::backend_name(backend),
                          read_ok,
                          image_ok,
+                         authored_gray_ok,
                          nested_clip_inside_ok,
                          nested_clip_outside_ok,
                          rounded_center_ok,

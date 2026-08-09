@@ -120,7 +120,9 @@ namespace tgfx {
         TextureDesc desc;
         desc.width = native_desc.Width;
         desc.height = native_desc.Height;
-        desc.format = PixelFormat::BGRA8_UNorm;
+        // DXGI swapchain storage is UNORM, but the window sink is an sRGB
+        // display boundary. Register an sRGB view so composition encodes once.
+        desc.format = PixelFormat::BGRA8_sRGB;
         desc.mip_levels = 1;
         desc.sample_count = native_desc.SampleDesc.Count;
         desc.usage = TextureUsage::ColorAttachment | TextureUsage::CopySrc | TextureUsage::CopyDst;

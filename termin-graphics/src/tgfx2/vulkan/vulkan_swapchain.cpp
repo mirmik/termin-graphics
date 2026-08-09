@@ -50,20 +50,20 @@ namespace tgfx {
                                      presentation_mode_name(requested) + "' is unsupported");
         }
 
-        // Pick a surface format. Prefer 8-bit sRGB; fall back to the first
-        // format offered by the driver.
-        VkSurfaceFormatKHR pick_surface_format(const std::vector<VkSurfaceFormatKHR>& formats) {
-            for (const auto& f : formats) {
-                if ((f.format == VK_FORMAT_B8G8R8A8_UNORM || f.format == VK_FORMAT_R8G8B8A8_UNORM) &&
-                    f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                    return f;
-                }
-            }
-            return formats.empty() ? VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
-                                   : formats[0];
-        }
-
     } // namespace
+
+    VkSurfaceFormatKHR select_swapchain_surface_format(std::span<const VkSurfaceFormatKHR> formats) noexcept {
+        if (formats.size() == 1 && formats.front().format == VK_FORMAT_UNDEFINED) {
+            return {VK_FORMAT_B8G8R8A8_SRGB, formats.front().colorSpace};
+        }
+        for (const VkSurfaceFormatKHR format : formats) {
+            if ((format.format == VK_FORMAT_B8G8R8A8_SRGB || format.format == VK_FORMAT_R8G8B8A8_SRGB) &&
+                format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return format;
+            }
+        }
+        return {VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+    }
 
     // ---------------------------------------------------------------------------
 
@@ -142,7 +142,11 @@ namespace tgfx {
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface_, &fmt_count, nullptr);
         std::vector<VkSurfaceFormatKHR> formats(fmt_count);
         vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface_, &fmt_count, formats.data());
-        VkSurfaceFormatKHR fmt = pick_surface_format(formats);
+        VkSurfaceFormatKHR fmt = select_swapchain_surface_format(formats);
+        if (fmt.format == VK_FORMAT_UNDEFINED) {
+            throw std::runtime_error(
+                "VulkanSwapchain: the surface exposes no sRGB attachment format required by the window color contract");
+        }
         format_ = fmt.format;
         color_space_ = fmt.colorSpace;
 

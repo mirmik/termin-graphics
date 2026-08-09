@@ -60,6 +60,10 @@ int main() {
         config.shader_compiler_path = TERMIN_GUI_NATIVE_TEST_SHADERC;
 
         termin::gui_native::OffscreenGuiComposition composition(std::move(config));
+        if (composition.renderer().frame_sink_encoding() != tgfx::TextureEncoding::Linear) {
+            std::fprintf(stderr, "offscreen composition did not declare its linear frame sink\n");
+            return 1;
+        }
         if (composition.graphics().owns_application_domain()) {
             std::fprintf(stderr, "offscreen composition claimed application graphics\n");
             return 1;
@@ -165,7 +169,7 @@ int main() {
 
         termin::gui_native::DynamicTextureLease lease(composition.renderer());
         std::vector<uint8_t> pixels(3u * 2u * 4u, 127);
-        lease.set_rgba8(3, 2, pixels);
+        lease.set_rgba8(3, 2, pixels, tgfx::TextureEncoding::SRGB);
         if (lease.empty()) {
             std::fprintf(stderr, "renderer-bound texture lease was not created\n");
             return 1;

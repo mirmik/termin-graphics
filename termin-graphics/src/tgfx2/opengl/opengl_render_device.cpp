@@ -1408,6 +1408,7 @@ namespace tgfx {
         }
 
         GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
+        GLboolean was_framebuffer_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
         GLboolean color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
         glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
         GLboolean depth_mask = GL_TRUE;
@@ -1420,6 +1421,8 @@ namespace tgfx {
 
         if (was_scissor)
             glDisable(GL_SCISSOR_TEST);
+        if (!was_framebuffer_srgb)
+            glEnable(GL_FRAMEBUFFER_SRGB);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
@@ -1446,6 +1449,8 @@ namespace tgfx {
         glDepthMask(depth_mask);
         if (was_scissor)
             glEnable(GL_SCISSOR_TEST);
+        if (!was_framebuffer_srgb)
+            glDisable(GL_FRAMEBUFFER_SRGB);
     }
 
     void OpenGLRenderDevice::reset_state() {

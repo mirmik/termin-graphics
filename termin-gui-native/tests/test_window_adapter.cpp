@@ -153,6 +153,10 @@ int main() {
         config.font_path = TERMIN_GUI_NATIVE_TEST_FONT;
 
         termin::gui_native::GuiWindowAdapter adapter(*graphics, document, config, window);
+        if (adapter.renderer().frame_sink_encoding() != tgfx::TextureEncoding::SRGB) {
+            std::fprintf(stderr, "window adapter did not declare its sRGB frame sink\n");
+            return 1;
+        }
         if (!window.text_input_enabled || &adapter.window() != &window || adapter.should_close() ||
             !tc_ui_document_handle_eq(adapter.document().handle(), document.handle()) || window.close_count != 0) {
             std::fprintf(stderr, "adapter did not establish borrowed services\n");
