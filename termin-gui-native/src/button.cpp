@@ -44,17 +44,17 @@ namespace termin::gui_native {
         return TC_UI_EVENT_IGNORED;
     }
 
-    Button::Button(std::string text, Color fill)
+    Button::Button(std::string text, SrgbColor fill)
         : Button(std::move(text)) {
-        set_style_color(*this, TC_UI_STYLE_BACKGROUND, fill.c_color());
+        set_style_color(*this, TC_UI_STYLE_BACKGROUND, to_tc_ui_srgb(fill));
     }
 
-    Button::Button(Color fill)
+    Button::Button(SrgbColor fill)
         : Button(std::string{}, fill) {}
 
-    Button& Button::set_accent(Color color) {
-        set_style_color(*this, TC_UI_STYLE_ACCENT, color.c_color());
-        set_style_color(*this, TC_UI_STYLE_BORDER, color.c_color());
+    Button& Button::set_accent(SrgbColor color) {
+        set_style_color(*this, TC_UI_STYLE_ACCENT, to_tc_ui_srgb(color));
+        set_style_color(*this, TC_UI_STYLE_BORDER, to_tc_ui_srgb(color));
         return *this;
     }
 

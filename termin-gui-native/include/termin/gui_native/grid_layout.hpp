@@ -11,8 +11,8 @@ namespace termin::gui_native {
         EdgeInsets padding_{};
         float column_spacing_ = 0.0f;
         float row_spacing_ = 0.0f;
-        Color background_{0.0f, 0.0f, 0.0f, 0.0f};
-        Color border_{0.0f, 0.0f, 0.0f, 0.0f};
+        SrgbColor background_{0.0f, 0.0f, 0.0f, 0.0f};
+        SrgbColor border_{0.0f, 0.0f, 0.0f, 0.0f};
         float border_thickness_ = 0.0f;
         std::vector<GridTrack> columns_;
         std::vector<GridTrack> rows_;
@@ -22,8 +22,8 @@ namespace termin::gui_native {
         explicit GridLayout(const char* debug_name = nullptr);
         GridLayout& set_padding(EdgeInsets padding);
         GridLayout& set_spacing(float column_spacing, float row_spacing);
-        GridLayout& set_background(Color color);
-        GridLayout& set_border(Color color, float thickness = 1.0f);
+        GridLayout& set_background(SrgbColor color);
+        GridLayout& set_border(SrgbColor color, float thickness = 1.0f);
         size_t add_column(LayoutPolicy policy = LayoutPolicy::Stretch, float value = 0.0f);
         size_t add_row(LayoutPolicy policy = LayoutPolicy::Stretch, float value = 0.0f);
         size_t add_column(GridTrack track);

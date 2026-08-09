@@ -31,13 +31,13 @@ namespace termin::gui_native {
         return *this;
     }
 
-    GridLayout& GridLayout::set_background(Color color) {
+    GridLayout& GridLayout::set_background(SrgbColor color) {
         background_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
         return *this;
     }
 
-    GridLayout& GridLayout::set_border(Color color, float thickness) {
+    GridLayout& GridLayout::set_border(SrgbColor color, float thickness) {
         border_ = color;
         border_thickness_ = std::max(0.0f, thickness);
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
@@ -259,10 +259,10 @@ namespace termin::gui_native {
 
     void GridLayout::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
         if (color_visible(background_)) {
-            tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
+            tc_ui_painter_fill_rect(context, bounds(), to_tc_ui_srgb(background_));
         }
         if (color_visible(border_) && border_thickness_ > 0.0f) {
-            tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
+            tc_ui_painter_stroke_rect(context, bounds(), to_tc_ui_srgb(border_), border_thickness_);
         }
 
         tc_ui_painter_push_clip(context, bounds());

@@ -567,7 +567,7 @@ namespace tgfx {
         return should_recreate;
     }
 
-    bool VulkanSwapchain::clear_and_present(float r, float g, float b, float a) {
+    bool VulkanSwapchain::clear_and_present(termin::LinearColor color) {
         wait_for_current_frame();
 
         uint32_t image_idx = 0;
@@ -616,10 +616,10 @@ namespace tgfx {
                              &to_dst);
 
         VkClearColorValue clear{};
-        clear.float32[0] = r;
-        clear.float32[1] = g;
-        clear.float32[2] = b;
-        clear.float32[3] = a;
+        clear.float32[0] = color.r;
+        clear.float32[1] = color.g;
+        clear.float32[2] = color.b;
+        clear.float32[3] = color.a;
         vkCmdClearColorImage(cb, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
 
         VkImageMemoryBarrier to_present{};

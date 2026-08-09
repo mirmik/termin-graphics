@@ -17,7 +17,7 @@ namespace termin::gui_native {
     public:
         explicit Label(std::string text);
         Label(std::string text, float font_size);
-        Label(std::string text, float font_size, Color color);
+        Label(std::string text, float font_size, SrgbColor color);
         const std::string& text() const {
             return text_;
         }
@@ -31,7 +31,7 @@ namespace termin::gui_native {
             return max_lines_;
         }
         Label& set_text(std::string text);
-        Label& set_color(Color color);
+        Label& set_color(SrgbColor color);
         Label& set_font_size(float font_size);
         Label& set_wrap_mode(TextWrapMode mode);
         Label& set_overflow(TextOverflow overflow);

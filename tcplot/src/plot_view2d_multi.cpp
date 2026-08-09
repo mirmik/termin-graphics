@@ -280,25 +280,25 @@ namespace tcplot {
     // Colour + typography overrides
     // ---------------------------------------------------------------------------
 
-    void PlotView2DMulti::set_bg_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_bg_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->bg_color = {r, g, b, a};
+            p->bg_color = color;
     }
-    void PlotView2DMulti::set_plot_bg_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_plot_bg_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->plot_bg_color = {r, g, b, a};
+            p->plot_bg_color = color;
     }
-    void PlotView2DMulti::set_grid_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_grid_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->grid_color = {r, g, b, a};
+            p->grid_color = color;
     }
-    void PlotView2DMulti::set_axis_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_axis_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->axis_color = {r, g, b, a};
+            p->axis_color = color;
     }
-    void PlotView2DMulti::set_label_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_label_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->label_color = {r, g, b, a};
+            p->label_color = color;
     }
     void PlotView2DMulti::set_font_size(float label_px, float title_px) {
         for (auto& p : panels_) {
@@ -318,27 +318,27 @@ namespace tcplot {
         for (auto& p : panels_)
             p->title_pad = pad;
     }
-    void PlotView2DMulti::set_title_color(float r, float g, float b, float a) {
+    void PlotView2DMulti::set_title_color(SrgbColor color) {
         for (auto& p : panels_)
-            p->title_color = SrgbColor{r, g, b, a};
+            p->title_color = color;
     }
     void PlotView2DMulti::clear_title_color() {
         for (auto& p : panels_)
             p->title_color.reset();
     }
-    void PlotView2DMulti::set_line_color(int panel_idx, int series_idx, float r, float g, float b, float a) {
+    void PlotView2DMulti::set_line_color(int panel_idx, int series_idx, SrgbColor color) {
         if (panel_idx < 0 || panel_idx >= (int)panels_.size())
             return;
         if (series_idx < 0)
             return;
-        panels_[panel_idx]->set_line_color(static_cast<size_t>(series_idx), SrgbColor{r, g, b, a});
+        panels_[panel_idx]->set_line_color(static_cast<size_t>(series_idx), color);
     }
-    void PlotView2DMulti::set_scatter_color(int panel_idx, int series_idx, float r, float g, float b, float a) {
+    void PlotView2DMulti::set_scatter_color(int panel_idx, int series_idx, SrgbColor color) {
         if (panel_idx < 0 || panel_idx >= (int)panels_.size())
             return;
         if (series_idx < 0)
             return;
-        panels_[panel_idx]->set_scatter_color(static_cast<size_t>(series_idx), SrgbColor{r, g, b, a});
+        panels_[panel_idx]->set_scatter_color(static_cast<size_t>(series_idx), color);
     }
     void PlotView2DMulti::set_line_style(int panel_idx, int series_idx, LineStyle style, float dash_px, float gap_px) {
         if (panel_idx < 0 || panel_idx >= (int)panels_.size())

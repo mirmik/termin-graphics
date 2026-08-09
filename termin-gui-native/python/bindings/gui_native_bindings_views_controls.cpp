@@ -178,7 +178,7 @@ void bind_gui_native_control_views(nb::module_& m) {
         .def(
             "set_tint",
             [](const ImageWidgetRef& self, termin::SrgbColor tint) {
-                self.get().set_tint(termin::gui_native::Color{tint.r, tint.g, tint.b, tint.a});
+                self.get().set_tint(tint);
             },
             nb::arg("tint"))
         .def_prop_rw(

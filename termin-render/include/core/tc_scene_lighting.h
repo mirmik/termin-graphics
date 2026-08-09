@@ -3,6 +3,7 @@
 #define TC_SCENE_LIGHTING_H
 
 #include "tc_types.h"
+#include <geom/tc_color.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +19,7 @@ typedef enum tc_shadow_method {
 // Scene lighting properties
 typedef struct tc_scene_lighting {
     // Ambient lighting
-    float ambient_color[3];  // RGB, default (1, 1, 1)
+    tc_srgb_color ambient_color; // Authored sRGB chromaticity, alpha=1
     float ambient_intensity; // Default 0.1
 
     // Shadow settings
@@ -30,7 +31,8 @@ typedef struct tc_scene_lighting {
 // Initialize with defaults
 TC_API void tc_scene_lighting_init(tc_scene_lighting* lighting);
 
-// Note: Scene lighting API functions (tc_scene_get_lighting, tc_scene_set_ambient, etc.)
+// Note: Scene lighting API functions (tc_scene_get_lighting,
+// tc_scene_set_ambient_srgb_color, etc.)
 // are declared in tc_scene_render_state.h with tc_scene_handle parameter
 
 #ifdef __cplusplus

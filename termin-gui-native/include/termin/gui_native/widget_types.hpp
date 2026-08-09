@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include <tcbase/input_enums.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/gui_native/tc_ui_document.h>
 
 namespace termin::gui_native {
@@ -71,14 +72,8 @@ namespace termin::gui_native {
         size_t row_span = 1;
         size_t column_span = 1;
     };
-    struct Color {
-        float r = 0.0f;
-        float g = 0.0f;
-        float b = 0.0f;
-        float a = 1.0f;
-        tc_ui_srgb_color c_color() const {
-            return tc_ui_srgb_color{r, g, b, a};
-        }
-    };
+    inline tc_ui_srgb_color to_tc_ui_srgb(termin::SrgbColor color) {
+        return tc_ui_srgb_color{color.r, color.g, color.b, color.a};
+    }
 
 } // namespace termin::gui_native

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from tcbase import log
 from tgfx import TcShader
+from termin.geombase import SrgbColor
 
 from termin.materials import TcMaterial
 
@@ -34,7 +35,7 @@ def create_unknown_material(
     phase = mat.add_phase(shader, "opaque", 0)
 
     if phase is not None:
-        phase.set_color(1.0, 0.0, 1.0, 1.0)
+        phase.set_uniform_srgb_color("u_color", SrgbColor(1.0, 0.0, 1.0, 1.0))
 
     return mat
 

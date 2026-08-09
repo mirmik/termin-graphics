@@ -22,9 +22,10 @@ static void release_skybox_material(tc_scene_skybox* skybox) {
 void tc_scene_lighting_init(tc_scene_lighting* lighting) {
     if (!lighting)
         return;
-    lighting->ambient_color[0] = 1.0f;
-    lighting->ambient_color[1] = 1.0f;
-    lighting->ambient_color[2] = 1.0f;
+    lighting->ambient_color.r = 1.0f;
+    lighting->ambient_color.g = 1.0f;
+    lighting->ambient_color.b = 1.0f;
+    lighting->ambient_color.a = 1.0f;
     lighting->ambient_intensity = 0.1f;
     lighting->shadow_method = TC_SHADOW_METHOD_PCF;
     lighting->shadow_softness = 1.0f;
@@ -119,10 +120,10 @@ static void* render_state_create(tc_scene_handle scene, void* type_userdata) {
 
     tc_scene_lighting_init(&state->lighting);
     tc_scene_skybox_init(&state->skybox);
-    state->background_color[0] = 0.0f;
-    state->background_color[1] = 0.0f;
-    state->background_color[2] = 0.0f;
-    state->background_color[3] = 0.0f;
+    state->background_color.r = 0.0f;
+    state->background_color.g = 0.0f;
+    state->background_color.b = 0.0f;
+    state->background_color.a = 0.0f;
     return state;
 }
 
@@ -147,17 +148,17 @@ static bool render_state_serialize(void* ext, tc_value* out_data, void* type_use
 
     tc_value_dict_set(out_data,
                       "background_color",
-                      make_color4(state->background_color[0],
-                                  state->background_color[1],
-                                  state->background_color[2],
-                                  state->background_color[3]));
+                      make_color4(state->background_color.r,
+                                  state->background_color.g,
+                                  state->background_color.b,
+                                  state->background_color.a));
 
     tc_value lighting = tc_value_dict_new();
     tc_value_dict_set(&lighting,
                       "ambient_color",
-                      make_color3(state->lighting.ambient_color[0],
-                                  state->lighting.ambient_color[1],
-                                  state->lighting.ambient_color[2]));
+                      make_color3(state->lighting.ambient_color.r,
+                                  state->lighting.ambient_color.g,
+                                  state->lighting.ambient_color.b));
     tc_value_dict_set(&lighting, "ambient_intensity", tc_value_double((double)state->lighting.ambient_intensity));
     tc_value shadow = tc_value_dict_new();
     tc_value_dict_set(&shadow, "method", tc_value_int((int64_t)state->lighting.shadow_method));
@@ -169,14 +170,14 @@ static bool render_state_serialize(void* ext, tc_value* out_data, void* type_use
     tc_value skybox = tc_value_dict_new();
     tc_value_dict_set(&skybox, "type", tc_value_int((int64_t)state->skybox.type));
     tc_value_dict_set(
-        &skybox, "color", make_color3(state->skybox.color[0], state->skybox.color[1], state->skybox.color[2]));
+        &skybox, "color", make_color3(state->skybox.color.r, state->skybox.color.g, state->skybox.color.b));
     tc_value_dict_set(&skybox,
                       "top_color",
-                      make_color3(state->skybox.top_color[0], state->skybox.top_color[1], state->skybox.top_color[2]));
+                      make_color3(state->skybox.top_color.r, state->skybox.top_color.g, state->skybox.top_color.b));
     tc_value_dict_set(
         &skybox,
         "bottom_color",
-        make_color3(state->skybox.bottom_color[0], state->skybox.bottom_color[1], state->skybox.bottom_color[2]));
+        make_color3(state->skybox.bottom_color.r, state->skybox.bottom_color.g, state->skybox.bottom_color.b));
     tc_value_dict_set(out_data, "skybox", skybox);
 
     return true;
@@ -193,14 +194,23 @@ static bool render_state_deserialize(void* ext, const tc_value* in_data, void* t
 
     tc_value* bg = tc_value_dict_get((tc_value*)in_data, "background_color");
     if (bg) {
-        read_color4(bg, state->background_color);
+        float values[4];
+        if (read_color4(bg, values)) {
+            state->background_color = (tc_srgb_color){values[0], values[1], values[2], values[3]};
+        }
     }
 
     tc_value* lighting = tc_value_dict_get((tc_value*)in_data, "lighting");
     if (lighting && lighting->type == TC_VALUE_DICT) {
         tc_value* ambient_color = tc_value_dict_get(lighting, "ambient_color");
         if (ambient_color) {
-            read_color3(ambient_color, state->lighting.ambient_color);
+            float values[3];
+            if (read_color3(ambient_color, values)) {
+                state->lighting.ambient_color.r = values[0];
+                state->lighting.ambient_color.g = values[1];
+                state->lighting.ambient_color.b = values[2];
+                state->lighting.ambient_color.a = 1.0f;
+            }
         }
 
         tc_value* ambient_intensity = tc_value_dict_get(lighting, "ambient_intensity");
@@ -232,15 +242,27 @@ static bool render_state_deserialize(void* ext, const tc_value* in_data, void* t
 
         tc_value* color = tc_value_dict_get(skybox, "color");
         if (color) {
-            read_color3(color, state->skybox.color);
+            float values[3];
+            if (read_color3(color, values)) {
+                state->skybox.color.r = values[0]; state->skybox.color.g = values[1];
+                state->skybox.color.b = values[2]; state->skybox.color.a = 1.0f;
+            }
         }
         tc_value* top_color = tc_value_dict_get(skybox, "top_color");
         if (top_color) {
-            read_color3(top_color, state->skybox.top_color);
+            float values[3];
+            if (read_color3(top_color, values)) {
+                state->skybox.top_color.r = values[0]; state->skybox.top_color.g = values[1];
+                state->skybox.top_color.b = values[2]; state->skybox.top_color.a = 1.0f;
+            }
         }
         tc_value* bottom_color = tc_value_dict_get(skybox, "bottom_color");
         if (bottom_color) {
-            read_color3(bottom_color, state->skybox.bottom_color);
+            float values[3];
+            if (read_color3(bottom_color, values)) {
+                state->skybox.bottom_color.r = values[0]; state->skybox.bottom_color.g = values[1];
+                state->skybox.bottom_color.b = values[2]; state->skybox.bottom_color.a = 1.0f;
+            }
         }
     }
 
@@ -273,7 +295,7 @@ bool tc_scene_render_state_ensure(tc_scene_handle scene) {
     return tc_scene_ext_attach(scene, TC_SCENE_EXT_TYPE_RENDER_STATE);
 }
 
-void tc_scene_set_background_color(tc_scene_handle h, float r, float g, float b, float a) {
+void tc_scene_set_background_srgb_color(tc_scene_handle h, tc_srgb_color color) {
     if (!tc_scene_alive(h))
         return;
     if (!tc_scene_render_state_ensure(h))
@@ -281,26 +303,17 @@ void tc_scene_set_background_color(tc_scene_handle h, float r, float g, float b,
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    state->background_color[0] = r;
-    state->background_color[1] = g;
-    state->background_color[2] = b;
-    state->background_color[3] = a;
+    state->background_color = color;
 }
 
-void tc_scene_get_background_color(tc_scene_handle h, float* r, float* g, float* b, float* a) {
+void tc_scene_get_background_srgb_color(tc_scene_handle h, tc_srgb_color* out_color) {
     if (!tc_scene_alive(h))
         return;
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    if (r)
-        *r = state->background_color[0];
-    if (g)
-        *g = state->background_color[1];
-    if (b)
-        *b = state->background_color[2];
-    if (a)
-        *a = state->background_color[3];
+    if (out_color)
+        *out_color = state->background_color;
 }
 
 tc_scene_skybox* tc_scene_get_skybox(tc_scene_handle h) {
@@ -328,7 +341,7 @@ int tc_scene_get_skybox_type(tc_scene_handle h) {
     return state ? state->skybox.type : TC_SKYBOX_GRADIENT;
 }
 
-void tc_scene_set_skybox_color(tc_scene_handle h, float r, float g, float b) {
+void tc_scene_set_skybox_srgb_color(tc_scene_handle h, tc_srgb_color color) {
     if (!tc_scene_alive(h))
         return;
     if (!tc_scene_render_state_ensure(h))
@@ -336,26 +349,20 @@ void tc_scene_set_skybox_color(tc_scene_handle h, float r, float g, float b) {
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    state->skybox.color[0] = r;
-    state->skybox.color[1] = g;
-    state->skybox.color[2] = b;
+    state->skybox.color = color;
 }
 
-void tc_scene_get_skybox_color(tc_scene_handle h, float* r, float* g, float* b) {
+void tc_scene_get_skybox_srgb_color(tc_scene_handle h, tc_srgb_color* out_color) {
     if (!tc_scene_alive(h))
         return;
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    if (r)
-        *r = state->skybox.color[0];
-    if (g)
-        *g = state->skybox.color[1];
-    if (b)
-        *b = state->skybox.color[2];
+    if (out_color)
+        *out_color = state->skybox.color;
 }
 
-void tc_scene_set_skybox_top_color(tc_scene_handle h, float r, float g, float b) {
+void tc_scene_set_skybox_top_srgb_color(tc_scene_handle h, tc_srgb_color color) {
     if (!tc_scene_alive(h))
         return;
     if (!tc_scene_render_state_ensure(h))
@@ -363,26 +370,20 @@ void tc_scene_set_skybox_top_color(tc_scene_handle h, float r, float g, float b)
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    state->skybox.top_color[0] = r;
-    state->skybox.top_color[1] = g;
-    state->skybox.top_color[2] = b;
+    state->skybox.top_color = color;
 }
 
-void tc_scene_get_skybox_top_color(tc_scene_handle h, float* r, float* g, float* b) {
+void tc_scene_get_skybox_top_srgb_color(tc_scene_handle h, tc_srgb_color* out_color) {
     if (!tc_scene_alive(h))
         return;
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    if (r)
-        *r = state->skybox.top_color[0];
-    if (g)
-        *g = state->skybox.top_color[1];
-    if (b)
-        *b = state->skybox.top_color[2];
+    if (out_color)
+        *out_color = state->skybox.top_color;
 }
 
-void tc_scene_set_skybox_bottom_color(tc_scene_handle h, float r, float g, float b) {
+void tc_scene_set_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color color) {
     if (!tc_scene_alive(h))
         return;
     if (!tc_scene_render_state_ensure(h))
@@ -390,23 +391,17 @@ void tc_scene_set_skybox_bottom_color(tc_scene_handle h, float r, float g, float
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    state->skybox.bottom_color[0] = r;
-    state->skybox.bottom_color[1] = g;
-    state->skybox.bottom_color[2] = b;
+    state->skybox.bottom_color = color;
 }
 
-void tc_scene_get_skybox_bottom_color(tc_scene_handle h, float* r, float* g, float* b) {
+void tc_scene_get_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color* out_color) {
     if (!tc_scene_alive(h))
         return;
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    if (r)
-        *r = state->skybox.bottom_color[0];
-    if (g)
-        *g = state->skybox.bottom_color[1];
-    if (b)
-        *b = state->skybox.bottom_color[2];
+    if (out_color)
+        *out_color = state->skybox.bottom_color;
 }
 
 void tc_scene_set_skybox_mesh(tc_scene_handle h, tc_mesh* mesh) {
@@ -497,7 +492,7 @@ tc_scene_lighting* tc_scene_get_lighting(tc_scene_handle h) {
     return state ? &state->lighting : NULL;
 }
 
-void tc_scene_set_ambient(tc_scene_handle h, float r, float g, float b, float intensity) {
+void tc_scene_set_ambient_srgb_color(tc_scene_handle h, tc_srgb_color color, float intensity) {
     if (!tc_scene_alive(h))
         return;
     if (!tc_scene_render_state_ensure(h))
@@ -505,9 +500,7 @@ void tc_scene_set_ambient(tc_scene_handle h, float r, float g, float b, float in
     tc_scene_render_state* state = tc_scene_render_state_get(h);
     if (!state)
         return;
-    state->lighting.ambient_color[0] = r;
-    state->lighting.ambient_color[1] = g;
-    state->lighting.ambient_color[2] = b;
+    state->lighting.ambient_color = color;
     state->lighting.ambient_intensity = intensity;
 }
 

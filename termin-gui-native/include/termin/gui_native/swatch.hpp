@@ -6,10 +6,10 @@
 namespace termin::gui_native {
     class Swatch : public NativeWidget {
     private:
-        Color color_;
+        SrgbColor color_;
 
     public:
-        explicit Swatch(Color color);
+        explicit Swatch(SrgbColor color);
         void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override;
     };
 } // namespace termin::gui_native

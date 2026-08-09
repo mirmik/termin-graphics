@@ -234,37 +234,6 @@ namespace termin {
             return phase;
         }
 
-        std::optional<Vec4> color() const {
-            tc_material* m = get();
-            if (!m)
-                return std::nullopt;
-            float r, g, b, a;
-            if (tc_material_get_color(m, &r, &g, &b, &a)) {
-                return Vec4{r, g, b, a};
-            }
-            return std::nullopt;
-        }
-
-        // Legacy numeric scaffold. Vec4 has no color-space meaning and is not
-        // accepted by the typed color APIs below.
-        void set_color(const Vec4& rgba) {
-            tc_material* m = get();
-            if (m) {
-                tc_material_set_color(m,
-                                      static_cast<float>(rgba.x),
-                                      static_cast<float>(rgba.y),
-                                      static_cast<float>(rgba.z),
-                                      static_cast<float>(rgba.w));
-            }
-        }
-
-        void set_color(float r, float g, float b, float a = 1.0f) {
-            tc_material* m = get();
-            if (m) {
-                tc_material_set_color(m, r, g, b, a);
-            }
-        }
-
         bool set_uniform_srgb_color(const char* name, SrgbColor value) {
             tc_material* m = get();
             return m && tc_material_set_srgb_color(m, name, tc_srgb_color{value.r, value.g, value.b, value.a});

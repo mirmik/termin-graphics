@@ -58,7 +58,7 @@ namespace termin::gui_native {
                        : nullptr;
         }
 
-        bool color_property(const tc_value* properties, const char* name, Color& out) {
+        bool color_property(const tc_value* properties, const char* name, SrgbColor& out) {
             const tc_value* value = property(properties, name);
             if (!value) {
                 return false;
@@ -79,7 +79,7 @@ namespace termin::gui_native {
                 }
                 return item->type == TC_VALUE_DOUBLE ? static_cast<float>(item->data.d) : fallback;
             };
-            out = Color{channel(0, 0.0f), channel(1, 0.0f), channel(2, 0.0f), channel(3, 1.0f)};
+            out = SrgbColor{channel(0, 0.0f), channel(1, 0.0f), channel(2, 0.0f), channel(3, 1.0f)};
             return true;
         }
 
@@ -135,7 +135,7 @@ namespace termin::gui_native {
         }
 
         bool apply_panel_properties(tc_widget* widget, const tc_value* properties) {
-            Color background;
+            SrgbColor background;
             if (color_property(properties, "background_color", background)) {
                 auto* panel = static_cast<Panel*>(widget->body);
                 panel->set_fill(background);
@@ -144,10 +144,10 @@ namespace termin::gui_native {
         }
 
         bool apply_overlay_properties(tc_widget* widget, const tc_value* properties) {
-            Color background;
+            SrgbColor background;
             if (color_property(properties, "background_color", background)) {
                 tc_ui_style_override style = tc_widget_style_override(widget);
-                style.value.background = background.c_color();
+                style.value.background = to_tc_ui_srgb(background);
                 style.fields |= TC_UI_STYLE_BACKGROUND;
                 return tc_widget_set_style_override(widget, &style);
             }
@@ -299,7 +299,7 @@ namespace termin::gui_native {
             }
             struct ColorSetter {
                 const char* name;
-                void (IconButton::*setter)(Color);
+                void (IconButton::*setter)(SrgbColor);
             };
             static constexpr ColorSetter setters[] = {
                 {"background_color", &IconButton::set_background_color},
@@ -309,7 +309,7 @@ namespace termin::gui_native {
                 {"icon_color", &IconButton::set_icon_color},
             };
             for (const ColorSetter& item : setters) {
-                Color color;
+                SrgbColor color;
                 if (color_property(properties, item.name, color)) {
                     (button->*item.setter)(color);
                 }
@@ -343,7 +343,7 @@ namespace termin::gui_native {
             if (property(properties, "font_size")) {
                 label->set_font_size(number_property(properties, "font_size"));
             }
-            Color color;
+            SrgbColor color;
             if (color_property(properties, "color", color)) {
                 label->set_color(color);
             }

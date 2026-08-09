@@ -13,6 +13,8 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#include <termin/geom/color.hpp>
+
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/tgfx2_api.h"
@@ -147,7 +149,7 @@ namespace tgfx {
         // One-shot smoke helper: clear the acquired swapchain image directly
         // and present it. This bypasses tgfx2 textures/blits and is intended
         // for platform bring-up diagnostics.
-        bool clear_and_present(float r, float g, float b, float a);
+        bool clear_and_present(termin::LinearColor color);
 
         // Introspection
         VkSwapchainKHR handle() const {

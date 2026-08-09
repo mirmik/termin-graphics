@@ -9,6 +9,7 @@
 #include <vector>
 
 using namespace termin::gui_native;
+using termin::SrgbColor;
 
 namespace {
 
@@ -38,7 +39,7 @@ namespace {
     }
 
     void test_color_model_round_trip_and_revisions() {
-        ColorPickerModel model(Color{1.0f, 0.0f, 0.0f, 0.5f}, true);
+        ColorPickerModel model(SrgbColor{1.0f, 0.0f, 0.0f, 0.5f}, true);
         assert(near(model.hue(), 0.0f));
         assert(near(model.saturation(), 1.0f));
         assert(near(model.value(), 1.0f));
@@ -47,7 +48,7 @@ namespace {
         std::vector<uint32_t> changes;
         model.changed().connect([&changes](ColorPickerModel&, uint32_t flags) { changes.push_back(flags); });
         model.set_hue(0.5f);
-        const Color cyan = model.color();
+        const SrgbColor cyan = model.color();
         assert(near(cyan.r, 0.0f));
         assert(near(cyan.g, 1.0f));
         assert(near(cyan.b, 1.0f));
@@ -95,7 +96,7 @@ namespace {
         TcDocument document(document_handle);
         document.set_text_measurer(&measure_text, nullptr);
         DocumentBuilder ui(document);
-        auto model = std::make_shared<ColorPickerModel>(Color{1.0f, 0.0f, 0.0f, 1.0f}, true);
+        auto model = std::make_shared<ColorPickerModel>(SrgbColor{1.0f, 0.0f, 0.0f, 1.0f}, true);
         auto& picker = ui.make_root<ColorPicker>(model);
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 250.0f, 244.0f});
 
@@ -158,13 +159,13 @@ namespace {
         TcDocument document(document_handle);
         document.set_text_measurer(&measure_text, nullptr);
         DocumentBuilder ui(document);
-        auto& dialog = ui.make<ColorDialog>(Color{1.0f, 0.0f, 0.0f, 0.5f}, true);
-        std::vector<std::optional<Color>> results;
+        auto& dialog = ui.make<ColorDialog>(SrgbColor{1.0f, 0.0f, 0.0f, 0.5f}, true);
+        std::vector<std::optional<SrgbColor>> results;
         dialog.color_finished().connect(
-            [&results](ColorDialog&, const std::optional<Color>& color) { results.push_back(color); });
+            [&results](ColorDialog&, const std::optional<SrgbColor>& color) { results.push_back(color); });
 
         assert(dialog.show(document.get(), tc_ui_rect{0.0f, 0.0f, 640.0f, 480.0f}));
-        dialog.set_color(Color{0.0f, 0.5f, 1.0f, 0.25f});
+        dialog.set_color(SrgbColor{0.0f, 0.5f, 1.0f, 0.25f});
         assert(dialog.activate("ok", document.get()));
         assert(results.size() == 1 && results[0]);
         assert(near(results[0]->g, 0.5f));

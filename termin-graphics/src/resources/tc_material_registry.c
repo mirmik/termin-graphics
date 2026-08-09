@@ -662,32 +662,6 @@ bool tc_material_phase_accepts_texture(const tc_material_phase* phase, const cha
     return true;
 }
 
-bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float* g, float* b, float* a) {
-    if (!phase)
-        return false;
-    // Compatibility scaffold for callers still storing the legacy vec4.
-    for (size_t i = 0; i < phase->uniform_count; i++) {
-        if (strcmp(phase->uniforms[i].name, "u_color") == 0 && phase->uniforms[i].type == TC_UNIFORM_VEC4) {
-            if (r)
-                *r = phase->uniforms[i].data.v4[0];
-            if (g)
-                *g = phase->uniforms[i].data.v4[1];
-            if (b)
-                *b = phase->uniforms[i].data.v4[2];
-            if (a)
-                *a = phase->uniforms[i].data.v4[3];
-            return true;
-        }
-    }
-    return false;
-}
-
-void tc_material_phase_set_color(tc_material_phase* phase, float r, float g, float b, float a) {
-    // Compatibility scaffold; new callers should use the typed API.
-    float color[4] = {r, g, b, a};
-    tc_material_phase_set_uniform(phase, "u_color", TC_UNIFORM_VEC4, color);
-}
-
 void tc_material_phase_make_transparent(tc_material_phase* phase) {
     if (!phase)
         return;
@@ -932,22 +906,6 @@ bool tc_material_set_texture_source(
     strncpy(source->channel, channel, sizeof(source->channel) - 1);
     mat->header.version++;
     return true;
-}
-
-bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a) {
-    if (!mat || mat->phase_count == 0)
-        return false;
-    return tc_material_phase_get_color(&mat->phases[0], r, g, b, a);
-}
-
-void tc_material_set_color(tc_material* mat, float r, float g, float b, float a) {
-    if (!mat)
-        return;
-
-    for (size_t i = 0; i < mat->phase_count; i++) {
-        tc_material_phase_set_color(&mat->phases[i], r, g, b, a);
-    }
-    mat->header.version++;
 }
 
 // ============================================================================

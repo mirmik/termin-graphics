@@ -284,12 +284,6 @@ tc_material_phase_declare_texture(tc_material_phase* phase, const char* name, tc
 TGFX_API bool
 tc_material_phase_accepts_texture(const tc_material_phase* phase, const char* name, tc_texture_handle texture);
 
-// Get color (u_color uniform) from phase
-TGFX_API bool tc_material_phase_get_color(const tc_material_phase* phase, float* r, float* g, float* b, float* a);
-
-// Set color (u_color uniform) on phase
-TGFX_API void tc_material_phase_set_color(tc_material_phase* phase, float r, float g, float b, float a);
-
 // Set transparent render state (blend=ON, depth_write=OFF) on phase
 TGFX_API void tc_material_phase_make_transparent(tc_material_phase* phase);
 
@@ -323,12 +317,6 @@ TGFX_API bool tc_material_set_texture_source(
 TGFX_API bool tc_material_clear_texture_source(tc_material* mat, const char* uniform_name);
 TGFX_API const tc_material_texture_source* tc_material_find_texture_source(const tc_material* mat,
                                                                            const char* uniform_name);
-
-// Get color from default phase
-TGFX_API bool tc_material_get_color(const tc_material* mat, float* r, float* g, float* b, float* a);
-
-// Set color on all phases
-TGFX_API void tc_material_set_color(tc_material* mat, float r, float g, float b, float a);
 
 // ============================================================================
 // Reference counting

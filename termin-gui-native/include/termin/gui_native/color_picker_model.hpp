@@ -18,7 +18,7 @@ namespace termin::gui_native {
 
     class ColorPickerModel {
     private:
-        Color initial_color_;
+        SrgbColor initial_color_;
         float hue_ = 0.0f;
         float saturation_ = 0.0f;
         float value_ = 1.0f;
@@ -28,9 +28,9 @@ namespace termin::gui_native {
         Signal<ColorPickerModel&, uint32_t> changed_;
 
     public:
-        explicit ColorPickerModel(Color initial = Color{1.0f, 1.0f, 1.0f, 1.0f}, bool show_alpha = true);
+        explicit ColorPickerModel(SrgbColor initial = SrgbColor{1.0f, 1.0f, 1.0f, 1.0f}, bool show_alpha = true);
 
-        Color color() const;
+        SrgbColor color() const;
         // Authoring boundary for material/editor colors. RGB components are
         // encoded sRGB; HSV state below remains an internal picker detail.
         termin::SrgbColor srgb_color() const;
@@ -39,7 +39,7 @@ namespace termin::gui_native {
         void set_hex(std::string_view value);
         static termin::SrgbColor srgb_from_hex(std::string_view value);
         static std::string srgb_to_hex(termin::SrgbColor color);
-        Color initial_color() const {
+        SrgbColor initial_color() const {
             return initial_color_;
         }
         float hue() const {
@@ -61,7 +61,7 @@ namespace termin::gui_native {
             return revision_;
         }
 
-        void set_color(Color color);
+        void set_color(SrgbColor color);
         void set_hsv(float hue, float saturation, float value);
         void set_hue(float hue);
         void set_saturation(float saturation);
@@ -73,11 +73,11 @@ namespace termin::gui_native {
             return changed_;
         }
 
-        static Color hsv_to_rgb(float hue, float saturation, float value, float alpha = 1.0f);
+        static SrgbColor hsv_to_rgb(float hue, float saturation, float value, float alpha = 1.0f);
 
     private:
         static void validate_unit(float value, const char* field);
-        static void validate_color(Color color);
+        static void validate_color(SrgbColor color);
         void emit_change(uint32_t flags);
     };
 

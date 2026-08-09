@@ -18,7 +18,7 @@ namespace termin::gui_native::detail {
     extern const float kHuge;
 
     float clamp_float(float value, float lo, float hi);
-    bool color_visible(Color color);
+    bool color_visible(SrgbColor color);
     bool color_visible(tc_ui_srgb_color color);
     void set_style_color(Widget& widget, tc_ui_style_field_mask field, tc_ui_srgb_color color);
     void set_style_metric(Widget& widget, tc_ui_style_field_mask field, float value);

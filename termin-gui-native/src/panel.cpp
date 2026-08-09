@@ -9,13 +9,13 @@ namespace termin::gui_native {
         set_preferred_size(tc_ui_size{96.0f, 64.0f});
     }
 
-    Panel& Panel::set_fill(Color color) {
-        set_style_color(*this, TC_UI_STYLE_BACKGROUND, color.c_color());
+    Panel& Panel::set_fill(SrgbColor color) {
+        set_style_color(*this, TC_UI_STYLE_BACKGROUND, to_tc_ui_srgb(color));
         return *this;
     }
 
-    Panel& Panel::set_border(Color color, float thickness) {
-        set_style_color(*this, TC_UI_STYLE_BORDER, color.c_color());
+    Panel& Panel::set_border(SrgbColor color, float thickness) {
+        set_style_color(*this, TC_UI_STYLE_BORDER, to_tc_ui_srgb(color));
         set_style_metric(*this, TC_UI_STYLE_BORDER_WIDTH, std::max(0.0f, thickness));
         return *this;
     }

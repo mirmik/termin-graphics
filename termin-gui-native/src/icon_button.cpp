@@ -41,27 +41,27 @@ namespace termin::gui_native {
         tooltip_ = std::move(tooltip);
     }
 
-    void IconButton::set_background_color(Color color) {
+    void IconButton::set_background_color(SrgbColor color) {
         background_color_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void IconButton::set_hover_color(Color color) {
+    void IconButton::set_hover_color(SrgbColor color) {
         hover_color_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void IconButton::set_pressed_color(Color color) {
+    void IconButton::set_pressed_color(SrgbColor color) {
         pressed_color_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void IconButton::set_active_color(Color color) {
+    void IconButton::set_active_color(SrgbColor color) {
         active_color_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void IconButton::set_icon_color(Color color) {
+    void IconButton::set_icon_color(SrgbColor color) {
         icon_color_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
@@ -82,15 +82,15 @@ namespace termin::gui_native {
         tc_ui_style style = computed_style(document, extra);
         const uint32_t state = tc_ui_document_widget_style_state(document, c_widget()) | extra;
         if (background_color_)
-            style.background = background_color_->c_color();
+            style.background = to_tc_ui_srgb(*background_color_);
         if ((state & TC_UI_STYLE_STATE_HOVERED) != 0 && hover_color_)
-            style.background = hover_color_->c_color();
+            style.background = to_tc_ui_srgb(*hover_color_);
         if ((state & TC_UI_STYLE_STATE_PRESSED) != 0 && pressed_color_)
-            style.background = pressed_color_->c_color();
+            style.background = to_tc_ui_srgb(*pressed_color_);
         if ((state & TC_UI_STYLE_STATE_CHECKED) != 0 && active_color_)
-            style.background = active_color_->c_color();
+            style.background = to_tc_ui_srgb(*active_color_);
         if (icon_color_)
-            style.foreground = icon_color_->c_color();
+            style.foreground = to_tc_ui_srgb(*icon_color_);
         if (corner_radius_)
             style.corner_radius = *corner_radius_;
         if (font_size_)

@@ -139,7 +139,7 @@ namespace termin::gui_native {
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void SceneView::set_scene_colors(Color background, Color grid, Color axes) {
+    void SceneView::set_scene_colors(SrgbColor background, SrgbColor grid, SrgbColor axes) {
         background_ = background;
         grid_ = grid;
         axes_ = axes;
@@ -296,7 +296,7 @@ namespace termin::gui_native {
 
     void SceneView::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
         reconcile_portals(document);
-        tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
+        tc_ui_painter_fill_rect(context, bounds(), to_tc_ui_srgb(background_));
         tc_ui_painter_push_clip(context, bounds());
         if (show_grid_ && grid_step_ > 0.0f) {
             const tc_ui_point world_min = screen_to_world({bounds().x, bounds().y});
@@ -313,7 +313,7 @@ namespace termin::gui_native {
                 tc_ui_painter_draw_line(context,
                                         {screen_x, bounds().y},
                                         {screen_x, bounds().y + bounds().height},
-                                        (std::fabs(x) < 0.0001 ? axes_ : grid_).c_color(),
+                                        to_tc_ui_srgb(std::fabs(x) < 0.0001 ? axes_ : grid_),
                                         1.0f);
             }
             lines = 0;
@@ -322,7 +322,7 @@ namespace termin::gui_native {
                 tc_ui_painter_draw_line(context,
                                         {bounds().x, screen_y},
                                         {bounds().x + bounds().width, screen_y},
-                                        (std::fabs(y) < 0.0001 ? axes_ : grid_).c_color(),
+                                        to_tc_ui_srgb(std::fabs(y) < 0.0001 ? axes_ : grid_),
                                         1.0f);
             }
         }

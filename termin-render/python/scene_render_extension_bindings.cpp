@@ -5,8 +5,7 @@
 
 #include <stdexcept>
 
-#include <termin/geom/vec3.hpp>
-#include <termin/geom/vec4.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/render/tc_pipeline_template.hpp>
 #include <termin/render/tc_scene_render_ext.hpp>
 #include <termin/tc_scene.hpp>
@@ -69,18 +68,16 @@ namespace termin {
                 return ptr_ != nullptr;
             }
 
-            std::tuple<float, float, float> ambient_color() const {
+            SrgbColor ambient_srgb_color() const {
                 if (!ptr_)
-                    return {1.0f, 1.0f, 1.0f};
-                return {ptr_->ambient_color[0], ptr_->ambient_color[1], ptr_->ambient_color[2]};
+                    return SrgbColor::white();
+                return {ptr_->ambient_color.r, ptr_->ambient_color.g, ptr_->ambient_color.b, 1.0f};
             }
 
-            void set_ambient_color(float r, float g, float b) {
+            void set_ambient_srgb_color(SrgbColor color) {
                 if (!ptr_)
                     return;
-                ptr_->ambient_color[0] = r;
-                ptr_->ambient_color[1] = g;
-                ptr_->ambient_color[2] = b;
+                ptr_->ambient_color = tc_srgb_color{color.r, color.g, color.b, 1.0f};
             }
 
             float ambient_intensity() const {
@@ -121,10 +118,10 @@ namespace termin {
         nb::class_<TcSceneLighting>(m, "TcSceneLighting", "View on scene lighting properties (ambient, shadows)")
             .def(nb::init<uintptr_t>(), nb::arg("ptr"))
             .def_prop_rw(
-                "ambient_color",
-                [](TcSceneLighting& self) { return self.ambient_color(); },
-                [](TcSceneLighting& self, std::tuple<float, float, float> color) {
-                    self.set_ambient_color(std::get<0>(color), std::get<1>(color), std::get<2>(color));
+                "ambient_srgb_color",
+                [](TcSceneLighting& self) { return self.ambient_srgb_color(); },
+                [](TcSceneLighting& self, SrgbColor color) {
+                    self.set_ambient_srgb_color(color);
                 },
                 "Ambient light color (r, g, b)")
             .def_prop_rw("ambient_intensity",
@@ -139,22 +136,17 @@ namespace termin {
 
         nb::class_<SceneRenderState>(m, "SceneRenderState")
             .def_prop_rw(
-                "background_color",
-                [](const SceneRenderState& self) -> Vec4 { return scene_background_color(TcSceneRef(self.handle())); },
-                [](SceneRenderState& self, const Vec4& color) {
-                    scene_set_background_color(TcSceneRef(self.handle()), color);
+                "background_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor { return scene_background_srgb_color(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_background_srgb_color(TcSceneRef(self.handle()), color);
                 })
-            .def("get_background_color",
-                 [](const SceneRenderState& self) { return scene_get_background_color(TcSceneRef(self.handle())); })
-            .def(
-                "set_background_color",
-                [](SceneRenderState& self, float r, float g, float b, float a) {
-                    scene_set_background_color(TcSceneRef(self.handle()), r, g, b, a);
-                },
-                nb::arg("r"),
-                nb::arg("g"),
-                nb::arg("b"),
-                nb::arg("a"))
+            .def("get_background_srgb_color",
+                 [](const SceneRenderState& self) { return scene_background_srgb_color(TcSceneRef(self.handle())); })
+            .def("set_background_srgb_color",
+                 [](SceneRenderState& self, SrgbColor color) {
+                     scene_set_background_srgb_color(TcSceneRef(self.handle()), color);
+                 })
             .def_prop_rw(
                 "skybox_type",
                 [](const SceneRenderState& self) -> std::string {
@@ -194,49 +186,25 @@ namespace termin {
                      state->skybox.type = type;
                  })
             .def_prop_rw(
-                "skybox_color",
-                [](const SceneRenderState& self) -> Vec3 { return scene_skybox_color(TcSceneRef(self.handle())); },
-                [](SceneRenderState& self, const Vec3& color) {
-                    scene_set_skybox_color(TcSceneRef(self.handle()), color);
+                "skybox_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor { return scene_skybox_srgb_color(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_skybox_srgb_color(TcSceneRef(self.handle()), color);
                 })
             .def_prop_rw(
-                "skybox_top_color",
-                [](const SceneRenderState& self) -> Vec3 { return scene_skybox_top_color(TcSceneRef(self.handle())); },
-                [](SceneRenderState& self, const Vec3& color) {
-                    scene_set_skybox_top_color(TcSceneRef(self.handle()), color);
+                "skybox_top_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor { return scene_skybox_top_srgb_color(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_skybox_top_srgb_color(TcSceneRef(self.handle()), color);
                 })
             .def_prop_rw(
-                "skybox_bottom_color",
-                [](const SceneRenderState& self) -> Vec3 {
-                    return scene_skybox_bottom_color(TcSceneRef(self.handle()));
+                "skybox_bottom_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor {
+                    return scene_skybox_bottom_srgb_color(TcSceneRef(self.handle()));
                 },
-                [](SceneRenderState& self, const Vec3& color) {
-                    scene_set_skybox_bottom_color(TcSceneRef(self.handle()), color);
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_skybox_bottom_srgb_color(TcSceneRef(self.handle()), color);
                 })
-            .def("get_skybox_color",
-                 [](const SceneRenderState& self) {
-                     return scene_get_skybox_color_components(TcSceneRef(self.handle()));
-                 })
-            .def("set_skybox_color",
-                 [](SceneRenderState& self, float r, float g, float b) {
-                     scene_set_skybox_color_components(TcSceneRef(self.handle()), r, g, b);
-                 })
-            .def("get_skybox_top_color",
-                 [](const SceneRenderState& self) {
-                     return scene_get_skybox_top_color_components(TcSceneRef(self.handle()));
-                 })
-            .def("set_skybox_top_color",
-                 [](SceneRenderState& self, float r, float g, float b) {
-                     scene_set_skybox_top_color_components(TcSceneRef(self.handle()), r, g, b);
-                 })
-            .def("get_skybox_bottom_color",
-                 [](const SceneRenderState& self) {
-                     return scene_get_skybox_bottom_color_components(TcSceneRef(self.handle()));
-                 })
-            .def("set_skybox_bottom_color",
-                 [](SceneRenderState& self, float r, float g, float b) {
-                     scene_set_skybox_bottom_color_components(TcSceneRef(self.handle()), r, g, b);
-                 })
             .def("skybox_mesh",
                  [](const SceneRenderState& self) -> TcMesh {
                      tc_scene_render_state* state = tc_scene_render_state_get(self.handle());
@@ -250,10 +218,10 @@ namespace termin {
                      return TcMaterial(material);
                  })
             .def_prop_rw(
-                "ambient_color",
-                [](const SceneRenderState& self) -> Vec3 { return scene_ambient_color(TcSceneRef(self.handle())); },
-                [](SceneRenderState& self, const Vec3& color) {
-                    scene_set_ambient_color(TcSceneRef(self.handle()), color);
+                "ambient_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor { return scene_ambient_srgb_color(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_ambient_srgb_color(TcSceneRef(self.handle()), color);
                 })
             .def_prop_rw(
                 "ambient_intensity",

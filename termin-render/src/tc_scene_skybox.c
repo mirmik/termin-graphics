@@ -108,17 +108,20 @@ void tc_scene_skybox_init(tc_scene_skybox* skybox) {
         return;
     skybox->type = TC_SKYBOX_GRADIENT;
     // Solid color: blue-ish default
-    skybox->color[0] = 0.5f;
-    skybox->color[1] = 0.7f;
-    skybox->color[2] = 0.9f;
+    skybox->color.r = 0.5f;
+    skybox->color.g = 0.7f;
+    skybox->color.b = 0.9f;
+    skybox->color.a = 1.0f;
     // Gradient top: sky blue
-    skybox->top_color[0] = 0.4f;
-    skybox->top_color[1] = 0.6f;
-    skybox->top_color[2] = 0.9f;
+    skybox->top_color.r = 0.4f;
+    skybox->top_color.g = 0.6f;
+    skybox->top_color.b = 0.9f;
+    skybox->top_color.a = 1.0f;
     // Gradient bottom: warm horizon
-    skybox->bottom_color[0] = 0.6f;
-    skybox->bottom_color[1] = 0.5f;
-    skybox->bottom_color[2] = 0.4f;
+    skybox->bottom_color.r = 0.6f;
+    skybox->bottom_color.g = 0.5f;
+    skybox->bottom_color.b = 0.4f;
+    skybox->bottom_color.a = 1.0f;
     skybox->mesh = tc_mesh_handle_invalid();
     skybox->material = tc_material_handle_invalid();
 }

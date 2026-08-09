@@ -158,22 +158,22 @@ namespace tcplot {
         // --- Colour + typography overrides (propagated to every panel) ---
         // Strip background (behind margin area), plot-area background, grid,
         // axis, labels. Pass 0..1 RGBA. Useful for matching a host theme.
-        void set_bg_color(float r, float g, float b, float a);
-        void set_plot_bg_color(float r, float g, float b, float a);
-        void set_grid_color(float r, float g, float b, float a);
-        void set_axis_color(float r, float g, float b, float a);
-        void set_label_color(float r, float g, float b, float a);
+        void set_bg_color(SrgbColor color);
+        void set_plot_bg_color(SrgbColor color);
+        void set_grid_color(SrgbColor color);
+        void set_axis_color(SrgbColor color);
+        void set_label_color(SrgbColor color);
         // Explicit title colour applied to every panel. Overrides the
         // default (which is the panel's label_color). Typical use: pick a
         // theme-specific title colour once per theme switch.
-        void set_title_color(float r, float g, float b, float a);
+        void set_title_color(SrgbColor color);
         // Reset title colour to default (= each panel's label_color).
         void clear_title_color();
         // Change the colour of an already-added series. For theme
         // switching — no need to clear + re-add. Silent no-op if indices
         // are out of range.
-        void set_line_color(int panel_idx, int series_idx, float r, float g, float b, float a);
-        void set_scatter_color(int panel_idx, int series_idx, float r, float g, float b, float a);
+        void set_line_color(int panel_idx, int series_idx, SrgbColor color);
+        void set_scatter_color(int panel_idx, int series_idx, SrgbColor color);
         void set_line_style(int panel_idx, int series_idx, LineStyle style, float dash_px = 8.0f, float gap_px = 5.0f);
         void set_line_colormap_reversed(int panel_idx, int series_idx, bool reversed);
         // Per-panel font sizes in pixels. Margins auto-scale to fit.

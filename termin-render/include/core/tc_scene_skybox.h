@@ -3,6 +3,7 @@
 #define TC_SCENE_SKYBOX_H
 
 #include "tc_types.h"
+#include <geom/tc_color.h>
 #include <tgfx/resources/tc_material.h>
 #include <tgfx/resources/tc_mesh.h>
 
@@ -20,9 +21,9 @@ typedef enum tc_skybox_type {
 // Scene skybox properties
 typedef struct tc_scene_skybox {
     int type;                    // tc_skybox_type
-    float color[3];              // Solid color RGB
-    float top_color[3];          // Gradient top RGB
-    float bottom_color[3];       // Gradient bottom RGB
+    tc_srgb_color color;         // Solid authored sRGB color
+    tc_srgb_color top_color;     // Gradient authored sRGB color
+    tc_srgb_color bottom_color;  // Gradient authored sRGB color
     tc_mesh_handle mesh;         // Skybox cube mesh (refcounted via handle)
     tc_material_handle material; // Optional external skybox material handle
 } tc_scene_skybox;
@@ -36,7 +37,8 @@ TC_API void tc_scene_skybox_free(tc_scene_skybox* skybox);
 // Ensure skybox mesh exists (creates lazily if needed)
 TC_API struct tc_mesh* tc_scene_skybox_ensure_mesh(tc_scene_skybox* skybox);
 
-// Note: Scene skybox API functions (tc_scene_get_skybox, tc_scene_set_skybox_*, etc.)
+// Note: Scene skybox API functions (tc_scene_get_skybox,
+// tc_scene_set_skybox_srgb_color, etc.)
 // are declared in tc_scene_render_state.h with tc_scene_handle parameter
 
 #ifdef __cplusplus

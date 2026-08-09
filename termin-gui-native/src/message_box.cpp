@@ -22,16 +22,16 @@ namespace termin::gui_native {
             return true;
         }
         const char* icon = "ℹ";
-        Color color{0.30f, 0.60f, 0.90f, 1.0f};
+        SrgbColor color{0.30f, 0.60f, 0.90f, 1.0f};
         if (kind_ == MessageBoxKind::Warning) {
             icon = "⚠";
-            color = Color{0.90f, 0.70f, 0.20f, 1.0f};
+            color = SrgbColor{0.90f, 0.70f, 0.20f, 1.0f};
         } else if (kind_ == MessageBoxKind::Error) {
             icon = "✖";
-            color = Color{0.90f, 0.30f, 0.30f, 1.0f};
+            color = SrgbColor{0.90f, 0.30f, 0.30f, 1.0f};
         } else if (kind_ == MessageBoxKind::Question) {
             icon = "?";
-            color = Color{0.30f, 0.80f, 0.50f, 1.0f};
+            color = SrgbColor{0.30f, 0.80f, 0.50f, 1.0f};
         }
         auto row = std::make_unique<HStack>("message-box-content");
         row->set_spacing(14.0f);

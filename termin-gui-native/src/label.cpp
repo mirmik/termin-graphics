@@ -218,7 +218,7 @@ namespace termin::gui_native {
         set_font_size(font_size);
     }
 
-    Label::Label(std::string text, float font_size, Color color)
+    Label::Label(std::string text, float font_size, SrgbColor color)
         : Label(std::move(text), font_size) {
         set_color(color);
     }
@@ -230,8 +230,8 @@ namespace termin::gui_native {
         return *this;
     }
 
-    Label& Label::set_color(Color color) {
-        set_style_color(*this, TC_UI_STYLE_FOREGROUND, color.c_color());
+    Label& Label::set_color(SrgbColor color) {
+        set_style_color(*this, TC_UI_STYLE_FOREGROUND, to_tc_ui_srgb(color));
         return *this;
     }
 

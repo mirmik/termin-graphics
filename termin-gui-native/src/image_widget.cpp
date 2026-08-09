@@ -27,7 +27,7 @@ namespace termin::gui_native {
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
 
-    void ImageWidget::set_tint(Color tint) {
+    void ImageWidget::set_tint(SrgbColor tint) {
         tint_ = tint;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
     }
@@ -59,7 +59,7 @@ namespace termin::gui_native {
         }
         tc_ui_painter_push_clip(context, bounds());
         tc_ui_painter_draw_texture(
-            context, texture_id_, destination, tint_.c_color(), TC_UI_TEXTURE_SAMPLING_LINEAR, false);
+            context, texture_id_, destination, to_tc_ui_srgb(tint_), TC_UI_TEXTURE_SAMPLING_LINEAR, false);
         tc_ui_painter_pop_clip(context);
     }
 

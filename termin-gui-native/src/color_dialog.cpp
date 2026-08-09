@@ -2,7 +2,7 @@
 
 namespace termin::gui_native {
 
-    ColorDialog::ColorDialog(Color initial, bool show_alpha, std::string title)
+    ColorDialog::ColorDialog(SrgbColor initial, bool show_alpha, std::string title)
         : Dialog(std::move(title)),
           model_(std::make_shared<ColorPickerModel>(initial, show_alpha)) {
         set_actions({
@@ -10,7 +10,7 @@ namespace termin::gui_native {
             DialogAction{"cancel", "Cancel", false, true},
         });
         finished_connection_ = finished().connect([this](Dialog&, const DialogResult& result) {
-            const std::optional<Color> color = result.action_id == "ok" ? accepted_color_ : std::nullopt;
+            const std::optional<SrgbColor> color = result.action_id == "ok" ? accepted_color_ : std::nullopt;
             color_finished_.emit(*this, color);
         });
     }

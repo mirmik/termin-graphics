@@ -662,19 +662,13 @@ namespace termin {
                     }
                 }
 
-                // Set color
+                // Set the authored color only through its explicit semantic type.
                 if (!options.color.is_none()) {
-                    if (nb::isinstance<Vec4>(options.color)) {
-                        Vec4 c = nb::cast<Vec4>(options.color);
-                        tc_material_phase_set_color(phase, c.x, c.y, c.z, c.w);
-                    } else if (nb::isinstance<nb::tuple>(options.color) || nb::isinstance<nb::list>(options.color)) {
-                        nb::sequence seq = nb::cast<nb::sequence>(options.color);
-                        tc_material_phase_set_color(phase,
-                                                    nb::cast<float>(seq[0]),
-                                                    nb::cast<float>(seq[1]),
-                                                    nb::cast<float>(seq[2]),
-                                                    nb::cast<float>(seq[3]));
-                    }
+                    if (!nb::isinstance<SrgbColor>(options.color))
+                        throw std::invalid_argument("material color expects SrgbColor; numeric Vec4/tuples are rejected");
+                    const SrgbColor c = nb::cast<SrgbColor>(options.color);
+                    if (!tc_material_phase_set_srgb_color(phase, "u_color", tc_srgb_color{c.r, c.g, c.b, c.a}))
+                        throw std::runtime_error("failed to set typed u_color uniform");
                 }
             }
 
@@ -941,10 +935,6 @@ namespace termin {
                 },
                 nb::arg("name"),
                 nb::arg("expected_encoding") = nb::none())
-            .def("set_color",
-                 [](tc_material_phase& p, float r, float g, float b, float a) {
-                     tc_material_phase_set_color(&p, r, g, b, a);
-                 })
             .def("set_available_marks",
                  [](tc_material_phase& p, const std::vector<std::string>& marks) {
                      p.available_mark_count = std::min(marks.size(), (size_t)TC_MATERIAL_MAX_MARKS);
@@ -1347,13 +1337,6 @@ namespace termin {
                         throw std::runtime_error("failed to set TcMaterial.color");
                     }
                 })
-            .def(
-                "set_color",
-                [](TcMaterial& self, const SrgbColor& c) {
-                    if (!self.set_uniform_srgb_color("u_color", c))
-                        throw std::runtime_error("failed to set typed u_color uniform");
-                },
-                nb::arg("color"))
             .def("set_uniform_srgb_color",
                  [](TcMaterial& self, const char* name, const SrgbColor& c) {
                      if (!self.set_uniform_srgb_color(name, c))

@@ -687,7 +687,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             [](termin::gui_native::ColorPickerModel* self, std::optional<termin::SrgbColor> initial, bool show_alpha) {
                 const termin::SrgbColor resolved_initial = initial.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
                 new (self) termin::gui_native::ColorPickerModel(
-                    termin::gui_native::Color{
+                    termin::SrgbColor{
                         resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
                     show_alpha);
             },
@@ -697,7 +697,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             "color",
             [](const termin::gui_native::ColorPickerModel& self) { return self.srgb_color(); },
             [](termin::gui_native::ColorPickerModel& self, termin::SrgbColor color) {
-                self.set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
+                self.set_color(color);
             })
         .def_prop_rw("srgb_color",
                      &termin::gui_native::ColorPickerModel::srgb_color,
@@ -707,7 +707,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_static("srgb_to_hex", &termin::gui_native::ColorPickerModel::srgb_to_hex, nb::arg("color"))
         .def_prop_ro("initial_color",
                      [](const termin::gui_native::ColorPickerModel& self) {
-                         return from_tc_ui_srgb(self.initial_color().c_color());
+                         return self.initial_color();
                      })
         .def_prop_rw("hue", &termin::gui_native::ColorPickerModel::hue, &termin::gui_native::ColorPickerModel::set_hue)
         .def_prop_rw("saturation",
@@ -788,7 +788,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             "color",
             [](const ColorDialogRef& self) { return self.get().model()->srgb_color(); },
             [](const ColorDialogRef& self, termin::SrgbColor color) {
-                self.get().set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
+                self.get().set_color(color);
             })
         .def_prop_rw(
             "srgb_color",
@@ -817,11 +817,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                 auto state = self.widget.state;
                 return self.get().color_finished().connect(
                     [state, callback = std::move(callback)](termin::gui_native::ColorDialog&,
-                                                            const std::optional<termin::gui_native::Color>& color) {
+                                                            const std::optional<termin::SrgbColor>& color) {
                         try {
                             nb::gil_scoped_acquire gil;
                             if (color)
-                                callback(from_tc_ui_srgb(color->c_color()));
+                                callback(*color);
                             else
                                 callback(nb::none());
                         } catch (...) {
@@ -838,11 +838,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                 auto state = self.widget.state;
                 return self.get().color_finished().connect(
                     [state, callback = std::move(callback)](termin::gui_native::ColorDialog&,
-                                                            const std::optional<termin::gui_native::Color>& color) {
+                                                            const std::optional<termin::SrgbColor>& color) {
                         try {
                             nb::gil_scoped_acquire gil;
                             if (color)
-                                callback(termin::SrgbColor{color->r, color->g, color->b, color->a});
+                                callback(*color);
                             else
                                 callback(nb::none());
                         } catch (...) {

@@ -10,7 +10,7 @@ namespace termin::gui_native::detail {
         return std::max(lo, std::min(value, hi));
     }
 
-    bool color_visible(Color color) {
+    bool color_visible(SrgbColor color) {
         return color.a > 0.0f;
     }
 

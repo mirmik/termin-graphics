@@ -35,7 +35,7 @@ namespace termin::gui_native {
 
     } // namespace
 
-    ColorPickerModel::ColorPickerModel(Color initial, bool show_alpha)
+    ColorPickerModel::ColorPickerModel(SrgbColor initial, bool show_alpha)
         : initial_color_(initial),
           show_alpha_(show_alpha) {
         validate_color(initial);
@@ -50,20 +50,20 @@ namespace termin::gui_native {
         }
     }
 
-    void ColorPickerModel::validate_color(Color color) {
+    void ColorPickerModel::validate_color(SrgbColor color) {
         validate_unit(color.r, "red");
         validate_unit(color.g, "green");
         validate_unit(color.b, "blue");
         validate_unit(color.a, "alpha");
     }
 
-    Color ColorPickerModel::hsv_to_rgb(float hue, float saturation, float value, float alpha) {
+    SrgbColor ColorPickerModel::hsv_to_rgb(float hue, float saturation, float value, float alpha) {
         validate_unit(hue, "hue");
         validate_unit(saturation, "saturation");
         validate_unit(value, "value");
         validate_unit(alpha, "alpha");
         if (same(saturation, 0.0f))
-            return Color{value, value, value, alpha};
+            return SrgbColor{value, value, value, alpha};
         const float scaled = (hue >= 1.0f ? 0.0f : hue) * 6.0f;
         const int sector = static_cast<int>(std::floor(scaled));
         const float fraction = scaled - static_cast<float>(sector);
@@ -72,31 +72,31 @@ namespace termin::gui_native {
         const float t = value * (1.0f - saturation * (1.0f - fraction));
         switch (sector) {
         case 0:
-            return Color{value, t, p, alpha};
+            return SrgbColor{value, t, p, alpha};
         case 1:
-            return Color{q, value, p, alpha};
+            return SrgbColor{q, value, p, alpha};
         case 2:
-            return Color{p, value, t, alpha};
+            return SrgbColor{p, value, t, alpha};
         case 3:
-            return Color{p, q, value, alpha};
+            return SrgbColor{p, q, value, alpha};
         case 4:
-            return Color{t, p, value, alpha};
+            return SrgbColor{t, p, value, alpha};
         default:
-            return Color{value, p, q, alpha};
+            return SrgbColor{value, p, q, alpha};
         }
     }
 
-    Color ColorPickerModel::color() const {
+    SrgbColor ColorPickerModel::color() const {
         return hsv_to_rgb(hue_, saturation_, value_, show_alpha_ ? alpha_ : 1.0f);
     }
 
     termin::SrgbColor ColorPickerModel::srgb_color() const {
-        const Color value = color();
+        const SrgbColor value = color();
         return termin::SrgbColor{value.r, value.g, value.b, value.a};
     }
 
     void ColorPickerModel::set_srgb_color(termin::SrgbColor color) {
-        set_color(Color{color.r, color.g, color.b, color.a});
+        set_color(SrgbColor{color.r, color.g, color.b, color.a});
     }
 
     std::string ColorPickerModel::hex() const {
@@ -149,7 +149,7 @@ namespace termin::gui_native {
         changed_.emit(*this, flags);
     }
 
-    void ColorPickerModel::set_color(Color color) {
+    void ColorPickerModel::set_color(SrgbColor color) {
         validate_color(color);
         const float maximum = std::max(color.r, std::max(color.g, color.b));
         const float minimum = std::min(color.r, std::min(color.g, color.b));

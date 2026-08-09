@@ -77,11 +77,8 @@ namespace {
             release_gpu();
         }
 
-        void set_clear_color(float r, float g, float b, float a) {
-            clear_color_[0] = r;
-            clear_color_[1] = g;
-            clear_color_[2] = b;
-            clear_color_[3] = a;
+        void set_clear_srgb_color(tc_srgb_color color) {
+            clear_color_ = {color.r, color.g, color.b, color.a};
         }
 
         void set_msaa_samples(int samples) {
@@ -135,7 +132,7 @@ namespace {
             tgfx::RenderContext2& ctx = host_->ctx();
             ctx.begin_frame();
             const termin::LinearColor clear_color =
-                termin::srgb_to_linear(termin::SrgbColor{clear_color_[0], clear_color_[1], clear_color_[2], clear_color_[3]});
+                termin::srgb_to_linear(clear_color_);
             ctx.begin_pass(offscreen_color_, tgfx::TextureHandle{}, &clear_color, 1.0f, false);
             canvas_.begin(ctx, width, height);
             const bool executed = canvas_.execute(*draw_list, resources_);
@@ -209,7 +206,7 @@ namespace {
         int offscreen_width_ = 0;
         int offscreen_height_ = 0;
         int msaa_samples_ = 4;
-        float clear_color_[4] = {0.08f, 0.09f, 0.11f, 1.0f};
+        termin::SrgbColor clear_color_{0.08f, 0.09f, 0.11f, 1.0f};
         tc_retained_scene_renderer2d_timings timings_{};
     };
 
@@ -258,13 +255,13 @@ void tc_retained_scene_renderer2d_destroy(tc_retained_scene_renderer2d* renderer
     }
 }
 
-void tc_retained_scene_renderer2d_set_clear_color(
-    tc_retained_scene_renderer2d* renderer, float r, float g, float b, float a) {
+void tc_retained_scene_renderer2d_set_clear_srgb_color(
+    tc_retained_scene_renderer2d* renderer, tc_srgb_color color) {
     if (!renderer) {
-        tc::Log::error("RetainedSceneRenderer2D: set_clear_color called with null renderer");
+        tc::Log::error("RetainedSceneRenderer2D: set_clear_srgb_color called with null renderer");
         return;
     }
-    renderer->value.set_clear_color(r, g, b, a);
+    renderer->value.set_clear_srgb_color(color);
 }
 
 int tc_retained_scene_renderer2d_set_msaa_samples(tc_retained_scene_renderer2d* renderer, int samples) {

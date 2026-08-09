@@ -191,16 +191,16 @@ namespace tcplot {
         engine_->data.y_label = label ? label : "";
     }
 
-    bool PlotView2D::set_line_color(int idx, float r, float g, float b, float a) {
+    bool PlotView2D::set_line_color(int idx, SrgbColor color) {
         if (idx < 0)
             return false;
-        return engine_->set_line_color(static_cast<size_t>(idx), SrgbColor{r, g, b, a});
+        return engine_->set_line_color(static_cast<size_t>(idx), color);
     }
 
-    bool PlotView2D::set_scatter_color(int idx, float r, float g, float b, float a) {
+    bool PlotView2D::set_scatter_color(int idx, SrgbColor color) {
         if (idx < 0)
             return false;
-        return engine_->set_scatter_color(static_cast<size_t>(idx), SrgbColor{r, g, b, a});
+        return engine_->set_scatter_color(static_cast<size_t>(idx), color);
     }
 
     bool PlotView2D::set_line_style(int idx, LineStyle style, float dash_px, float gap_px) {

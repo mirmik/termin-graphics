@@ -540,7 +540,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             "create_swatch",
             [](termin::gui_native::TcDocument& self, termin::SrgbColor color) {
                 return SwatchRef{document_make_native<termin::gui_native::Swatch>(
-                    self, termin::gui_native::Color{color.r, color.g, color.b, color.a})};
+                    self, color)};
             },
             nb::arg("color"))
         .def(
@@ -736,7 +736,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                 const termin::SrgbColor resolved_initial = initial.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
                 return ColorDialogRef{document_make_native<termin::gui_native::ColorDialog>(
                     self,
-                    termin::gui_native::Color{
+                    termin::SrgbColor{
                         resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
                     show_alpha,
                     title)};

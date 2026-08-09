@@ -89,7 +89,7 @@ namespace tcplot {
         void set_axis_labels(const char* x_label, const char* y_label, const char* z_label);
         bool set_surface_colormap(int surface_idx, SurfaceColorMap colormap);
         bool set_surface_colormap_reversed(int surface_idx, bool reversed);
-        bool set_surface_color(int surface_idx, float r, float g, float b, float a);
+        bool set_surface_color(int surface_idx, SrgbColor color);
         bool set_surface_grid(int surface_idx, SurfaceGridOptions options);
         void toggle_wireframe();
         void toggle_marker_mode();

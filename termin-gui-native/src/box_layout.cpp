@@ -70,13 +70,13 @@ namespace termin::gui_native {
         return *this;
     }
 
-    BoxLayout& BoxLayout::set_background(Color color) {
+    BoxLayout& BoxLayout::set_background(SrgbColor color) {
         background_ = color;
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
         return *this;
     }
 
-    BoxLayout& BoxLayout::set_border(Color color, float thickness) {
+    BoxLayout& BoxLayout::set_border(SrgbColor color, float thickness) {
         border_ = color;
         border_thickness_ = std::max(0.0f, thickness);
         mark_dirty(TC_WIDGET_DIRTY_PAINT);
@@ -441,17 +441,17 @@ namespace termin::gui_native {
     void BoxLayout::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
         if (color_visible(background_)) {
             if (corner_radius_ > 0.0f) {
-                tc_ui_painter_fill_rounded_rect(context, bounds(), corner_radius_, background_.c_color());
+                tc_ui_painter_fill_rounded_rect(context, bounds(), corner_radius_, to_tc_ui_srgb(background_));
             } else {
-                tc_ui_painter_fill_rect(context, bounds(), background_.c_color());
+                tc_ui_painter_fill_rect(context, bounds(), to_tc_ui_srgb(background_));
             }
         }
         if (color_visible(border_) && border_thickness_ > 0.0f) {
             if (corner_radius_ > 0.0f) {
                 tc_ui_painter_stroke_rounded_rect(
-                    context, bounds(), corner_radius_, border_.c_color(), border_thickness_);
+                    context, bounds(), corner_radius_, to_tc_ui_srgb(border_), border_thickness_);
             } else {
-                tc_ui_painter_stroke_rect(context, bounds(), border_.c_color(), border_thickness_);
+                tc_ui_painter_stroke_rect(context, bounds(), to_tc_ui_srgb(border_), border_thickness_);
             }
         }
 

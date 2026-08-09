@@ -10,8 +10,8 @@ namespace termin::gui_native {
         set_preferred_size(orientation_ == Orientation::Horizontal ? tc_ui_size{24.0f, 1.0f} : tc_ui_size{1.0f, 24.0f});
     }
 
-    Separator& Separator::set_color(Color color) {
-        set_style_color(*this, TC_UI_STYLE_BACKGROUND, color.c_color());
+    Separator& Separator::set_color(SrgbColor color) {
+        set_style_color(*this, TC_UI_STYLE_BACKGROUND, to_tc_ui_srgb(color));
         return *this;
     }
 

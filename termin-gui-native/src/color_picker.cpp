@@ -104,7 +104,7 @@ namespace termin::gui_native {
         output->rgba.assign(static_cast<size_t>(width) * height * 4, 255);
         for (uint32_t y = 0; y < height; ++y) {
             for (uint32_t x = 0; x < width; ++x) {
-                Color color;
+                SrgbColor color;
                 if (kind == ColorPickerSurfaceKind::SaturationValue) {
                     const float saturation = static_cast<float>(x) / static_cast<float>(width - 1);
                     const float value = 1.0f - static_cast<float>(y) / static_cast<float>(height - 1);
@@ -114,9 +114,9 @@ namespace termin::gui_native {
                     color = ColorPickerModel::hsv_to_rgb(hue, 1.0f, 1.0f);
                 } else {
                     const float alpha = 1.0f - static_cast<float>(y) / static_cast<float>(height - 1);
-                    const Color current = model_->color();
+                    const SrgbColor current = model_->color();
                     const float checker = ((y / 6u) % 2u) == 0u ? 0.32f : 0.52f;
-                    color = Color{current.r * alpha + checker * (1.0f - alpha),
+                    color = SrgbColor{current.r * alpha + checker * (1.0f - alpha),
                                   current.g * alpha + checker * (1.0f - alpha),
                                   current.b * alpha + checker * (1.0f - alpha),
                                   1.0f};
@@ -195,38 +195,38 @@ namespace termin::gui_native {
             for (int column = 0; column < divisions; ++column) {
                 const float saturation = static_cast<float>(column) / (divisions - 1);
                 const float value = 1.0f - static_cast<float>(row) / (divisions - 1);
-                const Color color = ColorPickerModel::hsv_to_rgb(model_->hue(), saturation, value);
+                const SrgbColor color = ColorPickerModel::hsv_to_rgb(model_->hue(), saturation, value);
                 const float x0 = sv.x + sv.width * static_cast<float>(column) / divisions;
                 const float y0 = sv.y + sv.height * static_cast<float>(row) / divisions;
                 const float x1 = sv.x + sv.width * static_cast<float>(column + 1) / divisions;
                 const float y1 = sv.y + sv.height * static_cast<float>(row + 1) / divisions;
-                tc_ui_painter_fill_rect(context, tc_ui_rect{x0, y0, x1 - x0 + 0.5f, y1 - y0 + 0.5f}, color.c_color());
+                tc_ui_painter_fill_rect(context, tc_ui_rect{x0, y0, x1 - x0 + 0.5f, y1 - y0 + 0.5f}, to_tc_ui_srgb(color));
             }
         }
         const tc_ui_rect hue = hue_rect();
         constexpr int strips = 48;
         for (int row = 0; row < strips; ++row) {
             const float ratio = static_cast<float>(row) / (strips - 1);
-            const Color color = ColorPickerModel::hsv_to_rgb(ratio, 1.0f, 1.0f);
+            const SrgbColor color = ColorPickerModel::hsv_to_rgb(ratio, 1.0f, 1.0f);
             const float y0 = hue.y + hue.height * static_cast<float>(row) / strips;
             const float y1 = hue.y + hue.height * static_cast<float>(row + 1) / strips;
-            tc_ui_painter_fill_rect(context, tc_ui_rect{hue.x, y0, hue.width, y1 - y0 + 0.5f}, color.c_color());
+            tc_ui_painter_fill_rect(context, tc_ui_rect{hue.x, y0, hue.width, y1 - y0 + 0.5f}, to_tc_ui_srgb(color));
         }
         if (model_->show_alpha()) {
             const tc_ui_rect alpha = alpha_rect();
             paint_checker(context, alpha);
-            const Color current = model_->color();
+            const SrgbColor current = model_->color();
             for (int row = 0; row < strips; ++row) {
                 const float opacity = 1.0f - static_cast<float>(row) / (strips - 1);
                 const float checker = ((row / 4) & 1) == 0 ? 0.32f : 0.52f;
-                const Color blended{current.r * opacity + checker * (1.0f - opacity),
+                const SrgbColor blended{current.r * opacity + checker * (1.0f - opacity),
                                     current.g * opacity + checker * (1.0f - opacity),
                                     current.b * opacity + checker * (1.0f - opacity),
                                     1.0f};
                 const float y0 = alpha.y + alpha.height * static_cast<float>(row) / strips;
                 const float y1 = alpha.y + alpha.height * static_cast<float>(row + 1) / strips;
                 tc_ui_painter_fill_rect(
-                    context, tc_ui_rect{alpha.x, y0, alpha.width, y1 - y0 + 0.5f}, blended.c_color());
+                    context, tc_ui_rect{alpha.x, y0, alpha.width, y1 - y0 + 0.5f}, to_tc_ui_srgb(blended));
             }
         }
     }
@@ -287,12 +287,12 @@ namespace termin::gui_native {
         const tc_ui_rect new_rect{preview.x + half + gap_, preview.y, half, preview.height};
         paint_checker(context, old_rect);
         paint_checker(context, new_rect);
-        tc_ui_painter_fill_rect(context, old_rect, model_->initial_color().c_color());
-        tc_ui_painter_fill_rect(context, new_rect, model_->color().c_color());
+        tc_ui_painter_fill_rect(context, old_rect, to_tc_ui_srgb(model_->initial_color()));
+        tc_ui_painter_fill_rect(context, new_rect, to_tc_ui_srgb(model_->color()));
         tc_ui_painter_stroke_rect(context, old_rect, style.border, 1.0f);
         tc_ui_painter_stroke_rect(context, new_rect, style.border, 1.0f);
 
-        const Color current = model_->color();
+        const SrgbColor current = model_->color();
         std::array<char, 16> text{};
         if (model_->show_alpha()) {
             std::snprintf(text.data(),

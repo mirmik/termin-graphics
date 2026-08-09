@@ -40,9 +40,9 @@ namespace termin::gui_native {
         tc_ui_point offset_{};
         bool show_grid_ = true;
         float grid_step_ = 40.0f;
-        Color background_{0.10f, 0.11f, 0.13f, 1.0f};
-        Color grid_{0.17f, 0.19f, 0.24f, 1.0f};
-        Color axes_{0.30f, 0.33f, 0.42f, 1.0f};
+        SrgbColor background_{0.10f, 0.11f, 0.13f, 1.0f};
+        SrgbColor grid_{0.17f, 0.19f, 0.24f, 1.0f};
+        SrgbColor axes_{0.30f, 0.33f, 0.42f, 1.0f};
         bool panning_ = false;
         tc_ui_point pan_start_{};
         tc_ui_point pan_start_offset_{};
@@ -89,7 +89,7 @@ namespace termin::gui_native {
             return grid_step_;
         }
         void set_grid_step(float step);
-        void set_scene_colors(Color background, Color grid, Color axes);
+        void set_scene_colors(SrgbColor background, SrgbColor grid, SrgbColor axes);
 
         SceneTransform transform() const;
         tc_ui_point world_to_screen(tc_ui_point point) const;

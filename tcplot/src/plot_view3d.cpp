@@ -178,10 +178,10 @@ namespace tcplot {
             return false;
         return engine_->set_surface_colormap_reversed(static_cast<size_t>(surface_idx), reversed);
     }
-    bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, float a) {
+    bool PlotView3D::set_surface_color(int surface_idx, SrgbColor color) {
         if (surface_idx < 0)
             return false;
-        return engine_->set_surface_color(static_cast<size_t>(surface_idx), SrgbColor{r, g, b, a});
+        return engine_->set_surface_color(static_cast<size_t>(surface_idx), color);
     }
     bool PlotView3D::set_surface_grid(int surface_idx, SurfaceGridOptions options) {
         if (surface_idx < 0)

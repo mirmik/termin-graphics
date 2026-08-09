@@ -12,29 +12,29 @@ namespace termin::gui_native {
     private:
         std::shared_ptr<ColorPickerModel> model_;
         tc_widget_handle picker_handle_ = tc_widget_handle_invalid();
-        std::optional<Color> accepted_color_;
+        std::optional<SrgbColor> accepted_color_;
         size_t finished_connection_ = 0;
-        Signal<ColorDialog&, const std::optional<Color>&> color_finished_;
+        Signal<ColorDialog&, const std::optional<SrgbColor>&> color_finished_;
 
     public:
-        explicit ColorDialog(Color initial = Color{1.0f, 1.0f, 1.0f, 1.0f},
+        explicit ColorDialog(SrgbColor initial = SrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                              bool show_alpha = true,
-                             std::string title = "Color Picker");
+                             std::string title = "SrgbColor Picker");
 
         const std::shared_ptr<ColorPickerModel>& model() const {
             return model_;
         }
-        Color color() const {
+        SrgbColor color() const {
             return model_->color();
         }
-        void set_color(Color color) {
+        void set_color(SrgbColor color) {
             model_->set_color(color);
         }
         tc_widget_handle picker_handle() const {
             return picker_handle_;
         }
         bool show(tc_ui_document_handle document, tc_ui_rect viewport);
-        Signal<ColorDialog&, const std::optional<Color>&>& color_finished() {
+        Signal<ColorDialog&, const std::optional<SrgbColor>&>& color_finished() {
             return color_finished_;
         }
 

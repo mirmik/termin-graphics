@@ -17,11 +17,11 @@ namespace termin::gui_native {
         bool pressed_ = false;
         bool keyboard_pressed_ = false;
         std::string tooltip_;
-        std::optional<Color> background_color_;
-        std::optional<Color> hover_color_;
-        std::optional<Color> pressed_color_;
-        std::optional<Color> active_color_;
-        std::optional<Color> icon_color_;
+        std::optional<SrgbColor> background_color_;
+        std::optional<SrgbColor> hover_color_;
+        std::optional<SrgbColor> pressed_color_;
+        std::optional<SrgbColor> active_color_;
+        std::optional<SrgbColor> icon_color_;
         std::optional<float> corner_radius_;
         std::optional<float> font_size_;
         Signal<IconButton&> clicked_;
@@ -35,11 +35,11 @@ namespace termin::gui_native {
         const std::string& tooltip() const {
             return tooltip_;
         }
-        void set_background_color(Color color);
-        void set_hover_color(Color color);
-        void set_pressed_color(Color color);
-        void set_active_color(Color color);
-        void set_icon_color(Color color);
+        void set_background_color(SrgbColor color);
+        void set_hover_color(SrgbColor color);
+        void set_pressed_color(SrgbColor color);
+        void set_active_color(SrgbColor color);
+        void set_icon_color(SrgbColor color);
         void set_corner_radius(float radius);
         void set_font_size(float size);
         bool active() const {

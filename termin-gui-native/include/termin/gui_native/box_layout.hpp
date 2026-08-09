@@ -13,8 +13,8 @@ namespace termin::gui_native {
         EdgeInsets padding_{};
         float spacing_ = 0.0f;
         CrossAxisAlignment cross_axis_alignment_ = CrossAxisAlignment::Stretch;
-        Color background_{0.0f, 0.0f, 0.0f, 0.0f};
-        Color border_{0.0f, 0.0f, 0.0f, 0.0f};
+        SrgbColor background_{0.0f, 0.0f, 0.0f, 0.0f};
+        SrgbColor border_{0.0f, 0.0f, 0.0f, 0.0f};
         float border_thickness_ = 0.0f;
         float corner_radius_ = 0.0f;
         std::vector<LayoutItem> items_;
@@ -25,8 +25,8 @@ namespace termin::gui_native {
         BoxLayout& set_padding(EdgeInsets padding);
         BoxLayout& set_spacing(float spacing);
         BoxLayout& set_cross_axis_alignment(CrossAxisAlignment alignment);
-        BoxLayout& set_background(Color color);
-        BoxLayout& set_border(Color color, float thickness = 1.0f);
+        BoxLayout& set_background(SrgbColor color);
+        BoxLayout& set_border(SrgbColor color, float thickness = 1.0f);
         BoxLayout& set_corner_radius(float radius);
         void add_child(tc_widget_handle handle);
         void add_child(tc_widget_handle handle, LayoutPolicy policy, float value = 0.0f);

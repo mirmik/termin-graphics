@@ -3,6 +3,7 @@
 #include "widgets_test_support.hpp"
 
 namespace termin_gui_native_test {
+    using termin::SrgbColor;
     namespace {
 
         class WidthDependentWidget final : public NativeWidget {
@@ -33,7 +34,7 @@ namespace termin_gui_native_test {
         auto& root = ui.make_root<BoxLayout>(Orientation::Vertical, "root");
         root.set_padding(EdgeInsets{4.0f, 6.0f, 4.0f, 6.0f})
             .set_spacing(2.0f)
-            .set_background(Color{0.1f, 0.1f, 0.1f, 1.0f});
+            .set_background(SrgbColor{0.1f, 0.1f, 0.1f, 1.0f});
 
         auto& first = ui.make<Panel>("first");
         auto& second = ui.make<Panel>("second");
@@ -109,7 +110,7 @@ namespace termin_gui_native_test {
         assert(root.has_dirty_flags(TC_WIDGET_DIRTY_PAINT));
 
         root.clear_dirty(TC_WIDGET_DIRTY_MASK);
-        root.set_background(Color{0.1f, 0.2f, 0.3f, 1.0f});
+        root.set_background(SrgbColor{0.1f, 0.2f, 0.3f, 1.0f});
         assert(root.has_dirty_flags(TC_WIDGET_DIRTY_PAINT));
         assert(!root.has_dirty_flags(TC_WIDGET_DIRTY_LAYOUT));
 

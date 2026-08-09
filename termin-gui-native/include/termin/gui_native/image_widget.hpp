@@ -11,7 +11,7 @@ namespace termin::gui_native {
     private:
         uint32_t texture_id_ = 0;
         tc_ui_size intrinsic_size_{64.0f, 64.0f};
-        Color tint_{1.0f, 1.0f, 1.0f, 1.0f};
+        SrgbColor tint_{1.0f, 1.0f, 1.0f, 1.0f};
         ImageFit fit_ = ImageFit::Contain;
 
     public:
@@ -27,7 +27,7 @@ namespace termin::gui_native {
         tc_ui_size intrinsic_size() const {
             return intrinsic_size_;
         }
-        void set_tint(Color tint);
+        void set_tint(SrgbColor tint);
         ImageFit fit() const {
             return fit_;
         }

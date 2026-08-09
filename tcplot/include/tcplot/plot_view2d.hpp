@@ -71,8 +71,8 @@ namespace tcplot {
         void set_title(const char* title);
         void set_x_label(const char* label);
         void set_y_label(const char* label);
-        bool set_line_color(int idx, float r, float g, float b, float a);
-        bool set_scatter_color(int idx, float r, float g, float b, float a);
+        bool set_line_color(int idx, SrgbColor color);
+        bool set_scatter_color(int idx, SrgbColor color);
         bool set_line_style(int idx, LineStyle style, float dash_px = 8.0f, float gap_px = 5.0f);
         bool set_line_colormap_reversed(int idx, bool reversed);
 

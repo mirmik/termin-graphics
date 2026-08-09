@@ -16,9 +16,9 @@ namespace termin::gui_native {
 
     public:
         explicit Button(std::string text = {});
-        Button(std::string text, Color fill);
-        explicit Button(Color fill);
-        Button& set_accent(Color color);
+        Button(std::string text, SrgbColor fill);
+        explicit Button(SrgbColor fill);
+        Button& set_accent(SrgbColor color);
         Button& set_text(std::string text);
         Signal<Button&>& clicked() {
             return clicked_;

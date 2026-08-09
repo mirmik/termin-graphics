@@ -290,13 +290,13 @@ namespace termin::gui_native {
         body->set_spacing(10.0f);
         places_panel->set_padding(EdgeInsets{10.0f, 10.0f, 10.0f, 10.0f})
             .set_spacing(8.0f)
-            .set_background(Color{0.10f, 0.11f, 0.13f, 0.96f})
-            .set_border(Color{0.25f, 0.27f, 0.31f, 1.0f}, 1.0f)
+            .set_background(SrgbColor{0.10f, 0.11f, 0.13f, 0.96f})
+            .set_border(SrgbColor{0.25f, 0.27f, 0.31f, 1.0f}, 1.0f)
             .set_corner_radius(6.0f);
         files_panel->set_padding(EdgeInsets{10.0f, 10.0f, 10.0f, 10.0f})
             .set_spacing(8.0f)
-            .set_background(Color{0.12f, 0.13f, 0.16f, 0.96f})
-            .set_border(Color{0.28f, 0.30f, 0.35f, 1.0f}, 1.0f)
+            .set_background(SrgbColor{0.12f, 0.13f, 0.16f, 0.96f})
+            .set_border(SrgbColor{0.28f, 0.30f, 0.35f, 1.0f}, 1.0f)
             .set_corner_radius(6.0f);
         filter_row->set_spacing(8.0f);
         name_row->set_spacing(8.0f);
@@ -304,8 +304,8 @@ namespace termin::gui_native {
         list->set_row_height(44.0f);
         places->set_min_size(tc_ui_size{210.0f, 300.0f});
         list->set_min_size(tc_ui_size{480.0f, 300.0f});
-        selection->set_color(Color{0.68f, 0.72f, 0.79f, 1.0f});
-        error->set_color(Color{0.92f, 0.32f, 0.32f, 1.0f});
+        selection->set_color(SrgbColor{0.68f, 0.72f, 0.79f, 1.0f});
+        error->set_color(SrgbColor{0.92f, 0.32f, 0.32f, 1.0f});
 
         navigation->add_fixed_child(*back, 34.0f);
         navigation->add_fixed_child(*forward, 34.0f);

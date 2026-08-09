@@ -511,9 +511,9 @@ void bind_gui_native_scene_views(nb::module_& m) {
             "set_scene_colors",
             [](const SceneViewRef& self, termin::SrgbColor background, termin::SrgbColor grid, termin::SrgbColor axes) {
                 self.get().set_scene_colors(
-                    termin::gui_native::Color{background.r, background.g, background.b, background.a},
-                    termin::gui_native::Color{grid.r, grid.g, grid.b, grid.a},
-                    termin::gui_native::Color{axes.r, axes.g, axes.b, axes.a});
+                    background,
+                    grid,
+                    axes);
             },
             nb::arg("background"),
             nb::arg("grid"),

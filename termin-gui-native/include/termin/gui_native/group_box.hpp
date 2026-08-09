@@ -15,8 +15,8 @@ namespace termin::gui_native {
         explicit GroupBox(std::string title = {}, const char* debug_name = nullptr);
         GroupBox& set_title(std::string title);
         GroupBox& set_padding(EdgeInsets padding);
-        GroupBox& set_background(Color color);
-        GroupBox& set_border(Color color, float thickness = 1.0f);
+        GroupBox& set_background(SrgbColor color);
+        GroupBox& set_border(SrgbColor color, float thickness = 1.0f);
         void set_content(tc_widget_handle handle);
         void set_content(const Widget& widget) {
             set_content(widget.handle());
