@@ -141,7 +141,20 @@ class GLBMaterialData:
                  occlusion_texture: Optional[int] = None,
                  emissive_texture: Optional[int] = None,
                  emissive_factor: Optional[np.ndarray] = None,
-                 extension_texture_usages: Optional[List[tuple[int, str]]] = None):
+                 extension_texture_usages: Optional[List[tuple[int, str]]] = None,
+                 base_color_texcoord: int = 0,
+                 metallic_roughness_texcoord: int = 0,
+                 normal_texcoord: int = 0,
+                 occlusion_texcoord: int = 0,
+                 emissive_texcoord: int = 0,
+                 occlusion_strength: float = 1.0,
+                 alpha_mode: int = 0,
+                 alpha_cutoff: float = 0.5,
+                 double_sided: bool = False,
+                 unlit: bool = False,
+                 ior: float = 1.5,
+                 specular_factor: float = 1.0,
+                 specular_color_factor: Optional[np.ndarray] = None):
         self.name = name
         self.base_color = base_color  # RGBA
         self.base_color_texture = base_color_texture  # texture index
@@ -153,6 +166,19 @@ class GLBMaterialData:
         self.occlusion_texture = occlusion_texture
         self.emissive_texture = emissive_texture
         self.emissive_factor = emissive_factor  # RGB
+        self.base_color_texcoord = base_color_texcoord
+        self.metallic_roughness_texcoord = metallic_roughness_texcoord
+        self.normal_texcoord = normal_texcoord
+        self.occlusion_texcoord = occlusion_texcoord
+        self.emissive_texcoord = emissive_texcoord
+        self.occlusion_strength = occlusion_strength
+        self.alpha_mode = alpha_mode
+        self.alpha_cutoff = alpha_cutoff
+        self.double_sided = double_sided
+        self.unlit = unlit
+        self.ior = ior
+        self.specular_factor = specular_factor
+        self.specular_color_factor = specular_color_factor
         usages = extension_texture_usages or []
         for texture_index, encoding in usages:
             if encoding not in {"srgb", "linear"}:
@@ -914,35 +940,53 @@ def _parse_materials(gltf: dict, scene_data: GLBSceneData):
 
         base_color = None
         base_color_texture = None
+        base_color_texcoord = 0
         metallic_factor = 1.0
         roughness_factor = 1.0
         metallic_roughness_texture = None
+        metallic_roughness_texcoord = 0
         normal_texture = None
+        normal_texcoord = 0
         normal_scale = 1.0
         occlusion_texture = None
+        occlusion_texcoord = 0
+        occlusion_strength = 1.0
         emissive_texture = None
+        emissive_texcoord = 0
         emissive_factor = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
         pbr = mat.get("pbrMetallicRoughness", {})
         if "baseColorFactor" in pbr:
             base_color = np.array(pbr["baseColorFactor"], dtype=np.float32)
         if "baseColorTexture" in pbr:
-            base_color_texture = pbr["baseColorTexture"].get("index")
+            base_color_view = pbr["baseColorTexture"]
+            base_color_texture = base_color_view.get("index")
+            base_color_texcoord = int(base_color_view.get("texCoord", 0))
         if "metallicFactor" in pbr:
             metallic_factor = float(pbr["metallicFactor"])
         if "roughnessFactor" in pbr:
             roughness_factor = float(pbr["roughnessFactor"])
         if "metallicRoughnessTexture" in pbr:
-            metallic_roughness_texture = pbr["metallicRoughnessTexture"].get("index")
+            metallic_roughness_view = pbr["metallicRoughnessTexture"]
+            metallic_roughness_texture = metallic_roughness_view.get("index")
+            metallic_roughness_texcoord = int(
+                metallic_roughness_view.get("texCoord", 0)
+            )
         if "normalTexture" in mat:
             normal_info = mat["normalTexture"]
             normal_texture = normal_info.get("index")
+            normal_texcoord = int(normal_info.get("texCoord", 0))
             if "scale" in normal_info:
                 normal_scale = float(normal_info["scale"])
         if "occlusionTexture" in mat:
-            occlusion_texture = mat["occlusionTexture"].get("index")
+            occlusion_info = mat["occlusionTexture"]
+            occlusion_texture = occlusion_info.get("index")
+            occlusion_texcoord = int(occlusion_info.get("texCoord", 0))
+            occlusion_strength = float(occlusion_info.get("strength", 1.0))
         if "emissiveTexture" in mat:
-            emissive_texture = mat["emissiveTexture"].get("index")
+            emissive_info = mat["emissiveTexture"]
+            emissive_texture = emissive_info.get("index")
+            emissive_texcoord = int(emissive_info.get("texCoord", 0))
         if "emissiveFactor" in mat:
             emissive_factor = np.array(mat["emissiveFactor"], dtype=np.float32)
 
@@ -954,9 +998,15 @@ def _parse_materials(gltf: dict, scene_data: GLBSceneData):
             roughness_factor=roughness_factor,
             metallic_roughness_texture=metallic_roughness_texture,
             normal_texture=normal_texture,
+            base_color_texcoord=base_color_texcoord,
+            metallic_roughness_texcoord=metallic_roughness_texcoord,
+            normal_texcoord=normal_texcoord,
             normal_scale=normal_scale,
             occlusion_texture=occlusion_texture,
+            occlusion_texcoord=occlusion_texcoord,
+            occlusion_strength=occlusion_strength,
             emissive_texture=emissive_texture,
+            emissive_texcoord=emissive_texcoord,
             emissive_factor=emissive_factor,
         ))
 

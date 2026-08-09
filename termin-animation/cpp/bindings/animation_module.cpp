@@ -14,6 +14,89 @@ namespace nb = nanobind;
 using namespace termin;
 using namespace termin::animation;
 
+namespace {
+
+tc_animation_path animation_path_from_string(const std::string& value) {
+    if (value == "translation")
+        return TC_ANIMATION_PATH_TRANSLATION;
+    if (value == "rotation")
+        return TC_ANIMATION_PATH_ROTATION;
+    if (value == "scale")
+        return TC_ANIMATION_PATH_SCALE;
+    if (value == "weights")
+        return TC_ANIMATION_PATH_WEIGHTS;
+    throw std::invalid_argument("unsupported animation path: " + value);
+}
+
+const char* animation_path_name(tc_animation_path value) {
+    switch (value) {
+    case TC_ANIMATION_PATH_TRANSLATION:
+        return "translation";
+    case TC_ANIMATION_PATH_ROTATION:
+        return "rotation";
+    case TC_ANIMATION_PATH_SCALE:
+        return "scale";
+    case TC_ANIMATION_PATH_WEIGHTS:
+        return "weights";
+    }
+    return "invalid";
+}
+
+tc_animation_interpolation animation_interpolation_from_string(const std::string& value) {
+    if (value == "linear")
+        return TC_ANIMATION_INTERPOLATION_LINEAR;
+    if (value == "step")
+        return TC_ANIMATION_INTERPOLATION_STEP;
+    if (value == "cubic_spline")
+        return TC_ANIMATION_INTERPOLATION_CUBIC_SPLINE;
+    throw std::invalid_argument("unsupported animation interpolation: " + value);
+}
+
+const char* animation_interpolation_name(tc_animation_interpolation value) {
+    switch (value) {
+    case TC_ANIMATION_INTERPOLATION_LINEAR:
+        return "linear";
+    case TC_ANIMATION_INTERPOLATION_STEP:
+        return "step";
+    case TC_ANIMATION_INTERPOLATION_CUBIC_SPLINE:
+        return "cubic_spline";
+    }
+    return "invalid";
+}
+
+std::vector<double> doubles_from_sequence(nb::handle value, const char* field) {
+    nb::sequence sequence;
+    try {
+        sequence = nb::cast<nb::sequence>(value);
+    } catch (const nb::cast_error&) {
+        throw std::invalid_argument(std::string("animation track '") + field + "' must be a sequence");
+    }
+    std::vector<double> result;
+    result.reserve(nb::len(sequence));
+    for (size_t i = 0; i < nb::len(sequence); ++i)
+        result.push_back(nb::cast<double>(sequence[i]));
+    return result;
+}
+
+nb::dict animation_track_to_dict(const tc_animation_track& track) {
+    nb::dict result;
+    result["target_node_index"] = track.target_node_index;
+    result["path"] = animation_path_name((tc_animation_path)track.path);
+    result["interpolation"] = animation_interpolation_name((tc_animation_interpolation)track.interpolation);
+    result["components"] = track.components;
+    nb::list times;
+    for (size_t i = 0; i < track.key_count; ++i)
+        times.append(track.times[i]);
+    nb::list values;
+    for (size_t i = 0; i < track.value_count; ++i)
+        values.append(track.values[i]);
+    result["times"] = std::move(times);
+    result["values"] = std::move(values);
+    return result;
+}
+
+} // namespace
+
 void bind_tc_animation_clip(nb::module_& m) {
     nb::class_<tc_animation>(m, "TcAnimationData")
         .def_prop_rw(
@@ -37,6 +120,7 @@ void bind_tc_animation_clip(nb::module_& m) {
         .def_prop_ro("duration", &TcAnimationClip::duration)
         .def_prop_ro("tps", &TcAnimationClip::tps)
         .def_prop_ro("channel_count", &TcAnimationClip::channel_count)
+        .def_prop_ro("track_count", &TcAnimationClip::track_count)
         .def_prop_ro("loop", &TcAnimationClip::loop)
         .def("set_tps", &TcAnimationClip::set_tps, nb::arg("value"))
         .def("set_loop", &TcAnimationClip::set_loop, nb::arg("value"))
@@ -44,6 +128,78 @@ void bind_tc_animation_clip(nb::module_& m) {
         .def("recompute_duration", &TcAnimationClip::recompute_duration)
         .def("bump_version", &TcAnimationClip::bump_version)
         .def("find_channel", &TcAnimationClip::find_channel, nb::arg("target_name"))
+        .def_prop_ro(
+            "tracks",
+            [](const TcAnimationClip& self) {
+                nb::list result;
+                tc_animation* animation = self.get();
+                if (!animation)
+                    return result;
+                for (size_t i = 0; i < animation->track_count; ++i)
+                    result.append(animation_track_to_dict(animation->tracks[i]));
+                return result;
+            })
+        .def(
+            "set_tracks",
+            [](TcAnimationClip& self, nb::list track_data) {
+                struct PendingTrack {
+                    tc_animation_track_desc desc{};
+                    std::vector<double> times;
+                    std::vector<double> values;
+                };
+
+                std::vector<PendingTrack> pending;
+                pending.reserve(nb::len(track_data));
+                for (size_t i = 0; i < nb::len(track_data); ++i) {
+                    nb::dict data = nb::cast<nb::dict>(track_data[i]);
+                    const char* required[] = {
+                        "target_node_index", "path", "interpolation", "components", "times", "values"};
+                    for (const char* field : required) {
+                        if (!data.contains(field))
+                            throw std::invalid_argument(std::string("animation track is missing '") + field + "'");
+                    }
+
+                    PendingTrack track;
+                    track.desc.target_node_index = nb::cast<int32_t>(data["target_node_index"]);
+                    track.desc.path = animation_path_from_string(nb::cast<std::string>(data["path"]));
+                    track.desc.interpolation =
+                        animation_interpolation_from_string(nb::cast<std::string>(data["interpolation"]));
+                    track.desc.components = nb::cast<uint32_t>(data["components"]);
+                    track.times = doubles_from_sequence(data["times"], "times");
+                    track.values = doubles_from_sequence(data["values"], "values");
+                    pending.push_back(std::move(track));
+                }
+
+                std::vector<tc_animation_track_desc> descriptors;
+                descriptors.reserve(pending.size());
+                for (PendingTrack& track : pending) {
+                    track.desc.key_count = track.times.size();
+                    track.desc.value_count = track.values.size();
+                    track.desc.times = track.times.data();
+                    track.desc.values = track.values.data();
+                    descriptors.push_back(track.desc);
+                }
+                if (!self.replace_tracks(descriptors.data(), descriptors.size()))
+                    throw std::runtime_error("animation track replacement failed; previous payload was preserved");
+            },
+            nb::arg("tracks"))
+        .def(
+            "sample_track",
+            [](const TcAnimationClip& self, size_t track_index, double t_seconds) {
+                const tc_animation_track* track = self.get_track(track_index);
+                if (!track)
+                    throw std::out_of_range("animation track index is out of range");
+                std::vector<double> values(track->components);
+                const double t_ticks = t_seconds * self.tps();
+                if (!tc_animation_track_sample(track, t_ticks, values.data(), values.size()))
+                    throw std::runtime_error("animation track sampling is unsupported for this path/interpolation");
+                nb::list result;
+                for (double value : values)
+                    result.append(value);
+                return result;
+            },
+            nb::arg("track_index"),
+            nb::arg("t_seconds"))
         .def(
             "sample",
             [](const TcAnimationClip& self, double t_seconds) {

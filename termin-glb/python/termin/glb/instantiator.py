@@ -936,6 +936,26 @@ def _configure_import_material(
     from termin.geombase import Vec4
     from tcbase import log
 
+    texture_coordinates = (
+        ("baseColor", glb_material.base_color_texture, glb_material.base_color_texcoord),
+        (
+            "metallicRoughness",
+            glb_material.metallic_roughness_texture,
+            glb_material.metallic_roughness_texcoord,
+        ),
+        ("normal", glb_material.normal_texture, glb_material.normal_texcoord),
+        ("occlusion", glb_material.occlusion_texture, glb_material.occlusion_texcoord),
+        ("emissive", glb_material.emissive_texture, glb_material.emissive_texcoord),
+    )
+    for semantic, texture_index, texcoord in texture_coordinates:
+        if texture_index is not None and texcoord != 0:
+            message = (
+                f"glTF material '{glb_material.name}' {semantic} texture uses "
+                f"TEXCOORD_{texcoord}; the current Termin material path supports only TEXCOORD_0"
+            )
+            log.error(f"[glb_instantiator] {message}")
+            raise ValueError(message)
+
     base_color = glb_material.base_color
     if base_color is None:
         base_color = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32)
@@ -1178,14 +1198,15 @@ class GLBInstantiateResult:
         return None
 
 
-def _ordered_node_targets(scene_data: "GLBSceneData", node_to_entity: Dict[int, Entity]) -> List[Entity]:
-    """Return imported node entities in stable GLB node-index order."""
-    result: List[Entity] = []
-    for node_index in range(len(scene_data.nodes)):
-        entity = node_to_entity.get(node_index)
-        if entity is not None:
-            result.append(entity)
-    return result
+def _ordered_node_targets(
+    scene_data: "GLBSceneData", node_to_entity: Dict[int, Entity]
+) -> List[Optional[Entity]]:
+    """Return an exact GLB-node-indexed target table.
+
+    Missing/uninstantiated nodes remain ``None`` so later indices never shift.
+    The native AnimationPlayer binding preserves those empty slots.
+    """
+    return [node_to_entity.get(index) for index in range(len(scene_data.nodes))]
 
 
 def _fallback_skeleton_root_from_bones(bone_entities: List[Entity]) -> Optional[Entity]:

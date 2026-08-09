@@ -115,6 +115,11 @@ namespace termin {
                 return a ? a->channel_count : 0;
             }
 
+            size_t track_count() const {
+                tc_animation* a = get();
+                return a ? a->track_count : 0;
+            }
+
             bool loop() const {
                 tc_animation* a = get();
                 return a && a->loop;
@@ -129,6 +134,16 @@ namespace termin {
             tc_animation_channel* get_channel(size_t index) const {
                 tc_animation* a = get();
                 return a ? tc_animation_get_channel(a, index) : nullptr;
+            }
+
+            const tc_animation_track* get_track(size_t index) const {
+                tc_animation* a = get();
+                return a ? tc_animation_get_track(a, index) : nullptr;
+            }
+
+            bool replace_tracks(const tc_animation_track_desc* tracks, size_t count) {
+                tc_animation* a = get();
+                return a ? tc_animation_replace_tracks(a, tracks, count) : false;
             }
 
             int find_channel(const char* target_name) const {

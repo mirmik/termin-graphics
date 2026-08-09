@@ -29,6 +29,52 @@ def _write_glb(path: Path, document: dict, binary: bytes) -> Path:
     return path
 
 
+def _write_bulk_animation_glb(path: Path) -> Path:
+    times = struct.pack("<2f", 0.0, 1.0)
+    translations = struct.pack("<6f", 1.0, 2.0, 3.0, 7.0, 8.0, 9.0)
+    scales = struct.pack("<6f", 1.0, 2.0, 3.0, 3.0, 6.0, 9.0)
+    binary = times + translations + scales
+    return _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(times)},
+                {
+                    "buffer": 0,
+                    "byteOffset": len(times),
+                    "byteLength": len(translations),
+                },
+                {
+                    "buffer": 0,
+                    "byteOffset": len(times) + len(translations),
+                    "byteLength": len(scales),
+                },
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR"},
+                {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC3"},
+            ],
+            "nodes": [{"name": "Animated"}],
+            "animations": [
+                {
+                    "name": "ExactTracks",
+                    "samplers": [
+                        {"input": 0, "output": 1, "interpolation": "STEP"},
+                        {"input": 0, "output": 2, "interpolation": "LINEAR"},
+                    ],
+                    "channels": [
+                        {"sampler": 0, "target": {"node": 0, "path": "translation"}},
+                        {"sampler": 1, "target": {"node": 0, "path": "scale"}},
+                    ],
+                }
+            ],
+        },
+        binary,
+    )
+
+
 def _write_indexed_triangle_glb(path: Path, component_type: int | None, indices=(0, 1, 2)) -> Path:
     positions = b"".join(
         struct.pack("<4f", *position, 99.0)
@@ -111,12 +157,19 @@ def _write_sparse_triangle_glb(path: Path) -> Path:
     )
 
 
-def _write_normalized_tangent_glb(path: Path) -> Path:
+def _write_normalized_tangent_glb(path: Path, *, include_tangent: bool = True) -> Path:
     positions = struct.pack("<9f", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     normals = struct.pack("<9b", 127, 0, -128, 127, 0, -128, 127, 0, -128)
     uvs = struct.pack("<6H", 0, 0, 65535, 0, 0, 65535)
     tangents = struct.pack("<12b", 127, 0, 0, 127, 127, 0, 0, 127, 127, 0, 0, -128)
     binary = positions + normals + b"\0" * 3 + uvs + tangents
+    attributes = {
+        "POSITION": 0,
+        "NORMAL": 1,
+        "TEXCOORD_0": 2,
+    }
+    if include_tangent:
+        attributes["TANGENT"] = 3
     return _write_glb(
         path,
         {
@@ -156,12 +209,7 @@ def _write_normalized_tangent_glb(path: Path) -> Path:
                     "name": "NormalizedTangent",
                     "primitives": [
                         {
-                            "attributes": {
-                                "POSITION": 0,
-                                "NORMAL": 1,
-                                "TEXCOORD_0": 2,
-                                "TANGENT": 3,
-                            },
+                            "attributes": attributes,
                             "mode": 4,
                         }
                     ],
@@ -202,6 +250,86 @@ def _write_multi_primitive_glb(path: Path) -> Path:
     )
 
 
+def _write_material_texture_glb(path: Path, *, texture_transform: bool = False) -> Path:
+    positions = struct.pack("<9f", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    fallback = b"PNG-fallback"
+    webp = b"WEBP-selected"
+    base_color_view = {"index": 0, "texCoord": 0}
+    if texture_transform:
+        base_color_view["extensions"] = {
+            "KHR_texture_transform": {"offset": [0.25, 0.5]}
+        }
+    binary = positions + fallback + webp
+    return _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "extensionsUsed": ["EXT_texture_webp"],
+            "extensionsRequired": ["EXT_texture_webp"],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+                {
+                    "buffer": 0,
+                    "byteOffset": len(positions),
+                    "byteLength": len(fallback),
+                },
+                {
+                    "buffer": 0,
+                    "byteOffset": len(positions) + len(fallback),
+                    "byteLength": len(webp),
+                },
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}
+            ],
+            "images": [
+                {"name": "Fallback", "mimeType": "image/png", "bufferView": 1},
+                {"name": "SelectedWebP", "mimeType": "image/webp", "bufferView": 2},
+            ],
+            "samplers": [
+                {"magFilter": 9728, "minFilter": 9987, "wrapS": 33071, "wrapT": 33648}
+            ],
+            "textures": [
+                {
+                    "name": "WebPTexture",
+                    "source": 0,
+                    "sampler": 0,
+                    "extensions": {"EXT_texture_webp": {"source": 1}},
+                },
+                {"name": "DefaultSampler", "source": 1},
+            ],
+            "materials": [
+                {
+                    "name": "NativePBR",
+                    "pbrMetallicRoughness": {
+                        "baseColorFactor": [0.1, 0.2, 0.3, 0.4],
+                        "baseColorTexture": base_color_view,
+                        "metallicFactor": 0.6,
+                        "roughnessFactor": 0.7,
+                        "metallicRoughnessTexture": {"index": 1},
+                    },
+                    "normalTexture": {"index": 1, "scale": 0.8},
+                    "occlusionTexture": {"index": 1, "strength": 0.9},
+                    "emissiveTexture": {"index": 0},
+                    "emissiveFactor": [0.4, 0.5, 0.6],
+                    "alphaMode": "MASK",
+                    "alphaCutoff": 0.25,
+                    "doubleSided": True,
+                }
+            ],
+            "meshes": [
+                {
+                    "name": "MaterialTriangle",
+                    "primitives": [
+                        {"attributes": {"POSITION": 0}, "material": 0, "mode": 4}
+                    ],
+                }
+            ],
+        },
+        binary,
+    )
+
+
 def test_native_backend_reports_pinned_cgltf_revision():
     info = _glb_native.backend_info()
 
@@ -222,6 +350,7 @@ def test_native_document_discovers_and_builds_box_without_python_geometry_arrays
             primitive_count=1,
             vertex_count=24,
             index_count=36,
+            skinned=False,
         ),
     )
 
@@ -310,6 +439,23 @@ def test_native_static_mesh_decodes_normalized_attributes_and_tangents(tmp_path)
     np.testing.assert_allclose(vertices[:, 11], [1.0, 1.0, -1.0])
 
 
+def test_native_static_mesh_generates_pbr_tangents_when_uvs_are_present(tmp_path):
+    path = _write_normalized_tangent_glb(
+        tmp_path / "generated-tangent.glb",
+        include_tangent=False,
+    )
+    mesh = NativeStaticMeshDocument(path).build_mesh(
+        0,
+        "pytest-native-generated-tangent",
+        convert_to_z_up=False,
+    )
+
+    assert mesh.stride == 48
+    vertices = np.asarray(mesh.mesh.get_vertices_buffer()).reshape(3, 12)
+    np.testing.assert_allclose(vertices[:, 8:11], [[0.0, 0.0, 1.0]] * 3)
+    np.testing.assert_allclose(vertices[:, 11], [-1.0, -1.0, -1.0])
+
+
 def test_native_static_mesh_preserves_primitive_sections_and_material_slots(tmp_path):
     path = _write_multi_primitive_glb(tmp_path / "multi.glb")
     document = NativeStaticMeshDocument(path)
@@ -333,3 +479,113 @@ def test_native_static_mesh_reports_context_for_out_of_range_index(tmp_path):
         match=r"invalid-index\.glb: mesh\[0\] primitive\[0\] INDICES accessor index\[2\]=9",
     ):
         NativeStaticMeshDocument(path)
+
+
+def test_native_material_texture_discovery_selects_webp_and_preserves_sampler(tmp_path):
+    path = _write_material_texture_glb(tmp_path / "materials.glb")
+    document = NativeStaticMeshDocument(path)
+
+    assert [image.encoded_size for image in document.images] == [12, 13]
+    assert document.image_payload(0) == b"PNG-fallback"
+    assert document.image_payload(1) == b"WEBP-selected"
+    assert document.textures[0].image_index == 1
+    assert document.textures[0].selected_webp
+    assert (
+        document.textures[0].mag_filter,
+        document.textures[0].min_filter,
+        document.textures[0].wrap_s,
+        document.textures[0].wrap_t,
+    ) == (9728, 9987, 33071, 33648)
+    assert document.textures[1].sampler_index is None
+    assert (
+        document.textures[1].mag_filter,
+        document.textures[1].min_filter,
+        document.textures[1].wrap_s,
+        document.textures[1].wrap_t,
+    ) == (9729, 9729, 10497, 10497)
+
+    material = document.materials[0]
+    assert material.base_color_factor == pytest.approx((0.1, 0.2, 0.3, 0.4))
+    assert (material.metallic_factor, material.roughness_factor) == pytest.approx((0.6, 0.7))
+    assert material.base_color_texture.texture_index == 0
+    assert material.normal_texture.scale == pytest.approx(0.8)
+    assert material.occlusion_texture.scale == pytest.approx(0.9)
+    assert material.alpha_mode == 1
+    assert material.alpha_cutoff == pytest.approx(0.25)
+    assert material.double_sided
+
+    materials, textures = document.build_material_texture_data()
+    assert textures[0].data == b"WEBP-selected"
+    assert textures[0].name == "SelectedWebP"
+    assert textures[0].image_index == 1
+    assert textures[0].sampler == {
+        "magFilter": 9728,
+        "minFilter": 9987,
+        "wrapS": 33071,
+        "wrapT": 33648,
+    }
+    assert materials[0].base_color_texture == 0
+    assert materials[0].occlusion_strength == pytest.approx(0.9)
+
+
+def test_native_material_bridge_rejects_texture_transform(tmp_path):
+    path = _write_material_texture_glb(tmp_path / "texture-transform.glb", texture_transform=True)
+    document = NativeStaticMeshDocument(path)
+
+    assert document.materials[0].base_color_texture.has_transform
+    with pytest.raises(RuntimeError, match="KHR_texture_transform"):
+        document.build_material_texture_data()
+
+
+def test_native_document_rejects_unknown_required_extension(tmp_path):
+    path = tmp_path / "required-extension.glb"
+    positions = struct.pack(
+        "<12f",
+        1.0,
+        2.0,
+        3.0,
+        99.0,
+        4.0,
+        5.0,
+        6.0,
+        99.0,
+        7.0,
+        8.0,
+        9.0,
+        99.0,
+    )
+    _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "extensionsRequired": ["VENDOR_not_supported"],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(positions), "byteStride": 16}
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}
+            ],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 4}]}],
+        },
+        positions,
+    )
+    with pytest.raises(RuntimeError, match="VENDOR_not_supported"):
+        NativeStaticMeshDocument(path)
+
+
+def test_native_animation_bridge_preserves_step_vec3_scale_and_node_index(tmp_path):
+    path = _write_bulk_animation_glb(tmp_path / "bulk-animation.glb")
+    document = NativeStaticMeshDocument(path)
+
+    clip = document.build_animation_clip(
+        0,
+        "pytest-native-glb-bulk-animation",
+        convert_to_z_up=True,
+    )
+
+    assert clip.name == "ExactTracks"
+    assert clip.track_count == 2
+    assert clip.tracks[0]["target_node_index"] == 0
+    assert clip.tracks[0]["interpolation"] == "step"
+    assert clip.sample_track(0, 0.5) == pytest.approx([1.0, -3.0, 2.0])
+    assert clip.sample_track(1, 0.5) == pytest.approx([2.0, 6.0, 4.0])

@@ -32,8 +32,21 @@ int main() {
     if (!termin_glb_document_mesh_info(document, 0, &info, &error))
         return 8;
     if (std::strcmp(info.name, "Mesh") != 0 || info.primitive_count != 1 || info.vertex_count != 24 ||
-        info.index_count != 36)
+        info.index_count != 36 || info.skinned)
         return 9;
+    if (termin_glb_document_material_count(document) != 1 || termin_glb_document_image_count(document) != 0 ||
+        termin_glb_document_texture_count(document) != 0)
+        return 16;
+    termin_glb_material_info material = {};
+    if (!termin_glb_document_material_info(document, 0, &material, &error) ||
+        std::strcmp(material.name, "Red") != 0 || material.base_color_texture.present)
+        return 17;
+    if (termin_glb_document_node_count(document) != 2 || termin_glb_document_skin_count(document) != 0 ||
+        termin_glb_document_animation_count(document) != 0)
+        return 18;
+    termin_glb_node_info node = {};
+    if (!termin_glb_document_node_info(document, 0, &node, &error) || !node.default_scene_root)
+        return 19;
 
     tc_mesh_init();
     if (!termin_glb_document_build_static_mesh(document, 0, "native-box", "Native Box", true, &error))

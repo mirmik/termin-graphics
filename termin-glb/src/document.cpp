@@ -5,6 +5,7 @@
 #include <tgfx/resources/tc_mesh_registry.h>
 
 #include <cstdarg>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -87,6 +88,108 @@ namespace {
             return false;
         *result = left * right;
         return true;
+    }
+
+    void add_cross(float* destination, const float* origin, const float* left, const float* right) {
+        const float ax = left[0] - origin[0];
+        const float ay = left[1] - origin[1];
+        const float az = left[2] - origin[2];
+        const float bx = right[0] - origin[0];
+        const float by = right[1] - origin[1];
+        const float bz = right[2] - origin[2];
+        destination[0] += ay * bz - az * by;
+        destination[1] += az * bx - ax * bz;
+        destination[2] += ax * by - ay * bx;
+    }
+
+    void normalize3(float* vector) {
+        const float length = std::sqrt(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]);
+        if (length <= 1e-8f)
+            return;
+        vector[0] /= length;
+        vector[1] /= length;
+        vector[2] /= length;
+    }
+
+    float dot3(const float* left, const float* right) {
+        return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+    }
+
+    void cross3(const float* left, const float* right, float* destination) {
+        destination[0] = left[1] * right[2] - left[2] * right[1];
+        destination[1] = left[2] * right[0] - left[0] * right[2];
+        destination[2] = left[0] * right[1] - left[1] * right[0];
+    }
+
+    bool is_supported_required_extension(const char* extension) {
+        static const char* supported[] = {
+            "EXT_texture_webp",
+            "KHR_mesh_quantization",
+            "KHR_texture_basisu",
+        };
+        for (const char* candidate : supported) {
+            if (std::strcmp(extension, candidate) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    bool validate_required_extensions(const cgltf_data* data, const char* path, termin_glb_error* error) {
+        for (cgltf_size index = 0; index < data->extensions_required_count; ++index) {
+            const char* extension = data->extensions_required[index];
+            if (!extension || !is_supported_required_extension(extension)) {
+                set_error(error,
+                          TERMIN_GLB_ERROR_UNSUPPORTED,
+                          "%s: required glTF extension '%s' is not supported by the native adapter",
+                          path,
+                          extension ? extension : "<null>");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template <typename T>
+    bool pointer_index(const T* pointer, const T* base, size_t count, size_t* index) {
+        if (!pointer || !base || pointer < base || pointer >= base + count)
+            return false;
+        *index = static_cast<size_t>(pointer - base);
+        return true;
+    }
+
+    const cgltf_image* selected_image(const cgltf_texture& texture) {
+        if (texture.has_webp)
+            return texture.webp_image;
+        if (texture.has_basisu)
+            return texture.basisu_image;
+        return texture.image;
+    }
+
+    const unsigned char* buffer_view_data(const cgltf_buffer_view* view) {
+        if (!view)
+            return nullptr;
+        if (view->data)
+            return static_cast<const unsigned char*>(view->data);
+        if (!view->buffer || !view->buffer->data)
+            return nullptr;
+        return static_cast<const unsigned char*>(view->buffer->data) + view->offset;
+    }
+
+    int resolved_filter(cgltf_filter_type value) {
+        return value == cgltf_filter_type_undefined ? 9729 : static_cast<int>(value);
+    }
+
+    int resolved_wrap(cgltf_wrap_mode value) {
+        return value == static_cast<cgltf_wrap_mode>(0) ? 10497 : static_cast<int>(value);
+    }
+
+    termin_glb_texture_view_info texture_view_info(const cgltf_data* data, const cgltf_texture_view& view) {
+        termin_glb_texture_view_info info = {};
+        info.present = pointer_index(view.texture, data->textures, data->textures_count, &info.texture_index);
+        info.texcoord = view.texcoord;
+        info.scale = view.scale;
+        info.has_transform = view.has_transform;
+        return info;
     }
 
     class MappedFile {
@@ -323,6 +426,40 @@ namespace {
         return true;
     }
 
+    bool validate_rig_accessors(cgltf_data* data, const char* path, termin_glb_error* error) {
+        for (cgltf_size skin_index = 0; skin_index < data->skins_count; ++skin_index) {
+            const cgltf_skin& skin = data->skins[skin_index];
+            if (skin.inverse_bind_matrices &&
+                (!accessor_storage_is_valid(skin.inverse_bind_matrices) ||
+                 skin.inverse_bind_matrices->type != cgltf_type_mat4 ||
+                 skin.inverse_bind_matrices->count != skin.joints_count)) {
+                set_error(error,
+                          TERMIN_GLB_ERROR_INVALID_FORMAT,
+                          "%s: skin[%zu] has invalid inverse bind matrices",
+                          path,
+                          static_cast<size_t>(skin_index));
+                return false;
+            }
+        }
+        for (cgltf_size animation_index = 0; animation_index < data->animations_count; ++animation_index) {
+            const cgltf_animation& animation = data->animations[animation_index];
+            for (cgltf_size sampler_index = 0; sampler_index < animation.samplers_count; ++sampler_index) {
+                const cgltf_animation_sampler& sampler = animation.samplers[sampler_index];
+                if (!sampler.input || !sampler.output || !accessor_storage_is_valid(sampler.input) ||
+                    !accessor_storage_is_valid(sampler.output) || sampler.input->type != cgltf_type_scalar) {
+                    set_error(error,
+                              TERMIN_GLB_ERROR_INVALID_FORMAT,
+                              "%s: animation[%zu] sampler[%zu] has invalid input/output accessors",
+                              path,
+                              static_cast<size_t>(animation_index),
+                              static_cast<size_t>(sampler_index));
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     bool primitive_counts(const cgltf_primitive& primitive, size_t* vertices, size_t* indices) {
         const cgltf_accessor* positions = find_attribute(primitive, cgltf_attribute_type_position);
         if (!positions)
@@ -383,6 +520,12 @@ struct termin_glb_document {
     cgltf_data* data = nullptr;
     std::string path;
     std::vector<std::string> fallback_mesh_names;
+    std::vector<std::string> fallback_image_names;
+    std::vector<std::string> fallback_texture_names;
+    std::vector<std::string> fallback_material_names;
+    std::vector<std::string> fallback_node_names;
+    std::vector<std::string> fallback_skin_names;
+    std::vector<std::string> fallback_animation_names;
 
     ~termin_glb_document() {
         if (data)
@@ -423,6 +566,10 @@ termin_glb_document* termin_glb_document_open(const char* path, termin_glb_error
         delete document;
         return nullptr;
     }
+    if (!validate_required_extensions(document->data, document->path.c_str(), error)) {
+        delete document;
+        return nullptr;
+    }
     result = cgltf_load_buffers(&options, document->data, path);
     if (result != cgltf_result_success) {
         set_error(error,
@@ -434,6 +581,10 @@ termin_glb_document* termin_glb_document_open(const char* path, termin_glb_error
         return nullptr;
     }
     if (!validate_mesh_accessors(document->data, document->path.c_str(), error)) {
+        delete document;
+        return nullptr;
+    }
+    if (!validate_rig_accessors(document->data, document->path.c_str(), error)) {
         delete document;
         return nullptr;
     }
@@ -450,8 +601,26 @@ termin_glb_document* termin_glb_document_open(const char* path, termin_glb_error
 
     try {
         document->fallback_mesh_names.reserve(document->data->meshes_count);
+        document->fallback_image_names.reserve(document->data->images_count);
+        document->fallback_texture_names.reserve(document->data->textures_count);
+        document->fallback_material_names.reserve(document->data->materials_count);
+        document->fallback_node_names.reserve(document->data->nodes_count);
+        document->fallback_skin_names.reserve(document->data->skins_count);
+        document->fallback_animation_names.reserve(document->data->animations_count);
         for (cgltf_size i = 0; i < document->data->meshes_count; ++i)
             document->fallback_mesh_names.emplace_back("Mesh_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->images_count; ++i)
+            document->fallback_image_names.emplace_back("Image_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->textures_count; ++i)
+            document->fallback_texture_names.emplace_back("Texture_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->materials_count; ++i)
+            document->fallback_material_names.emplace_back("Material_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->nodes_count; ++i)
+            document->fallback_node_names.emplace_back("Node_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->skins_count; ++i)
+            document->fallback_skin_names.emplace_back("Skin_" + std::to_string(i));
+        for (cgltf_size i = 0; i < document->data->animations_count; ++i)
+            document->fallback_animation_names.emplace_back("Animation_" + std::to_string(i));
     } catch (const std::bad_alloc&) {
         set_error(error, TERMIN_GLB_ERROR_OUT_OF_MEMORY, "%s: cannot allocate mesh discovery data", path);
         delete document;
@@ -490,10 +659,26 @@ bool termin_glb_document_mesh_info(const termin_glb_document* document,
     const cgltf_mesh& mesh = document->data->meshes[mesh_index];
     size_t vertex_count = 0;
     size_t index_count = 0;
+    bool any_skinned = false;
+    bool any_static = false;
     for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count; ++primitive_index) {
+        const cgltf_primitive& primitive = mesh.primitives[primitive_index];
+        const bool has_joints = find_attribute(primitive, cgltf_attribute_type_joints) != nullptr;
+        const bool has_weights = find_attribute(primitive, cgltf_attribute_type_weights) != nullptr;
+        if (has_joints != has_weights) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: mesh[%zu] primitive[%zu] must provide JOINTS_0 and WEIGHTS_0 together",
+                      document->path.c_str(),
+                      mesh_index,
+                      static_cast<size_t>(primitive_index));
+            return false;
+        }
+        any_skinned = any_skinned || has_joints;
+        any_static = any_static || !has_joints;
         size_t primitive_vertices = 0;
         size_t primitive_indices = 0;
-        if (!primitive_counts(mesh.primitives[primitive_index], &primitive_vertices, &primitive_indices)) {
+        if (!primitive_counts(primitive, &primitive_vertices, &primitive_indices)) {
             set_error(error,
                       TERMIN_GLB_ERROR_INVALID_FORMAT,
                       "%s: mesh[%zu] primitive[%zu] has no POSITION accessor",
@@ -513,19 +698,515 @@ bool termin_glb_document_mesh_info(const termin_glb_document* document,
         }
     }
 
+    if (any_skinned && any_static) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_UNSUPPORTED,
+                  "%s: mesh[%zu] mixes skinned and static primitives",
+                  document->path.c_str(),
+                  mesh_index);
+        return false;
+    }
+
     info->name = mesh.name ? mesh.name : document->fallback_mesh_names[mesh_index].c_str();
     info->primitive_count = mesh.primitives_count;
     info->vertex_count = vertex_count;
     info->index_count = index_count;
+    info->skinned = any_skinned;
     return true;
 }
 
-bool termin_glb_document_build_static_mesh(termin_glb_document* document,
-                                           size_t mesh_index,
-                                           const char* mesh_uuid,
-                                           const char* mesh_name,
-                                           bool convert_to_z_up,
-                                           termin_glb_error* error) {
+size_t termin_glb_document_image_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->images_count : 0;
+}
+
+bool termin_glb_document_image_info(const termin_glb_document* document,
+                                    size_t image_index,
+                                    termin_glb_image_info* info,
+                                    termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "image discovery requires a document and output pointer");
+        return false;
+    }
+    if (image_index >= document->data->images_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: image index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  image_index,
+                  static_cast<size_t>(document->data->images_count));
+        return false;
+    }
+    const cgltf_image& image = document->data->images[image_index];
+    info->name = image.name ? image.name : document->fallback_image_names[image_index].c_str();
+    info->has_name = image.name != nullptr;
+    info->mime_type = image.mime_type ? image.mime_type : "";
+    info->uri = image.uri ? image.uri : "";
+    info->embedded = image.buffer_view != nullptr;
+    info->encoded_size = image.buffer_view ? image.buffer_view->size : 0;
+    return true;
+}
+
+bool termin_glb_document_image_payload(const termin_glb_document* document,
+                                       size_t image_index,
+                                       const unsigned char** data,
+                                       size_t* size,
+                                       termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !data || !size) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "image payload requires a document and output pointers");
+        return false;
+    }
+    if (image_index >= document->data->images_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: image index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  image_index,
+                  static_cast<size_t>(document->data->images_count));
+        return false;
+    }
+    const cgltf_image& image = document->data->images[image_index];
+    if (!image.buffer_view) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_UNSUPPORTED,
+                  "%s: image[%zu] '%s' uses URI '%s'; native GLB image payloads currently require an embedded bufferView",
+                  document->path.c_str(),
+                  image_index,
+                  image.name ? image.name : document->fallback_image_names[image_index].c_str(),
+                  image.uri ? image.uri : "");
+        return false;
+    }
+    const unsigned char* payload = buffer_view_data(image.buffer_view);
+    if (!payload || image.buffer_view->size == 0 ||
+        !buffer_view_range_is_valid(image.buffer_view, 0, image.buffer_view->size)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: image[%zu] '%s' embedded bufferView is empty or invalid",
+                  document->path.c_str(),
+                  image_index,
+                  image.name ? image.name : document->fallback_image_names[image_index].c_str());
+        return false;
+    }
+    *data = payload;
+    *size = image.buffer_view->size;
+    return true;
+}
+
+size_t termin_glb_document_texture_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->textures_count : 0;
+}
+
+bool termin_glb_document_texture_info(const termin_glb_document* document,
+                                      size_t texture_index,
+                                      termin_glb_texture_info* info,
+                                      termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "texture discovery requires a document and output pointer");
+        return false;
+    }
+    if (texture_index >= document->data->textures_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: texture index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  texture_index,
+                  static_cast<size_t>(document->data->textures_count));
+        return false;
+    }
+    const cgltf_texture& texture = document->data->textures[texture_index];
+    const cgltf_image* image = selected_image(texture);
+    *info = {};
+    info->name = texture.name ? texture.name : document->fallback_texture_names[texture_index].c_str();
+    info->has_name = texture.name != nullptr;
+    info->has_image = pointer_index(image, document->data->images, document->data->images_count, &info->image_index);
+    if (!info->has_image) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: texture[%zu] '%s' has no valid selected image",
+                  document->path.c_str(),
+                  texture_index,
+                  info->name);
+        return false;
+    }
+    info->has_sampler = pointer_index(
+        texture.sampler, document->data->samplers, document->data->samplers_count, &info->sampler_index);
+    info->selected_webp = texture.has_webp;
+    info->selected_basisu = !texture.has_webp && texture.has_basisu;
+    info->mag_filter = resolved_filter(texture.sampler ? texture.sampler->mag_filter : cgltf_filter_type_undefined);
+    info->min_filter = resolved_filter(texture.sampler ? texture.sampler->min_filter : cgltf_filter_type_undefined);
+    info->wrap_s = resolved_wrap(texture.sampler ? texture.sampler->wrap_s : static_cast<cgltf_wrap_mode>(0));
+    info->wrap_t = resolved_wrap(texture.sampler ? texture.sampler->wrap_t : static_cast<cgltf_wrap_mode>(0));
+    return true;
+}
+
+size_t termin_glb_document_material_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->materials_count : 0;
+}
+
+bool termin_glb_document_material_info(const termin_glb_document* document,
+                                       size_t material_index,
+                                       termin_glb_material_info* info,
+                                       termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "material discovery requires a document and output pointer");
+        return false;
+    }
+    if (material_index >= document->data->materials_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: material index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  material_index,
+                  static_cast<size_t>(document->data->materials_count));
+        return false;
+    }
+    const cgltf_material& material = document->data->materials[material_index];
+    const cgltf_pbr_metallic_roughness& pbr = material.pbr_metallic_roughness;
+    *info = {};
+    info->name = material.name ? material.name : document->fallback_material_names[material_index].c_str();
+    std::memcpy(info->base_color_factor, pbr.base_color_factor, sizeof(info->base_color_factor));
+    info->metallic_factor = pbr.metallic_factor;
+    info->roughness_factor = pbr.roughness_factor;
+    info->base_color_texture = texture_view_info(document->data, pbr.base_color_texture);
+    info->metallic_roughness_texture = texture_view_info(document->data, pbr.metallic_roughness_texture);
+    info->normal_texture = texture_view_info(document->data, material.normal_texture);
+    info->occlusion_texture = texture_view_info(document->data, material.occlusion_texture);
+    info->emissive_texture = texture_view_info(document->data, material.emissive_texture);
+    std::memcpy(info->emissive_factor, material.emissive_factor, sizeof(info->emissive_factor));
+    info->alpha_mode = static_cast<int>(material.alpha_mode);
+    info->alpha_cutoff = material.alpha_cutoff;
+    info->double_sided = material.double_sided;
+    info->unlit = material.unlit;
+    info->ior = material.has_ior ? material.ior.ior : 1.5f;
+    info->specular_factor = material.has_specular ? material.specular.specular_factor : 1.0f;
+    const float default_specular_color[3] = {1.0f, 1.0f, 1.0f};
+    std::memcpy(info->specular_color_factor,
+                material.has_specular ? material.specular.specular_color_factor : default_specular_color,
+                sizeof(info->specular_color_factor));
+    return true;
+}
+
+size_t termin_glb_document_node_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->nodes_count : 0;
+}
+
+bool termin_glb_document_node_info(const termin_glb_document* document,
+                                   size_t node_index,
+                                   termin_glb_node_info* info,
+                                   termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "node discovery requires a document and output pointer");
+        return false;
+    }
+    if (node_index >= document->data->nodes_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: node index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  node_index,
+                  static_cast<size_t>(document->data->nodes_count));
+        return false;
+    }
+    const cgltf_node& node = document->data->nodes[node_index];
+    *info = {};
+    info->name = node.name ? node.name : document->fallback_node_names[node_index].c_str();
+    info->has_parent = pointer_index(node.parent, document->data->nodes, document->data->nodes_count, &info->parent_index);
+    info->has_mesh = pointer_index(node.mesh, document->data->meshes, document->data->meshes_count, &info->mesh_index);
+    info->has_skin = pointer_index(node.skin, document->data->skins, document->data->skins_count, &info->skin_index);
+    const cgltf_scene* scene = document->data->scene;
+    if (!scene && document->data->scenes_count > 0)
+        scene = &document->data->scenes[0];
+    if (scene) {
+        for (cgltf_size root_index = 0; root_index < scene->nodes_count; ++root_index)
+            info->default_scene_root = info->default_scene_root || scene->nodes[root_index] == &node;
+    }
+    info->has_matrix = node.has_matrix;
+    std::memcpy(info->translation, node.translation, sizeof(info->translation));
+    std::memcpy(info->rotation, node.rotation, sizeof(info->rotation));
+    std::memcpy(info->scale, node.scale, sizeof(info->scale));
+    std::memcpy(info->matrix, node.matrix, sizeof(info->matrix));
+    return true;
+}
+
+size_t termin_glb_document_skin_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->skins_count : 0;
+}
+
+bool termin_glb_document_skin_info(const termin_glb_document* document,
+                                   size_t skin_index,
+                                   termin_glb_skin_info* info,
+                                   termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "skin discovery requires a document and output pointer");
+        return false;
+    }
+    if (skin_index >= document->data->skins_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: skin index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  skin_index,
+                  static_cast<size_t>(document->data->skins_count));
+        return false;
+    }
+    const cgltf_skin& skin = document->data->skins[skin_index];
+    *info = {};
+    info->name = skin.name ? skin.name : document->fallback_skin_names[skin_index].c_str();
+    info->joint_count = skin.joints_count;
+    info->has_skeleton = pointer_index(
+        skin.skeleton, document->data->nodes, document->data->nodes_count, &info->skeleton_node_index);
+    info->has_inverse_bind_matrices = skin.inverse_bind_matrices != nullptr;
+    return true;
+}
+
+bool termin_glb_document_skin_joints(const termin_glb_document* document,
+                                     size_t skin_index,
+                                     size_t* node_indices,
+                                     size_t node_index_count,
+                                     termin_glb_error* error) {
+    termin_glb_skin_info info = {};
+    if (!termin_glb_document_skin_info(document, skin_index, &info, error))
+        return false;
+    if (node_index_count != info.joint_count || (node_index_count > 0 && !node_indices)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INTERNAL,
+                  "%s: skin[%zu] joint output size mismatch (expected=%zu actual=%zu)",
+                  document->path.c_str(),
+                  skin_index,
+                  info.joint_count,
+                  node_index_count);
+        return false;
+    }
+    const cgltf_skin& skin = document->data->skins[skin_index];
+    for (size_t joint_index = 0; joint_index < node_index_count; ++joint_index) {
+        if (!pointer_index(skin.joints[joint_index],
+                           document->data->nodes,
+                           document->data->nodes_count,
+                           &node_indices[joint_index])) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: skin[%zu] joint[%zu] has an invalid node reference",
+                      document->path.c_str(),
+                      skin_index,
+                      joint_index);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool termin_glb_document_skin_inverse_bind_matrices(const termin_glb_document* document,
+                                                    size_t skin_index,
+                                                    float* matrices,
+                                                    size_t float_count,
+                                                    termin_glb_error* error) {
+    termin_glb_skin_info info = {};
+    if (!termin_glb_document_skin_info(document, skin_index, &info, error))
+        return false;
+    size_t expected = 0;
+    if (!checked_mul(info.joint_count, size_t{16}, &expected) || float_count != expected ||
+        (float_count > 0 && !matrices)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INTERNAL,
+                  "%s: skin[%zu] inverse-bind output size mismatch (expected=%zu actual=%zu)",
+                  document->path.c_str(),
+                  skin_index,
+                  expected,
+                  float_count);
+        return false;
+    }
+    const cgltf_accessor* accessor = document->data->skins[skin_index].inverse_bind_matrices;
+    for (size_t joint_index = 0; joint_index < info.joint_count; ++joint_index) {
+        float source[16] = {};
+        if (accessor && !cgltf_accessor_read_float(accessor, joint_index, source, 16)) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: skin[%zu] cannot read inverse bind matrix[%zu]",
+                      document->path.c_str(),
+                      skin_index,
+                      joint_index);
+            return false;
+        }
+        float* destination = matrices + joint_index * 16;
+        if (!accessor) {
+            destination[0] = destination[5] = destination[10] = destination[15] = 1.0f;
+            continue;
+        }
+        for (size_t row = 0; row < 4; ++row)
+            for (size_t column = 0; column < 4; ++column)
+                destination[row * 4 + column] = source[column * 4 + row];
+    }
+    return true;
+}
+
+size_t termin_glb_document_animation_count(const termin_glb_document* document) {
+    return document && document->data ? document->data->animations_count : 0;
+}
+
+bool termin_glb_document_animation_info(const termin_glb_document* document,
+                                        size_t animation_index,
+                                        termin_glb_animation_info* info,
+                                        termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "animation discovery requires a document and output pointer");
+        return false;
+    }
+    if (animation_index >= document->data->animations_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: animation index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  animation_index,
+                  static_cast<size_t>(document->data->animations_count));
+        return false;
+    }
+    const cgltf_animation& animation = document->data->animations[animation_index];
+    *info = {};
+    info->name = animation.name ? animation.name : document->fallback_animation_names[animation_index].c_str();
+    info->sampler_count = animation.samplers_count;
+    info->channel_count = animation.channels_count;
+    return true;
+}
+
+bool termin_glb_document_animation_sampler_info(const termin_glb_document* document,
+                                                size_t animation_index,
+                                                size_t sampler_index,
+                                                termin_glb_animation_sampler_info* info,
+                                                termin_glb_error* error) {
+    termin_glb_animation_info animation_info = {};
+    if (!termin_glb_document_animation_info(document, animation_index, &animation_info, error))
+        return false;
+    if (!info || sampler_index >= animation_info.sampler_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: animation[%zu] sampler index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  animation_index,
+                  sampler_index,
+                  animation_info.sampler_count);
+        return false;
+    }
+    const cgltf_animation_sampler& sampler = document->data->animations[animation_index].samplers[sampler_index];
+    const size_t components = cgltf_num_components(sampler.output->type);
+    size_t output_float_count = 0;
+    if (components == 0 || !checked_mul(sampler.output->count, components, &output_float_count)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: animation[%zu] sampler[%zu] output size overflows",
+                  document->path.c_str(),
+                  animation_index,
+                  sampler_index);
+        return false;
+    }
+    *info = {};
+    info->input_count = sampler.input->count;
+    info->output_float_count = output_float_count;
+    info->output_components = components;
+    info->interpolation = static_cast<int>(sampler.interpolation);
+    return true;
+}
+
+bool termin_glb_document_animation_sampler_payload(const termin_glb_document* document,
+                                                   size_t animation_index,
+                                                   size_t sampler_index,
+                                                   float* input,
+                                                   size_t input_count,
+                                                   float* output,
+                                                   size_t output_float_count,
+                                                   termin_glb_error* error) {
+    termin_glb_animation_sampler_info info = {};
+    if (!termin_glb_document_animation_sampler_info(document, animation_index, sampler_index, &info, error))
+        return false;
+    if (input_count != info.input_count || output_float_count != info.output_float_count ||
+        (input_count > 0 && !input) || (output_float_count > 0 && !output)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INTERNAL,
+                  "%s: animation[%zu] sampler[%zu] payload size mismatch",
+                  document->path.c_str(),
+                  animation_index,
+                  sampler_index);
+        return false;
+    }
+    const cgltf_animation_sampler& sampler = document->data->animations[animation_index].samplers[sampler_index];
+    for (size_t key_index = 0; key_index < input_count; ++key_index) {
+        if (!cgltf_accessor_read_float(sampler.input, key_index, input + key_index, 1)) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: animation[%zu] sampler[%zu] cannot read input[%zu]",
+                      document->path.c_str(),
+                      animation_index,
+                      sampler_index,
+                      key_index);
+            return false;
+        }
+    }
+    const size_t output_count = sampler.output->count;
+    for (size_t value_index = 0; value_index < output_count; ++value_index) {
+        if (!cgltf_accessor_read_float(sampler.output,
+                                       value_index,
+                                       output + value_index * info.output_components,
+                                       info.output_components)) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: animation[%zu] sampler[%zu] cannot read output[%zu]",
+                      document->path.c_str(),
+                      animation_index,
+                      sampler_index,
+                      value_index);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool termin_glb_document_animation_channel_info(const termin_glb_document* document,
+                                                size_t animation_index,
+                                                size_t channel_index,
+                                                termin_glb_animation_channel_info* info,
+                                                termin_glb_error* error) {
+    termin_glb_animation_info animation_info = {};
+    if (!termin_glb_document_animation_info(document, animation_index, &animation_info, error))
+        return false;
+    if (!info || channel_index >= animation_info.channel_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: animation[%zu] channel index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  animation_index,
+                  channel_index,
+                  animation_info.channel_count);
+        return false;
+    }
+    const cgltf_animation& animation = document->data->animations[animation_index];
+    const cgltf_animation_channel& channel = animation.channels[channel_index];
+    *info = {};
+    if (!pointer_index(channel.sampler, animation.samplers, animation.samplers_count, &info->sampler_index)) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: animation[%zu] channel[%zu] has an invalid sampler reference",
+                  document->path.c_str(),
+                  animation_index,
+                  channel_index);
+        return false;
+    }
+    info->has_target_node = pointer_index(
+        channel.target_node, document->data->nodes, document->data->nodes_count, &info->target_node_index);
+    info->target_path = static_cast<int>(channel.target_path);
+    return true;
+}
+
+bool termin_glb_document_build_mesh(termin_glb_document* document,
+                                    size_t mesh_index,
+                                    const char* mesh_uuid,
+                                    const char* mesh_name,
+                                    bool convert_to_z_up,
+                                    termin_glb_error* error) {
     termin_glb_error_clear(error);
     if (!document || !document->data || !mesh_uuid || mesh_uuid[0] == '\0') {
         set_error(error, TERMIN_GLB_ERROR_INTERNAL, "static mesh build requires a document and non-empty UUID");
@@ -560,6 +1241,7 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
     bool has_normals = false;
     bool has_texcoords = false;
     bool has_tangents = false;
+    bool is_skinned = false;
     for (cgltf_size primitive_index = 0; primitive_index < source_mesh.primitives_count; ++primitive_index) {
         const cgltf_primitive& primitive = source_mesh.primitives[primitive_index];
         if (primitive.type != cgltf_primitive_type_triangles) {
@@ -573,24 +1255,40 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
                       static_cast<int>(primitive.type));
             return false;
         }
-        if (find_attribute(primitive, cgltf_attribute_type_joints) ||
-            find_attribute(primitive, cgltf_attribute_type_weights)) {
+        const cgltf_accessor* joints = find_attribute(primitive, cgltf_attribute_type_joints);
+        const cgltf_accessor* weights = find_attribute(primitive, cgltf_attribute_type_weights);
+        if ((joints != nullptr) != (weights != nullptr)) {
             set_error(error,
-                      TERMIN_GLB_ERROR_UNSUPPORTED,
-                      "%s: mesh[%zu] '%s' primitive[%zu] is skinned; skinning is handled by the rig migration",
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: mesh[%zu] '%s' primitive[%zu] must provide JOINTS_0 and WEIGHTS_0 together",
                       document->path.c_str(),
                       mesh_index,
                       info.name,
                       static_cast<size_t>(primitive_index));
             return false;
         }
+        if ((joints != nullptr) != info.skinned) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_UNSUPPORTED,
+                      "%s: mesh[%zu] '%s' mixes skinned and static primitives",
+                      document->path.c_str(),
+                      mesh_index,
+                      info.name);
+            return false;
+        }
+        is_skinned = is_skinned || joints != nullptr;
         has_normals = has_normals || find_attribute(primitive, cgltf_attribute_type_normal);
         has_texcoords = has_texcoords || find_attribute(primitive, cgltf_attribute_type_texcoord);
         has_tangents = has_tangents || find_attribute(primitive, cgltf_attribute_type_tangent);
     }
 
     tc_vertex_layout layout = {};
-    if (has_tangents)
+    // The production PBR path declares a tangent input. Match the legacy GLB
+    // adapter by deriving tangents whenever UVs are available, even when the
+    // source file omits the optional TANGENT accessor.
+    if (is_skinned)
+        layout = tc_vertex_layout_skinned();
+    else if (has_tangents || has_texcoords)
         layout = tc_vertex_layout_pos_normal_uv_tangent();
     else if (has_texcoords)
         layout = tc_vertex_layout_pos_normal_uv();
@@ -621,11 +1319,15 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
             const cgltf_accessor* normals = find_attribute(primitive, cgltf_attribute_type_normal);
             const cgltf_accessor* texcoords = find_attribute(primitive, cgltf_attribute_type_texcoord);
             const cgltf_accessor* tangents = find_attribute(primitive, cgltf_attribute_type_tangent);
+            const cgltf_accessor* joints = find_attribute(primitive, cgltf_attribute_type_joints);
+            const cgltf_accessor* weights = find_attribute(primitive, cgltf_attribute_type_weights);
 
             if (positions->type != cgltf_type_vec3 ||
                 (normals && !accessor_shape_is(normals, cgltf_type_vec3, vertex_count)) ||
                 (texcoords && !accessor_shape_is(texcoords, cgltf_type_vec2, vertex_count)) ||
-                (tangents && !accessor_shape_is(tangents, cgltf_type_vec4, vertex_count))) {
+                (tangents && !accessor_shape_is(tangents, cgltf_type_vec4, vertex_count)) ||
+                (joints && !accessor_shape_is(joints, cgltf_type_vec4, vertex_count)) ||
+                (weights && !accessor_shape_is(weights, cgltf_type_vec4, vertex_count))) {
                 set_error(error,
                           TERMIN_GLB_ERROR_INVALID_FORMAT,
                           "%s: mesh[%zu] '%s' primitive[%zu] has incompatible static vertex accessor shape/count",
@@ -702,6 +1404,26 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
                     if (convert_to_z_up)
                         convert_vector_to_z_up(destination + 8);
                 }
+                if (joints && !read_attribute(joints,
+                                               vertex_index,
+                                               destination + 12,
+                                               4,
+                                               document->path.c_str(),
+                                               mesh_index,
+                                               primitive_index,
+                                               "JOINTS_0",
+                                               error))
+                    goto cleanup;
+                if (weights && !read_attribute(weights,
+                                                vertex_index,
+                                                destination + 16,
+                                                4,
+                                                document->path.c_str(),
+                                                mesh_index,
+                                                primitive_index,
+                                                "WEIGHTS_0",
+                                                error))
+                    goto cleanup;
             }
 
             const size_t primitive_index_count = primitive.indices ? primitive.indices->count : vertex_count;
@@ -722,6 +1444,105 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
                     goto cleanup;
                 }
                 builder.indices[index_base + local_index] = static_cast<uint32_t>(vertex_base + source_index);
+            }
+
+            const bool tangent_layout = is_skinned || has_tangents || has_texcoords;
+            if (!is_skinned && tangent_layout && !normals) {
+                for (size_t local_index = 0; local_index + 2 < primitive_index_count; local_index += 3) {
+                    const uint32_t i0 = builder.indices[index_base + local_index];
+                    const uint32_t i1 = builder.indices[index_base + local_index + 1];
+                    const uint32_t i2 = builder.indices[index_base + local_index + 2];
+                    float* v0 = reinterpret_cast<float*>(static_cast<unsigned char*>(builder.vertices) +
+                                                         static_cast<size_t>(i0) * layout.stride);
+                    float* v1 = reinterpret_cast<float*>(static_cast<unsigned char*>(builder.vertices) +
+                                                         static_cast<size_t>(i1) * layout.stride);
+                    float* v2 = reinterpret_cast<float*>(static_cast<unsigned char*>(builder.vertices) +
+                                                         static_cast<size_t>(i2) * layout.stride);
+                    add_cross(v0 + 3, v0, v1, v2);
+                    add_cross(v1 + 3, v0, v1, v2);
+                    add_cross(v2 + 3, v0, v1, v2);
+                }
+                for (size_t vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
+                    float* destination = reinterpret_cast<float*>(
+                        static_cast<unsigned char*>(builder.vertices) +
+                        (vertex_base + vertex_index) * layout.stride);
+                    normalize3(destination + 3);
+                }
+            }
+
+            if (!is_skinned && tangent_layout && !tangents) {
+                std::vector<float> tangent_1(vertex_count * 3, 0.0f);
+                std::vector<float> tangent_2(vertex_count * 3, 0.0f);
+                for (size_t local_index = 0; local_index + 2 < primitive_index_count; local_index += 3) {
+                    const size_t i0 = builder.indices[index_base + local_index] - vertex_base;
+                    const size_t i1 = builder.indices[index_base + local_index + 1] - vertex_base;
+                    const size_t i2 = builder.indices[index_base + local_index + 2] - vertex_base;
+                    const float* v0 = reinterpret_cast<const float*>(
+                        static_cast<const unsigned char*>(builder.vertices) + (vertex_base + i0) * layout.stride);
+                    const float* v1 = reinterpret_cast<const float*>(
+                        static_cast<const unsigned char*>(builder.vertices) + (vertex_base + i1) * layout.stride);
+                    const float* v2 = reinterpret_cast<const float*>(
+                        static_cast<const unsigned char*>(builder.vertices) + (vertex_base + i2) * layout.stride);
+                    const float x1 = v1[0] - v0[0];
+                    const float x2 = v2[0] - v0[0];
+                    const float y1 = v1[1] - v0[1];
+                    const float y2 = v2[1] - v0[1];
+                    const float z1 = v1[2] - v0[2];
+                    const float z2 = v2[2] - v0[2];
+                    const float s1 = v1[6] - v0[6];
+                    const float s2 = v2[6] - v0[6];
+                    const float t1 = v1[7] - v0[7];
+                    const float t2 = v2[7] - v0[7];
+                    const float determinant = s1 * t2 - s2 * t1;
+                    if (std::fabs(determinant) <= 1e-8f)
+                        continue;
+                    const float reciprocal = 1.0f / determinant;
+                    const float sdir[3] = {
+                        (t2 * x1 - t1 * x2) * reciprocal,
+                        (t2 * y1 - t1 * y2) * reciprocal,
+                        (t2 * z1 - t1 * z2) * reciprocal,
+                    };
+                    const float tdir[3] = {
+                        (s1 * x2 - s2 * x1) * reciprocal,
+                        (s1 * y2 - s2 * y1) * reciprocal,
+                        (s1 * z2 - s2 * z1) * reciprocal,
+                    };
+                    for (const size_t index : {i0, i1, i2}) {
+                        for (size_t component = 0; component < 3; ++component) {
+                            tangent_1[index * 3 + component] += sdir[component];
+                            tangent_2[index * 3 + component] += tdir[component];
+                        }
+                    }
+                }
+                for (size_t vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
+                    float* destination = reinterpret_cast<float*>(
+                        static_cast<unsigned char*>(builder.vertices) +
+                        (vertex_base + vertex_index) * layout.stride);
+                    const float* normal = destination + 3;
+                    const float* accumulated = tangent_1.data() + vertex_index * 3;
+                    const float projection = dot3(normal, accumulated);
+                    float tangent[3] = {
+                        accumulated[0] - normal[0] * projection,
+                        accumulated[1] - normal[1] * projection,
+                        accumulated[2] - normal[2] * projection,
+                    };
+                    normalize3(tangent);
+                    if (dot3(tangent, tangent) <= 1e-8f) {
+                        const float reference[3] = {
+                            0.0f,
+                            std::fabs(normal[2]) > 0.9f ? 1.0f : 0.0f,
+                            std::fabs(normal[2]) > 0.9f ? 0.0f : 1.0f,
+                        };
+                        cross3(reference, normal, tangent);
+                        normalize3(tangent);
+                    }
+                    destination[8] = tangent[0];
+                    destination[9] = tangent[1];
+                    destination[10] = tangent[2];
+                    float bitangent[3] = {};
+                    cross3(normal, tangent, bitangent);
+                    destination[11] = dot3(bitangent, tangent_2.data() + vertex_index * 3) < 0.0f ? -1.0f : 1.0f;
+                }
             }
 
             uint32_t material_slot = 0;
@@ -789,4 +1610,14 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
 cleanup:
     tc_mesh_data_builder_discard(&builder);
     return success;
+}
+
+bool termin_glb_document_build_static_mesh(termin_glb_document* document,
+                                           size_t mesh_index,
+                                           const char* mesh_uuid,
+                                           const char* mesh_name,
+                                           bool convert_to_z_up,
+                                           termin_glb_error* error) {
+    return termin_glb_document_build_mesh(
+        document, mesh_index, mesh_uuid, mesh_name, convert_to_z_up, error);
 }
