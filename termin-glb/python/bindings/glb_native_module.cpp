@@ -1,5 +1,7 @@
 #include <termin/glb/native_backend.h>
 
+#include <tgfx/resources/tc_mesh_registry.h>
+
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 
@@ -9,6 +11,15 @@
 namespace nb = nanobind;
 
 namespace {
+
+    uint64_t fnv1a(const void* data, size_t size, uint64_t hash = 14695981039346656037ull) {
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        for (size_t i = 0; i < size; ++i) {
+            hash ^= bytes[i];
+            hash *= 1099511628211ull;
+        }
+        return hash;
+    }
 
     std::runtime_error native_error(const termin_glb_error& error) {
         return std::runtime_error(std::string(termin_glb_error_code_name(error.code)) + ": " + error.message);
@@ -54,10 +65,11 @@ namespace {
             return result;
         }
 
-        void build_static_mesh(size_t mesh_index,
-                               const std::string& mesh_uuid,
-                               const std::string& mesh_name,
-                               bool convert_to_z_up) {
+        nb::object build_static_mesh(size_t mesh_index,
+                                     const std::string& mesh_uuid,
+                                     const std::string& mesh_name,
+                                     bool convert_to_z_up,
+                                     bool compute_diagnostics) {
             termin_glb_error error = {};
             if (!termin_glb_document_build_static_mesh(document_,
                                                        mesh_index,
@@ -67,6 +79,21 @@ namespace {
                                                        &error)) {
                 throw native_error(error);
             }
+            if (!compute_diagnostics)
+                return nb::none();
+
+            const tc_mesh_handle handle = tc_mesh_find(mesh_uuid.c_str());
+            const tc_mesh* mesh = tc_mesh_get(handle);
+            if (!mesh)
+                throw std::runtime_error("native GLB build did not publish the requested tc_mesh UUID");
+            const size_t vertex_bytes = tc_mesh_vertices_size(mesh);
+            const size_t index_bytes = tc_mesh_indices_size(mesh);
+            uint64_t payload_hash = fnv1a(mesh->vertices, vertex_bytes);
+            payload_hash = fnv1a(mesh->indices, index_bytes, payload_hash);
+            nb::dict diagnostics;
+            diagnostics["payload_bytes"] = vertex_bytes + index_bytes;
+            diagnostics["payload_hash"] = payload_hash;
+            return diagnostics;
         }
 
     private:
@@ -105,5 +132,6 @@ NB_MODULE(_glb_native, module) {
              nb::arg("mesh_index"),
              nb::arg("mesh_uuid"),
              nb::arg("mesh_name") = "",
-             nb::arg("convert_to_z_up") = true);
+             nb::arg("convert_to_z_up") = true,
+             nb::arg("compute_diagnostics") = false);
 }

@@ -21,6 +21,12 @@ class NativeMeshInfo:
     index_count: int
 
 
+@dataclass(frozen=True)
+class NativeMeshBuildDiagnostics:
+    payload_bytes: int
+    payload_hash: int
+
+
 class NativeStaticMeshDocument:
     """Mapped GLB document with compact discovery and transactional mesh build."""
 
@@ -54,8 +60,31 @@ class NativeStaticMeshDocument:
         convert_to_z_up: bool = True,
     ):
         """Build one discovered mesh and return its existing native handle."""
-        self._document.build_static_mesh(mesh_index, mesh_uuid, name, convert_to_z_up)
+        self._document.build_static_mesh(
+            mesh_index, mesh_uuid, name, convert_to_z_up, False
+        )
+        return self._mesh_handle(mesh_uuid)
 
+    def build_mesh_with_diagnostics(
+        self,
+        mesh_index: int,
+        mesh_uuid: str,
+        *,
+        name: str = "",
+        convert_to_z_up: bool = True,
+    ):
+        """Build one mesh and return its handle plus native hash/size oracle."""
+        values = self._document.build_static_mesh(
+            mesh_index, mesh_uuid, name, convert_to_z_up, True
+        )
+
+        return self._mesh_handle(mesh_uuid), NativeMeshBuildDiagnostics(
+            payload_bytes=values["payload_bytes"],
+            payload_hash=values["payload_hash"],
+        )
+
+    @staticmethod
+    def _mesh_handle(mesh_uuid: str):
         from tmesh import tc_mesh_get
 
         mesh = tc_mesh_get(mesh_uuid)

@@ -557,6 +557,8 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
     }
 
     const cgltf_mesh& source_mesh = document->data->meshes[mesh_index];
+    bool has_normals = false;
+    bool has_texcoords = false;
     bool has_tangents = false;
     for (cgltf_size primitive_index = 0; primitive_index < source_mesh.primitives_count; ++primitive_index) {
         const cgltf_primitive& primitive = source_mesh.primitives[primitive_index];
@@ -582,11 +584,20 @@ bool termin_glb_document_build_static_mesh(termin_glb_document* document,
                       static_cast<size_t>(primitive_index));
             return false;
         }
+        has_normals = has_normals || find_attribute(primitive, cgltf_attribute_type_normal);
+        has_texcoords = has_texcoords || find_attribute(primitive, cgltf_attribute_type_texcoord);
         has_tangents = has_tangents || find_attribute(primitive, cgltf_attribute_type_tangent);
     }
 
-    const tc_vertex_layout layout =
-        has_tangents ? tc_vertex_layout_pos_normal_uv_tangent() : tc_vertex_layout_pos_normal_uv();
+    tc_vertex_layout layout = {};
+    if (has_tangents)
+        layout = tc_vertex_layout_pos_normal_uv_tangent();
+    else if (has_texcoords)
+        layout = tc_vertex_layout_pos_normal_uv();
+    else if (has_normals)
+        layout = tc_vertex_layout_pos_normal();
+    else
+        layout = tc_vertex_layout_pos();
     tc_mesh_data_builder builder = {};
     if (!tc_mesh_data_builder_allocate(&builder, info.vertex_count, &layout, info.index_count, info.primitive_count)) {
         set_error(error,

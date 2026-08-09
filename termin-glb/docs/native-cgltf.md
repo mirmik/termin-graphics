@@ -40,8 +40,9 @@ Import is deliberately two-phase:
 The static path supports triangle primitives, `POSITION`, `NORMAL`,
 `TEXCOORD_0`, and `TANGENT`, sparse and normalized accessors, accessor stride,
 U8/U16/U32 indices, and non-indexed primitives. Multiple primitives become
-submeshes with stable per-mesh material slots. Missing optional attributes are
-zero-filled by the selected Termin superset layout. Coordinate conversion is
+submeshes with stable per-mesh material slots. The smallest compatible existing
+Termin layout is selected; missing fields in a required superset are
+zero-filled. Coordinate conversion is
 the explicit `(x, y, z) -> (x, -z, y)` option and applies to positions,
 normals, and tangent xyz while preserving tangent handedness.
 
@@ -54,3 +55,19 @@ cgltf does not clamp the most-negative signed normalized integer after division
 (`-128/127` or `-32768/32767`). The adapter clamps these values to `-1` as
 required by glTF. This is intentionally local and tested; it does not justify
 a Termin fork on its own.
+
+## Reference-model verification
+
+`test_glb_native_reference_models.py` verifies the two local Pixal3D models
+named in the migration brief against stable native payload sizes and FNV-1a
+hashes. Tests skip when the models are absent; CI or another workstation can
+override their locations with `TERMIN_GLB_GEOMETRY_REFERENCE` and
+`TERMIN_GLB_TEXTURED_REFERENCE`. Payload hashing is an opt-in diagnostic path
+and is not performed by normal `build_mesh()` calls.
+
+On the geometry-only reference, the native importer produces 2,823,922
+vertices and 17,280,924 indices in a 12-byte position-only layout. The payload
+is 103,010,760 bytes with hash `5462061671071880564`. A measured local run
+opened the mapped document in 38.7 ms and built plus hashed it in 142.4 ms;
+maximum process RSS was 256,608 KiB. Twelve repeated load/build/destroy cycles
+stabilized at 51,948 KiB after warm-up (8 KiB tail growth).

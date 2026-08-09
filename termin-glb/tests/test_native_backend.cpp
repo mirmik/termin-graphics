@@ -42,7 +42,7 @@ int main() {
     tc_mesh* mesh = tc_mesh_get(handle);
     if (!mesh || mesh->vertex_count != 24 || mesh->index_count != 36 || mesh->submesh_count != 1)
         return 11;
-    if (mesh->layout.stride != 32 || mesh->submeshes[0].index_count != 36 ||
+    if (mesh->layout.stride != 24 || mesh->submeshes[0].index_count != 36 ||
         std::strcmp(mesh->submeshes[0].name, "Mesh/Red") != 0)
         return 12;
     for (size_t i = 0; i < mesh->index_count; ++i) {

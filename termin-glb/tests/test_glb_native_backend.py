@@ -231,11 +231,11 @@ def test_native_document_discovers_and_builds_box_without_python_geometry_arrays
     assert raw.vertex_count == converted.vertex_count == 24
     assert raw.index_count == converted.index_count == 36
     assert raw.submesh_count == converted.submesh_count == 1
-    assert raw.stride == converted.stride == 32
+    assert raw.stride == converted.stride == 24
     assert raw.submeshes[0].name == "Mesh/Red"
 
-    raw_vertices = np.asarray(raw.mesh.get_vertices_buffer()).reshape(24, 8)
-    converted_vertices = np.asarray(converted.mesh.get_vertices_buffer()).reshape(24, 8)
+    raw_vertices = np.asarray(raw.mesh.get_vertices_buffer()).reshape(24, 6)
+    converted_vertices = np.asarray(converted.mesh.get_vertices_buffer()).reshape(24, 6)
     np.testing.assert_array_equal(converted_vertices[:, 0], raw_vertices[:, 0])
     np.testing.assert_array_equal(converted_vertices[:, 1], -raw_vertices[:, 2])
     np.testing.assert_array_equal(converted_vertices[:, 2], raw_vertices[:, 1])
@@ -274,9 +274,9 @@ def test_native_static_mesh_supports_index_widths_nonindexed_and_stride(tmp_path
         convert_to_z_up=True,
     )
 
-    assert (mesh.vertex_count, mesh.index_count, mesh.stride) == (3, 3, 32)
+    assert (mesh.vertex_count, mesh.index_count, mesh.stride) == (3, 3, 12)
     np.testing.assert_array_equal(np.asarray(mesh.mesh.get_indices_buffer()), [0, 1, 2])
-    vertices = np.asarray(mesh.mesh.get_vertices_buffer()).reshape(3, 8)
+    vertices = np.asarray(mesh.mesh.get_vertices_buffer()).reshape(3, 3)
     np.testing.assert_array_equal(
         vertices[:, :3],
         [[1.0, -3.0, 2.0], [4.0, -6.0, 5.0], [7.0, -9.0, 8.0]],
@@ -287,7 +287,7 @@ def test_native_static_mesh_reads_sparse_position_accessor(tmp_path):
     document = NativeStaticMeshDocument(_write_sparse_triangle_glb(tmp_path / "sparse.glb"))
     mesh = document.build_mesh(0, "pytest-native-sparse", convert_to_z_up=False)
 
-    vertices = np.asarray(mesh.mesh.get_vertices_buffer()).reshape(3, 8)
+    vertices = np.asarray(mesh.mesh.get_vertices_buffer()).reshape(3, 3)
     np.testing.assert_array_equal(
         vertices[:, :3],
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]],
