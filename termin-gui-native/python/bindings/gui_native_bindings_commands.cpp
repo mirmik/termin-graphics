@@ -699,6 +699,12 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             [](termin::gui_native::ColorPickerModel& self, tc_ui_color color) {
                 self.set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
+        .def_prop_rw("srgb_color",
+                     &termin::gui_native::ColorPickerModel::srgb_color,
+                     &termin::gui_native::ColorPickerModel::set_srgb_color)
+        .def_prop_rw("hex", &termin::gui_native::ColorPickerModel::hex, &termin::gui_native::ColorPickerModel::set_hex)
+        .def_static("srgb_from_hex", &termin::gui_native::ColorPickerModel::srgb_from_hex, nb::arg("value"))
+        .def_static("srgb_to_hex", &termin::gui_native::ColorPickerModel::srgb_to_hex, nb::arg("color"))
         .def_prop_ro("initial_color",
                      [](const termin::gui_native::ColorPickerModel& self) { return self.initial_color().c_color(); })
         .def_prop_rw("hue", &termin::gui_native::ColorPickerModel::hue, &termin::gui_native::ColorPickerModel::set_hue)
@@ -783,6 +789,10 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                 self.get().set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
         .def_prop_rw(
+            "srgb_color",
+            [](const ColorDialogRef& self) { return self.get().model()->srgb_color(); },
+            [](const ColorDialogRef& self, termin::SrgbColor color) { self.get().model()->set_srgb_color(color); })
+        .def_prop_rw(
             "draggable",
             [](const ColorDialogRef& self) { return self.get().draggable(); },
             [](const ColorDialogRef& self, bool enabled) { self.get().set_draggable(enabled); })
@@ -816,6 +826,27 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                             if (state && !state->pending_exception)
                                 state->pending_exception = std::current_exception();
                             tc_log_error("[termin-gui-native/python] ColorDialog callback failed");
+                        }
+                    });
+            },
+            nb::arg("callback"))
+        .def(
+            "connect_srgb_color_finished",
+            [](const ColorDialogRef& self, nb::object callback) {
+                auto state = self.widget.state;
+                return self.get().color_finished().connect(
+                    [state, callback = std::move(callback)](termin::gui_native::ColorDialog&,
+                                                            const std::optional<termin::gui_native::Color>& color) {
+                        try {
+                            nb::gil_scoped_acquire gil;
+                            if (color)
+                                callback(termin::SrgbColor{color->r, color->g, color->b, color->a});
+                            else
+                                callback(nb::none());
+                        } catch (...) {
+                            if (state && !state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                            tc_log_error("[termin-gui-native/python] typed ColorDialog callback failed");
                         }
                     });
             },

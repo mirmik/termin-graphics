@@ -122,15 +122,16 @@ TEST_CASE("material UBO Bool field rejects non-integral uniforms") {
     CHECK(captured_log.find("Bool") != std::string::npos);
 }
 
-TEST_CASE("material UBO SrgbColor decodes RGB once and preserves alpha") {
+TEST_CASE("material UBO authored #808080 decodes once and preserves alpha") {
     std::array<uint8_t, 16> buffer{};
-    const tc_uniform_value value = uniform_color("u_color", TC_UNIFORM_SRGB_COLOR, 0.5f, 0.5f, 0.5f, 0.5f);
+    constexpr float authored = 128.0f / 255.0f;
+    const tc_uniform_value value = uniform_color("u_color", TC_UNIFORM_SRGB_COLOR, authored, authored, authored, 0.5f);
 
     REQUIRE(termin::pack_material_uniform_value_to_std140_field(value, "SrgbColor", buffer.data()));
 
-    CHECK(std::fabs(read_float_at(buffer, 0) - 0.21404114f) < 1.0e-5f);
-    CHECK(std::fabs(read_float_at(buffer, 4) - 0.21404114f) < 1.0e-5f);
-    CHECK(std::fabs(read_float_at(buffer, 8) - 0.21404114f) < 1.0e-5f);
+    CHECK(std::fabs(read_float_at(buffer, 0) - 0.2158605f) < 1.0e-5f);
+    CHECK(std::fabs(read_float_at(buffer, 4) - 0.2158605f) < 1.0e-5f);
+    CHECK(std::fabs(read_float_at(buffer, 8) - 0.2158605f) < 1.0e-5f);
     CHECK_EQ(read_float_at(buffer, 12), 0.5f);
 }
 

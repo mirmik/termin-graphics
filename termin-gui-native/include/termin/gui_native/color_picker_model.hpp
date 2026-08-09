@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <string_view>
 
+#include <termin/geom/color.hpp>
 #include <termin/gui_native/signal.hpp>
 #include <termin/gui_native/widget_types.hpp>
 
@@ -28,6 +31,14 @@ namespace termin::gui_native {
         explicit ColorPickerModel(Color initial = Color{1.0f, 1.0f, 1.0f, 1.0f}, bool show_alpha = true);
 
         Color color() const;
+        // Authoring boundary for material/editor colors. RGB components are
+        // encoded sRGB; HSV state below remains an internal picker detail.
+        termin::SrgbColor srgb_color() const;
+        void set_srgb_color(termin::SrgbColor color);
+        std::string hex() const;
+        void set_hex(std::string_view value);
+        static termin::SrgbColor srgb_from_hex(std::string_view value);
+        static std::string srgb_to_hex(termin::SrgbColor color);
         Color initial_color() const {
             return initial_color_;
         }

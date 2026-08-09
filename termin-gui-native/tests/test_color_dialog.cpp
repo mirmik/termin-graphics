@@ -69,6 +69,27 @@ namespace {
         assert(rejected);
     }
 
+    void test_srgb_hex_round_trip() {
+        const termin::SrgbColor authored = ColorPickerModel::srgb_from_hex("#808080");
+        assert(near(authored.r, 128.0f / 255.0f, 1.0e-6f));
+        assert(near(authored.g, 128.0f / 255.0f, 1.0e-6f));
+        assert(near(authored.b, 128.0f / 255.0f, 1.0e-6f));
+        assert(ColorPickerModel::srgb_to_hex(authored) == "#808080");
+
+        ColorPickerModel model;
+        model.set_hex("#808080");
+        assert(model.hex() == "#808080");
+        assert(near(model.srgb_color().r, 128.0f / 255.0f, 1.0e-6f));
+
+        bool rejected_hdr = false;
+        try {
+            ColorPickerModel::srgb_to_hex(termin::SrgbColor{1.1f, 0.0f, 0.0f, 1.0f});
+        } catch (const std::invalid_argument&) {
+            rejected_hdr = true;
+        }
+        assert(rejected_hdr);
+    }
+
     void test_picker_surfaces_paint_and_pointer_capture() {
         tc_ui_document_handle document_handle = tc_ui_document_create();
         TcDocument document(document_handle);
@@ -159,6 +180,7 @@ namespace {
 
 int main() {
     test_color_model_round_trip_and_revisions();
+    test_srgb_hex_round_trip();
     test_picker_surfaces_paint_and_pointer_capture();
     test_color_dialog_typed_result_and_cancel();
     return EXIT_SUCCESS;

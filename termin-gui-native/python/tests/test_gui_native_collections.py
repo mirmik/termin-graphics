@@ -3,6 +3,7 @@ import weakref
 from pathlib import Path
 
 import pytest
+from termin.geombase import SrgbColor
 
 from termin.gui_native import (
     Color,
@@ -585,6 +586,10 @@ def test_native_color_picker_surfaces_and_dialog_contract():
     model.hue = 0.5
     assert model.color.g == pytest.approx(1.0)
     assert model.color.b == pytest.approx(1.0)
+    model.hex = "#808080"
+    assert model.hex == "#808080"
+    assert isinstance(model.srgb_color, SrgbColor)
+    assert tuple(model.srgb_color) == pytest.approx((128.0 / 255.0,) * 3 + (1.0,))
 
     document = tc_ui_document_create()
     picker = document.create_color_picker(model)
@@ -609,15 +614,20 @@ def test_native_color_picker_surfaces_and_dialog_contract():
 
     dialog = document.create_color_dialog(Color(1.0, 0.0, 0.0, 0.5), show_alpha=True)
     results = []
+    typed_results = []
     dialog.connect_color_finished(results.append)
+    dialog.connect_srgb_color_finished(typed_results.append)
     assert dialog.show(Rect(0.0, 0.0, 640.0, 480.0))
     dialog.color = Color(0.0, 0.5, 1.0, 0.25)
     assert dialog.activate("ok")
     assert results[0].g == pytest.approx(0.5)
     assert results[0].a == pytest.approx(0.25)
+    assert isinstance(typed_results[0], SrgbColor)
+    assert tuple(typed_results[0]) == pytest.approx((0.0, 0.5, 1.0, 0.25))
     assert dialog.show(Rect(0.0, 0.0, 640.0, 480.0))
     assert dialog.activate("cancel")
     assert results[1] is None
+    assert typed_results[1] is None
 
 
 def test_native_tree_model_widget_virtualization_and_navigation():

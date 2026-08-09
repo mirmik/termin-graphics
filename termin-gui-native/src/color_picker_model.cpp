@@ -1,5 +1,6 @@
 #include "widgets_internal.hpp"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -9,6 +10,27 @@ namespace termin::gui_native {
 
         bool same(float left, float right) {
             return std::fabs(left - right) <= 1.0e-6f;
+        }
+
+        uint8_t parse_hex_byte(std::string_view text, size_t offset) {
+            auto digit = [](char value) -> int {
+                if (value >= '0' && value <= '9')
+                    return value - '0';
+                if (value >= 'a' && value <= 'f')
+                    return value - 'a' + 10;
+                if (value >= 'A' && value <= 'F')
+                    return value - 'A' + 10;
+                return -1;
+            };
+            const int high = digit(text[offset]);
+            const int low = digit(text[offset + 1]);
+            if (high < 0 || low < 0)
+                throw std::invalid_argument("color picker hex contains a non-hex digit");
+            return static_cast<uint8_t>((high << 4) | low);
+        }
+
+        uint8_t quantize_srgb(float value) {
+            return static_cast<uint8_t>(std::lround(value * 255.0f));
         }
 
     } // namespace
@@ -66,6 +88,60 @@ namespace termin::gui_native {
 
     Color ColorPickerModel::color() const {
         return hsv_to_rgb(hue_, saturation_, value_, show_alpha_ ? alpha_ : 1.0f);
+    }
+
+    termin::SrgbColor ColorPickerModel::srgb_color() const {
+        const Color value = color();
+        return termin::SrgbColor{value.r, value.g, value.b, value.a};
+    }
+
+    void ColorPickerModel::set_srgb_color(termin::SrgbColor color) {
+        set_color(Color{color.r, color.g, color.b, color.a});
+    }
+
+    std::string ColorPickerModel::hex() const {
+        return srgb_to_hex(srgb_color());
+    }
+
+    void ColorPickerModel::set_hex(std::string_view value) {
+        const termin::SrgbColor color = srgb_from_hex(value);
+        set_srgb_color(color);
+    }
+
+    termin::SrgbColor ColorPickerModel::srgb_from_hex(std::string_view value) {
+        if (!value.empty() && value.front() == '#')
+            value.remove_prefix(1);
+        if (value.size() != 6 && value.size() != 8) {
+            tc_log_error("[termin-gui-native] ColorPickerModel rejected hex color with invalid length");
+            throw std::invalid_argument("color picker hex must contain 6 or 8 digits");
+        }
+        try {
+            const uint8_t red = parse_hex_byte(value, 0);
+            const uint8_t green = parse_hex_byte(value, 2);
+            const uint8_t blue = parse_hex_byte(value, 4);
+            const uint8_t alpha = value.size() == 8 ? parse_hex_byte(value, 6) : 255;
+            return termin::SrgbColor{red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f};
+        } catch (const std::invalid_argument&) {
+            tc_log_error("[termin-gui-native] ColorPickerModel rejected invalid hex color");
+            throw;
+        }
+    }
+
+    std::string ColorPickerModel::srgb_to_hex(termin::SrgbColor color) {
+        validate_unit(color.r, "sRGB red");
+        validate_unit(color.g, "sRGB green");
+        validate_unit(color.b, "sRGB blue");
+        validate_unit(color.a, "sRGB alpha");
+        const char digits[] = "0123456789ABCDEF";
+        const std::array<uint8_t, 4> channels = {
+            quantize_srgb(color.r), quantize_srgb(color.g), quantize_srgb(color.b), quantize_srgb(color.a)};
+        std::string result = "#";
+        result.reserve(9);
+        for (size_t index = 0; index < (color.a < 1.0f ? 4 : 3); ++index) {
+            result.push_back(digits[channels[index] >> 4]);
+            result.push_back(digits[channels[index] & 0x0f]);
+        }
+        return result;
     }
 
     void ColorPickerModel::emit_change(uint32_t flags) {
