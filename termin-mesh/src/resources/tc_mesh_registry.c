@@ -24,6 +24,17 @@ static tc_mesh_destroy_hook_fn g_destroy_hooks[TC_MAX_MESH_DESTROY_HOOKS];
 static void* g_destroy_hook_user[TC_MAX_MESH_DESTROY_HOOKS];
 static int g_destroy_hook_count = 0;
 
+static bool tc_mesh_checked_size_mul(size_t count, size_t element_size, size_t* out, const char* context) {
+    if (!out)
+        return false;
+    if (element_size != 0 && count > SIZE_MAX / element_size) {
+        tc_log(TC_LOG_ERROR, "%s: size overflow: count=%zu element_size=%zu", context, count, element_size);
+        return false;
+    }
+    *out = count * element_size;
+    return true;
+}
+
 // Free mesh internal data (vertices, indices, submeshes)
 static void mesh_free_data(tc_mesh* mesh) {
     if (!mesh)
@@ -43,28 +54,42 @@ static void mesh_free_data(tc_mesh* mesh) {
     mesh->submesh_count = 0;
 }
 
-static bool tc_mesh_validate_submesh_range(const tc_mesh* mesh, const tc_submesh* submesh, size_t submesh_index) {
-    if (!mesh || !submesh)
+static bool tc_mesh_validate_submesh_range_for_count(
+    size_t index_count, const char* mesh_name, const tc_submesh* submesh, size_t submesh_index, const char* context) {
+    if (!submesh)
         return false;
     if (submesh->index_count == 0) {
         tc_log(TC_LOG_ERROR,
-               "tc_mesh_set_submeshes: submesh %zu has zero index_count for mesh '%s'",
+               "%s: submesh %zu has zero index_count for mesh '%s'",
+               context,
                submesh_index,
-               mesh->header.name ? mesh->header.name : mesh->header.uuid);
+               mesh_name ? mesh_name : "");
         return false;
     }
-    if ((size_t)submesh->first_index > mesh->index_count ||
-        (size_t)submesh->index_count > mesh->index_count - (size_t)submesh->first_index) {
+    if ((size_t)submesh->first_index > index_count ||
+        (size_t)submesh->index_count > index_count - (size_t)submesh->first_index) {
+        const size_t range_end = (size_t)submesh->first_index + (size_t)submesh->index_count;
         tc_log(TC_LOG_ERROR,
-               "tc_mesh_set_submeshes: submesh %zu range [%u, %u) exceeds mesh '%s' index_count=%zu",
+               "%s: submesh %zu range [%u, %zu) exceeds mesh '%s' index_count=%zu",
+               context,
                submesh_index,
                submesh->first_index,
-               submesh->first_index + submesh->index_count,
-               mesh->header.name ? mesh->header.name : mesh->header.uuid,
-               mesh->index_count);
+               range_end,
+               mesh_name ? mesh_name : "",
+               index_count);
         return false;
     }
     return true;
+}
+
+static bool tc_mesh_validate_submesh_range(const tc_mesh* mesh, const tc_submesh* submesh, size_t submesh_index) {
+    if (!mesh)
+        return false;
+    return tc_mesh_validate_submesh_range_for_count(mesh->index_count,
+                                                    mesh->header.name ? mesh->header.name : mesh->header.uuid,
+                                                    submesh,
+                                                    submesh_index,
+                                                    "tc_mesh_set_submeshes");
 }
 
 static void tc_mesh_make_default_submesh(tc_mesh* mesh, tc_submesh* out) {
@@ -449,11 +474,177 @@ bool tc_mesh_remove(const char* uuid) {
 // Mesh data helpers
 // ============================================================================
 
-bool tc_mesh_set_vertices(tc_mesh* mesh, const void* data, size_t vertex_count, const tc_vertex_layout* layout) {
-    if (!mesh || !layout)
-        return false;
+void tc_mesh_data_builder_discard(tc_mesh_data_builder* builder) {
+    if (!builder)
+        return;
+    free(builder->vertices);
+    free(builder->indices);
+    free(builder->submeshes);
+    memset(builder, 0, sizeof(*builder));
+}
 
-    size_t data_size = vertex_count * layout->stride;
+bool tc_mesh_data_builder_allocate(tc_mesh_data_builder* builder,
+                                   size_t vertex_count,
+                                   const tc_vertex_layout* layout,
+                                   size_t index_count,
+                                   size_t submesh_count) {
+    if (!builder || !layout) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_allocate: builder and layout are required");
+        return false;
+    }
+
+    memset(builder, 0, sizeof(*builder));
+
+    if (vertex_count > 0 && layout->stride == 0) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_allocate: non-empty vertex payload has zero stride");
+        return false;
+    }
+    if (index_count > UINT32_MAX) {
+        tc_log(
+            TC_LOG_ERROR, "tc_mesh_data_builder_allocate: index_count=%zu exceeds uint32 submesh range", index_count);
+        return false;
+    }
+
+    size_t vertex_size = 0;
+    size_t index_size = 0;
+    size_t effective_submesh_count = submesh_count;
+    if (effective_submesh_count == 0 && index_count > 0)
+        effective_submesh_count = 1;
+    size_t submesh_size = 0;
+    if (!tc_mesh_checked_size_mul(
+            vertex_count, layout->stride, &vertex_size, "tc_mesh_data_builder_allocate(vertices)") ||
+        !tc_mesh_checked_size_mul(
+            index_count, sizeof(uint32_t), &index_size, "tc_mesh_data_builder_allocate(indices)") ||
+        !tc_mesh_checked_size_mul(
+            effective_submesh_count, sizeof(tc_submesh), &submesh_size, "tc_mesh_data_builder_allocate(submeshes)")) {
+        return false;
+    }
+
+    void* vertices = vertex_size > 0 ? calloc(1, vertex_size) : NULL;
+    if (vertex_size > 0 && !vertices) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_allocate: vertex allocation failed (%zu bytes)", vertex_size);
+        return false;
+    }
+    uint32_t* indices = index_size > 0 ? (uint32_t*)calloc(1, index_size) : NULL;
+    if (index_size > 0 && !indices) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_allocate: index allocation failed (%zu bytes)", index_size);
+        free(vertices);
+        return false;
+    }
+    tc_submesh* submeshes = submesh_size > 0 ? (tc_submesh*)calloc(1, submesh_size) : NULL;
+    if (submesh_size > 0 && !submeshes) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_allocate: submesh allocation failed (%zu bytes)", submesh_size);
+        free(indices);
+        free(vertices);
+        return false;
+    }
+
+    builder->vertices = vertices;
+    builder->vertex_count = vertex_count;
+    builder->indices = indices;
+    builder->index_count = index_count;
+    builder->submeshes = submeshes;
+    builder->submesh_count = effective_submesh_count;
+    builder->layout = *layout;
+    builder->vertex_capacity_bytes = vertex_size;
+    builder->index_capacity = index_count;
+    builder->submesh_capacity = effective_submesh_count;
+
+    if (submesh_count == 0 && index_count > 0) {
+        builder->submeshes[0].first_index = 0;
+        builder->submeshes[0].index_count = (uint32_t)index_count;
+        builder->submeshes[0].draw_mode = TC_DRAW_TRIANGLES;
+    }
+    return true;
+}
+
+bool tc_mesh_data_builder_commit(tc_mesh* mesh, tc_mesh_data_builder* builder, const char* name) {
+    if (!mesh || !builder) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_commit: mesh and builder are required");
+        return false;
+    }
+    if ((builder->vertex_count > 0 && (!builder->vertices || builder->layout.stride == 0)) ||
+        (builder->index_count > 0 && !builder->indices) || (builder->submesh_count > 0 && !builder->submeshes)) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_commit: builder storage is incomplete");
+        return false;
+    }
+    size_t vertex_size = 0;
+    if (!tc_mesh_checked_size_mul(
+            builder->vertex_count, builder->layout.stride, &vertex_size, "tc_mesh_data_builder_commit(vertices)")) {
+        return false;
+    }
+    if (vertex_size > builder->vertex_capacity_bytes || builder->index_count > builder->index_capacity ||
+        builder->submesh_count > builder->submesh_capacity) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_data_builder_commit: payload exceeds allocation "
+               "(vertices=%zu/%zu indices=%zu/%zu submeshes=%zu/%zu)",
+               vertex_size,
+               builder->vertex_capacity_bytes,
+               builder->index_count,
+               builder->index_capacity,
+               builder->submesh_count,
+               builder->submesh_capacity);
+        return false;
+    }
+    if (builder->index_count > UINT32_MAX) {
+        tc_log(TC_LOG_ERROR,
+               "tc_mesh_data_builder_commit: index_count=%zu exceeds uint32 submesh range",
+               builder->index_count);
+        return false;
+    }
+    if (builder->index_count > 0 && builder->submesh_count == 0) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_data_builder_commit: indexed mesh has no submeshes");
+        return false;
+    }
+
+    const char* effective_name = name ? name : (mesh->header.name ? mesh->header.name : mesh->header.uuid);
+    for (size_t i = 0; i < builder->submesh_count; ++i) {
+        if (!tc_mesh_validate_submesh_range_for_count(
+                builder->index_count, effective_name, &builder->submeshes[i], i, "tc_mesh_data_builder_commit")) {
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < builder->submesh_count; ++i) {
+        builder->submeshes[i].name[TC_SUBMESH_NAME_MAX - 1] = '\0';
+        if (builder->submeshes[i].draw_mode != TC_DRAW_LINES)
+            builder->submeshes[i].draw_mode = TC_DRAW_TRIANGLES;
+        if (builder->submeshes[i].name[0] == '\0' && effective_name)
+            snprintf(builder->submeshes[i].name, sizeof(builder->submeshes[i].name), "%s", effective_name);
+    }
+
+    void* old_vertices = mesh->vertices;
+    uint32_t* old_indices = mesh->indices;
+    tc_submesh* old_submeshes = mesh->submeshes;
+
+    mesh->vertices = builder->vertices;
+    mesh->vertex_count = builder->vertex_count;
+    mesh->indices = builder->indices;
+    mesh->index_count = builder->index_count;
+    mesh->submeshes = builder->submeshes;
+    mesh->submesh_count = builder->submesh_count;
+    mesh->layout = builder->layout;
+    if (name)
+        mesh->header.name = tc_intern_string(name);
+    mesh->header.version++;
+    mesh->header.is_loaded = 1;
+
+    memset(builder, 0, sizeof(*builder));
+    free(old_vertices);
+    free(old_indices);
+    free(old_submeshes);
+    return true;
+}
+
+bool tc_mesh_set_vertices(tc_mesh* mesh, const void* data, size_t vertex_count, const tc_vertex_layout* layout) {
+    if (!mesh || !layout) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_vertices: mesh and layout are required");
+        return false;
+    }
+
+    size_t data_size = 0;
+    if (!tc_mesh_checked_size_mul(vertex_count, layout->stride, &data_size, "tc_mesh_set_vertices"))
+        return false;
 
     void* new_vertices = NULL;
     if (data_size > 0) {
@@ -479,10 +670,18 @@ bool tc_mesh_set_vertices(tc_mesh* mesh, const void* data, size_t vertex_count, 
 }
 
 bool tc_mesh_set_indices(tc_mesh* mesh, const uint32_t* data, size_t index_count) {
-    if (!mesh)
+    if (!mesh) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_indices: mesh is required");
         return false;
+    }
+    if (index_count > UINT32_MAX) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_indices: index_count=%zu exceeds uint32 submesh range", index_count);
+        return false;
+    }
 
-    size_t data_size = index_count * sizeof(uint32_t);
+    size_t data_size = 0;
+    if (!tc_mesh_checked_size_mul(index_count, sizeof(uint32_t), &data_size, "tc_mesh_set_indices"))
+        return false;
 
     uint32_t* new_indices = NULL;
     if (data_size > 0) {
@@ -532,7 +731,9 @@ bool tc_mesh_set_submeshes(tc_mesh* mesh, const tc_submesh* submeshes, size_t su
         }
     }
 
-    size_t data_size = submesh_count * sizeof(tc_submesh);
+    size_t data_size = 0;
+    if (!tc_mesh_checked_size_mul(submesh_count, sizeof(tc_submesh), &data_size, "tc_mesh_set_submeshes"))
+        return false;
     tc_submesh* new_submeshes = (tc_submesh*)malloc(data_size);
     if (!new_submeshes) {
         tc_log(TC_LOG_ERROR, "tc_mesh_set_submeshes: allocation failed");
@@ -608,57 +809,31 @@ bool tc_mesh_set_data(tc_mesh* mesh,
                       const uint32_t* indices,
                       size_t index_count,
                       const char* name) {
-    if (!mesh || !layout)
-        return false;
-
-    if (name) {
-        mesh->header.name = tc_intern_string(name);
-    }
-
-    size_t vertex_size = vertex_count * layout->stride;
-    void* new_vertices = NULL;
-    if (vertex_size > 0) {
-        new_vertices = malloc(vertex_size);
-        if (!new_vertices)
-            return false;
-        if (vertices) {
-            memcpy(new_vertices, vertices, vertex_size);
-        } else {
-            memset(new_vertices, 0, vertex_size);
-        }
-    }
-
-    size_t index_size = index_count * sizeof(uint32_t);
-    uint32_t* new_indices = NULL;
-    if (index_size > 0) {
-        new_indices = (uint32_t*)malloc(index_size);
-        if (!new_indices) {
-            free(new_vertices);
-            return false;
-        }
-        if (indices) {
-            memcpy(new_indices, indices, index_size);
-        } else {
-            memset(new_indices, 0, index_size);
-        }
-    }
-
-    if (mesh->vertices)
-        free(mesh->vertices);
-    if (mesh->indices)
-        free(mesh->indices);
-
-    mesh->vertices = new_vertices;
-    mesh->vertex_count = vertex_count;
-    mesh->layout = *layout;
-    mesh->indices = new_indices;
-    mesh->index_count = index_count;
-    if (!tc_mesh_ensure_default_submesh(mesh)) {
+    if (!mesh || !layout) {
+        tc_log(TC_LOG_ERROR, "tc_mesh_set_data: mesh and layout are required");
         return false;
     }
-    mesh->header.version++;
-    mesh->header.is_loaded = 1; // Data is now loaded
 
+    tc_mesh_data_builder builder;
+    if (!tc_mesh_data_builder_allocate(&builder, vertex_count, layout, index_count, 0))
+        return false;
+    if (builder.submesh_count > 0)
+        builder.submeshes[0].draw_mode = mesh->draw_mode;
+    size_t vertex_size = 0;
+    size_t index_size = 0;
+    if (!tc_mesh_checked_size_mul(vertex_count, layout->stride, &vertex_size, "tc_mesh_set_data(vertices)") ||
+        !tc_mesh_checked_size_mul(index_count, sizeof(uint32_t), &index_size, "tc_mesh_set_data(indices)")) {
+        tc_mesh_data_builder_discard(&builder);
+        return false;
+    }
+    if (vertices && vertex_size > 0)
+        memcpy(builder.vertices, vertices, vertex_size);
+    if (indices && index_size > 0)
+        memcpy(builder.indices, indices, index_size);
+    if (!tc_mesh_data_builder_commit(mesh, &builder, name)) {
+        tc_mesh_data_builder_discard(&builder);
+        return false;
+    }
     return true;
 }
 
