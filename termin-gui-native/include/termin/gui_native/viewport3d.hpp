@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -56,6 +57,7 @@ namespace termin::gui_native {
         std::shared_ptr<ViewportSurfaceHost> surface_host_;
         Signal<Viewport3D&, ViewportSurfaceSize, ViewportSurfaceSize> before_resize_;
         ExternalDragHandler external_drag_handler_;
+        std::optional<int> captured_button_;
 
     public:
         Viewport3D();
