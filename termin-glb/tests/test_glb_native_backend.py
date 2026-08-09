@@ -751,7 +751,7 @@ def test_glb_asset_default_cgltf_backend_publishes_children_and_node_targets(
 
     class _InstantiationResourceManager:
         def get_material(self, name):
-            assert name == "NormalizedPBR"
+            assert name == "CookTorrancePBR"
             return _Material()
 
         def list_runtime_asset_names(self, asset_type):

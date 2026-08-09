@@ -1290,12 +1290,13 @@ def instantiate_glb(
 
     # Base material for all imported glTF primitives. Per-material glTF
     # parameters are applied through MeshRenderer material overrides.
-    base_material = rm.get_material("NormalizedPBR")
+    base_material_name = "CookTorrancePBR"
+    base_material = rm.get_material(base_material_name)
 
     if base_material is None or not base_material.is_valid:
         raise RuntimeError(
-            f"[glb_instantiator] Builtin materials not registered: "
-            f"NormalizedPBR(default)={base_material is not None}"
+            f"[glb_instantiator] Required builtin material "
+            f"'{base_material_name}' is not registered or invalid"
         )
 
     texture_lookup = _build_texture_lookup(rm, scene_data)
