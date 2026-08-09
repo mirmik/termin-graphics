@@ -1,6 +1,6 @@
 import tgfx
 import pytest
-from tcbase._geom_native import Vec3, Vec3f
+from tcbase._geom_native import SrgbColor, Vec3, Vec3f
 
 
 def test_basic_types_and_render_state():
@@ -204,8 +204,8 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
             },
             {
                 "name": "tint",
-                "property_type": "Color",
-                "default": (1.0, 0.5, 0.25, 1.0),
+                "property_type": "SrgbColor",
+                "default": SrgbColor(1.0, 0.5, 0.25, 1.0),
             },
             {
                 "name": "normal_texture",
@@ -233,7 +233,11 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
     assert program.source_path == "materials/python.shader"
     assert program.language == "slang"
     assert program.features == 3
-    assert program.properties == [
+    properties = program.properties
+    tint_default = properties[1]["default"]
+    assert isinstance(tint_default, SrgbColor)
+    properties[1]["default"] = tuple(tint_default)
+    assert properties == [
         {
             "name": "roughness",
             "property_type": "Float",
@@ -246,7 +250,7 @@ def test_shader_program_registry_owns_canonical_multiphase_payload():
         },
         {
             "name": "tint",
-            "property_type": "Color",
+            "property_type": "SrgbColor",
             "label": "",
             "expected_encoding": None,
             "has_default": True,

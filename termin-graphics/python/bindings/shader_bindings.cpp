@@ -716,6 +716,16 @@ namespace tgfx_bindings {
                                                                               property.default_value.data.v4[2],
                                                                               property.default_value.data.v4[3]);
                                              break;
+                                         case TC_UNIFORM_SRGB_COLOR: {
+                                             const tc_srgb_color& color = property.default_value.data.srgb_color;
+                                             item["default"] = SrgbColor{color.r, color.g, color.b, color.a};
+                                             break;
+                                         }
+                                         case TC_UNIFORM_LINEAR_COLOR: {
+                                             const tc_linear_color& color = property.default_value.data.linear_color;
+                                             item["default"] = LinearColor{color.r, color.g, color.b, color.a};
+                                             break;
+                                         }
                                          case TC_UNIFORM_MAT4: {
                                              nb::list components;
                                              for (size_t component = 0; component < 16; ++component) {

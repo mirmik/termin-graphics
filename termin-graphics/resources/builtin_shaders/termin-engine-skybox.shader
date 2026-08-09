@@ -9,9 +9,9 @@
 
 @property Mat4  u_inv_view_projection
 @property Int   u_skybox_type
-@property Color u_skybox_color        = Color(0.5, 0.5, 0.5, 1.0)
-@property Color u_skybox_top_color    = Color(0.3, 0.5, 1.0, 1.0)
-@property Color u_skybox_bottom_color = Color(0.1, 0.1, 0.3, 1.0)
+@property SrgbColor u_skybox_color        = SrgbColor(0.5, 0.5, 0.5, 1.0)
+@property SrgbColor u_skybox_top_color    = SrgbColor(0.3, 0.5, 1.0, 1.0)
+@property SrgbColor u_skybox_bottom_color = SrgbColor(0.1, 0.1, 0.3, 1.0)
 
 @stage vertex
 import termin_prelude;

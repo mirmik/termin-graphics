@@ -861,6 +861,9 @@ def test_stdlib_blinn_phong_uses_slang_scope_model():
     program = parse_shader_text(shader_path.read_text(encoding="utf-8"))
 
     phase = program.phases[0]
+    properties = {prop.name: prop.property_type for prop in program.material_properties}
+    assert properties["u_diffuse_color"] == "SrgbColor"
+    assert properties["u_specular_color"] == "SrgbColor"
     vertex = phase.stages["vertex"].source
     assert "[[TerminScope(\"frame\")]]" in vertex
     assert "ConstantBuffer<PerFrame> per_frame;" in vertex
@@ -972,6 +975,7 @@ def test_stdlib_slang_textured_normal_material_uses_texture_property():
     assert "Sampler2D u_tint_texture;" in phase.shader.fragment_source
     assert "u_tint_texture.Sample(input.uv)" in phase.shader.fragment_source
     assert phase.uniform_count == 1
+    assert phase.uniforms["u_tint_color"].r == pytest.approx(1.0)
     assert phase.texture_count == 1
 
 
@@ -991,6 +995,9 @@ def test_builtin_pbr_shader_uses_slang_scope_model():
     )
     assert program.program == "CookTorrancePBR"
     assert program.language == "slang"
+    properties = {prop.name: prop.property_type for prop in program.material_properties}
+    assert properties["u_color"] == "SrgbColor"
+    assert properties["u_emission_color"] == "SrgbColor"
     assert "lighting_ubo" not in program.features
     assert len(program.phases) == 2
 
@@ -1044,6 +1051,9 @@ def test_subsurface_pbr_preserves_the_artistic_final_color_model():
         ).read_text(encoding="utf-8")
     )
     assert program.program == "CookTorrancePBRSubsurface"
+    properties = {prop.name: prop.property_type for prop in program.material_properties}
+    assert properties["u_color"] == "SrgbColor"
+    assert properties["u_emission_color"] == "SrgbColor"
     assert "lighting_ubo" in program.features
     assert len(program.phases) == 2
 
