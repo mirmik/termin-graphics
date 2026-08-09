@@ -1,10 +1,10 @@
 import tgfx
 import pytest
-from tcbase._geom_native import SrgbColor, Vec3, Vec3f
+from tcbase._geom_native import LinearColor, SrgbColor, Vec3, Vec3f
 
 
 def test_basic_types_and_render_state():
-    c = tgfx.Color4.red()
+    c = SrgbColor(1.0, 0.0, 0.0, 1.0)
     assert c.r == 1.0
     assert c.g == 0.0
     assert c.b == 0.0
@@ -377,13 +377,13 @@ def test_text3d_binding_requires_authored_srgb_color():
 def test_screen_space_line_binding_smoke():
     style = tgfx.ScreenSpaceLineStyle()
     style.width_px = 5.0
-    style.color = (1.0, 0.25, 0.5, 1.0)
+    style.color = LinearColor(1.0, 0.25, 0.5, 1.0)
     style.cap = tgfx.LineCapStyle.Round
     style.join = tgfx.LineJoinStyle.Bevel
     style.round_segments = 10
 
     assert style.width_px == 5.0
-    assert style.color == [1.0, 0.25, 0.5, 1.0]
+    assert style.color == pytest.approx([1.0, 0.25, 0.5, 1.0])
     assert style.cap == tgfx.LineCapStyle.Round
     assert style.join == tgfx.LineJoinStyle.Bevel
     assert style.round_segments == 10
@@ -401,13 +401,13 @@ def test_screen_space_line_binding_smoke():
 def test_world_space_line_binding_smoke():
     style = tgfx.WorldSpaceLineStyle()
     style.width = 0.125
-    style.color = (0.25, 0.75, 1.0, 1.0)
+    style.color = LinearColor(0.25, 0.75, 1.0, 1.0)
     style.cap = tgfx.LineCapStyle.Round
     style.join = tgfx.LineJoinStyle.Round
     style.round_segments = 12
 
     assert style.width == 0.125
-    assert style.color == [0.25, 0.75, 1.0, 1.0]
+    assert style.color == pytest.approx([0.25, 0.75, 1.0, 1.0])
     assert style.cap == tgfx.LineCapStyle.Round
     assert style.join == tgfx.LineJoinStyle.Round
     assert style.round_segments == 12

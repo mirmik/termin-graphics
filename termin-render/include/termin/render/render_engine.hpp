@@ -13,6 +13,7 @@
 #include "termin/render/material_texture_source.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include <termin/geom/rect2.hpp>
+#include <termin/geom/color.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/handles.hpp>
 
@@ -61,7 +62,7 @@ namespace termin {
         tgfx::PixelFormat output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
         tgfx::PixelFormat output_depth_format = tgfx::PixelFormat::D24_UNorm;
         bool clear_color_enabled = false;
-        float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        LinearColor clear_linear_color{0.0f, 0.0f, 0.0f, 1.0f};
         bool clear_depth_enabled = false;
         float clear_depth = 1.0f;
 

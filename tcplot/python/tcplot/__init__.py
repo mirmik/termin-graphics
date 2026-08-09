@@ -14,7 +14,7 @@ from termin_nanobind.runtime import preload_sdk_libs
 preload_sdk_libs("tcplot", "termin_graphics2", "termin_mesh", "termin_base")
 
 from tcplot._tcplot_native import (
-    Color4,
+    SrgbColor,
     cycle_color,
     jet,
     default_colors,
@@ -62,7 +62,7 @@ __all__ = [
     "PlotAnnotationAction2D",
     "PlotDataMarker2D",
     "PlotDataMarkerSnapshot2D",
-    "Color4",
+    "SrgbColor",
     "SurfaceColorMap",
     "MouseButton",
     "DEFAULT_COLORS",

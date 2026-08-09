@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from termin.geombase import LinearColor
+
 import os
 import sys
 import time
@@ -9,13 +11,13 @@ import time
 import tgfx
 from termin.display.window import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
-    Color,
     tc_ui_document_create,
     DrawList,
     DrawListRenderer,
     PaintContext,
     Point,
     Rect,
+    SrgbColor,
     tc_ui_document_destroy,
     Widget,
 )
@@ -25,31 +27,31 @@ class DemoWidget(Widget):
     def paint(self, context: PaintContext) -> None:
         context.fill_rect(
             Rect(0.0, 0.0, 800.0, 600.0),
-            Color(0.08, 0.09, 0.11, 1.0),
+            SrgbColor(0.08, 0.09, 0.11, 1.0),
         )
         context.push_clip(Rect(40.0, 40.0, 720.0, 520.0))
         context.fill_rect(
             Rect(90.0, 90.0, 260.0, 120.0),
-            Color(0.18, 0.42, 0.72, 1.0),
+            SrgbColor(0.18, 0.42, 0.72, 1.0),
         )
         context.stroke_rect(
             Rect(90.0, 90.0, 260.0, 120.0),
-            Color(0.85, 0.92, 1.0, 1.0),
+            SrgbColor(0.85, 0.92, 1.0, 1.0),
             3.0,
         )
         context.fill_rect(
             Rect(120.0, 250.0, 180.0, 44.0),
-            Color(0.20, 0.62, 0.42, 1.0),
+            SrgbColor(0.20, 0.62, 0.42, 1.0),
         )
         context.stroke_rect(
             Rect(120.0, 250.0, 180.0, 44.0),
-            Color(0.75, 1.0, 0.86, 1.0),
+            SrgbColor(0.75, 1.0, 0.86, 1.0),
             2.0,
         )
         context.draw_line(
             Point(410.0, 120.0),
             Point(690.0, 320.0),
-            Color(0.98, 0.72, 0.20, 1.0),
+            SrgbColor(0.98, 0.72, 0.20, 1.0),
             5.0,
         )
         context.pop_clip()
@@ -109,11 +111,7 @@ def main() -> int:
             context.begin_frame()
             context.begin_pass(
                 color_target,
-                clear_color_enabled=True,
-                r=0.03,
-                g=0.035,
-                b=0.045,
-                a=1.0,
+                clear_linear_color=LinearColor(0.03, 0.035, 0.045, 1.0),
             )
             renderer.render(context, draw_list, width, height)
             context.end_pass()

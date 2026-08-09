@@ -173,7 +173,7 @@ void bind_gui_native_offscreen(nb::module_& m) {
                const std::string& backend,
                const std::string& font_path,
                int font_size,
-               std::array<float, 4> clear_color,
+               termin::LinearColor clear_linear_color,
                bool enable_text_input,
                bool continuous_rendering,
                bool application_graphics_domain,
@@ -189,7 +189,7 @@ void bind_gui_native_offscreen(nb::module_& m) {
                 config.backend = offscreen_backend(backend);
                 config.renderer.font_path = font_path;
                 config.renderer.font_size = font_size;
-                config.renderer.clear_color = clear_color;
+                config.renderer.clear_linear_color = clear_linear_color;
                 config.renderer.enable_text_input = enable_text_input;
                 config.continuous_rendering = continuous_rendering;
                 config.application_graphics_domain = application_graphics_domain;
@@ -206,7 +206,7 @@ void bind_gui_native_offscreen(nb::module_& m) {
             nb::arg("backend") = "auto",
             nb::arg("font_path") = "",
             nb::arg("font_size") = 14,
-            nb::arg("clear_color") = std::array<float, 4>{0.03f, 0.035f, 0.045f, 1.0f},
+            nb::arg("clear_linear_color") = termin::LinearColor{0.03f, 0.035f, 0.045f, 1.0f},
             nb::arg("enable_text_input") = true,
             nb::arg("continuous_rendering") = true,
             nb::arg("application_graphics_domain") = false,

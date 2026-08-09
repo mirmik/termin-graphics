@@ -26,12 +26,12 @@ namespace tcplot::gui_native {
         constexpr float label_font_size = 11.0f;
         constexpr float title_font_size = 13.0f;
 
-        tc_ui_srgb_color ui_color(Color4 color) {
+        tc_ui_srgb_color ui_color(termin::SrgbColor color) {
             return {color.r, color.g, color.b, color.a};
         }
 
-        tgfx::Color4f visual_color(Color4 color) {
-            return {color.r, color.g, color.b, color.a};
+        termin::SrgbColor visual_color(termin::SrgbColor color) {
+            return color;
         }
 
         tc_ui_size clamp_size(tc_ui_size size, tc_ui_constraints constraints) {

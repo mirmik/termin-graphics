@@ -93,13 +93,21 @@ void bind_gui_native_scene_views(nb::module_& m) {
         .def(nb::init<>())
         .def(
             "__init__",
-            [](termin::gui_native::RichTextStyle* self, std::optional<tc_ui_srgb_color> color, bool bold, bool italic) {
-                new (self) termin::gui_native::RichTextStyle{std::move(color), bold, italic};
+            [](termin::gui_native::RichTextStyle* self, std::optional<termin::SrgbColor> color, bool bold, bool italic) {
+                new (self) termin::gui_native::RichTextStyle{
+                    color ? std::optional<tc_ui_srgb_color>(to_tc_ui_srgb(*color)) : std::nullopt, bold, italic};
             },
             nb::arg("color") = nb::none(),
             nb::arg("bold") = false,
             nb::arg("italic") = false)
-        .def_rw("color", &termin::gui_native::RichTextStyle::color)
+        .def_prop_rw(
+            "color",
+            [](const termin::gui_native::RichTextStyle& self) -> std::optional<termin::SrgbColor> {
+                return self.color ? std::optional<termin::SrgbColor>(from_tc_ui_srgb(*self.color)) : std::nullopt;
+            },
+            [](termin::gui_native::RichTextStyle& self, std::optional<termin::SrgbColor> color) {
+                self.color = color ? std::optional<tc_ui_srgb_color>(to_tc_ui_srgb(*color)) : std::nullopt;
+            })
         .def_rw("bold", &termin::gui_native::RichTextStyle::bold)
         .def_rw("italic", &termin::gui_native::RichTextStyle::italic);
 
@@ -501,7 +509,7 @@ void bind_gui_native_scene_views(nb::module_& m) {
             nb::arg("maximum"))
         .def(
             "set_scene_colors",
-            [](const SceneViewRef& self, tc_ui_srgb_color background, tc_ui_srgb_color grid, tc_ui_srgb_color axes) {
+            [](const SceneViewRef& self, termin::SrgbColor background, termin::SrgbColor grid, termin::SrgbColor axes) {
                 self.get().set_scene_colors(
                     termin::gui_native::Color{background.r, background.g, background.b, background.a},
                     termin::gui_native::Color{grid.r, grid.g, grid.b, grid.a},

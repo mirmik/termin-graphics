@@ -374,10 +374,7 @@ namespace tcplot {
             target.output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
             target.output_depth_format = tgfx::PixelFormat::D24_UNorm;
             target.clear_color_enabled = true;
-            target.clear_color[0] = 0.08f;
-            target.clear_color[1] = 0.09f;
-            target.clear_color[2] = 0.11f;
-            target.clear_color[3] = 1.0f;
+            target.clear_linear_color = termin::LinearColor{0.08f, 0.09f, 0.11f, 1.0f};
             target.clear_depth_enabled = true;
             target.clear_depth = 1.0f;
 

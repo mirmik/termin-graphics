@@ -359,27 +359,18 @@ namespace tgfx_bindings {
                 [](tgfx::RenderContext2& self,
                    tgfx::TextureHandle color,
                    std::optional<tgfx::TextureHandle> depth,
-                   bool clear_color_enabled,
-                   float r,
-                   float g,
-                   float b,
-                   float a,
+                   std::optional<termin::LinearColor> clear_linear_color,
                    float clear_depth,
                    bool clear_depth_enabled) {
-                    float clear_rgba[4] = {r, g, b, a};
                     self.begin_pass(color,
                                     depth.value_or(tgfx::TextureHandle{}),
-                                    clear_color_enabled ? clear_rgba : nullptr,
+                                    clear_linear_color ? &*clear_linear_color : nullptr,
                                     clear_depth,
                                     clear_depth_enabled);
                 },
                 nb::arg("color"),
                 nb::arg("depth").none() = nb::none(),
-                nb::arg("clear_color_enabled") = false,
-                nb::arg("r") = 0.0f,
-                nb::arg("g") = 0.0f,
-                nb::arg("b") = 0.0f,
-                nb::arg("a") = 1.0f,
+                nb::arg("clear_linear_color").none() = nb::none(),
                 nb::arg("clear_depth") = 1.0f,
                 nb::arg("clear_depth_enabled") = false)
             .def("end_pass", &tgfx::RenderContext2::end_pass)
@@ -1253,18 +1244,17 @@ namespace tgfx_bindings {
                                         const std::string& text,
                                         float x,
                                         float y,
-                                        std::tuple<float, float, float, float> color,
+                                        termin::SrgbColor color,
                                         float size,
                                         nb::object anchor) {
-                    auto [r, g, b, a] = color;
                     self.draw(text,
                               tgfx::Text2DRenderer::DrawOptions{
-                                  x, y, termin::Color4{r, g, b, a}, size, resolve_text2d_anchor(anchor)});
+                                  x, y, color, size, resolve_text2d_anchor(anchor)});
                 },
                 nb::arg("text"),
                 nb::arg("x"),
                 nb::arg("y"),
-                nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+                nb::arg("color") = termin::SrgbColor::white(),
                 nb::arg("size") = 14.0f,
                 nb::arg("anchor") = "left")
 

@@ -30,7 +30,7 @@ namespace tgfx {
             float width;
             LinePoint3 p1;
             float flags;
-            float color[4];
+            termin::LinearColor color;
         };
 
         struct CapCornerVertex {
@@ -42,7 +42,7 @@ namespace tgfx {
             LinePoint3 center;
             float width;
             LinePoint3 neighbor;
-            float color[4];
+            termin::LinearColor color;
         };
 
         struct JoinCornerVertex {
@@ -56,7 +56,7 @@ namespace tgfx {
             float flags;
             LinePoint3 next;
             float pad;
-            float color[4];
+            termin::LinearColor color;
         };
 
         static_assert(sizeof(SegmentInstance) == 12 * sizeof(float),
@@ -352,7 +352,7 @@ namespace tgfx {
             if (style.cap == LineCapStyle::Square && i + 1 == clean_points.size()) {
                 instance.flags += kFlagExtendEnd;
             }
-            std::memcpy(instance.color, style.color.data(), sizeof(instance.color));
+            instance.color = style.color;
             instances.push_back(instance);
         }
 
@@ -368,7 +368,7 @@ namespace tgfx {
                 cap.center = first;
                 cap.width = style.width;
                 cap.neighbor = second;
-                std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
+                cap.color = style.color;
                 cap_instances.push_back(cap);
             }
 
@@ -379,7 +379,7 @@ namespace tgfx {
                 cap.center = last;
                 cap.width = style.width;
                 cap.neighbor = prev;
-                std::memcpy(cap.color, style.color.data(), sizeof(cap.color));
+                cap.color = style.color;
                 cap_instances.push_back(cap);
             }
         }
@@ -393,7 +393,7 @@ namespace tgfx {
                 join.center = center;
                 join.width = style.width;
                 join.neighbor = next;
-                std::memcpy(join.color, style.color.data(), sizeof(join.color));
+                join.color = style.color;
                 round_join_instances.push_back(join);
             }
         } else if (style.join == LineJoinStyle::Bevel) {
@@ -407,7 +407,7 @@ namespace tgfx {
                 join.width = style.width;
                 join.center = center;
                 join.next = next;
-                std::memcpy(join.color, style.color.data(), sizeof(join.color));
+                join.color = style.color;
                 join_instances.push_back(join);
             }
         }

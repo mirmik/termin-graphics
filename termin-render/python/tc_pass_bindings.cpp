@@ -267,11 +267,7 @@ namespace termin {
 
         value = py_spec.attr("clear_color");
         if (!value.is_none()) {
-            nb::tuple color = nb::cast<nb::tuple>(value);
-            out_spec.clear_color = std::array<double, 4>{nb::cast<double>(color[0]),
-                                                         nb::cast<double>(color[1]),
-                                                         nb::cast<double>(color[2]),
-                                                         nb::cast<double>(color[3])};
+            out_spec.clear_color = nb::cast<termin::LinearColor>(value);
         }
 
         value = py_spec.attr("clear_depth");
@@ -970,7 +966,7 @@ namespace termin {
                 spec_dict["samples"] = spec.samples;
                 if (spec.clear_color) {
                     const auto& cc = *spec.clear_color;
-                    spec_dict["clear_color"] = nb::make_tuple(cc[0], cc[1], cc[2], cc[3]);
+                    spec_dict["clear_color"] = nb::make_tuple(cc.r, cc.g, cc.b, cc.a);
                 }
                 if (spec.clear_depth) {
                     spec_dict["clear_depth"] = *spec.clear_depth;

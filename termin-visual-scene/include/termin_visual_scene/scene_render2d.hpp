@@ -13,7 +13,7 @@ namespace termin::visual {
 
     struct ResolvedCustomBatch2D {
         std::vector<tgfx::DrawVertex2D> vertices;
-        tgfx::Color4f color{};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         tgfx::TextureHandle texture{};
         tgfx::DrawTextureSampling2D sampling = tgfx::DrawTextureSampling2D::Linear;
     };

@@ -810,7 +810,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         texture_ops_.reset();
     }
 
-    void WebGpuRenderDevice::clear_texture(TextureHandle dst_handle, termin::Color4 color, termin::Bounds2i viewport) {
+    void WebGpuRenderDevice::clear_texture(TextureHandle dst_handle, termin::LinearColor color, termin::Bounds2i viewport) {
         const WebGpuTexture* dst = textures_.get(dst_handle.id);
         if (!dst)
             fail("clear_texture requires a valid destination texture");
@@ -832,20 +832,20 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         RenderPassDesc pass;
         ColorAttachmentDesc attachment;
         attachment.texture = dst_handle;
-        attachment.clear_color[0] = color.r;
-        attachment.clear_color[1] = color.g;
-        attachment.clear_color[2] = color.b;
-        attachment.clear_color[3] = color.a;
+        attachment.clear_color.r = color.r;
+        attachment.clear_color.g = color.g;
+        attachment.clear_color.b = color.b;
+        attachment.clear_color.a = color.a;
         const bool full = x0 == 0 && y0 == 0 && x1 == width && y1 == height;
         attachment.load = full ? LoadOp::Clear : LoadOp::Load;
         pass.colors.push_back(attachment);
         PipelineHandle partial_pipeline;
         ResourceSetHandle partial_set;
         if (!full) {
-            const std::array<float, 4> params{{color.r, color.g, color.b, color.a}};
+            const termin::LinearColor params{color.r, color.g, color.b, color.a};
             ensure_texture_op_state();
             upload_buffer(texture_ops_->clear_params,
-                          std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(params.data()), sizeof(params)));
+                          std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(&params), sizeof(params)));
             partial_pipeline = texture_op_pipeline(dst->desc.format, dst->desc.sample_count, false);
             partial_set = texture_op_resource_set(partial_pipeline, {}, false);
         }

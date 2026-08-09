@@ -75,7 +75,7 @@ namespace tgfx {
             colors[index].loadOp = load_op(source.load);
             colors[index].storeOp = store_op(source.store);
             colors[index].clearValue = {
-                source.clear_color[0], source.clear_color[1], source.clear_color[2], source.clear_color[3]};
+                source.clear_color.r, source.clear_color.g, source.clear_color.b, source.clear_color.a};
         }
         wgpu::RenderPassDepthStencilAttachment depth;
         if (pass.has_depth) {

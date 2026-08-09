@@ -929,7 +929,8 @@ namespace tc {
                 if (params.contains("clear_color_a") && params["clear_color_a"].is_numer()) {
                     a = params["clear_color_a"].as_numer();
                 }
-                spec.clear_color = std::array<double, 4>{r, g, b, a};
+                spec.clear_color = termin::LinearColor{static_cast<float>(r), static_cast<float>(g),
+                                                       static_cast<float>(b), static_cast<float>(a)};
             }
 
             // Clear depth

@@ -6,6 +6,12 @@
 
 namespace tgfx {
     namespace {
+        bool finite_color(const termin::LinearColor& color) {
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) &&
+                   std::isfinite(color.a);
+        }
+    }
+    namespace {
 
         bool finite(float value) {
             return std::isfinite(value);
@@ -179,10 +185,10 @@ namespace tgfx {
     bool DrawList2DBuilder::text(std::string text_value,
                                  termin::Vec2f origin,
                                  float size_px,
-                                 Color4f color,
+                                 termin::LinearColor color,
                                  FontHandle font,
                                  TextAnchor2D anchor) {
-        if (text_value.empty() || !finite(origin) || !finite(size_px) || size_px <= 0.0f || !color.is_finite() ||
+        if (text_value.empty() || !finite(origin) || !finite(size_px) || size_px <= 0.0f || !finite_color(color) ||
             !font || !valid_anchor(anchor)) {
             tc::Log::error("[DrawList2DBuilder] invalid text draw rejected");
             return false;
@@ -192,9 +198,9 @@ namespace tgfx {
     }
 
     bool DrawList2DBuilder::image(
-        TextureHandle texture, termin::Rect2f rect, termin::Rect2f uv, Color4f tint, DrawTextureSampling2D sampling) {
+        TextureHandle texture, termin::Rect2f rect, termin::Rect2f uv, termin::LinearColor tint, DrawTextureSampling2D sampling) {
         if (!texture || !valid_rect(rect) || rect.width <= 0.0f || rect.height <= 0.0f || !valid_rect(uv) ||
-            !tint.is_finite() || !valid_sampling(sampling)) {
+            !finite_color(tint) || !valid_sampling(sampling)) {
             tc::Log::error("[DrawList2DBuilder] invalid image draw rejected");
             return false;
         }
@@ -203,10 +209,10 @@ namespace tgfx {
     }
 
     bool DrawList2DBuilder::custom_batch(std::span<const DrawVertex2D> vertices,
-                                         Color4f color,
+                                         termin::LinearColor color,
                                          TextureHandle texture,
                                          DrawTextureSampling2D sampling) {
-        if (vertices.empty() || vertices.size() % 3 != 0 || !color.is_finite() || !valid_sampling(sampling)) {
+        if (vertices.empty() || vertices.size() % 3 != 0 || !finite_color(color) || !valid_sampling(sampling)) {
             tc::Log::error("[DrawList2DBuilder] invalid custom triangle batch rejected");
             return false;
         }

@@ -5,6 +5,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <tcbase/tc_log.hpp>
+#include <termin/geom/color.hpp>
 
 extern "C" {
 #include "core/tc_component.h"
@@ -96,21 +97,14 @@ void bind_tc_render_target(nb::module_& m) {
             [](const tc_render_target_handle& h) { return tc_render_target_get_clear_color_enabled(h); },
             [](tc_render_target_handle& h, bool v) { tc_render_target_set_clear_color_enabled(h, v); })
         .def_prop_rw(
-            "clear_color_value",
+            "clear_linear_color",
             [](const tc_render_target_handle& h) {
-                float color[4];
-                tc_render_target_get_clear_color_value(h, color);
-                return nb::make_tuple(color[0], color[1], color[2], color[3]);
+                tc_linear_color color{};
+                tc_render_target_get_clear_linear_color(h, &color);
+                return termin::LinearColor{color.r, color.g, color.b, color.a};
             },
-            [](tc_render_target_handle& h, nb::sequence value) {
-                if (nb::len(value) < 4) {
-                    throw nb::value_error("clear_color_value requires 4 values");
-                }
-                tc_render_target_set_clear_color_value(h,
-                                                       nb::cast<float>(value[0]),
-                                                       nb::cast<float>(value[1]),
-                                                       nb::cast<float>(value[2]),
-                                                       nb::cast<float>(value[3]));
+            [](tc_render_target_handle& h, const termin::LinearColor& value) {
+                tc_render_target_set_clear_linear_color(h, {value.r, value.g, value.b, value.a});
             })
         .def_prop_rw(
             "clear_depth_enabled",

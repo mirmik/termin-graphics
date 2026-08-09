@@ -10,7 +10,7 @@ void tc_render_target_config_init(tc_render_target_config* config) {
     config->kind = tc_intern_string("texture_2d");
     config->width = 512;
     config->height = 512;
-    config->clear_color_value[3] = 1.0f;
+    config->clear_linear_color.a = 1.0f;
     config->clear_depth_value = 1.0f;
     config->layer_mask = 0xFFFFFFFFFFFFFFFFULL;
     config->enabled = true;
@@ -37,7 +37,7 @@ void tc_render_target_config_copy(tc_render_target_config* dst, const tc_render_
     dst->color_format = src->color_format ? tc_intern_string(src->color_format) : NULL;
     dst->depth_format = src->depth_format ? tc_intern_string(src->depth_format) : NULL;
     dst->clear_color = src->clear_color;
-    memcpy(dst->clear_color_value, src->clear_color_value, sizeof(dst->clear_color_value));
+    dst->clear_linear_color = src->clear_linear_color;
     dst->clear_depth = src->clear_depth;
     dst->clear_depth_value = src->clear_depth_value;
     dst->pipeline_uuid = src->pipeline_uuid ? tc_intern_string(src->pipeline_uuid) : NULL;

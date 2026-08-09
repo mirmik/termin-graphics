@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <tcbase/tc_log.hpp>
+#include <termin/geom/color.hpp>
 
 #include "termin_visual_scene/builtin_items2d.hpp"
 
@@ -28,7 +29,11 @@ namespace {
         return std::nullopt;
     }
 
-    tgfx::Color4f color(tc_visual_color4f value) {
+    termin::LinearColor color(tc_visual_color4f value) {
+        return {value.r, value.g, value.b, value.a};
+    }
+
+    termin::SrgbColor authored_color(tc_visual_color4f value) {
         return {value.r, value.g, value.b, value.a};
     }
 
@@ -295,7 +300,7 @@ tc_graphic_item_handle tc_visual_text_item2d_create(tc_visual_scene_handle scene
             throw std::invalid_argument("invalid text descriptor");
         }
         return std::make_unique<termin::visual::TextItem2D>(
-            desc->text, desc->font_uri, desc->origin, desc->size_px, color(desc->color), *anchor, desc->layout_bounds);
+            desc->text, desc->font_uri, desc->origin, desc->size_px, authored_color(desc->color), *anchor, desc->layout_bounds);
     });
 }
 
@@ -308,7 +313,7 @@ bool tc_visual_text_item2d_set(tc_visual_scene_handle scene,
             throw std::invalid_argument("invalid text descriptor");
         }
         return std::make_unique<termin::visual::TextItem2D>(
-            desc->text, desc->font_uri, desc->origin, desc->size_px, color(desc->color), *anchor, desc->layout_bounds);
+            desc->text, desc->font_uri, desc->origin, desc->size_px, authored_color(desc->color), *anchor, desc->layout_bounds);
     });
 }
 
@@ -321,7 +326,7 @@ tc_graphic_item_handle tc_visual_image_item2d_create(tc_visual_scene_handle scen
             throw std::invalid_argument("invalid image descriptor");
         }
         return std::make_unique<termin::visual::ImageItem2D>(
-            desc->image_uri, desc->rect, desc->uv, color(desc->tint), *mode);
+            desc->image_uri, desc->rect, desc->uv, authored_color(desc->tint), *mode);
     });
 }
 
@@ -334,7 +339,7 @@ bool tc_visual_image_item2d_set(tc_visual_scene_handle scene,
             throw std::invalid_argument("invalid image descriptor");
         }
         return std::make_unique<termin::visual::ImageItem2D>(
-            desc->image_uri, desc->rect, desc->uv, color(desc->tint), *mode);
+            desc->image_uri, desc->rect, desc->uv, authored_color(desc->tint), *mode);
     });
 }
 

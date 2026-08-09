@@ -21,7 +21,7 @@ namespace tcplot {
         std::vector<double> y;
         std::vector<double> z;      // empty for 2D series
         std::vector<double> scalar; // optional per-point values for 2D colormap lines
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         SurfaceColorMap colormap = SurfaceColorMap::Jet;
         bool colormap_reversed = false;
         double scalar_min = 0.0;
@@ -37,7 +37,7 @@ namespace tcplot {
         std::vector<double> x;
         std::vector<double> y;
         std::vector<double> z; // empty for 2D series
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         double size = 4.0;
         std::string label;
     };
@@ -68,7 +68,7 @@ namespace tcplot {
     };
 
     struct TCPLOT_API LinePlotOptions {
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         double thickness = 1.5;
         std::string label;
     };
@@ -83,13 +83,13 @@ namespace tcplot {
     };
 
     struct TCPLOT_API ScatterPlotOptions {
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         double size = 4.0;
         std::string label;
     };
 
     struct TCPLOT_API SurfacePlotOptions {
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         SurfaceColorMap colormap = SurfaceColorMap::Jet;
         bool wireframe = false;
         std::string label;
@@ -100,7 +100,7 @@ namespace tcplot {
         bool visible = false;
         uint32_t row_step = 8;
         uint32_t col_step = 8;
-        Color4 color = styles::grid_color();
+        SrgbColor color = styles::grid_color();
         float width_px = 1.5f;
     };
 
@@ -112,7 +112,7 @@ namespace tcplot {
         std::vector<double> Z;
         uint32_t rows = 0;
         uint32_t cols = 0;
-        std::optional<Color4> color;
+        std::optional<SrgbColor> color;
         SurfaceColorMap colormap = SurfaceColorMap::Jet;
         bool colormap_reversed = false;
         bool wireframe = false;
@@ -120,7 +120,7 @@ namespace tcplot {
         uint32_t grid_row_step = 8;
         uint32_t grid_col_step = 8;
         float grid_width_px = 1.5f;
-        std::optional<Color4> grid_color;
+        std::optional<SrgbColor> grid_color;
         std::string label;
     };
 
@@ -142,14 +142,14 @@ namespace tcplot {
         LineSeries& add_line(std::vector<double> x,
                              std::vector<double> y,
                              std::vector<double> z = {},
-                             std::optional<Color4> color = std::nullopt,
+                             std::optional<SrgbColor> color = std::nullopt,
                              double thickness = 1.5,
                              std::string label = "");
 
         ScatterSeries& add_scatter(std::vector<double> x,
                                    std::vector<double> y,
                                    std::vector<double> z = {},
-                                   std::optional<Color4> color = std::nullopt,
+                                   std::optional<SrgbColor> color = std::nullopt,
                                    double size = 4.0,
                                    std::string label = "");
 

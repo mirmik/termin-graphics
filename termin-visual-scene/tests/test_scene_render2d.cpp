@@ -5,6 +5,8 @@
 #include <memory>
 #include <variant>
 
+#include <termin/geom/color.hpp>
+
 #include "termin_visual_scene/builtin_items2d.hpp"
 #include "termin_visual_scene/scene_render2d.hpp"
 
@@ -79,14 +81,14 @@ int main() {
                                                     "font://ui",
                                                     termin::Vec2f{1.0f, 2.0f},
                                                     13.0f,
-                                                    tgfx::Color4f{},
+                                                    termin::SrgbColor{},
                                                     tgfx::TextAnchor2D::Left,
                                                     termin::Bounds2f{1.0f, 2.0f, 40.0f, 15.0f}),
                        root_ptr));
     assert(scene.adopt(std::make_unique<ImageItem2D>("image://logo",
                                                      termin::Rect2f{3.0f, 4.0f, 8.0f, 9.0f},
                                                      termin::Rect2f{0.0f, 0.0f, 1.0f, 1.0f},
-                                                     tgfx::Color4f::white(),
+                                                     termin::SrgbColor::white(),
                                                      tgfx::DrawTextureSampling2D::Linear),
                        root_ptr));
     assert(scene.adopt(std::make_unique<CustomBatchItem2D>("batch://plot", termin::Bounds2f{0.0f, 0.0f, 2.0f, 2.0f}),
@@ -129,7 +131,7 @@ int main() {
     assert(failing_scene.adopt(std::make_unique<ImageItem2D>("image://logo",
                                                              termin::Rect2f{0.0f, 0.0f, 2.0f, 2.0f},
                                                              termin::Rect2f{0.0f, 0.0f, 1.0f, 1.0f},
-                                                             tgfx::Color4f::white(),
+                                                             termin::SrgbColor::white(),
                                                              tgfx::DrawTextureSampling2D::Linear)));
     resolver.fail_images = true;
     tgfx::DrawList2DBuilder failing_builder;

@@ -87,7 +87,7 @@ namespace termin {
             target.texture = resource->second;
             target.load = source.load;
             target.store = source.store;
-            std::memcpy(target.clear_color, source.clear_color, sizeof(target.clear_color));
+            target.clear_color = source.clear_linear_color;
             out_pass.colors.push_back(target);
         }
 

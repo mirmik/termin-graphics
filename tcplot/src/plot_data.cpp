@@ -10,7 +10,7 @@ namespace tcplot {
     LineSeries& PlotData::add_line(std::vector<double> x,
                                    std::vector<double> y,
                                    std::vector<double> z,
-                                   std::optional<Color4> color,
+                                   std::optional<SrgbColor> color,
                                    double thickness,
                                    std::string label) {
         LineSeries s;
@@ -27,7 +27,7 @@ namespace tcplot {
     ScatterSeries& PlotData::add_scatter(std::vector<double> x,
                                          std::vector<double> y,
                                          std::vector<double> z,
-                                         std::optional<Color4> color,
+                                         std::optional<SrgbColor> color,
                                          double size,
                                          std::string label) {
         ScatterSeries s;

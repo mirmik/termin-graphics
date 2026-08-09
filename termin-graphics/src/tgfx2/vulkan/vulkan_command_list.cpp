@@ -332,7 +332,7 @@ namespace tgfx {
         std::vector<VkClearValue> clears;
         for (const auto& c : pass.colors) {
             VkClearValue cv{};
-            cv.color = {{c.clear_color[0], c.clear_color[1], c.clear_color[2], c.clear_color[3]}};
+            cv.color = {{c.clear_color.r, c.clear_color.g, c.clear_color.b, c.clear_color.a}};
             clears.push_back(cv);
         }
         for (const auto& c : pass.colors) {

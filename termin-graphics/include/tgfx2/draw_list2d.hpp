@@ -86,7 +86,7 @@ namespace tgfx {
         std::string text;
         termin::Vec2f origin{};
         float size_px = 14.0f;
-        Color4f color{};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         FontHandle font{};
         TextAnchor2D anchor = TextAnchor2D::Left;
     };
@@ -95,7 +95,7 @@ namespace tgfx {
         TextureHandle texture{};
         termin::Rect2f rect{};
         termin::Rect2f uv{0.0f, 0.0f, 1.0f, 1.0f};
-        Color4f tint{};
+        termin::LinearColor tint{1.0f, 1.0f, 1.0f, 1.0f};
         DrawTextureSampling2D sampling = DrawTextureSampling2D::Linear;
     };
 
@@ -109,7 +109,7 @@ namespace tgfx {
     // shader. Persistent asset identity must already have been resolved.
     struct DrawCustomBatch2D {
         std::vector<DrawVertex2D> vertices;
-        Color4f color{};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         TextureHandle texture{};
         DrawTextureSampling2D sampling = DrawTextureSampling2D::Linear;
     };
@@ -210,16 +210,16 @@ namespace tgfx {
         bool text(std::string text,
                   termin::Vec2f origin,
                   float size_px,
-                  Color4f color,
+                  termin::LinearColor color,
                   FontHandle font,
                   TextAnchor2D anchor = TextAnchor2D::Left);
         bool image(TextureHandle texture,
                    termin::Rect2f rect,
                    termin::Rect2f uv = {0.0f, 0.0f, 1.0f, 1.0f},
-                   Color4f tint = Color4f::white(),
+                   termin::LinearColor tint = termin::LinearColor{1.0f, 1.0f, 1.0f, 1.0f},
                    DrawTextureSampling2D sampling = DrawTextureSampling2D::Linear);
         bool custom_batch(std::span<const DrawVertex2D> vertices,
-                          Color4f color,
+                          termin::LinearColor color,
                           TextureHandle texture = {},
                           DrawTextureSampling2D sampling = DrawTextureSampling2D::Linear);
         bool retained_batch(std::shared_ptr<RetainedDrawBatch2D> batch);

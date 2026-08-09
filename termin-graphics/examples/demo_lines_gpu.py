@@ -8,6 +8,7 @@ import math
 import sdl2
 
 from tcbase import MouseButton
+from tcbase._geom_native import LinearColor
 from termin.display.window import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
@@ -212,11 +213,7 @@ def main() -> None:
             ctx.context.begin_pass(
                 target.color,
                 target.depth,
-                clear_color_enabled=True,
-                r=0.035,
-                g=0.04,
-                b=0.05,
-                a=1.0,
+                clear_linear_color=LinearColor(0.035, 0.04, 0.05, 1.0),
                 clear_depth_enabled=True,
                 clear_depth=1.0,
             )

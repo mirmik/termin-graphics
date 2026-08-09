@@ -188,7 +188,7 @@ namespace tgfx {
 
     void RenderContext2::begin_pass(TextureHandle color,
                                     TextureHandle depth,
-                                    const float* clear_color,
+                                    const termin::LinearColor* clear_color,
                                     float clear_depth,
                                     bool clear_depth_enabled) {
         RenderPassDesc pass;
@@ -202,7 +202,7 @@ namespace tgfx {
             color_att.texture = color;
             if (clear_color) {
                 color_att.load = LoadOp::Clear;
-                memcpy(color_att.clear_color, clear_color, sizeof(float) * 4);
+                color_att.clear_color = *clear_color;
             } else {
                 color_att.load = LoadOp::Load;
             }

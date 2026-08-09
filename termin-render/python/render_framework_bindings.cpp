@@ -143,11 +143,7 @@ namespace termin {
                         self->size = std::make_pair(nb::cast<int>(t[0]), nb::cast<int>(t[1]));
                     }
                     if (!clear_color.is_none()) {
-                        nb::tuple t = nb::cast<nb::tuple>(clear_color);
-                        self->clear_color = std::array<double, 4>{nb::cast<double>(t[0]),
-                                                                  nb::cast<double>(t[1]),
-                                                                  nb::cast<double>(t[2]),
-                                                                  nb::cast<double>(t[3])};
+                        self->clear_color = nb::cast<termin::LinearColor>(clear_color);
                     }
                     if (!clear_depth.is_none()) {
                         self->clear_depth = nb::cast<float>(clear_depth);
@@ -194,8 +190,7 @@ namespace termin {
                 "clear_color",
                 [](const ResourceSpec& self) -> nb::object {
                     if (self.clear_color) {
-                        auto& c = *self.clear_color;
-                        return nb::make_tuple(c[0], c[1], c[2], c[3]);
+                        return nb::cast(*self.clear_color);
                     }
                     return nb::none();
                 },
@@ -203,11 +198,7 @@ namespace termin {
                     if (val.is_none()) {
                         self.clear_color = std::nullopt;
                     } else {
-                        nb::tuple t = nb::cast<nb::tuple>(val);
-                        self.clear_color = std::array<double, 4>{nb::cast<double>(t[0]),
-                                                                 nb::cast<double>(t[1]),
-                                                                 nb::cast<double>(t[2]),
-                                                                 nb::cast<double>(t[3])};
+                        self.clear_color = nb::cast<termin::LinearColor>(val);
                     }
                 })
             .def_prop_rw(

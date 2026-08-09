@@ -7,26 +7,12 @@
 
 #include <termin/geom/affine2.hpp>
 #include <termin/geom/bounds2.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/geom/vec2.hpp>
 
 #include "tgfx2/tgfx2_api.h"
 
 namespace tgfx {
-
-    struct Color4f {
-        float r = 1.0f;
-        float g = 1.0f;
-        float b = 1.0f;
-        float a = 1.0f;
-
-        static constexpr Color4f white() noexcept {
-            return {};
-        }
-        static constexpr Color4f transparent() noexcept {
-            return {0, 0, 0, 0};
-        }
-        TGFX2_API bool is_finite() const noexcept;
-    };
 
     enum class FillRule : std::uint8_t {
         NonZero,
@@ -44,14 +30,14 @@ namespace tgfx {
     };
 
     struct FillPaint {
-        Color4f color{};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         FillRule rule = FillRule::NonZero;
 
         TGFX2_API bool validate() const;
     };
 
     struct StrokePaint {
-        Color4f color{};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         float width = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Butt;

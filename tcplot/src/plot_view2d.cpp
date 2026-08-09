@@ -22,7 +22,7 @@ namespace tcplot {
 
     namespace {
 
-        std::optional<Color4> plot2d_opt_color(Color4 color) {
+        std::optional<SrgbColor> plot2d_opt_color(SrgbColor color) {
             if (std::isnan(color.r) || std::isnan(color.g) || std::isnan(color.b) || std::isnan(color.a)) {
                 return std::nullopt;
             }
@@ -194,13 +194,13 @@ namespace tcplot {
     bool PlotView2D::set_line_color(int idx, float r, float g, float b, float a) {
         if (idx < 0)
             return false;
-        return engine_->set_line_color(static_cast<size_t>(idx), Color4{r, g, b, a});
+        return engine_->set_line_color(static_cast<size_t>(idx), SrgbColor{r, g, b, a});
     }
 
     bool PlotView2D::set_scatter_color(int idx, float r, float g, float b, float a) {
         if (idx < 0)
             return false;
-        return engine_->set_scatter_color(static_cast<size_t>(idx), Color4{r, g, b, a});
+        return engine_->set_scatter_color(static_cast<size_t>(idx), SrgbColor{r, g, b, a});
     }
 
     bool PlotView2D::set_line_style(int idx, LineStyle style, float dash_px, float gap_px) {
@@ -237,10 +237,10 @@ namespace tcplot {
 
         ctx_->begin_frame();
 
-        const Color4 bg = styles::bg_color();
-        const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
+        const SrgbColor bg = styles::bg_color();
+        const termin::LinearColor clear_col = termin::srgb_to_linear(bg);
         // 2D pass: no depth attachment, no depth clear.
-        ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{}, clear_col, 1.0f, false);
+        ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{}, &clear_col, 1.0f, false);
 
         engine_->render(ctx_, font_);
 

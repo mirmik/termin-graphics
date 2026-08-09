@@ -63,7 +63,8 @@ namespace tgfx::tests {
             pass.colors[i].texture = targets[i];
             pass.colors[i].load = LoadOp::Clear;
             pass.colors[i].store = StoreOp::Store;
-            std::memcpy(pass.colors[i].clear_color, clear_colors[i], sizeof(clear_colors[i]));
+            pass.colors[i].clear_color = {clear_colors[i][0], clear_colors[i][1],
+                                          clear_colors[i][2], clear_colors[i][3]};
         }
         pass.has_depth = true;
         pass.depth.texture = depth;

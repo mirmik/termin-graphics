@@ -245,10 +245,10 @@ void main() {
             tgfx::ColorAttachmentDesc color_att;
             color_att.texture = rt_tex;
             color_att.load = tgfx::LoadOp::Clear;
-            color_att.clear_color[0] = pulse(t, 0.0f) * 0.1f;
-            color_att.clear_color[1] = pulse(t, 2.1f) * 0.1f;
-            color_att.clear_color[2] = 0.15f;
-            color_att.clear_color[3] = 1.0f;
+            color_att.clear_color.r = pulse(t, 0.0f) * 0.1f;
+            color_att.clear_color.g = pulse(t, 2.1f) * 0.1f;
+            color_att.clear_color.b = 0.15f;
+            color_att.clear_color.a = 1.0f;
             pass.colors.push_back(color_att);
 
             cmd->begin_render_pass(pass);

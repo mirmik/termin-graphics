@@ -82,10 +82,10 @@ int main(int argc, char** argv) {
         tgfx::ColorAttachmentDesc color;
         color.texture = rt;
         color.load = tgfx::LoadOp::Clear;
-        color.clear_color[0] = 0.24f;
-        color.clear_color[1] = 0.48f;
-        color.clear_color[2] = 0.76f;
-        color.clear_color[3] = 1.00f;
+        color.clear_color.r = 0.24f;
+        color.clear_color.g = 0.48f;
+        color.clear_color.b = 0.76f;
+        color.clear_color.a = 1.00f;
         pass.colors.push_back(color);
 
         auto cmd = dev->create_command_list();

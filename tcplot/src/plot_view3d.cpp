@@ -26,7 +26,7 @@ namespace tcplot {
 
     namespace {
 
-        std::optional<Color4> plot3d_opt_color(Color4 color) {
+        std::optional<SrgbColor> plot3d_opt_color(SrgbColor color) {
             if (std::isnan(color.r) || std::isnan(color.g) || std::isnan(color.b) || std::isnan(color.a)) {
                 return std::nullopt;
             }
@@ -181,7 +181,7 @@ namespace tcplot {
     bool PlotView3D::set_surface_color(int surface_idx, float r, float g, float b, float a) {
         if (surface_idx < 0)
             return false;
-        return engine_->set_surface_color(static_cast<size_t>(surface_idx), Color4{r, g, b, a});
+        return engine_->set_surface_color(static_cast<size_t>(surface_idx), SrgbColor{r, g, b, a});
     }
     bool PlotView3D::set_surface_grid(int surface_idx, SurfaceGridOptions options) {
         if (surface_idx < 0)
@@ -326,9 +326,9 @@ namespace tcplot {
 
         ctx_->begin_frame();
 
-        const Color4 bg = styles::bg_color();
-        const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
-        ctx_->begin_pass(offscreen_color_, offscreen_depth_, clear_col, 1.0f, true);
+        const SrgbColor bg = styles::bg_color();
+        const termin::LinearColor clear_col = termin::srgb_to_linear(bg);
+        ctx_->begin_pass(offscreen_color_, offscreen_depth_, &clear_col, 1.0f, true);
         engine_->render(ctx_, font_);
         ctx_->end_pass();
         ctx_->end_frame();

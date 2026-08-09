@@ -184,7 +184,7 @@ static void test_triangle_draw(tgfx::IRenderDevice& device, tgfx::PipelineCache&
     ctx.begin_frame();
 
     float clear[] = {0.f, 0.f, 0.2f, 1.f}; // dark blue background
-    ctx.begin_pass(rt, {}, clear);
+    ctx.begin_pass(rt, {}, &clear);
     ctx.set_viewport(0, 0, W, H);
 
     ctx.set_depth_test(false);
@@ -324,7 +324,7 @@ static void test_index_buffer_rebind_after_pipeline_change(tgfx::IRenderDevice& 
     ctx.begin_frame();
 
     float clear[] = {0.f, 0.f, 0.f, 1.f};
-    ctx.begin_pass(rt, {}, clear);
+    ctx.begin_pass(rt, {}, &clear);
     ctx.set_viewport(0, 0, W, H);
     ctx.set_depth_test(false);
     ctx.set_blend(false);
@@ -403,7 +403,7 @@ static void test_fullscreen_quad(tgfx::IRenderDevice& device, tgfx::PipelineCach
     ctx.begin_frame();
 
     float clear[] = {0.f, 0.f, 0.f, 1.f};
-    ctx.begin_pass(rt, {}, clear);
+    ctx.begin_pass(rt, {}, &clear);
     ctx.set_viewport(0, 0, W, H);
     ctx.set_depth_test(false);
     ctx.set_cull(tgfx::CullMode::None);
@@ -625,8 +625,8 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
     };
 
     ctx.begin_frame();
-    float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    ctx.begin_pass(color, depth, clear, 1.0f, true);
+    termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
+    ctx.begin_pass(color, depth, &clear, 1.0f, true);
     ctx.set_viewport(0, 0, W, H);
     ctx.set_depth_test(true);
     ctx.set_depth_write(true);

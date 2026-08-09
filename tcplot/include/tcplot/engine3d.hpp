@@ -75,11 +75,11 @@ namespace tcplot {
         bool show_wireframe = true;
         bool show_series = true;
         bool show_labels = true;
-        Color4 grid_color{0.55f, 0.55f, 0.55f, 1.0f};
-        std::array<Color4, 3> axis_colors{
-            Color4{1, 0, 0, 1},
-            Color4{0, 1, 0, 1},
-            Color4{0, 0, 1, 1},
+        SrgbColor grid_color{0.55f, 0.55f, 0.55f, 1.0f};
+        std::array<SrgbColor, 3> axis_colors{
+            SrgbColor{1, 0, 0, 1},
+            SrgbColor{0, 1, 0, 1},
+            SrgbColor{0, 0, 1, 1},
         };
         float x_scale = 1.0f;
         float y_scale = 1.0f;
@@ -115,7 +115,7 @@ namespace tcplot {
 
         bool set_surface_colormap(size_t idx, SurfaceColorMap colormap);
         bool set_surface_colormap_reversed(size_t idx, bool reversed);
-        bool set_surface_color(size_t idx, Color4 color);
+        bool set_surface_color(size_t idx, SrgbColor color);
         bool set_surface_wireframe(size_t idx, bool wireframe);
         bool set_surface_grid(size_t idx, SurfaceGridOptions options);
         bool set_surface_data(size_t idx,
@@ -125,8 +125,8 @@ namespace tcplot {
                               uint32_t rows,
                               uint32_t cols);
         bool set_scatter_data(size_t idx, std::vector<double> x, std::vector<double> y, std::vector<double> z);
-        bool set_scatter_style(size_t idx, Color4 color, double size);
-        void set_grid_style(Color4 color, const std::array<Color4, 3>& axis_colors);
+        bool set_scatter_style(size_t idx, SrgbColor color, double size);
+        void set_grid_style(SrgbColor color, const std::array<SrgbColor, 3>& axis_colors);
 
         void toggle_wireframe() {
             show_wireframe = !show_wireframe;

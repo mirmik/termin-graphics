@@ -230,7 +230,9 @@ namespace tgfx {
             width = tex->desc.width;
             height = tex->desc.height;
             if (color.load == LoadOp::Clear) {
-                ctx_->ClearRenderTargetView(tex->rtv.Get(), color.clear_color);
+                const float clear_color[4] = {color.clear_color.r, color.clear_color.g,
+                                              color.clear_color.b, color.clear_color.a};
+                ctx_->ClearRenderTargetView(tex->rtv.Get(), clear_color);
             }
             if (color.resolve_texture) {
                 auto* resolve = device_.get_texture(color.resolve_texture);

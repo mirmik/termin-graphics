@@ -3,6 +3,7 @@
 #include <string>
 
 #include <tgfx2/draw_list2d.hpp>
+#include <termin/geom/color.hpp>
 
 #include "termin_visual_scene/native_graphic_item2d.hpp"
 
@@ -15,7 +16,7 @@ namespace termin::visual {
                    std::string font_uri,
                    termin::Vec2f origin,
                    float size_px,
-                   tgfx::Color4f color,
+                   termin::SrgbColor color,
                    tgfx::TextAnchor2D anchor,
                    termin::Bounds2f layout_bounds);
 
@@ -23,7 +24,7 @@ namespace termin::visual {
         void set_font_uri(std::string font_uri);
         void set_origin(termin::Vec2f origin);
         void set_size_px(float size_px);
-        void set_color(tgfx::Color4f color);
+        void set_color(termin::SrgbColor color);
         void set_anchor(tgfx::TextAnchor2D anchor);
         void set_layout_bounds(termin::Bounds2f bounds);
 
@@ -36,7 +37,7 @@ namespace termin::visual {
         std::string font_uri_;
         termin::Vec2f origin_{};
         float size_px_ = 14.0f;
-        tgfx::Color4f color_{};
+        termin::SrgbColor color_{};
         tgfx::TextAnchor2D anchor_ = tgfx::TextAnchor2D::Left;
         termin::Bounds2f layout_bounds_{};
     };

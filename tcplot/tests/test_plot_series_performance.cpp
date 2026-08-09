@@ -54,9 +54,9 @@ int main() {
             scatter_y[index] = std::cos(x[index] * 0.2);
         }
         view.plot({x.data(), line_y.data(), count},
-                  tcplot::LinePlotOptions{{tcplot::Color4{0.1f, 0.6f, 0.9f, 1.0f}}, 1.5, "100k line"});
+                  tcplot::LinePlotOptions{{tcplot::SrgbColor{0.1f, 0.6f, 0.9f, 1.0f}}, 1.5, "100k line"});
         view.scatter({x.data(), scatter_y.data(), count},
-                     tcplot::ScatterPlotOptions{{tcplot::Color4{0.9f, 0.3f, 0.2f, 0.7f}}, 3.0, "100k scatter"});
+                     tcplot::ScatterPlotOptions{{tcplot::SrgbColor{0.9f, 0.3f, 0.2f, 0.7f}}, 3.0, "100k scatter"});
 
         constexpr int width = 1280;
         constexpr int height = 720;

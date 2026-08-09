@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -8,6 +9,8 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+
+#include <termin/geom/color.hpp>
 
 #include "termin_visual_scene/builtin_items2d.hpp"
 #include "termin_visual_scene/interaction2d.hpp"
@@ -62,20 +65,16 @@ namespace {
 
     struct PolylineItemRef2D : GraphicItemRef2D {};
 
-    tgfx::Color4f parse_color(nb::tuple value) {
-        if (value.size() != 4) {
-            throw nb::value_error("color must contain (r, g, b, a)");
-        }
-        tgfx::Color4f result{
-            nb::cast<float>(value[0]),
-            nb::cast<float>(value[1]),
-            nb::cast<float>(value[2]),
-            nb::cast<float>(value[3]),
-        };
-        if (!result.is_finite()) {
+    termin::SrgbColor validate_color(termin::SrgbColor authored) {
+        if (!std::isfinite(authored.r) || !std::isfinite(authored.g) || !std::isfinite(authored.b) ||
+            !std::isfinite(authored.a)) {
             throw nb::value_error("color must be finite");
         }
-        return result;
+        return authored;
+    }
+
+    termin::LinearColor parse_color(termin::SrgbColor authored) {
+        return termin::srgb_to_linear(validate_color(authored));
     }
 
     termin::Vec2f parse_point(nb::tuple value) {
@@ -142,7 +141,7 @@ namespace {
         if (color.is_none())
             return std::nullopt;
         return tgfx::StrokePaint{
-            parse_color(nb::cast<nb::tuple>(color)),
+            parse_color(nb::cast<termin::SrgbColor>(color)),
             width,
         };
     }
@@ -256,7 +255,7 @@ NB_MODULE(_visual_scene_native, m) {
     nb::class_<PolylineItemRef2D, GraphicItemRef2D>(m, "PolylineItemRef2D")
         .def(
             "set",
-            [](const PolylineItemRef2D& self, nb::sequence points, nb::tuple color, float width, bool closed) {
+            [](const PolylineItemRef2D& self, nb::sequence points, termin::SrgbColor color, float width, bool closed) {
                 tc_graphic_item& item = self.item();
                 const char* type_name = tc_graphic_item_type_name(&item);
                 if (!type_name || std::string_view(type_name) != "termin.visual.Polyline2D") {
@@ -304,7 +303,7 @@ NB_MODULE(_visual_scene_native, m) {
             "create_rect",
             [](TcVisualScene self,
                nb::tuple rect,
-               nb::tuple fill,
+               termin::SrgbColor fill,
                nb::object stroke_color,
                float stroke_width,
                nb::object parent) {
@@ -324,7 +323,7 @@ NB_MODULE(_visual_scene_native, m) {
             [](TcVisualScene self,
                nb::tuple rect,
                float radius,
-               nb::tuple fill,
+               termin::SrgbColor fill,
                nb::object stroke_color,
                float stroke_width,
                nb::object parent) {
@@ -346,7 +345,7 @@ NB_MODULE(_visual_scene_native, m) {
             "create_ellipse",
             [](TcVisualScene self,
                nb::tuple rect,
-               nb::tuple fill,
+               termin::SrgbColor fill,
                nb::object stroke_color,
                float stroke_width,
                nb::object parent) {
@@ -364,7 +363,7 @@ NB_MODULE(_visual_scene_native, m) {
             nb::arg("parent").none() = nb::none())
         .def(
             "create_polyline",
-            [](TcVisualScene self, nb::sequence points, nb::tuple color, float width, bool closed, nb::object parent) {
+            [](TcVisualScene self, nb::sequence points, termin::SrgbColor color, float width, bool closed, nb::object parent) {
                 auto object = std::make_unique<PolylineItem2D>(
                     parse_points(points), tgfx::StrokePaint{parse_color(color), width}, closed);
                 const auto handle = self.adopt(std::move(object), parent_object(self, parent));
@@ -387,7 +386,7 @@ NB_MODULE(_visual_scene_native, m) {
                std::string text,
                nb::tuple origin,
                float size_px,
-               nb::tuple color,
+               termin::SrgbColor color,
                nb::tuple layout_bounds,
                nb::object parent) {
                 const auto bounds = parse_rect(layout_bounds);
@@ -397,7 +396,7 @@ NB_MODULE(_visual_scene_native, m) {
                                            "ui://default-font",
                                            parse_point(origin),
                                            size_px,
-                                           parse_color(color),
+                                           validate_color(color),
                                            tgfx::TextAnchor2D::Left,
                                            termin::Bounds2f{
                                                bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height}),

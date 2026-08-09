@@ -53,7 +53,7 @@ namespace termin {
                 item["size"] = nb::make_tuple(spec.size->first, spec.size->second);
             if (spec.clear_color) {
                 const auto& color = *spec.clear_color;
-                item["clear_color"] = nb::make_tuple(color[0], color[1], color[2], color[3]);
+                item["clear_color"] = nb::make_tuple(color.r, color.g, color.b, color.a);
             }
             if (spec.clear_depth)
                 item["clear_depth"] = *spec.clear_depth;

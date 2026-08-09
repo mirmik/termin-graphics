@@ -97,10 +97,10 @@ int main() {
         tgfx::ColorAttachmentDesc color;
         color.texture = offscreen;
         color.load = tgfx::LoadOp::Clear;
-        color.clear_color[0] = 0.18f;
-        color.clear_color[1] = 0.42f;
-        color.clear_color[2] = 0.73f;
-        color.clear_color[3] = 1.00f;
+        color.clear_color.r = 0.18f;
+        color.clear_color.g = 0.42f;
+        color.clear_color.b = 0.73f;
+        color.clear_color.a = 1.00f;
         pass.colors.push_back(color);
 
         auto cmd = device.create_command_list();

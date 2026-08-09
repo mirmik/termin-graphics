@@ -19,7 +19,7 @@ namespace termin {
         c.color_format = color_format.empty() ? nullptr : tc_intern_string(color_format.c_str());
         c.depth_format = depth_format.empty() ? nullptr : tc_intern_string(depth_format.c_str());
         c.clear_color = clear_color;
-        std::memcpy(c.clear_color_value, clear_color_value, sizeof(c.clear_color_value));
+        c.clear_linear_color = {clear_linear_color.r, clear_linear_color.g, clear_linear_color.b, clear_linear_color.a};
         c.clear_depth = clear_depth;
         c.clear_depth_value = clear_depth_value;
         c.pipeline_uuid = pipeline_uuid.empty() ? nullptr : tc_intern_string(pipeline_uuid.c_str());
@@ -53,7 +53,7 @@ namespace termin {
         cfg.color_format = c->color_format ? c->color_format : "rgba16f";
         cfg.depth_format = c->depth_format ? c->depth_format : "depth32f";
         cfg.clear_color = c->clear_color;
-        std::memcpy(cfg.clear_color_value, c->clear_color_value, sizeof(cfg.clear_color_value));
+        cfg.clear_linear_color = {c->clear_linear_color.r, c->clear_linear_color.g, c->clear_linear_color.b, c->clear_linear_color.a};
         cfg.clear_depth = c->clear_depth;
         cfg.clear_depth_value = c->clear_depth_value;
         cfg.pipeline_uuid = c->pipeline_uuid ? c->pipeline_uuid : "";

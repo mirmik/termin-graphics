@@ -258,10 +258,10 @@ int main() {
     tgfx::RenderPassDesc pass;
     tgfx::ColorAttachmentDesc color_att;
     color_att.load = tgfx::LoadOp::Clear;
-    color_att.clear_color[0] = 0.1f;
-    color_att.clear_color[1] = 0.1f;
-    color_att.clear_color[2] = 0.1f;
-    color_att.clear_color[3] = 1.0f;
+    color_att.clear_color.r = 0.1f;
+    color_att.clear_color.g = 0.1f;
+    color_att.clear_color.b = 0.1f;
+    color_att.clear_color.a = 1.0f;
     pass.colors.push_back(color_att);
 
     cmd->begin_render_pass(pass);
@@ -310,10 +310,10 @@ int main() {
     tgfx::ColorAttachmentDesc rt_color;
     rt_color.texture = rt_tex;
     rt_color.load = tgfx::LoadOp::Clear;
-    rt_color.clear_color[0] = 0.0f;
-    rt_color.clear_color[1] = 0.0f;
-    rt_color.clear_color[2] = 0.2f; // dark blue clear
-    rt_color.clear_color[3] = 1.0f;
+    rt_color.clear_color.r = 0.0f;
+    rt_color.clear_color.g = 0.0f;
+    rt_color.clear_color.b = 0.2f; // dark blue clear
+    rt_color.clear_color.a = 1.0f;
     rt_pass.colors.push_back(rt_color);
 
     cmd2->begin_render_pass(rt_pass);
@@ -428,10 +428,10 @@ int main() {
                 tgfx::ColorAttachmentDesc artifact_color;
                 artifact_color.texture = artifact_rt_tex;
                 artifact_color.load = tgfx::LoadOp::Clear;
-                artifact_color.clear_color[0] = 0.0f;
-                artifact_color.clear_color[1] = 0.0f;
-                artifact_color.clear_color[2] = 0.0f;
-                artifact_color.clear_color[3] = 1.0f;
+                artifact_color.clear_color.r = 0.0f;
+                artifact_color.clear_color.g = 0.0f;
+                artifact_color.clear_color.b = 0.0f;
+                artifact_color.clear_color.a = 1.0f;
                 artifact_pass.colors.push_back(artifact_color);
 
                 cmd3->begin_render_pass(artifact_pass);

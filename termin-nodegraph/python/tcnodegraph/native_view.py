@@ -9,10 +9,10 @@ import weakref
 
 from tcbase import MouseButton
 from termin.gui_native import (
-    Color,
     KeyCode,
     KeyEventType,
     Point,
+    SrgbColor,
     PointerEventType,
     Rect,
     Size,
@@ -30,24 +30,24 @@ from tcnodegraph.controller import GraphController
 from tcnodegraph.model import Edge, Graph, Node
 
 
-_BACKGROUND = Color(0.09, 0.10, 0.12, 1.0)
-_GRID = Color(0.15, 0.16, 0.20, 1.0)
-_AXES = Color(0.24, 0.27, 0.34, 1.0)
-_TEXT = Color(0.92, 0.94, 0.98, 1.0)
-_PARAM_TEXT = Color(0.70, 0.74, 0.82, 1.0)
+_BACKGROUND = SrgbColor(0.09, 0.10, 0.12, 1.0)
+_GRID = SrgbColor(0.15, 0.16, 0.20, 1.0)
+_AXES = SrgbColor(0.24, 0.27, 0.34, 1.0)
+_TEXT = SrgbColor(0.92, 0.94, 0.98, 1.0)
+_PARAM_TEXT = SrgbColor(0.70, 0.74, 0.82, 1.0)
 _SOCKET_COLORS = {
-    "fbo": Color(0.39, 0.70, 0.39, 1.0),
-    "color_texture": Color(0.30, 0.62, 0.92, 1.0),
-    "depth_texture": Color(0.74, 0.56, 0.28, 1.0),
-    "texture": Color(0.78, 0.62, 0.35, 1.0),
-    "shadow": Color(0.45, 0.45, 0.70, 1.0),
-    "flow": Color(0.88, 0.88, 0.90, 1.0),
-    "any": Color(0.68, 0.68, 0.70, 1.0),
+    "fbo": SrgbColor(0.39, 0.70, 0.39, 1.0),
+    "color_texture": SrgbColor(0.30, 0.62, 0.92, 1.0),
+    "depth_texture": SrgbColor(0.74, 0.56, 0.28, 1.0),
+    "texture": SrgbColor(0.78, 0.62, 0.35, 1.0),
+    "shadow": SrgbColor(0.45, 0.45, 0.70, 1.0),
+    "flow": SrgbColor(0.88, 0.88, 0.90, 1.0),
+    "any": SrgbColor(0.68, 0.68, 0.70, 1.0),
 }
 
 
-def _color(value: Color) -> tuple[float, float, float, float]:
-    return value.r, value.g, value.b, value.a
+def _color(value: SrgbColor) -> SrgbColor:
+    return value
 
 
 def _rect(value: Rect) -> tuple[float, float, float, float]:
@@ -62,37 +62,37 @@ def _points(values: list[Point]) -> list[tuple[float, float]]:
     return [_point(value) for value in values]
 
 
-def _node_palette(node: Node) -> tuple[Color, Color, Color]:
+def _node_palette(node: Node) -> tuple[SrgbColor, SrgbColor, SrgbColor]:
     kind = str(node.data.get("node_type", node.kind))
     graph_type = str(node.data.get("graph_type", node.title))
     if kind == "resource":
         if graph_type == "Shadow Maps":
             return (
-                Color(0.22, 0.20, 0.30, 1.0),
-                Color(0.34, 0.30, 0.47, 1.0),
-                Color(0.48, 0.44, 0.62, 1.0),
+                SrgbColor(0.22, 0.20, 0.30, 1.0),
+                SrgbColor(0.34, 0.30, 0.47, 1.0),
+                SrgbColor(0.48, 0.44, 0.62, 1.0),
             )
         return (
-            Color(0.18, 0.24, 0.20, 1.0),
-            Color(0.26, 0.37, 0.28, 1.0),
-            Color(0.40, 0.52, 0.41, 1.0),
+            SrgbColor(0.18, 0.24, 0.20, 1.0),
+            SrgbColor(0.26, 0.37, 0.28, 1.0),
+            SrgbColor(0.40, 0.52, 0.41, 1.0),
         )
     if kind == "effect":
         return (
-            Color(0.28, 0.23, 0.18, 1.0),
-            Color(0.42, 0.31, 0.22, 1.0),
-            Color(0.56, 0.43, 0.32, 1.0),
+            SrgbColor(0.28, 0.23, 0.18, 1.0),
+            SrgbColor(0.42, 0.31, 0.22, 1.0),
+            SrgbColor(0.56, 0.43, 0.32, 1.0),
         )
     if kind in ("output", "pipeline_output"):
         return (
-            Color(0.21, 0.17, 0.24, 1.0),
-            Color(0.36, 0.23, 0.42, 1.0),
-            Color(0.54, 0.37, 0.62, 1.0),
+            SrgbColor(0.21, 0.17, 0.24, 1.0),
+            SrgbColor(0.36, 0.23, 0.42, 1.0),
+            SrgbColor(0.54, 0.37, 0.62, 1.0),
         )
     return (
-        Color(0.17, 0.20, 0.27, 1.0),
-        Color(0.24, 0.28, 0.38, 1.0),
-        Color(0.32, 0.36, 0.48, 1.0),
+        SrgbColor(0.17, 0.20, 0.27, 1.0),
+        SrgbColor(0.24, 0.28, 0.38, 1.0),
+        SrgbColor(0.32, 0.36, 0.48, 1.0),
     )
 
 
@@ -178,8 +178,8 @@ class NativeNodeGraphView:
         for group in self.graph.groups.values():
             item = self.scene.create_rect(
                 _rect(Rect(0.0, 0.0, group.width, group.height)),
-                _color(Color(0.16, 0.20, 0.30, 0.20)),
-                _color(Color(0.28, 0.40, 0.62, 0.9)),
+                _color(SrgbColor(0.16, 0.20, 0.30, 0.20)),
+                _color(SrgbColor(0.28, 0.40, 0.62, 0.9)),
                 1.5,
             )
             item.position = (group.x, group.y)
@@ -308,7 +308,7 @@ class NativeNodeGraphView:
             widget = self._create_param_widget(node, name, value)
             item = self.scene.create_rect(
                 _rect(Rect(0.0, 0.0, max(64.0, node.width * 0.46 - 8.0), 18.0)),
-                _color(Color(0.0, 0.0, 0.0, 0.0)),
+                _color(SrgbColor(0.0, 0.0, 0.0, 0.0)),
                 None,
                 1.0,
                 parent,
@@ -548,7 +548,7 @@ class NativeNodeGraphView:
             self.scene.destroy(self._pending_item)
         item = self.scene.create_polyline(
             [(0.0, 0.0), (0.0, 0.0)],
-            _color(Color(0.9, 0.86, 0.55, 1.0)),
+            _color(SrgbColor(0.9, 0.86, 0.55, 1.0)),
             2.0,
         )
         item.z_order = -9
@@ -567,7 +567,7 @@ class NativeNodeGraphView:
         if start is not None:
             self._pending_item.set(
                 _points(_bezier_points(start, self._pending_world)),
-                _color(Color(0.9, 0.86, 0.55, 1.0)),
+                _color(SrgbColor(0.9, 0.86, 0.55, 1.0)),
                 2.0,
             )
             self.view.invalidate_scene()
@@ -638,7 +638,7 @@ class NativeNodeGraphView:
         self._drag_start_world = None
         self._drag_start_position = None
 
-    def _edge_color(self, edge: Edge) -> Color:
+    def _edge_color(self, edge: Edge) -> SrgbColor:
         node = self.graph.nodes.get(edge.src_node_id)
         if node is not None:
             for socket in node.outputs:

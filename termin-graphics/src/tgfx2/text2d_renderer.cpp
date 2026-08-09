@@ -176,7 +176,7 @@ namespace tgfx {
             return;
 
         const bool profile = tc_profiler_enabled();
-        const termin::Color4& color = options.color;
+        const termin::LinearColor color = termin::srgb_to_linear(options.color);
 
         // Rasterise any missing glyphs for this display size and re-upload
         // the atlas if needed. Bitmap path bakes per-size; SDF path bakes
@@ -366,9 +366,16 @@ namespace tgfx {
     }
 
     void Text2DRenderer::draw_mesh(std::span<const Text2DVertex> vertices,
-                                   termin::Color4 color,
+                                   termin::SrgbColor color,
                                    float display_px,
                                    FontAtlas* font) {
+        draw_mesh_linear(vertices, termin::srgb_to_linear(color), display_px, font);
+    }
+
+    void Text2DRenderer::draw_mesh_linear(std::span<const Text2DVertex> vertices,
+                                          termin::LinearColor color,
+                                          float display_px,
+                                          FontAtlas* font) {
         if (vertices.empty() || vertices.size() % 3 != 0 || font == nullptr || ctx_ == nullptr) {
             return;
         }

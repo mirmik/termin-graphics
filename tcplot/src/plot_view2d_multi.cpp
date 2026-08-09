@@ -320,7 +320,7 @@ namespace tcplot {
     }
     void PlotView2DMulti::set_title_color(float r, float g, float b, float a) {
         for (auto& p : panels_)
-            p->title_color = Color4{r, g, b, a};
+            p->title_color = SrgbColor{r, g, b, a};
     }
     void PlotView2DMulti::clear_title_color() {
         for (auto& p : panels_)
@@ -331,14 +331,14 @@ namespace tcplot {
             return;
         if (series_idx < 0)
             return;
-        panels_[panel_idx]->set_line_color(static_cast<size_t>(series_idx), Color4{r, g, b, a});
+        panels_[panel_idx]->set_line_color(static_cast<size_t>(series_idx), SrgbColor{r, g, b, a});
     }
     void PlotView2DMulti::set_scatter_color(int panel_idx, int series_idx, float r, float g, float b, float a) {
         if (panel_idx < 0 || panel_idx >= (int)panels_.size())
             return;
         if (series_idx < 0)
             return;
-        panels_[panel_idx]->set_scatter_color(static_cast<size_t>(series_idx), Color4{r, g, b, a});
+        panels_[panel_idx]->set_scatter_color(static_cast<size_t>(series_idx), SrgbColor{r, g, b, a});
     }
     void PlotView2DMulti::set_line_style(int panel_idx, int series_idx, LineStyle style, float dash_px, float gap_px) {
         if (panel_idx < 0 || panel_idx >= (int)panels_.size())
@@ -501,9 +501,9 @@ namespace tcplot {
         // (virtualised scrolling leaves a strip at the bottom when fewer
         // panels fit than PanelCount). Fallback to the style default for
         // an empty panel list.
-        const Color4 bg = panels_.empty() ? styles::bg_color() : panels_[0]->bg_color;
-        const float clear_col[4] = {bg.r, bg.g, bg.b, bg.a};
-        ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{}, clear_col, 1.0f, /*clear_depth_enabled=*/false);
+        const SrgbColor bg = panels_.empty() ? styles::bg_color() : panels_[0]->bg_color;
+        const termin::LinearColor clear_col = termin::srgb_to_linear(bg);
+        ctx_->begin_pass(offscreen_color_, tgfx::TextureHandle{}, &clear_col, 1.0f, /*clear_depth_enabled=*/false);
 
         // Only render panels whose rect intersects the viewport. In
         // virtualised mode this is usually 2-6 out of N; the rest pay

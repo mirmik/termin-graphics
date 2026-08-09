@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include <termin/geom/color.hpp>
 #include <termin/geom/vec2.hpp>
 #include <termin_visual_scene/graphic_item2d.hpp>
 #include <termin_visual_scene/interaction2d.hpp>
@@ -128,11 +129,11 @@ namespace tcplot {
         float anchor_radius = 6.0f;
         float text_size = 14.0f;
         bool close_button = true;
-        tgfx::Color4f anchor_color{0.95f, 0.55f, 0.15f, 1.0f};
-        tgfx::Color4f hover_color{1.0f, 0.72f, 0.25f, 1.0f};
-        tgfx::Color4f callout_color{0.10f, 0.13f, 0.18f, 0.96f};
-        tgfx::Color4f border_color{0.78f, 0.82f, 0.90f, 1.0f};
-        tgfx::Color4f text_color{0.96f, 0.97f, 1.0f, 1.0f};
+        termin::SrgbColor anchor_color{0.95f, 0.55f, 0.15f, 1.0f};
+        termin::SrgbColor hover_color{1.0f, 0.72f, 0.25f, 1.0f};
+        termin::SrgbColor callout_color{0.10f, 0.13f, 0.18f, 0.96f};
+        termin::SrgbColor border_color{0.78f, 0.82f, 0.90f, 1.0f};
+        termin::SrgbColor text_color{0.96f, 0.97f, 1.0f, 1.0f};
     };
 
     struct PlotDataMarkerSnapshot2D {

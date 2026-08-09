@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from termin.gui_native import (
-    Color,
+    SrgbColor,
     Constraints,
     CrossAxisAlignment,
     CursorIntent,
@@ -124,15 +124,15 @@ class DemoWidget(Widget):
     def paint(self, context):
         self.paint_count += 1
         context.push_clip(Rect(0.0, 0.0, 64.0, 32.0))
-        context.fill_rect(Rect(1.0, 2.0, 30.0, 10.0), Color(0.1, 0.2, 0.3, 1.0))
-        context.stroke_rect(Rect(2.0, 3.0, 40.0, 12.0), Color(0.2, 0.4, 0.6, 1.0), 1.5)
+        context.fill_rect(Rect(1.0, 2.0, 30.0, 10.0), SrgbColor(0.1, 0.2, 0.3, 1.0))
+        context.stroke_rect(Rect(2.0, 3.0, 40.0, 12.0), SrgbColor(0.2, 0.4, 0.6, 1.0), 1.5)
         context.draw_line(
             Point(4.0, 5.0),
             Point(6.0, 7.0),
-            Color(0.8, 0.7, 0.6, 1.0),
+            SrgbColor(0.8, 0.7, 0.6, 1.0),
             2.0,
         )
-        context.draw_text("hello", Point(8.0, 9.0), 13.0, Color(0.9, 0.1, 0.2, 1.0))
+        context.draw_text("hello", Point(8.0, 9.0), 13.0, SrgbColor(0.9, 0.1, 0.2, 1.0))
         context.pop_clip()
 
 
@@ -179,8 +179,8 @@ def test_python_box_layout_policies_padding_spacing_and_limits():
 
     root.set_layout_padding(EdgeInsets(10.0, 10.0, 10.0, 10.0))
     root.set_layout_spacing(5.0)
-    root.set_layout_background(Color(0.1, 0.2, 0.3, 1.0))
-    root.set_layout_border(Color(0.8, 0.8, 0.8, 1.0), 2.0)
+    root.set_layout_background(SrgbColor(0.1, 0.2, 0.3, 1.0))
+    root.set_layout_border(SrgbColor(0.8, 0.8, 0.8, 1.0), 2.0)
     root.add_fixed_child(fixed, 30.0)
     root.add_preferred_child(preferred)
     root.add_flex_child(flexible, 2.0)
@@ -252,7 +252,7 @@ def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy(
     slider = document.create_slider(0.25)
     separator = document.create_separator(horizontal=True)
     spacer = document.create_spacer(Size(8.0, 6.0))
-    swatch = document.create_swatch(Color(0.2, 0.4, 0.6, 1.0))
+    swatch = document.create_swatch(SrgbColor(0.2, 0.4, 0.6, 1.0))
 
     label.text = "after"
     label.set_font_size(15.0)
@@ -262,7 +262,7 @@ def test_python_typed_layout_and_basic_control_factories_disconnect_and_destroy(
     assert flow_label.wrap_mode == TextWrapMode.Word
     assert flow_label.overflow == TextOverflow.Ellipsis
     assert flow_label.max_lines == 2
-    panel.set_fill(Color(0.1, 0.1, 0.1, 1.0))
+    panel.set_fill(SrgbColor(0.1, 0.1, 0.1, 1.0))
     separator.set_thickness(2.0)
     grid.add_column(LayoutPolicy.Stretch)
     grid.add_row(LayoutPolicy.Fixed, 24.0)
@@ -646,7 +646,7 @@ def test_python_widget_paint_builds_draw_list():
 def test_python_extended_draw_commands_copy_polyline_points():
     draw_list = DrawList()
     context = PaintContext(draw_list)
-    white = Color(1.0, 1.0, 1.0, 1.0)
+    white = SrgbColor(1.0, 1.0, 1.0, 1.0)
     points = [Point(1.0, 2.0), Point(3.0, 4.0), Point(5.0, 6.0)]
 
     context.fill_rounded_rect(Rect(0.0, 0.0, 20.0, 10.0), 3.0, white)
@@ -1181,7 +1181,7 @@ def test_theme_style_inheritance_state_and_runtime_update():
     inherited.fields = StyleField.FontSize | StyleField.Foreground
     inherited.flags = 1
     inherited.value.font_size = 19.0
-    inherited.value.foreground = Color(1.0, 0.5, 0.25, 1.0)
+    inherited.value.foreground = SrgbColor(1.0, 0.5, 0.25, 1.0)
     parent.native.style_override = inherited
 
     resolved = child.native.resolve_style()
@@ -1199,7 +1199,7 @@ def test_theme_style_inheritance_state_and_runtime_update():
     initial_revision = document.theme_revision
     theme = document.theme
     theme.role(StyleRole.Button).base.font_size = 17.0
-    theme.role(StyleRole.Button).base.background = Color(0.44, 0.2, 0.1, 1.0)
+    theme.role(StyleRole.Button).base.background = SrgbColor(0.44, 0.2, 0.1, 1.0)
     child.native.clear_style_override()
     document.theme = theme
     assert document.theme_revision == initial_revision + 1
@@ -1247,7 +1247,7 @@ def test_native_rich_text_model_view_wrap_selection_and_lifetime():
     assert segment.style.italic
     assert segment.style.color.g == pytest.approx(250 / 255.0)
 
-    model.set_lines([[RichTextSegment("alpha beta gamma", RichTextStyle(Color(0.2, 0.8, 0.3, 1.0), True))]])
+    model.set_lines([[RichTextSegment("alpha beta gamma", RichTextStyle(SrgbColor(0.2, 0.8, 0.3, 1.0), True))]])
     document = tc_ui_document_create()
     renderer = DrawListRenderer()
     assert renderer.set_default_font_path(str(_bundled_font_path()), 14)
@@ -1512,8 +1512,8 @@ def test_native_basic_input_and_media_widget_factories():
     replacement = document.create_panel("group-replacement")
     group.title = "Display"
     group.set_padding(EdgeInsets(8.0, 6.0, 10.0, 12.0))
-    group.set_background(Color(0.1, 0.2, 0.3, 1.0))
-    group.set_border(Color(0.8, 0.9, 1.0, 1.0), 2.0)
+    group.set_background(SrgbColor(0.1, 0.2, 0.3, 1.0))
+    group.set_border(SrgbColor(0.8, 0.9, 1.0, 1.0), 2.0)
     group.set_content(group_content)
     assert group.title == "Display"
     assert group.content_handle == group_content.handle
@@ -1689,7 +1689,7 @@ def test_native_basic_input_and_media_widget_factories():
         context.draw_line(
             Point(0.0, 0.0),
             Point(10.0, 10.0),
-            Color(1.0, 0.0, 0.0, 1.0),
+            SrgbColor(1.0, 0.0, 0.0, 1.0),
             1.0,
         )
 

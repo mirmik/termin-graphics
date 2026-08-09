@@ -23,6 +23,14 @@ namespace nb = nanobind;
 
 namespace termin::gui_native::python_bindings {
 
+    inline tc_ui_srgb_color to_tc_ui_srgb(termin::SrgbColor color) {
+        return {color.r, color.g, color.b, color.a};
+    }
+
+    inline termin::SrgbColor from_tc_ui_srgb(tc_ui_srgb_color color) {
+        return {color.r, color.g, color.b, color.a};
+    }
+
     constexpr uint32_t PYTHON_WIDGET_MAGIC = 0x54475549u; // "TGUI"
 
     class DrawList {

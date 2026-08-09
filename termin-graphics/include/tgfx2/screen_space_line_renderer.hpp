@@ -1,7 +1,7 @@
 #pragma once
 
-#include <array>
 #include <span>
+#include <termin/geom/color.hpp>
 
 #include "tgfx2/handles.hpp"
 #include "tgfx2/line_mesh_builder.hpp"
@@ -16,7 +16,7 @@ namespace tgfx {
 
     struct ScreenSpaceLineStyle {
         float width_px = 2.0f;
-        std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};
+        termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         LineCapStyle cap = LineCapStyle::Butt;
         LineJoinStyle join = LineJoinStyle::Round;
         int round_segments = 12;

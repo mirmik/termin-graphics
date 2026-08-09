@@ -143,9 +143,9 @@ namespace {
         tgfx::RenderContext2 context(*device, cache);
         tgfx::Canvas2DRenderer canvas;
         NoFonts resources;
-        const float black[] = {0, 0, 0, 1};
+        const termin::LinearColor black{0, 0, 0, 1};
         context.begin_frame();
-        context.begin_pass(target, {}, black, 1.0f, false);
+        context.begin_pass(target, {}, &black, 1.0f, false);
         canvas.begin(context, static_cast<int>(width), static_cast<int>(height));
         const bool executed = canvas.execute(*list, resources);
         canvas.draw_rect(0, 0, 4, 4, {0, 0, 1, 1});

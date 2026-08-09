@@ -180,10 +180,10 @@ int main() {
     tgfx::ColorAttachmentDesc ca;
     ca.texture = rt;
     ca.load = tgfx::LoadOp::Clear;
-    ca.clear_color[0] = 0.0f;
-    ca.clear_color[1] = 0.0f;
-    ca.clear_color[2] = 0.0f;
-    ca.clear_color[3] = 1.0f;
+    ca.clear_color.r = 0.0f;
+    ca.clear_color.g = 0.0f;
+    ca.clear_color.b = 0.0f;
+    ca.clear_color.a = 1.0f;
     pass.colors.push_back(ca);
 
     cmd->begin_render_pass(pass);

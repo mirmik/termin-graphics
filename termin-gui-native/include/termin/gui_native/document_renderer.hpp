@@ -1,12 +1,12 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
 #include <utility>
 
+#include <termin/geom/color.hpp>
 #include <termin/gui_native/document_renderer_export.h>
 #include <termin/gui_native/tc_document.hpp>
 #include <tgfx2/handles.hpp>
@@ -26,7 +26,7 @@ namespace termin::gui_native {
     struct DocumentRendererConfig {
         std::string font_path;
         int font_size = 14;
-        std::array<float, 4> clear_color{0.03f, 0.035f, 0.045f, 1.0f};
+        termin::LinearColor clear_linear_color{0.03f, 0.035f, 0.045f, 1.0f};
         bool enable_text_input = true;
     };
 

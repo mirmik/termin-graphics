@@ -71,11 +71,11 @@ namespace tcplot {
 
         // Style
         bool show_grid = true;
-        Color4 grid_color = styles::grid_color();
-        Color4 axis_color = styles::axis_color();
-        Color4 label_color = styles::label_color();
-        Color4 bg_color = styles::bg_color();
-        Color4 plot_bg_color = styles::plot_area_bg();
+        SrgbColor grid_color = styles::grid_color();
+        SrgbColor axis_color = styles::axis_color();
+        SrgbColor label_color = styles::label_color();
+        SrgbColor bg_color = styles::bg_color();
+        SrgbColor plot_bg_color = styles::plot_area_bg();
         // Explicit title colour. nullopt = use label_color. Earlier
         // revisions auto-picked the first line series' colour (so stacked
         // panels read as "sin is blue, cos is orange"), but that coupling
@@ -84,7 +84,7 @@ namespace tcplot {
         // overridden without clearing the whole panel. Now the default is
         // predictable (label_color); callers who want series-coupled
         // titles can sample the series colour themselves and pass it in.
-        std::optional<Color4> title_color;
+        std::optional<SrgbColor> title_color;
         // Pixel sizes follow common dashboard-typography norms: axis labels
         // ≈ 15 px (tick labels -2 → 13 px), title at 22 px so it reads as
         // a header rather than another label (ratio ~1.7× to ticks).
@@ -147,8 +147,8 @@ namespace tcplot {
         // Replace the colour of an existing line / scatter series. Returns
         // false if idx is out of range. Intended for theme switching —
         // callers don't need to clear + re-add to recolour a live series.
-        bool set_line_color(size_t idx, Color4 color);
-        bool set_scatter_color(size_t idx, Color4 color);
+        bool set_line_color(size_t idx, SrgbColor color);
+        bool set_scatter_color(size_t idx, SrgbColor color);
         bool set_line_style(size_t idx, LineStyle style, float dash_px = 8.0f, float gap_px = 5.0f);
         bool set_line_colormap_reversed(size_t idx, bool reversed);
 

@@ -123,7 +123,9 @@ namespace tgfx {
         for (size_t i = 0; i < pass.colors.size(); ++i) {
             const auto& color = pass.colors[i];
             if (color.load == LoadOp::Clear) {
-                glClearBufferfv(GL_COLOR, static_cast<GLint>(i), color.clear_color);
+                const float clear_color[4] = {color.clear_color.r, color.clear_color.g,
+                                              color.clear_color.b, color.clear_color.a};
+                glClearBufferfv(GL_COLOR, static_cast<GLint>(i), clear_color);
             }
         }
 

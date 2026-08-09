@@ -11,7 +11,7 @@ namespace tcplot {
 
             // Values lifted verbatim from tcplot/styles.py so existing Python
             // screenshots stay reproducible.
-            constexpr Color4 kDefaultColors[] = {
+            constexpr SrgbColor kDefaultColors[] = {
                 {0.12f, 0.47f, 0.71f, 1.0f}, // blue
                 {1.00f, 0.50f, 0.05f, 1.0f}, // orange
                 {0.17f, 0.63f, 0.17f, 1.0f}, // green
@@ -28,37 +28,37 @@ namespace tcplot {
 
         } // namespace
 
-        const Color4* default_colors() {
+        const SrgbColor* default_colors() {
             return kDefaultColors;
         }
         uint32_t default_colors_count() {
             return kDefaultColorsCount;
         }
 
-        Color4 axis_color() {
+        SrgbColor axis_color() {
             return {0.7f, 0.7f, 0.7f, 1.0f};
         }
-        Color4 grid_color() {
+        SrgbColor grid_color() {
             return {0.3f, 0.3f, 0.3f, 0.5f};
         }
-        Color4 label_color() {
+        SrgbColor label_color() {
             return {0.8f, 0.8f, 0.8f, 1.0f};
         }
         // Neutral greys — R = G = B so hosts on a pure-grey dark theme
         // (#1A1A1A / #242424) don't see a subtle blue cast. If a host wants a
         // tinted look they override via set_bg_color / set_plot_bg_color.
-        Color4 bg_color() {
+        SrgbColor bg_color() {
             return {0.14f, 0.14f, 0.14f, 1.0f};
         }
-        Color4 plot_area_bg() {
+        SrgbColor plot_area_bg() {
             return {0.10f, 0.10f, 0.10f, 1.0f};
         }
 
-        Color4 cycle_color(uint32_t index) {
+        SrgbColor cycle_color(uint32_t index) {
             return kDefaultColors[index % kDefaultColorsCount];
         }
 
-        Color4 jet(float t) {
+        SrgbColor jet(float t) {
             t = std::clamp(t, 0.0f, 1.0f);
             float r = 0.0f, g = 0.0f, b = 0.0f;
             if (t < 0.125f) {
@@ -85,7 +85,7 @@ namespace tcplot {
             return {r, g, b, 1.0f};
         }
 
-        Color4 colormap(SurfaceColorMap map, float t) {
+        SrgbColor colormap(SurfaceColorMap map, float t) {
             t = std::clamp(t, 0.0f, 1.0f);
             switch (map) {
             case SurfaceColorMap::Viridis:

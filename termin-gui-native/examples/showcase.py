@@ -8,6 +8,7 @@ import sys
 import time
 
 import tgfx
+from tcbase._geom_native import LinearColor
 from termin.display.window import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     DrawList,
@@ -82,11 +83,7 @@ def main() -> int:
             context.begin_frame()
             context.begin_pass(
                 color_target,
-                clear_color_enabled=True,
-                r=0.03,
-                g=0.035,
-                b=0.045,
-                a=1.0,
+                clear_linear_color=LinearColor(0.03, 0.035, 0.045, 1.0),
             )
             renderer.render(context, draw_list, width, height)
             context.end_pass()

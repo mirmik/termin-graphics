@@ -5,6 +5,12 @@
 #include <tcbase/tc_log.hpp>
 
 namespace termin::visual {
+    namespace {
+        termin::LinearColor to_gpu_color(termin::SrgbColor color) {
+            const auto linear = termin::srgb_to_linear(color);
+            return {linear.r, linear.g, linear.b, linear.a};
+        }
+    }
 
     bool GraphicItemPaintContext2D::rect(termin::Rect2f rect, tgfx::FillPaint fill) {
         return sink_ != nullptr && sink_->builder != nullptr && sink_->builder->rect(rect, fill);
@@ -42,7 +48,7 @@ namespace termin::visual {
                                          std::string font_uri,
                                          termin::Vec2f origin,
                                          float size_px,
-                                         tgfx::Color4f color,
+                                         termin::SrgbColor color,
                                          tgfx::TextAnchor2D anchor) {
         if (sink_ == nullptr || sink_->builder == nullptr || sink_->resolver == nullptr) {
             return false;
@@ -52,13 +58,13 @@ namespace termin::visual {
             tc::Log::error("graphic item font '%s' was not resolved", font_uri.c_str());
             return false;
         }
-        return sink_->builder->text(std::move(text), origin, size_px, color, *font, anchor);
+        return sink_->builder->text(std::move(text), origin, size_px, to_gpu_color(color), *font, anchor);
     }
 
     bool GraphicItemPaintContext2D::image(std::string image_uri,
                                           termin::Rect2f rect,
                                           termin::Rect2f uv,
-                                          tgfx::Color4f tint,
+                                          termin::SrgbColor tint,
                                           tgfx::DrawTextureSampling2D sampling) {
         if (sink_ == nullptr || sink_->builder == nullptr || sink_->resolver == nullptr) {
             return false;
@@ -68,7 +74,7 @@ namespace termin::visual {
             tc::Log::error("graphic item image '%s' was not resolved", image_uri.c_str());
             return false;
         }
-        return sink_->builder->image(*image, rect, uv, tint, sampling);
+        return sink_->builder->image(*image, rect, uv, to_gpu_color(tint), sampling);
     }
 
     bool GraphicItemPaintContext2D::custom_batch(std::string key, termin::Bounds2f local_bounds) {

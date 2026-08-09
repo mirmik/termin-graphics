@@ -74,7 +74,7 @@ namespace tcplot {
             return value;
         }
 
-        bool finite_color(Color4 color) {
+        bool finite_color(SrgbColor color) {
             return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) && std::isfinite(color.a);
         }
 
@@ -229,11 +229,11 @@ namespace tcplot {
             return result;
         }
 
-        Color4 from_c(tc_plot_color2d value) {
+        SrgbColor from_c(tc_plot_color2d value) {
             return {value.r, value.g, value.b, value.a};
         }
 
-        tc_plot_color2d to_c(Color4 value) {
+        tc_plot_color2d to_c(SrgbColor value) {
             return {value.r, value.g, value.b, value.a};
         }
 

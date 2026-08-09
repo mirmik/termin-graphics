@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <termin/geom/rect2.hpp>
+#include <termin/geom/color.hpp>
 #include <tgfx2/draw_list2d.hpp>
 
 #include "termin_visual_scene/export.h"
@@ -33,12 +34,12 @@ namespace termin::visual {
                   std::string font_uri,
                   termin::Vec2f origin,
                   float size_px,
-                  tgfx::Color4f color,
+                  termin::SrgbColor color,
                   tgfx::TextAnchor2D anchor = tgfx::TextAnchor2D::Left);
         bool image(std::string image_uri,
                    termin::Rect2f rect,
                    termin::Rect2f uv = {0.0f, 0.0f, 1.0f, 1.0f},
-                   tgfx::Color4f tint = tgfx::Color4f::white(),
+                   termin::SrgbColor tint = termin::SrgbColor::white(),
                    tgfx::DrawTextureSampling2D sampling = tgfx::DrawTextureSampling2D::Linear);
         bool custom_batch(std::string key, termin::Bounds2f local_bounds);
         bool retained_batch(std::shared_ptr<tgfx::RetainedDrawBatch2D> batch);

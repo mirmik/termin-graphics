@@ -53,7 +53,7 @@ namespace tgfx {
         struct DrawOptions {
             float x = 0.0f;
             float y = 0.0f;
-            termin::Color4 color = termin::Color4::white();
+            termin::SrgbColor color = termin::SrgbColor::white();
             float size = 14.0f;
             Anchor anchor = Anchor::Left;
         };
@@ -99,7 +99,11 @@ namespace tgfx {
         // Draw caller-prepared glyph triangles. This is used by DrawList2D after
         // affine transformation and CPU geometric clipping. The caller must have
         // populated glyphs on `font` for `display_px`; the atlas remains borrowed.
-        void draw_mesh(std::span<const Text2DVertex> vertices, termin::Color4 color, float display_px, FontAtlas* font);
+        void draw_mesh(std::span<const Text2DVertex> vertices, termin::SrgbColor color, float display_px, FontAtlas* font);
+        void draw_mesh_linear(std::span<const Text2DVertex> vertices,
+                              termin::LinearColor color,
+                              float display_px,
+                              FontAtlas* font);
 
         // End batch. Currently a no-op — shader/state stays bound on ctx
         // until the caller rebinds or ends its pass.

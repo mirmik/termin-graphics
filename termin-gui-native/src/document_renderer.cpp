@@ -398,7 +398,7 @@ namespace termin::gui_native {
         {
             ProfilerSection profile("UI Document Paint");
             impl_->context->begin_pass(
-                impl_->color_target, tgfx::TextureHandle{}, impl_->config.clear_color.data(), 1.0f, false);
+                impl_->color_target, tgfx::TextureHandle{}, &impl_->config.clear_linear_color, 1.0f, false);
             tc_ui_presentation_metrics presentation_metrics{};
             if (!impl_->document.presentation_metrics(presentation_metrics)) {
                 renderer_error("DocumentRenderer failed to read synchronized presentation metrics");

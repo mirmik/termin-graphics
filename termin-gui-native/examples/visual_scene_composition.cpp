@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <tcbase/tc_log.h>
+#include <termin/geom/color.hpp>
 #include <termin_visual_scene/interaction2d.hpp>
 
 namespace termin::gui_native::examples {
@@ -181,7 +182,7 @@ namespace termin::gui_native::examples {
                                           "ui://default-font",
                                           termin::Vec2f{16.0f, 34.0f},
                                           17.0f,
-                                          tgfx::Color4f{0.94f, 0.97f, 1.0f, 1.0f},
+                                          termin::SrgbColor{0.94f, 0.97f, 1.0f, 1.0f},
                                           tgfx::TextAnchor2D::Left,
                                           termin::Bounds2f{0.0f, 0.0f, 160.0f, 48.0f});
 

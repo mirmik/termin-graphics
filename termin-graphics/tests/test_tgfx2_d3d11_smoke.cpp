@@ -355,10 +355,10 @@ int main() {
         tgfx::ColorAttachmentDesc attachment;
         attachment.texture = color;
         attachment.load = tgfx::LoadOp::Clear;
-        attachment.clear_color[0] = 0.25f;
-        attachment.clear_color[1] = 0.50f;
-        attachment.clear_color[2] = 0.75f;
-        attachment.clear_color[3] = 1.00f;
+        attachment.clear_color.r = 0.25f;
+        attachment.clear_color.g = 0.50f;
+        attachment.clear_color.b = 0.75f;
+        attachment.clear_color.a = 1.00f;
         pass.colors.push_back(attachment);
 
         auto cmd = device->create_command_list();
@@ -384,7 +384,7 @@ int main() {
             return 1;
         }
 
-        device->clear_texture(color, termin::Color4{0.10f, 0.20f, 0.30f, 1.0f}, termin::Bounds2i::from_size(4, 4));
+        device->clear_texture(color, termin::LinearColor{0.10f, 0.20f, 0.30f, 1.0f}, termin::Bounds2i::from_size(4, 4));
         if (!device->read_pixel_rgba8(color, 2, 2, rgba)) {
             std::fprintf(stderr, "D3D11 smoke: clear_texture readback failed\n");
             return 1;
@@ -411,7 +411,7 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: RGBA16F target creation failed\n");
             return 1;
         }
-        device->clear_texture(hdr_color, termin::Color4{1.25f, 0.50f, 0.125f, 1.0f}, termin::Bounds2i::from_size(4, 4));
+        device->clear_texture(hdr_color, termin::LinearColor{1.25f, 0.50f, 0.125f, 1.0f}, termin::Bounds2i::from_size(4, 4));
         std::vector<float> hdr_readback(4 * 4 * 4, 0.0f);
         if (!device->read_texture_rgba_float(hdr_color, hdr_readback.data())) {
             std::fprintf(stderr, "D3D11 smoke: RGBA16F read_texture_rgba_float failed\n");
@@ -581,10 +581,10 @@ int main() {
         tgfx::ColorAttachmentDesc msaa_blit_attachment;
         msaa_blit_attachment.texture = msaa_blit_src;
         msaa_blit_attachment.load = tgfx::LoadOp::Clear;
-        msaa_blit_attachment.clear_color[0] = 0.70f;
-        msaa_blit_attachment.clear_color[1] = 0.10f;
-        msaa_blit_attachment.clear_color[2] = 0.20f;
-        msaa_blit_attachment.clear_color[3] = 1.00f;
+        msaa_blit_attachment.clear_color.r = 0.70f;
+        msaa_blit_attachment.clear_color.g = 0.10f;
+        msaa_blit_attachment.clear_color.b = 0.20f;
+        msaa_blit_attachment.clear_color.a = 1.00f;
         msaa_blit_pass.colors.push_back(msaa_blit_attachment);
 
         auto msaa_blit_cmd = device->create_command_list();
@@ -681,10 +681,10 @@ int main() {
             return 1;
         }
 
-        attachment.clear_color[0] = 0.0f;
-        attachment.clear_color[1] = 0.0f;
-        attachment.clear_color[2] = 0.0f;
-        attachment.clear_color[3] = 1.0f;
+        attachment.clear_color.r = 0.0f;
+        attachment.clear_color.g = 0.0f;
+        attachment.clear_color.b = 0.0f;
+        attachment.clear_color.a = 1.0f;
         pass.colors[0] = attachment;
 
         auto draw_cmd = device->create_command_list();
@@ -890,10 +890,10 @@ int main() {
             return 1;
         }
 
-        attachment.clear_color[0] = 0.0f;
-        attachment.clear_color[1] = 0.0f;
-        attachment.clear_color[2] = 0.0f;
-        attachment.clear_color[3] = 1.0f;
+        attachment.clear_color.r = 0.0f;
+        attachment.clear_color.g = 0.0f;
+        attachment.clear_color.b = 0.0f;
+        attachment.clear_color.a = 1.0f;
         pass.colors[0] = attachment;
         const auto sample_texture = [&](tgfx::ResourceSetHandle set, float out_rgba[4]) {
             auto draw_cmd = device->create_command_list();
@@ -1184,10 +1184,10 @@ int main() {
         tgfx::ColorAttachmentDesc normal_msaa_attachment;
         normal_msaa_attachment.texture = normal_msaa_color;
         normal_msaa_attachment.load = tgfx::LoadOp::Clear;
-        normal_msaa_attachment.clear_color[0] = 0.0f;
-        normal_msaa_attachment.clear_color[1] = 0.0f;
-        normal_msaa_attachment.clear_color[2] = 0.0f;
-        normal_msaa_attachment.clear_color[3] = 1.0f;
+        normal_msaa_attachment.clear_color.r = 0.0f;
+        normal_msaa_attachment.clear_color.g = 0.0f;
+        normal_msaa_attachment.clear_color.b = 0.0f;
+        normal_msaa_attachment.clear_color.a = 1.0f;
         normal_msaa_pass.colors.push_back(normal_msaa_attachment);
 
         auto normal_msaa_cmd = device->create_command_list();
@@ -1281,7 +1281,7 @@ int main() {
 
         tgfx::PipelineCache pipeline_cache(*device);
         tgfx::RenderContext2 ctx(*device, pipeline_cache);
-        const float context_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+        const termin::LinearColor context_clear{0.0f, 0.0f, 0.0f, 1.0f};
         auto fsq_vs = ctx.fsq_vertex_shader();
         if (!fsq_vs) {
             std::fprintf(stderr, "D3D11 smoke: RenderContext2 fullscreen quad VS failed\n");
@@ -1292,7 +1292,7 @@ int main() {
             return 1;
         }
         ctx.begin_frame();
-        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.begin_pass(color, {}, &context_clear, 1.0f, false);
         ctx.set_depth_test(false);
         ctx.set_depth_write(false);
         ctx.set_cull(tgfx::CullMode::None);
@@ -1318,7 +1318,7 @@ int main() {
         }
 
         ctx.begin_frame();
-        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.begin_pass(color, {}, &context_clear, 1.0f, false);
         ctx.set_depth_test(true);
         ctx.set_depth_write(true);
         ctx.set_cull(tgfx::CullMode::None);
@@ -1366,7 +1366,7 @@ int main() {
         }
 
         ctx.begin_frame();
-        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.begin_pass(color, {}, &context_clear, 1.0f, false);
         ctx.set_depth_test(false);
         ctx.set_depth_write(false);
         ctx.set_cull(tgfx::CullMode::None);
@@ -1416,15 +1416,15 @@ int main() {
             return 1;
         }
 
-        const std::array<float, 4> push_color = {0.62f, 0.18f, 0.73f, 1.0f};
+        const termin::LinearColor push_color{0.62f, 0.18f, 0.73f, 1.0f};
         ctx.begin_frame();
-        ctx.begin_pass(color, {}, context_clear, 1.0f, false);
+        ctx.begin_pass(color, {}, &context_clear, 1.0f, false);
         ctx.set_depth_test(false);
         ctx.set_depth_write(false);
         ctx.set_cull(tgfx::CullMode::None);
         ctx.set_blend(false);
         ctx.bind_shader(fsq_vs, push_constants_fs);
-        ctx.set_push_constants(push_color.data(), static_cast<uint32_t>(push_color.size() * sizeof(float)));
+        ctx.set_push_constants(&push_color, static_cast<uint32_t>(sizeof(push_color)));
         ctx.draw_fullscreen_quad_with_bound_shader();
         ctx.end_pass();
         ctx.end_frame();
@@ -1519,13 +1519,13 @@ int main() {
             return 1;
         }
 
-        const float reflected_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+        const termin::LinearColor reflected_clear{0.0f, 0.0f, 0.0f, 1.0f};
         const float reflected_vertices[] = {
             -1.0f, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f, 3.0f, -1.0f, 0.0f, 1.0f,
             0.0f,  0.0f,  0.0f, -1.0f, 3.0f, 0.0f, 0.0f, 1.0f, 0.0f,  0.0f,
         };
         ctx.begin_frame();
-        ctx.begin_pass(color, {}, reflected_clear, 1.0f, false);
+        ctx.begin_pass(color, {}, &reflected_clear, 1.0f, false);
         ctx.set_depth_test(false);
         ctx.set_depth_write(false);
         ctx.set_cull(tgfx::CullMode::None);
@@ -1584,9 +1584,9 @@ int main() {
             };
             device->upload_texture(canvas_texture, std::span<const uint8_t>(canvas_pixels, sizeof(canvas_pixels)));
 
-            const float canvas_clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
+            const termin::LinearColor canvas_clear{0.0f, 0.0f, 0.0f, 1.0f};
             ctx.begin_frame();
-            ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
+            ctx.begin_pass(color, {}, &canvas_clear, 1.0f, false);
             tgfx::Canvas2DRenderer canvas;
             canvas.begin(ctx, 4, 4);
             canvas.draw_texture(canvas_texture, 0.0f, 0.0f, 4.0f, 4.0f);
@@ -1624,7 +1624,7 @@ int main() {
             device->destroy(canvas_texture);
 
             ctx.begin_frame();
-            ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
+            ctx.begin_pass(color, {}, &canvas_clear, 1.0f, false);
             tgfx::Canvas2DRenderer solid_canvas;
             solid_canvas.begin(ctx, 4, 4);
             solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f, tgfx::CanvasSrgbColor{0.90f, 0.10f, 0.10f, 1.0f});
@@ -1693,7 +1693,7 @@ int main() {
                 tgfx::FontAtlas bitmap_font(font_path.string(), 14, 512, 512);
                 bitmap_font.set_sdf_enabled(false);
                 ctx.begin_frame();
-                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                ctx.begin_pass(text_target, {}, &canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer bitmap_canvas(&bitmap_font);
                 bitmap_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
                 bitmap_canvas.draw_text("Text",
@@ -1713,7 +1713,7 @@ int main() {
 
                 tgfx::FontAtlas sdf_font(font_path.string(), 14, 512, 512);
                 ctx.begin_frame();
-                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                ctx.begin_pass(text_target, {}, &canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer sdf_canvas(&sdf_font);
                 sdf_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
                 sdf_canvas.draw_text("Text",
@@ -1764,7 +1764,7 @@ int main() {
                 device->upload_texture(mixed_texture, std::span<const uint8_t>(mixed_pixels, sizeof(mixed_pixels)));
 
                 ctx.begin_frame();
-                ctx.begin_pass(text_target, {}, canvas_clear, 1.0f, false);
+                ctx.begin_pass(text_target, {}, &canvas_clear, 1.0f, false);
                 tgfx::Canvas2DRenderer mixed_canvas(&bitmap_font);
                 mixed_canvas.begin(ctx, static_cast<int>(text_desc.width), static_cast<int>(text_desc.height));
                 mixed_canvas.draw_rect(0.0f,

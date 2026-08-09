@@ -2245,7 +2245,7 @@ namespace tgfx {
         });
     }
 
-    void VulkanRenderDevice::clear_texture(TextureHandle dst_handle, termin::Color4 color, termin::Bounds2i viewport) {
+    void VulkanRenderDevice::clear_texture(TextureHandle dst_handle, termin::LinearColor color, termin::Bounds2i viewport) {
         auto* dst = textures_.get(dst_handle.id);
         if (!dst)
             return;

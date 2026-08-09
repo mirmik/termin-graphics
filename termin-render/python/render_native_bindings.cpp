@@ -87,6 +87,8 @@ namespace termin {
 } // namespace termin
 
 NB_MODULE(_render_native, m) {
+    nb::module_::import_("tcbase._geom_native");
+
     nb::class_<termin::DebugGeometryTypeRegistration>(m, "DebugGeometryTypeRegistration")
         .def(nb::init<const char*, const char*, const char*, bool>(),
              nb::arg("stable_id"),

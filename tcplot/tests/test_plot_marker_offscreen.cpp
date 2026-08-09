@@ -31,6 +31,9 @@ namespace {
         std::size_t green_series = 0;
         std::size_t magenta_series = 0;
         std::size_t opaque = 0;
+        float strongest_orange_r = 0.0f;
+        float strongest_orange_g = 0.0f;
+        float strongest_orange_b = 0.0f;
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 const std::size_t i = (static_cast<std::size_t>(y) * width + x) * 4;
@@ -45,6 +48,11 @@ namespace {
                 if (r > 0.80f && g > 0.20f && g < 0.35f && b < 0.05f) {
                     ++orange;
                 }
+                if (r > strongest_orange_r && g > 0.02f && g < 0.40f && b < 0.10f) {
+                    strongest_orange_r = r;
+                    strongest_orange_g = g;
+                    strongest_orange_b = b;
+                }
                 if (r > 0.52f && g > 0.58f && b > 0.72f) {
                     ++light_border;
                 }
@@ -56,8 +64,24 @@ namespace {
                     ++magenta_series;
             }
         }
-        return opaque > static_cast<std::size_t>(width * height * 9 / 10) && orange >= 20 && light_border >= 40 &&
-               blue_series >= 20 && green_series >= 20 && magenta_series >= 20;
+        const bool present = opaque > static_cast<std::size_t>(width * height * 9 / 10) && orange >= 20 &&
+                             light_border >= 40 && blue_series >= 20 && green_series >= 20 &&
+                             magenta_series >= 20;
+        if (!present) {
+            std::fprintf(stderr,
+                         "marker fixture counts: opaque=%zu orange=%zu border=%zu blue=%zu green=%zu magenta=%zu "
+                         "strongest_orange=(%.5f, %.5f, %.5f)\n",
+                         opaque,
+                         orange,
+                         light_border,
+                         blue_series,
+                         green_series,
+                         magenta_series,
+                         strongest_orange_r,
+                         strongest_orange_g,
+                         strongest_orange_b);
+        }
+        return present;
     }
 
 } // namespace
@@ -89,9 +113,9 @@ int main() {
         const double scatter_y[] = {4.0, 6.0, 4.0, 6.0, 4.0};
         const double scalar[] = {0.0, 0.25, 0.5, 0.75, 1.0};
         view.plot({series_x, solid_y, 5},
-                  tcplot::LinePlotOptions{{tcplot::Color4{0.1f, 0.3f, 0.9f, 1.0f}}, 2.0, "solid"});
+                  tcplot::LinePlotOptions{{tcplot::SrgbColor{0.1f, 0.3f, 0.9f, 1.0f}}, 2.0, "solid"});
         view.plot({series_x, dashed_y, 5},
-                  tcplot::LinePlotOptions{{tcplot::Color4{0.1f, 0.9f, 0.1f, 1.0f}}, 3.0, "dashed"});
+                  tcplot::LinePlotOptions{{tcplot::SrgbColor{0.1f, 0.9f, 0.1f, 1.0f}}, 3.0, "dashed"});
         if (!view.set_line_style(1, tcplot::LineStyle::Dash, 10.0f, 5.0f)) {
             std::fprintf(stderr, "failed to style retained line\n");
             return 1;
@@ -101,7 +125,7 @@ int main() {
             scalar,
             tcplot::LineColormapOptions{tcplot::SurfaceColorMap::Viridis, 0.0, 1.0, 3.0, "colormap", true});
         view.scatter({series_x, scatter_y, 5},
-                     tcplot::ScatterPlotOptions{{tcplot::Color4{0.9f, 0.1f, 0.9f, 1.0f}}, 10.0, "scatter"});
+                     tcplot::ScatterPlotOptions{{tcplot::SrgbColor{0.9f, 0.1f, 0.9f, 1.0f}}, 10.0, "scatter"});
 
         tcplot::PlotDataMarker2D marker;
         marker.data_position = {5.0, 5.0};

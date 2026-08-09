@@ -184,9 +184,9 @@ namespace tcplot_bindings {
                 }
             }
 
-            static tcplot::Color4 resolve_color(nb::object color, std::uint32_t index) {
+            static tcplot::SrgbColor resolve_color(nb::object color, std::uint32_t index) {
                 if (!color.is_none())
-                    return color_from_seq(color);
+                    return color_from_obj(color);
                 return tcplot::styles::cycle_color(index);
             }
 

@@ -278,10 +278,10 @@ int main() {
     tgfx::ColorAttachmentDesc color_attachment;
     color_attachment.texture = rt;
     color_attachment.load = tgfx::LoadOp::Clear;
-    color_attachment.clear_color[0] = 0.0f;
-    color_attachment.clear_color[1] = 0.0f;
-    color_attachment.clear_color[2] = 0.0f;
-    color_attachment.clear_color[3] = 1.0f;
+    color_attachment.clear_color.r = 0.0f;
+    color_attachment.clear_color.g = 0.0f;
+    color_attachment.clear_color.b = 0.0f;
+    color_attachment.clear_color.a = 1.0f;
     pass.colors.push_back(color_attachment);
 
     cmd->begin_render_pass(pass);

@@ -76,7 +76,7 @@ namespace tgfx {
         ShaderHandle solid_vs_{}, solid_fs_{}, texture_vs_{}, texture_fs_{};
         std::vector<ClipRect> clip_stack_;
         BatchMode batch_mode_ = BatchMode::None;
-        CanvasSrgbColor batch_color_{};
+        termin::LinearColor batch_color_{};
         TextureHandle batch_texture_{};
         CanvasTextureSampling batch_texture_sampling_ = CanvasTextureSampling::Linear;
         SamplerHandle linear_sampler_{};
@@ -149,18 +149,18 @@ namespace tgfx {
         void ensure_samplers_(IRenderDevice& device);
         void build_projection_();
         bool flush_();
-        bool bind_solid_(CanvasSrgbColor color);
-        bool bind_texture_(CanvasSrgbColor tint, TextureHandle texture, CanvasTextureSampling sampling);
+        bool bind_solid_(termin::LinearColor color);
+        bool bind_texture_(termin::LinearColor tint, TextureHandle texture, CanvasTextureSampling sampling);
         void push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv);
-        void append_solid_quad_(termin::Bounds2f bounds, CanvasSrgbColor color);
-        void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, CanvasSrgbColor color);
+        void append_solid_quad_(termin::Bounds2f bounds, termin::LinearColor color);
+        void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, termin::LinearColor color);
         void append_textured_quad_(termin::Bounds2f bounds,
                                    termin::Bounds2f uv,
-                                   CanvasSrgbColor tint,
+                                   termin::LinearColor tint,
                                    TextureHandle texture,
                                    CanvasTextureSampling sampling);
         void append_mesh_(std::span<const DrawVertex2D> vertices,
-                          CanvasSrgbColor color,
+                          termin::LinearColor color,
                           TextureHandle texture,
                           CanvasTextureSampling sampling);
     };

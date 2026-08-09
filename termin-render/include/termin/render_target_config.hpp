@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <termin/geom/color.hpp>
 
 extern "C" {
 #include <tc_render_target_config.h>
@@ -23,7 +24,7 @@ namespace termin {
         std::string color_format = "rgba16f";
         std::string depth_format = "depth32f";
         bool clear_color = false;
-        float clear_color_value[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        LinearColor clear_linear_color{0.0f, 0.0f, 0.0f, 1.0f};
         bool clear_depth = false;
         float clear_depth_value = 1.0f;
         std::string pipeline_uuid;

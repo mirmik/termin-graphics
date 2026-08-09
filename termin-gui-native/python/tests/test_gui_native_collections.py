@@ -3,10 +3,8 @@ import weakref
 from pathlib import Path
 
 import pytest
-from termin.geombase import SrgbColor
-
 from termin.gui_native import (
-    Color,
+    SrgbColor,
     ColorPickerModel,
     ColorPickerSurfaceKind,
     ColorPickerTextureIds,
@@ -580,7 +578,7 @@ def test_native_file_dialog_model_and_overlay_contract(tmp_path: Path):
 
 
 def test_native_color_picker_surfaces_and_dialog_contract():
-    model = ColorPickerModel(Color(1.0, 0.0, 0.0, 0.5), show_alpha=True)
+    model = ColorPickerModel(SrgbColor(1.0, 0.0, 0.0, 0.5), show_alpha=True)
     assert model.hue == pytest.approx(0.0)
     assert model.saturation == pytest.approx(1.0)
     model.hue = 0.5
@@ -612,13 +610,13 @@ def test_native_color_picker_surfaces_and_dialog_contract():
     document.paint_roots(PaintContext(draw_list))
     assert sum(command.type == DrawCommandType.Texture for command in draw_list.commands) == 3
 
-    dialog = document.create_color_dialog(Color(1.0, 0.0, 0.0, 0.5), show_alpha=True)
+    dialog = document.create_color_dialog(SrgbColor(1.0, 0.0, 0.0, 0.5), show_alpha=True)
     results = []
     typed_results = []
     dialog.connect_color_finished(results.append)
     dialog.connect_srgb_color_finished(typed_results.append)
     assert dialog.show(Rect(0.0, 0.0, 640.0, 480.0))
-    dialog.color = Color(0.0, 0.5, 1.0, 0.25)
+    dialog.color = SrgbColor(0.0, 0.5, 1.0, 0.25)
     assert dialog.activate("ok")
     assert results[0].g == pytest.approx(0.5)
     assert results[0].a == pytest.approx(0.25)
@@ -1227,14 +1225,14 @@ def test_native_scene_view_transform_forwarding_and_embedding():
     scene = tc_visual_scene_create()
     node = scene.create_rect(
         (0.0, 0.0, 120.0, 70.0),
-        (0.8, 0.2, 0.1, 1.0),
+        SrgbColor(0.8, 0.2, 0.1, 1.0),
     )
     node.position = (10.0, 20.0)
     assert scene.hit_test(20.0, 30.0) == node
 
     edge = scene.create_polyline(
         [(0.0, 0.0), (200.0, 0.0)],
-        (0.6, 0.7, 0.9, 1.0),
+        SrgbColor(0.6, 0.7, 0.9, 1.0),
         10.0,
     )
     edge.z_order = -10
@@ -1286,7 +1284,7 @@ def test_native_scene_view_transform_forwarding_and_embedding():
     view.offset = Point(0.0, 0.0)
     editor_item = scene.create_rect(
         (0.0, 0.0, 100.0, 30.0),
-        (0.2, 0.2, 0.25, 1.0),
+        SrgbColor(0.2, 0.2, 0.25, 1.0),
     )
     editor_item.position = (5.0, 6.0)
     assert view.set_widget_portal(editor_item.handle, embedded.handle)

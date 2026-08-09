@@ -262,7 +262,7 @@ namespace {
 
         termin::gui_native::ColorPicker color_picker;
 
-        const float clear[]{0.0f, 0.0f, 0.0f, 1.0f};
+        const termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
         context.begin_frame();
         painter.sync_color_picker_surfaces(context, color_picker);
         const auto picker_textures = color_picker.texture_ids();
@@ -278,7 +278,7 @@ namespace {
             {early.document, -1, 100, metrics},
             {identity_first.document, 0, 10, metrics},
         };
-        context.begin_pass(target, {}, clear, 1.0f, false);
+        context.begin_pass(target, {}, &clear, 1.0f, false);
         const std::size_t painted =
             painter.paint_documents(context, static_cast<int>(kWidth), static_cast<int>(kHeight), submissions);
         context.end_pass();
@@ -336,7 +336,7 @@ namespace {
             const termin::gui_native::UiDocumentSubmission scaled_submission{
                 scaled_document.document, 0, 0, scaled_metrics};
             context.begin_frame();
-            context.begin_pass(target, {}, clear, 1.0f, false);
+            context.begin_pass(target, {}, &clear, 1.0f, false);
             scaled_geometry_ok =
                 scaled_geometry_ok && painter.paint_documents(context,
                                                               static_cast<int>(kWidth),

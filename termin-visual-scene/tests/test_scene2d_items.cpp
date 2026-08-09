@@ -6,6 +6,8 @@
 #include <memory>
 #include <string>
 
+#include <termin/geom/color.hpp>
+
 #include "termin_visual_scene/builtin_items2d.hpp"
 
 namespace {
@@ -84,13 +86,13 @@ int main() {
                                                                "asset://fonts/ui",
                                                                termin::Vec2f{2.0f, 3.0f},
                                                                16.0f,
-                                                               tgfx::Color4f{},
+                                                               termin::SrgbColor{},
                                                                tgfx::TextAnchor2D::Center,
                                                                termin::Bounds2f{2.0f, 3.0f, 42.0f, 19.0f}));
     const auto image = scene.adopt(std::make_unique<ImageItem2D>("asset://images/icon",
                                                                  termin::Rect2f{2.0f, 4.0f, 8.0f, 6.0f},
                                                                  termin::Rect2f{0.0f, 0.0f, 1.0f, 1.0f},
-                                                                 tgfx::Color4f{},
+                                                                 termin::SrgbColor{},
                                                                  tgfx::DrawTextureSampling2D::Linear));
     const auto hit = scene.adopt(std::make_unique<HitRegionItem2D>(triangle(), tgfx::FillRule::NonZero));
     const auto custom = scene.adopt(

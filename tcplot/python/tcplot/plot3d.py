@@ -15,6 +15,7 @@ from tcplot._tcplot_native import (
     SurfaceColorMap,
     SurfaceSeries,
     default_colors,
+    SrgbColor,
 )
 
 
@@ -27,7 +28,8 @@ class Plot3D(Widget):
     window or selecting a graphics backend.
     """
 
-    _LABEL_COLOR = (0.8, 0.8, 0.8, 1.0)
+    _LABEL_COLOR = SrgbColor(0.8, 0.8, 0.8, 1.0)
+    _SURFACE_GRID_COLOR = SrgbColor(0.05, 0.05, 0.05, 1.0)
 
     def __init__(self):
         super().__init__()
@@ -195,7 +197,7 @@ class Plot3D(Widget):
         visible=True,
         row_step=8,
         col_step=8,
-        color=(0.05, 0.05, 0.05, 1.0),
+        color=_SURFACE_GRID_COLOR,
         width_px=1.5,
     ):
         if idx < 0 or idx >= len(self._surface_handles):

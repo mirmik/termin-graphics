@@ -1365,7 +1365,7 @@ namespace tgfx {
         glDeleteFramebuffers(2, fbos);
     }
 
-    void OpenGLRenderDevice::clear_texture(TextureHandle dst_color, termin::Color4 color, termin::Bounds2i viewport) {
+    void OpenGLRenderDevice::clear_texture(TextureHandle dst_color, termin::LinearColor color, termin::Bounds2i viewport) {
         GLTexture* dst = textures_.get(dst_color.id);
         if (!dst)
             return;

@@ -336,7 +336,7 @@ namespace {
             return {termin::ResourceSpec{resource_,
                                          "fbo",
                                          std::pair<int, int>{16, 16},
-                                         std::array<double, 4>{0.25, 0.5, 0.75, 1.0},
+                                         termin::LinearColor{0.25f, 0.5f, 0.75f, 1.0f},
                                          0.5f}};
         }
 
@@ -389,7 +389,7 @@ namespace {
             return {termin::ResourceSpec{input_,
                                          "fbo",
                                          std::pair<int, int>{16, 16},
-                                         std::array<double, 4>{0.1, 0.2, 0.3, 1.0},
+                                         termin::LinearColor{0.1f, 0.2f, 0.3f, 1.0f},
                                          0.75f}};
         }
 
@@ -909,9 +909,9 @@ TEST_CASE("compatible raster clear metadata becomes the physical scope load oper
     const tgfx::RenderPassDesc& scope = recording_device->state.scopes.front().pass;
     REQUIRE(scope.colors.size() == 1);
     CHECK(scope.colors.front().load == tgfx::LoadOp::Clear);
-    CHECK(scope.colors.front().clear_color[0] == guard::Approx(0.25f));
-    CHECK(scope.colors.front().clear_color[1] == guard::Approx(0.5f));
-    CHECK(scope.colors.front().clear_color[2] == guard::Approx(0.75f));
+    CHECK(scope.colors.front().clear_color.r == guard::Approx(0.25f));
+    CHECK(scope.colors.front().clear_color.g == guard::Approx(0.5f));
+    CHECK(scope.colors.front().clear_color.b == guard::Approx(0.75f));
     CHECK(scope.has_depth);
     CHECK(scope.depth.load == tgfx::LoadOp::Clear);
     CHECK(scope.depth.clear_depth == guard::Approx(0.5f));
@@ -1055,10 +1055,7 @@ TEST_CASE("first-access resolve suppresses an external target preclear") {
     target.output_color_tex = output;
     target.output_color_format = tgfx::PixelFormat::RGBA16F;
     target.clear_color_enabled = true;
-    target.clear_color[0] = 0.8f;
-    target.clear_color[1] = 0.2f;
-    target.clear_color[2] = 0.1f;
-    target.clear_color[3] = 1.0f;
+    target.clear_linear_color = {0.8f, 0.2f, 0.1f, 1.0f};
     termin::RenderExecution execution;
     execution.pipeline = &pipeline;
     execution.default_render_target = target.name;

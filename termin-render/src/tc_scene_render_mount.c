@@ -259,7 +259,11 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     if (rtc->clear_color) {
         tc_value color = tc_value_list_new();
         for (size_t i = 0; i < 4; i++) {
-            tc_value_list_push(&color, tc_value_float(rtc->clear_color_value[i]));
+            const float components[4] = {rtc->clear_linear_color.r,
+                                         rtc->clear_linear_color.g,
+                                         rtc->clear_linear_color.b,
+                                         rtc->clear_linear_color.a};
+            tc_value_list_push(&color, tc_value_float(components[i]));
         }
         tc_value_dict_set(&v, "clear_color", color);
     }
@@ -329,7 +333,12 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
             tc_value* item = tc_value_list_get(clear_color, i);
             float value = (i == 3) ? 1.0f : 0.0f;
             value_to_float(item, &value);
-            out->clear_color_value[i] = value;
+            switch (i) {
+            case 0: out->clear_linear_color.r = value; break;
+            case 1: out->clear_linear_color.g = value; break;
+            case 2: out->clear_linear_color.b = value; break;
+            default: out->clear_linear_color.a = value; break;
+            }
         }
     }
 

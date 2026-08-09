@@ -4,6 +4,7 @@
 
 #include "tc_types.h"
 #include "tc_value.h"
+#include "geom/tc_color.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -22,7 +23,7 @@ typedef struct tc_render_target_config {
     const char* color_format;   // Color attachment format (interned, nullable)
     const char* depth_format;   // Depth attachment format (interned, nullable)
     bool clear_color;           // Clear color attachment before rendering
-    float clear_color_value[4]; // RGBA clear value
+    tc_linear_color clear_linear_color; // Linear RGBA clear value
     bool clear_depth;           // Clear depth attachment before rendering
     float clear_depth_value;    // Depth clear value
     const char* pipeline_uuid;  // Pipeline asset UUID (interned, nullable)

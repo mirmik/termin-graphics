@@ -1429,7 +1429,7 @@ float4 main(VSOut input) : SV_Target {
     }
 
     void
-    D3D11RenderDevice::clear_texture(TextureHandle dst_handle, termin::Color4 clear_color, termin::Bounds2i viewport) {
+    D3D11RenderDevice::clear_texture(TextureHandle dst_handle, termin::LinearColor clear_color, termin::Bounds2i viewport) {
         auto* dst = get_texture(dst_handle);
         if (!dst || !dst->texture || !dst->rtv) {
             tc::Log::error("D3D11RenderDevice::clear_texture: invalid color texture handle=%u", dst_handle.id);

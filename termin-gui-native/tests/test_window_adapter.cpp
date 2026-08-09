@@ -270,9 +270,9 @@ int main() {
             // UI fills are authored in sRGB and composed in linear RGB. Dark
             // controls can therefore differ from the linear clear by much less
             // than the old display-referred 0.03 threshold.
-            const bool differs_from_clear = std::fabs(pixels[index] - config.clear_color[0]) > 0.005f ||
-                                            std::fabs(pixels[index + 1] - config.clear_color[1]) > 0.005f ||
-                                            std::fabs(pixels[index + 2] - config.clear_color[2]) > 0.005f;
+            const bool differs_from_clear = std::fabs(pixels[index] - config.clear_linear_color.r) > 0.005f ||
+                                            std::fabs(pixels[index + 1] - config.clear_linear_color.g) > 0.005f ||
+                                            std::fabs(pixels[index + 2] - config.clear_linear_color.b) > 0.005f;
             non_background_pixels += differs_from_clear;
             text_pixels += pixels[index] > 0.45f || pixels[index + 1] > 0.45f || pixels[index + 2] > 0.45f;
         }

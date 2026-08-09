@@ -6,6 +6,7 @@
 #include <span>
 #include <vector>
 
+#include <termin/geom/color.hpp>
 #include <termin_visual_scene/native_graphic_item2d.hpp>
 
 #include "tcplot/plot_projection2d.hpp"
@@ -14,7 +15,7 @@
 namespace tcplot {
 
     struct PlotGridStyle2D {
-        tgfx::Color4f color{0.3f, 0.3f, 0.3f, 0.5f};
+        termin::SrgbColor color{0.3f, 0.3f, 0.3f, 0.5f};
         float width_px = 1.0f;
     };
 

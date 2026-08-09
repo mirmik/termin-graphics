@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include <termin/geom/color.hpp>
+
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
 #include "tgfx2/render_state.hpp"
@@ -112,7 +114,9 @@ namespace tgfx {
         TextureHandle resolve_texture;
         LoadOp load = LoadOp::Clear;
         StoreOp store = StoreOp::Store;
-        float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        // Clear values are renderer-working-space values. Authored sRGB
+        // colors must be decoded before entering a render pass.
+        termin::LinearColor clear_color{0.0f, 0.0f, 0.0f, 1.0f};
     };
 
     struct DepthAttachmentDesc {

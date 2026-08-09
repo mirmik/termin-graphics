@@ -11,6 +11,8 @@
 #include <string_view>
 #include <vector>
 
+#include <termin/geom/color.hpp>
+
 #include <termin/platform/backend_window.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/descriptors.hpp>
@@ -133,7 +135,7 @@ namespace {
     private:
         struct BaseColor {
             GraphicItemHandle handle;
-            tgfx::Color4f color;
+            termin::SrgbColor color;
         };
 
         static GraphicItemHandle require_(std::optional<GraphicItemHandle> value) {
@@ -159,10 +161,10 @@ namespace {
                     return same(value, entry.handle);
                 });
                 const bool is_hovered = same(hovered, entry.handle);
-                const tgfx::Color4f color = is_selected  ? tgfx::Color4f{1.0f, 0.82f, 0.20f, 1.0f}
-                                            : is_hovered ? tgfx::Color4f{0.35f, 0.90f, 1.0f, 1.0f}
+                const termin::SrgbColor color = is_selected  ? termin::SrgbColor{1.0f, 0.82f, 0.20f, 1.0f}
+                                            : is_hovered ? termin::SrgbColor{0.35f, 0.90f, 1.0f, 1.0f}
                                                          : entry.color;
-                const tgfx::FillPaint fill{color};
+                const tgfx::FillPaint fill{termin::srgb_to_linear(color)};
                 if (same(entry.handle, rectangle_)) {
                     rectangle_item_->set_fill(fill);
                 } else if (same(entry.handle, ellipse_)) {
@@ -281,10 +283,10 @@ namespace {
             }
 
             tgfx::Canvas2DRenderer canvas;
-            const float clear[] = {0.035f, 0.045f, 0.065f, 1.0f};
+            const termin::LinearColor clear{0.035f, 0.045f, 0.065f, 1.0f};
             auto& context = host->context();
             context.begin_frame();
-            context.begin_pass(target, {}, clear, 1.0f, false);
+            context.begin_pass(target, {}, &clear, 1.0f, false);
             canvas.begin(context, width, height);
             if (!canvas.execute(*rendered, resources)) {
                 throw std::runtime_error("shader smoke DrawList2D execution failed");
@@ -379,9 +381,9 @@ namespace {
                 const auto rendered = example.render(resources);
                 if (!rendered)
                     throw std::runtime_error("scene rendering failed");
-                const float clear[] = {0.035f, 0.045f, 0.065f, 1.0f};
+                const termin::LinearColor clear{0.035f, 0.045f, 0.065f, 1.0f};
                 context.begin_frame();
-                context.begin_pass(target, {}, clear, 1.0f, false);
+                context.begin_pass(target, {}, &clear, 1.0f, false);
                 canvas.begin(context, width, height);
                 if (!canvas.execute(*rendered, resources)) {
                     throw std::runtime_error("DrawList2D execution failed");

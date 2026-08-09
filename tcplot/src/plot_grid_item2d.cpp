@@ -20,7 +20,8 @@ namespace tcplot {
         }
 
         bool valid_style(PlotGridStyle2D style) {
-            return style.color.is_finite() && std::isfinite(style.width_px) && style.width_px > 0.0f;
+            return std::isfinite(style.color.r) && std::isfinite(style.color.g) && std::isfinite(style.color.b) &&
+                   std::isfinite(style.color.a) && std::isfinite(style.width_px) && style.width_px > 0.0f;
         }
 
         PlotGridStyle2D from_c(tc_plot_grid_style2d style) {
@@ -205,8 +206,8 @@ namespace tcplot {
             tc::Log::error("PlotGridItem2D::paint failed to push plot clip");
             return false;
         }
-        const bool painted =
-            context.path(std::move(path), std::nullopt, tgfx::StrokePaint{style_.color, style_.width_px});
+        const bool painted = context.path(
+            std::move(path), std::nullopt, tgfx::StrokePaint{termin::srgb_to_linear(style_.color), style_.width_px});
         const bool popped = context.pop_clip();
         if (!popped) {
             tc::Log::error("PlotGridItem2D::paint failed to pop plot clip");

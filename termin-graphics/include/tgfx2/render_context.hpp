@@ -228,7 +228,7 @@ namespace tgfx {
         // `clear_depth_enabled` controls depth LoadOp independently of color.
         void begin_pass(TextureHandle color,
                         TextureHandle depth = {},
-                        const float* clear_color = nullptr,
+                        const termin::LinearColor* clear_color = nullptr,
                         float clear_depth = 1.0f,
                         bool clear_depth_enabled = true);
         // Begin a pass with an ordered attachment set. Color attachment N maps to

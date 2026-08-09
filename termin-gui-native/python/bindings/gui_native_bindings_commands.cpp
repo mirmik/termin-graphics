@@ -684,8 +684,8 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
     nb::class_<termin::gui_native::ColorPickerModel>(m, "ColorPickerModel")
         .def(
             "__init__",
-            [](termin::gui_native::ColorPickerModel* self, std::optional<tc_ui_srgb_color> initial, bool show_alpha) {
-                const tc_ui_srgb_color resolved_initial = initial.value_or(tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
+            [](termin::gui_native::ColorPickerModel* self, std::optional<termin::SrgbColor> initial, bool show_alpha) {
+                const termin::SrgbColor resolved_initial = initial.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
                 new (self) termin::gui_native::ColorPickerModel(
                     termin::gui_native::Color{
                         resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
@@ -696,7 +696,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_prop_rw(
             "color",
             [](const termin::gui_native::ColorPickerModel& self) { return self.srgb_color(); },
-            [](termin::gui_native::ColorPickerModel& self, tc_ui_srgb_color color) {
+            [](termin::gui_native::ColorPickerModel& self, termin::SrgbColor color) {
                 self.set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
         .def_prop_rw("srgb_color",
@@ -706,7 +706,9 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_static("srgb_from_hex", &termin::gui_native::ColorPickerModel::srgb_from_hex, nb::arg("value"))
         .def_static("srgb_to_hex", &termin::gui_native::ColorPickerModel::srgb_to_hex, nb::arg("color"))
         .def_prop_ro("initial_color",
-                     [](const termin::gui_native::ColorPickerModel& self) { return self.initial_color().c_color(); })
+                     [](const termin::gui_native::ColorPickerModel& self) {
+                         return from_tc_ui_srgb(self.initial_color().c_color());
+                     })
         .def_prop_rw("hue", &termin::gui_native::ColorPickerModel::hue, &termin::gui_native::ColorPickerModel::set_hue)
         .def_prop_rw("saturation",
                      &termin::gui_native::ColorPickerModel::saturation,
@@ -785,7 +787,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def_prop_rw(
             "color",
             [](const ColorDialogRef& self) { return self.get().model()->srgb_color(); },
-            [](const ColorDialogRef& self, tc_ui_srgb_color color) {
+            [](const ColorDialogRef& self, termin::SrgbColor color) {
                 self.get().set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
         .def_prop_rw(
@@ -819,7 +821,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                         try {
                             nb::gil_scoped_acquire gil;
                             if (color)
-                                callback(color->c_color());
+                                callback(from_tc_ui_srgb(color->c_color()));
                             else
                                 callback(nb::none());
                         } catch (...) {

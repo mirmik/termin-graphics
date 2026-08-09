@@ -23,7 +23,7 @@ typedef struct {
     tc_texture_format color_format;
     tc_texture_format depth_format;
     bool clear_color_enabled;
-    float clear_color_value[4];
+    tc_linear_color clear_linear_color;
     bool clear_depth_enabled;
     float clear_depth_value;
     tc_scene_handle scene;
@@ -99,7 +99,7 @@ static void rt_slot_set_defaults(RenderTargetSlot* slot) {
     slot->height = 512;
     slot->color_format = RT_DEFAULT_COLOR_FORMAT;
     slot->depth_format = RT_DEFAULT_DEPTH_FORMAT;
-    slot->clear_color_value[3] = 1.0f;
+    slot->clear_linear_color.a = 1.0f;
     slot->clear_depth_value = 1.0f;
     slot->scene = TC_SCENE_HANDLE_INVALID;
     slot->camera_entity = TC_ENTITY_HANDLE_INVALID;
@@ -524,25 +524,19 @@ bool tc_render_target_get_clear_color_enabled(tc_render_target_handle h) {
     return RT_SLOTS[h.index].clear_color_enabled;
 }
 
-void tc_render_target_set_clear_color_value(tc_render_target_handle h, float r, float g, float b, float a) {
+void tc_render_target_set_clear_linear_color(tc_render_target_handle h, tc_linear_color value) {
     if (!render_target_handle_alive(h))
         return;
-    RT_SLOTS[h.index].clear_color_value[0] = r;
-    RT_SLOTS[h.index].clear_color_value[1] = g;
-    RT_SLOTS[h.index].clear_color_value[2] = b;
-    RT_SLOTS[h.index].clear_color_value[3] = a;
+    RT_SLOTS[h.index].clear_linear_color = value;
 }
 
-void tc_render_target_get_clear_color_value(tc_render_target_handle h, float out_rgba[4]) {
-    if (!out_rgba)
+void tc_render_target_get_clear_linear_color(tc_render_target_handle h, tc_linear_color* out_value) {
+    if (!out_value)
         return;
-    out_rgba[0] = 0.0f;
-    out_rgba[1] = 0.0f;
-    out_rgba[2] = 0.0f;
-    out_rgba[3] = 1.0f;
+    *out_value = (tc_linear_color){0.0f, 0.0f, 0.0f, 1.0f};
     if (!render_target_handle_alive(h))
         return;
-    memcpy(out_rgba, RT_SLOTS[h.index].clear_color_value, sizeof(float[4]));
+    *out_value = RT_SLOTS[h.index].clear_linear_color;
 }
 
 void tc_render_target_set_clear_depth_enabled(tc_render_target_handle h, bool enabled) {

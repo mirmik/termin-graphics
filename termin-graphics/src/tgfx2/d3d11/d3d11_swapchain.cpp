@@ -191,7 +191,7 @@ namespace tgfx {
         }
         if (!exact_extent) {
             device_.clear_texture(backbuffer_texture_,
-                                  termin::Color4(0.0f, 0.0f, 0.0f, 1.0f),
+                                  termin::LinearColor{0.0f, 0.0f, 0.0f, 1.0f},
                                   termin::Bounds2i::from_size(static_cast<int>(width_), static_cast<int>(height_)));
         }
 

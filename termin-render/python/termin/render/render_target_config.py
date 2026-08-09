@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from termin.render._render_native import RenderTargetConfig
+from termin.geombase import LinearColor
 
 __all__ = [
     "RenderTargetConfig",
@@ -32,7 +33,10 @@ def serialize_render_target_config(config: RenderTargetConfig) -> dict:
     if config.depth_format:
         result["depth_format"] = config.depth_format
     if config.clear_color:
-        result["clear_color"] = [float(v) for v in config.clear_color_value]
+        result["clear_color"] = [config.clear_linear_color.r,
+                                  config.clear_linear_color.g,
+                                  config.clear_linear_color.b,
+                                  config.clear_linear_color.a]
     if config.clear_depth:
         result["clear_depth"] = float(config.clear_depth_value)
     if config.pipeline_uuid:
@@ -63,10 +67,10 @@ def deserialize_render_target_config(data: dict) -> RenderTargetConfig:
     clear_color = data.get("clear_color", None)
     if isinstance(clear_color, (list, tuple)) and len(clear_color) >= 4:
         config.clear_color = True
-        config.clear_color_value = tuple(float(v) for v in clear_color[:4])
+        config.clear_linear_color = LinearColor(*[float(v) for v in clear_color[:4]])
     else:
         config.clear_color = False
-        config.clear_color_value = (0.0, 0.0, 0.0, 1.0)
+        config.clear_linear_color = LinearColor(0.0, 0.0, 0.0, 1.0)
     clear_depth = data.get("clear_depth", None)
     if clear_depth is not None:
         config.clear_depth = True

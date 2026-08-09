@@ -1,10 +1,10 @@
 #pragma once
 
-#include <array>
 #include <optional>
 #include <string>
 
 #include "tgfx/types.hpp"
+#include <termin/geom/color.hpp>
 
 namespace termin {
 
@@ -12,7 +12,7 @@ namespace termin {
         std::string resource;
         std::string resource_type = "fbo";
         std::optional<std::pair<int, int>> size;
-        std::optional<std::array<double, 4>> clear_color;
+        std::optional<termin::LinearColor> clear_color;
         std::optional<float> clear_depth;
         std::optional<std::string> format;
         int samples = 1;
@@ -26,7 +26,7 @@ namespace termin {
         ResourceSpec(std::string resource_,
                      std::string resource_type_ = "fbo",
                      std::optional<std::pair<int, int>> size_ = std::nullopt,
-                     std::optional<std::array<double, 4>> clear_color_ = std::nullopt,
+                     std::optional<termin::LinearColor> clear_color_ = std::nullopt,
                      std::optional<float> clear_depth_ = std::nullopt,
                      std::optional<std::string> format_ = std::nullopt,
                      int samples_ = 1,

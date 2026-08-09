@@ -27,7 +27,7 @@ namespace tcplot {
 
     namespace {
 
-        tgfx::CanvasSrgbColor canvas_color(const Color4& c) {
+        tgfx::CanvasSrgbColor canvas_color(const SrgbColor& c) {
             return tgfx::CanvasSrgbColor{c.r, c.g, c.b, c.a};
         }
 
@@ -199,14 +199,14 @@ namespace tcplot {
         return true;
     }
 
-    bool PlotEngine2D::set_line_color(size_t idx, Color4 color) {
+    bool PlotEngine2D::set_line_color(size_t idx, SrgbColor color) {
         if (idx >= data.lines.size())
             return false;
         data.lines[idx].color = color;
         return true;
     }
 
-    bool PlotEngine2D::set_scatter_color(size_t idx, Color4 color) {
+    bool PlotEngine2D::set_scatter_color(size_t idx, SrgbColor color) {
         if (idx >= data.scatters.size())
             return false;
         data.scatters[idx].color = color;
@@ -344,7 +344,7 @@ namespace tcplot {
         const termin::Rect2f series_clip{pa.x(), pa.y(), pa.width(), pa.height()};
         for (std::size_t index = 0; index < data.lines.size(); ++index) {
             const auto& series = data.lines[index];
-            const Color4 color = series.color.value_or(styles::cycle_color(static_cast<std::uint32_t>(index)));
+            const SrgbColor color = series.color.value_or(styles::cycle_color(static_cast<std::uint32_t>(index)));
             const PlotLineSeriesStyle2D style{
                 color,
                 static_cast<float>(std::max(1.0, series.thickness)),
@@ -371,7 +371,7 @@ namespace tcplot {
         }
         for (std::size_t index = 0; index < data.scatters.size(); ++index) {
             const auto& series = data.scatters[index];
-            const Color4 color =
+            const SrgbColor color =
                 series.color.value_or(styles::cycle_color(static_cast<std::uint32_t>(data.lines.size() + index)));
             if (!scatter_renderers_[index]->render(*ctx,
                                                    frame,
@@ -443,7 +443,7 @@ namespace tcplot {
                 // removed in favour of an explicit override because the
                 // implicit coupling made theme switching and per-panel
                 // recolouring unpredictable.
-                const Color4 tc = title_color.value_or(label_color);
+                const SrgbColor tc = title_color.value_or(label_color);
                 const auto title_metrics = measure_plot_text2d(*font, data.title, title_font_size);
                 if (!title_metrics) {
                     tc::Log::error("PlotEngine2D::render failed to measure title");

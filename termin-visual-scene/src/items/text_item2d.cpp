@@ -9,15 +9,18 @@
 
 namespace termin::visual {
     namespace {
+        bool finite_color(termin::SrgbColor color) {
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) && std::isfinite(color.a);
+        }
 
         void validate(const std::string& text,
                       const std::string& font_uri,
                       termin::Vec2f origin,
                       float size_px,
-                      tgfx::Color4f color,
+                      termin::SrgbColor color,
                       termin::Bounds2f layout_bounds) {
             if (text.empty() || font_uri.empty() || !detail::valid_point(origin) || !std::isfinite(size_px) ||
-                size_px <= 0.0f || !color.is_finite() || !detail::valid_bounds(layout_bounds)) {
+                size_px <= 0.0f || !finite_color(color) || !detail::valid_bounds(layout_bounds)) {
                 throw std::invalid_argument("invalid TextItem2D state");
             }
         }
@@ -51,7 +54,7 @@ namespace termin::visual {
                            std::string font_uri,
                            termin::Vec2f origin,
                            float size_px,
-                           tgfx::Color4f color,
+                           termin::SrgbColor color,
                            tgfx::TextAnchor2D anchor,
                            termin::Bounds2f layout_bounds)
         : TextItem2D() {
@@ -85,7 +88,7 @@ namespace termin::visual {
         size_px_ = size;
     }
 
-    void TextItem2D::set_color(tgfx::Color4f color) {
+    void TextItem2D::set_color(termin::SrgbColor color) {
         validate(text_, font_uri_, origin_, size_px_, color, layout_bounds_);
         color_ = color;
     }

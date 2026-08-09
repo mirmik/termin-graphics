@@ -108,26 +108,26 @@ namespace {
                 nb::arg("spacing"))
             .def(
                 "set_background",
-                [](const Ref& self, tc_ui_srgb_color color) {
+                [](const Ref& self, termin::SrgbColor color) {
                     self.get().set_background({color.r, color.g, color.b, color.a});
                 },
                 nb::arg("color"))
             .def(
                 "set_layout_background",
-                [](const Ref& self, tc_ui_srgb_color color) {
+                [](const Ref& self, termin::SrgbColor color) {
                     self.get().set_background({color.r, color.g, color.b, color.a});
                 },
                 nb::arg("color"))
             .def(
                 "set_border",
-                [](const Ref& self, tc_ui_srgb_color color, float thickness) {
+                [](const Ref& self, termin::SrgbColor color, float thickness) {
                     self.get().set_border({color.r, color.g, color.b, color.a}, thickness);
                 },
                 nb::arg("color"),
                 nb::arg("thickness") = 1.0f)
             .def(
                 "set_layout_border",
-                [](const Ref& self, tc_ui_srgb_color color, float thickness) {
+                [](const Ref& self, termin::SrgbColor color, float thickness) {
                     self.get().set_border({color.r, color.g, color.b, color.a}, thickness);
                 },
                 nb::arg("color"),
@@ -427,13 +427,13 @@ void bind_gui_native_widgets(nb::module_& m) {
             nb::arg("rows"))
         .def(
             "set_background",
-            [](const GridLayoutRef& self, tc_ui_srgb_color color) {
+            [](const GridLayoutRef& self, termin::SrgbColor color) {
                 self.get().set_background({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_border",
-            [](const GridLayoutRef& self, tc_ui_srgb_color color, float thickness) {
+            [](const GridLayoutRef& self, termin::SrgbColor color, float thickness) {
                 self.get().set_border({color.r, color.g, color.b, color.a}, thickness);
             },
             nb::arg("color"),
@@ -535,11 +535,11 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_ro("handle", [](const PanelRef& self) { return WidgetHandle{self.widget.handle}; })
         .def(
             "set_fill",
-            [](const PanelRef& self, tc_ui_srgb_color color) { self.get().set_fill({color.r, color.g, color.b, color.a}); },
+            [](const PanelRef& self, termin::SrgbColor color) { self.get().set_fill({color.r, color.g, color.b, color.a}); },
             nb::arg("color"))
         .def(
             "set_border",
-            [](const PanelRef& self, tc_ui_srgb_color color, float thickness) {
+            [](const PanelRef& self, termin::SrgbColor color, float thickness) {
                 self.get().set_border({color.r, color.g, color.b, color.a}, thickness);
             },
             nb::arg("color"),
@@ -554,7 +554,7 @@ void bind_gui_native_widgets(nb::module_& m) {
             [](const LabelRef& self, const std::string& text) { self.get().set_text(text); })
         .def(
             "set_color",
-            [](const LabelRef& self, tc_ui_srgb_color color) { self.get().set_color({color.r, color.g, color.b, color.a}); },
+            [](const LabelRef& self, termin::SrgbColor color) { self.get().set_color({color.r, color.g, color.b, color.a}); },
             nb::arg("color"))
         .def(
             "set_font_size",
@@ -628,7 +628,7 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_ro("handle", [](const SeparatorRef& self) { return WidgetHandle{self.widget.handle}; })
         .def(
             "set_color",
-            [](const SeparatorRef& self, tc_ui_srgb_color color) {
+            [](const SeparatorRef& self, termin::SrgbColor color) {
                 self.get().set_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
@@ -953,13 +953,13 @@ void bind_gui_native_widgets(nb::module_& m) {
             nb::arg("padding"))
         .def(
             "set_background",
-            [](const GroupBoxRef& self, tc_ui_srgb_color color) {
+            [](const GroupBoxRef& self, termin::SrgbColor color) {
                 self.get().set_background({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_border",
-            [](const GroupBoxRef& self, tc_ui_srgb_color color, float thickness) {
+            [](const GroupBoxRef& self, termin::SrgbColor color, float thickness) {
                 self.get().set_border({color.r, color.g, color.b, color.a}, thickness);
             },
             nb::arg("color"),

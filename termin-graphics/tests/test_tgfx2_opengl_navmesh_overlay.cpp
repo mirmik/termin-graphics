@@ -274,7 +274,7 @@ int main() {
             tgfx::ColorAttachmentDesc color_attachment;
             color_attachment.texture = color;
             color_attachment.load = tgfx::LoadOp::Clear;
-            color_attachment.clear_color[3] = 1.0f;
+            color_attachment.clear_color.a = 1.0f;
             render_pass.colors.push_back(color_attachment);
             render_pass.has_depth = true;
             render_pass.depth.texture = depth;

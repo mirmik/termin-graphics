@@ -134,7 +134,9 @@ namespace {
             const auto submit_started = RenderClock::now();
             tgfx::RenderContext2& ctx = host_->ctx();
             ctx.begin_frame();
-            ctx.begin_pass(offscreen_color_, tgfx::TextureHandle{}, clear_color_, 1.0f, false);
+            const termin::LinearColor clear_color =
+                termin::srgb_to_linear(termin::SrgbColor{clear_color_[0], clear_color_[1], clear_color_[2], clear_color_[3]});
+            ctx.begin_pass(offscreen_color_, tgfx::TextureHandle{}, &clear_color, 1.0f, false);
             canvas_.begin(ctx, width, height);
             const bool executed = canvas_.execute(*draw_list, resources_);
             canvas_.end();

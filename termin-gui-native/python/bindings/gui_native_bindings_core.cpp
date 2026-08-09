@@ -165,16 +165,10 @@ void bind_gui_native_core(nb::module_& m) {
         .value("FullViewport", TC_UI_ROOT_LAYOUT_FULL_VIEWPORT)
         .value("SafeArea", TC_UI_ROOT_LAYOUT_SAFE_AREA);
 
-    nb::class_<tc_ui_srgb_color>(m, "Color")
-        .def(nb::init<float, float, float, float>(),
-             nb::arg("r") = 0.0f,
-             nb::arg("g") = 0.0f,
-             nb::arg("b") = 0.0f,
-             nb::arg("a") = 1.0f)
-        .def_rw("r", &tc_ui_srgb_color::r)
-        .def_rw("g", &tc_ui_srgb_color::g)
-        .def_rw("b", &tc_ui_srgb_color::b)
-        .def_rw("a", &tc_ui_srgb_color::a);
+    // Re-export the canonical geombase value; do not register a competing
+    // termin::SrgbColor Python class in this extension.
+    nb::module_ geom = nb::module_::import_("tcbase._geom_native");
+    m.attr("SrgbColor") = geom.attr("SrgbColor");
 
     nb::class_<termin::gui_native::EdgeInsets>(m, "EdgeInsets")
         .def(nb::init<float, float, float, float>(),
@@ -274,10 +268,22 @@ void bind_gui_native_core(nb::module_& m) {
 
     nb::class_<tc_ui_style>(m, "Style")
         .def(nb::init<>())
-        .def_rw("background", &tc_ui_style::background)
-        .def_rw("foreground", &tc_ui_style::foreground)
-        .def_rw("border", &tc_ui_style::border)
-        .def_rw("accent", &tc_ui_style::accent)
+        .def_prop_rw(
+            "background",
+            [](const tc_ui_style& self) { return from_tc_ui_srgb(self.background); },
+            [](tc_ui_style& self, termin::SrgbColor color) { self.background = to_tc_ui_srgb(color); })
+        .def_prop_rw(
+            "foreground",
+            [](const tc_ui_style& self) { return from_tc_ui_srgb(self.foreground); },
+            [](tc_ui_style& self, termin::SrgbColor color) { self.foreground = to_tc_ui_srgb(color); })
+        .def_prop_rw(
+            "border",
+            [](const tc_ui_style& self) { return from_tc_ui_srgb(self.border); },
+            [](tc_ui_style& self, termin::SrgbColor color) { self.border = to_tc_ui_srgb(color); })
+        .def_prop_rw(
+            "accent",
+            [](const tc_ui_style& self) { return from_tc_ui_srgb(self.accent); },
+            [](tc_ui_style& self, termin::SrgbColor color) { self.accent = to_tc_ui_srgb(color); })
         .def_rw("padding_left", &tc_ui_style::padding_left)
         .def_rw("padding_top", &tc_ui_style::padding_top)
         .def_rw("padding_right", &tc_ui_style::padding_right)

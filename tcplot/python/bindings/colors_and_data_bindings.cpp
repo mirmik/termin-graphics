@@ -1,4 +1,4 @@
-// colors_and_data_bindings.cpp - Color4 + series + PlotData bindings.
+// colors_and_data_bindings.cpp - SrgbColor + series + PlotData bindings.
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -18,23 +18,17 @@ namespace nb = nanobind;
 namespace tcplot_bindings {
 
     void bind_colors_and_data(nb::module_& m) {
-        // ---- Color4 ----
-        nb::class_<tcplot::Color4>(m, "Color4")
-            .def(nb::init<>())
-            .def(nb::init<float, float, float, float>(), nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
-            .def_rw("r", &tcplot::Color4::r)
-            .def_rw("g", &tcplot::Color4::g)
-            .def_rw("b", &tcplot::Color4::b)
-            .def_rw("a", &tcplot::Color4::a)
-            // Convenience: convert to / from Python tuples.
-            .def("as_tuple", [](const tcplot::Color4& c) { return std::make_tuple(c.r, c.g, c.b, c.a); });
+        // Re-export the canonical base type so values cross module boundaries
+        // without a competing nanobind registration.
+        nb::module_ geom = nb::module_::import_("tcbase._geom_native");
+        m.attr("SrgbColor") = geom.attr("SrgbColor");
 
         // ---- Palette helpers ----
         m.def(
             "cycle_color",
             [](uint32_t index) {
                 auto c = tcplot::styles::cycle_color(index);
-                return std::make_tuple(c.r, c.g, c.b, c.a);
+                return c;
             },
             nb::arg("index"));
 
@@ -42,17 +36,17 @@ namespace tcplot_bindings {
             "jet",
             [](float t) {
                 auto c = tcplot::styles::jet(t);
-                return std::make_tuple(c.r, c.g, c.b, c.a);
+                return c;
             },
             nb::arg("t"));
 
-        // Default colors as a list of 4-tuples (matches Python styles.DEFAULT_COLORS).
+        // Default colors as typed authored sRGB values.
         m.def("default_colors", []() {
-            std::vector<std::tuple<float, float, float, float>> out;
+            std::vector<tcplot::SrgbColor> out;
             out.reserve(tcplot::styles::default_colors_count());
-            const tcplot::Color4* pal = tcplot::styles::default_colors();
+            const tcplot::SrgbColor* pal = tcplot::styles::default_colors();
             for (uint32_t i = 0; i < tcplot::styles::default_colors_count(); i++) {
-                out.emplace_back(pal[i].r, pal[i].g, pal[i].b, pal[i].a);
+                out.push_back(pal[i]);
             }
             return out;
         });
@@ -109,7 +103,7 @@ namespace tcplot_bindings {
             .def_rw("y_label", &tcplot::PlotData::y_label)
             .def_rw("z_label", &tcplot::PlotData::z_label)
 
-            // add_line: accept numpy arrays for x/y/z and a tuple-or-None color.
+            // add_line: accept numpy arrays for x/y/z and a typed-or-None color.
             .def(
                 "add_line",
                 [](tcplot::PlotData& self,

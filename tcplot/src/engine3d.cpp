@@ -60,7 +60,7 @@ namespace tcplot {
             bool surface_mode = false;
             SurfaceColorMap colormap = SurfaceColorMap::Jet;
             bool colormap_reversed = false;
-            Color4 surface_color{1.0f, 1.0f, 1.0f, 1.0f};
+            SrgbColor surface_color{1.0f, 1.0f, 1.0f, 1.0f};
         };
 
         constexpr const char* TCPLOT_3D_SHADER_UUID = "termin-engine-tcplot-3d";
@@ -166,7 +166,7 @@ namespace tcplot {
             float row = 0.0f;
             float row_step = 1.0f;
             float col_step = 1.0f;
-            Color4 color = styles::grid_color();
+            SrgbColor color = styles::grid_color();
             bool visible = false;
             float width_px = 1.5f;
             float max_col = 0.0f;
@@ -177,12 +177,12 @@ namespace tcplot {
             float x = 0.0f;
             float y = 0.0f;
             float z = 0.0f;
-            Color4 color;
+            SrgbColor color;
             SurfaceVertexGrid grid;
         };
 
         // Push the 7-float (pos+color) vertex for a single point.
-        inline void push_vertex(std::vector<float>& verts, float x, float y, float z, const Color4& c) {
+        inline void push_vertex(std::vector<float>& verts, float x, float y, float z, const SrgbColor& c) {
             verts.push_back(x);
             verts.push_back(y);
             verts.push_back(z);
@@ -216,9 +216,9 @@ namespace tcplot {
             verts.push_back(vertex.grid.max_row);
         }
 
-        // Resolve a possibly-missing Color4 against a series index. Matches
+        // Resolve a possibly-missing SrgbColor against a series index. Matches
         // Python behaviour of "no color → palette cycle by index".
-        Color4 resolve_color(const std::optional<Color4>& c, uint32_t palette_idx, Color4 fallback) {
+        SrgbColor resolve_color(const std::optional<SrgbColor>& c, uint32_t palette_idx, SrgbColor fallback) {
             if (c.has_value())
                 return *c;
             if (palette_idx != UINT32_MAX)
@@ -332,7 +332,7 @@ namespace tcplot {
         return true;
     }
 
-    bool PlotEngine3D::set_surface_color(size_t idx, Color4 color) {
+    bool PlotEngine3D::set_surface_color(size_t idx, SrgbColor color) {
         if (idx >= data.surfaces.size())
             return false;
         data.surfaces[idx].color = color;
@@ -392,7 +392,7 @@ namespace tcplot {
         return true;
     }
 
-    bool PlotEngine3D::set_scatter_style(size_t idx, Color4 color, double size) {
+    bool PlotEngine3D::set_scatter_style(size_t idx, SrgbColor color, double size) {
         if (idx >= data.scatters.size())
             return false;
         ScatterSeries& scatter = data.scatters[idx];
@@ -402,7 +402,7 @@ namespace tcplot {
         return true;
     }
 
-    void PlotEngine3D::set_grid_style(Color4 color, const std::array<Color4, 3>& colors) {
+    void PlotEngine3D::set_grid_style(SrgbColor color, const std::array<SrgbColor, 3>& colors) {
         grid_color = color;
         axis_colors = colors;
         dirty_ = true;
@@ -516,7 +516,7 @@ namespace tcplot {
                     palette_i++;
                     continue;
                 }
-                const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
+                const SrgbColor c = resolve_color(s.color, palette_i, styles::axis_color());
                 for (size_t i = 0; i < s.x.size(); i++) {
                     push_vertex(verts, (float)s.x[i], (float)s.y[i], (float)s.z[i], c);
                 }
@@ -550,7 +550,7 @@ namespace tcplot {
                     palette_i++;
                     continue;
                 }
-                const Color4 c = resolve_color(s.color, palette_i, styles::axis_color());
+                const SrgbColor c = resolve_color(s.color, palette_i, styles::axis_color());
                 const float series_cs = cs * static_cast<float>(std::max(s.size, 0.1) / 4.0);
                 for (size_t i = 0; i < s.x.size(); i++) {
                     const float px = (float)s.x[i];
@@ -598,7 +598,7 @@ namespace tcplot {
         // get very dim if sampled with low coverage; full alpha + mid-gray
         // keeps the grid legible without drowning the data series.
         // styles::grid_color() = (0.3, 0.3, 0.3, 0.5) stays the 2D choice.
-        const Color4 gc = grid_color;
+        const SrgbColor gc = grid_color;
 
         // For each axis, draw ticks as line segments running along the
         // bounding box's "floor" on one of the other two axes. Matches
@@ -657,10 +657,10 @@ namespace tcplot {
         if (rows < 2 || cols < 2)
             return;
 
-        const Color4 surface_color = surf.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
+        const SrgbColor surface_color = surf.color.value_or(SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
         const float alpha = surface_color.a;
 
-        const Color4 grid_color = surf.grid_color.value_or(Color4{0.05f, 0.05f, 0.05f, 1.0f});
+        const SrgbColor grid_color = surf.grid_color.value_or(SrgbColor{0.05f, 0.05f, 0.05f, 1.0f});
         const float row_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_row_step));
         const float col_step = static_cast<float>(std::max<uint32_t>(1, surf.grid_col_step));
         const float grid_width_px = std::max(surf.grid_width_px, 0.1f);
@@ -810,7 +810,7 @@ namespace tcplot {
         if (show_series) {
             for (size_t i = 0; i < surface_meshes_.size(); ++i) {
                 const SurfaceSeries& style = surface_mesh_styles_[i];
-                const Color4 surface_color = style.color.value_or(Color4{1.0f, 1.0f, 1.0f, 1.0f});
+                const SrgbColor surface_color = style.color.value_or(SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
                 Plot3DDrawParams surface_params{mvp, z_min, z_max, true};
                 surface_params.colormap = style.colormap;
                 surface_params.colormap_reversed = style.colormap_reversed;
@@ -859,7 +859,7 @@ namespace tcplot {
                 const double dz = (hi[2] - lo[2]) * z_scale;
                 const double data_size = std::sqrt(dx * dx + dy * dy + dz * dz);
                 const float cs = (float)(data_size * 0.015);
-                const Color4 c{1.0f, 1.0f, 0.0f, 1.0f};
+                const SrgbColor c{1.0f, 1.0f, 0.0f, 1.0f};
                 std::vector<float> verts;
                 const float px = (float)marker_x_;
                 const float py = (float)marker_y_;

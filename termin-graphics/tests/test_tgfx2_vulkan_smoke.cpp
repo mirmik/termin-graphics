@@ -323,8 +323,8 @@ static bool render_fsq_artifact_smoke(tgfx::IRenderDevice& device) {
         tgfx::RenderContext2 ctx(device, cache);
         ctx.begin_frame();
 
-        float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
-        ctx.begin_pass(rt, {}, clear);
+        termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
+        ctx.begin_pass(rt, {}, &clear);
         ctx.set_viewport(0, 0, kWidth, kHeight);
         ctx.set_depth_test(false);
         ctx.set_depth_write(false);
@@ -559,10 +559,10 @@ static bool render_bound_resource_set_smoke(tgfx::IRenderDevice& device) {
     tgfx::ColorAttachmentDesc color_attachment;
     color_attachment.texture = rt;
     color_attachment.load = tgfx::LoadOp::Clear;
-    color_attachment.clear_color[0] = 0.0f;
-    color_attachment.clear_color[1] = 0.0f;
-    color_attachment.clear_color[2] = 0.0f;
-    color_attachment.clear_color[3] = 1.0f;
+    color_attachment.clear_color.r = 0.0f;
+    color_attachment.clear_color.g = 0.0f;
+    color_attachment.clear_color.b = 0.0f;
+    color_attachment.clear_color.a = 1.0f;
     pass.colors.push_back(color_attachment);
 
     cmd->begin_render_pass(pass);
@@ -624,10 +624,10 @@ static bool render_color_resolve_smoke(tgfx::IRenderDevice& device, bool multivi
     color.resolve_texture = resolve;
     color.load = tgfx::LoadOp::Clear;
     color.store = tgfx::StoreOp::DontCare;
-    color.clear_color[0] = 0.25f;
-    color.clear_color[1] = 0.50f;
-    color.clear_color[2] = 0.75f;
-    color.clear_color[3] = 1.00f;
+    color.clear_color.r = 0.25f;
+    color.clear_color.g = 0.50f;
+    color.clear_color.b = 0.75f;
+    color.clear_color.a = 1.00f;
 
     auto cmd = device.create_command_list();
     cmd->begin();
@@ -1174,10 +1174,10 @@ int main(int argc, char** argv) {
     tgfx::ColorAttachmentDesc color_att;
     color_att.texture = rt_tex;
     color_att.load = tgfx::LoadOp::Clear;
-    color_att.clear_color[0] = 0.0f;
-    color_att.clear_color[1] = 0.0f;
-    color_att.clear_color[2] = 0.2f;
-    color_att.clear_color[3] = 1.0f;
+    color_att.clear_color.r = 0.0f;
+    color_att.clear_color.g = 0.0f;
+    color_att.clear_color.b = 0.2f;
+    color_att.clear_color.a = 1.0f;
     pass.colors.push_back(color_att);
 
     cmd->begin_render_pass(pass);
@@ -1444,8 +1444,8 @@ int main(int argc, char** argv) {
                     tgfx::RenderContext2 slang_ctx(*device, slang_cache);
                     slang_ctx.begin_frame();
 
-                    float clear[] = {0.0f, 0.0f, 0.0f, 1.0f};
-                    slang_ctx.begin_pass(slang_rt_tex, {}, clear);
+                    termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
+                    slang_ctx.begin_pass(slang_rt_tex, {}, &clear);
                     slang_ctx.set_viewport(0, 0, 128, 128);
                     slang_ctx.set_depth_test(false);
                     slang_ctx.set_depth_write(false);

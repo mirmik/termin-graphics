@@ -86,7 +86,7 @@ TEST_CASE("ExecuteContext builds an ordered MRT pass from independent resources"
     CHECK(pass.colors[0].load == tgfx::LoadOp::Clear);
     CHECK(pass.colors[1].load == tgfx::LoadOp::Load);
     CHECK(pass.colors[2].store == tgfx::StoreOp::DontCare);
-    CHECK_EQ(pass.colors[0].clear_color[2], 0.3f);
+    CHECK_EQ(pass.colors[0].clear_color.b, 0.3f);
     CHECK(pass.has_depth);
     CHECK_EQ(pass.depth.texture.id, 44u);
     CHECK_EQ(pass.depth.clear_depth, 0.25f);

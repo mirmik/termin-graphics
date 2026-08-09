@@ -137,7 +137,7 @@ namespace tgfx {
                              TextureHandle src,
                              termin::Bounds2i src_rect,
                              termin::Bounds2i dst_rect) override;
-        void clear_texture(TextureHandle dst, termin::Color4 color, termin::Bounds2i viewport) override;
+        void clear_texture(TextureHandle dst, termin::LinearColor color, termin::Bounds2i viewport) override;
 
         bool read_pixel_rgba8(TextureHandle tex, int x, int y, float out_rgba[4]) override;
         bool read_pixel_depth_float(TextureHandle tex, int x, int y, float* out_depth) override;

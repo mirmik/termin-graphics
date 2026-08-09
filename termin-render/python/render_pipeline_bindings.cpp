@@ -130,8 +130,11 @@ namespace termin {
                             spec.resource_type = nb::cast<std::string>(item["resource_type"]);
                         if (item.contains("size"))
                             spec.size = nb::cast<std::pair<int, int>>(item["size"]);
-                        if (item.contains("clear_color"))
-                            spec.clear_color = nb::cast<std::array<double, 4>>(item["clear_color"]);
+                        if (item.contains("clear_color")) {
+                            nb::list cc = nb::cast<nb::list>(item["clear_color"]);
+                            spec.clear_color = termin::LinearColor{nb::cast<float>(cc[0]), nb::cast<float>(cc[1]),
+                                                                    nb::cast<float>(cc[2]), nb::cast<float>(cc[3])};
+                        }
                         if (item.contains("clear_depth"))
                             spec.clear_depth = nb::cast<float>(item["clear_depth"]);
                         if (item.contains("format"))
@@ -567,10 +570,10 @@ namespace termin {
                          if (spec.clear_color) {
                              const auto& cc = *spec.clear_color;
                              nb::list color;
-                             color.append(cc[0]);
-                             color.append(cc[1]);
-                             color.append(cc[2]);
-                             color.append(cc[3]);
+                             color.append(cc.r);
+                             color.append(cc.g);
+                             color.append(cc.b);
+                             color.append(cc.a);
                              spec_dict["clear_color"] = color;
                          }
                          if (spec.clear_depth)
@@ -691,10 +694,10 @@ namespace termin {
                             }
                             if (spec_data.contains("clear_color")) {
                                 nb::list cc = nb::cast<nb::list>(spec_data["clear_color"]);
-                                spec.clear_color = std::array<double, 4>{nb::cast<double>(cc[0]),
-                                                                         nb::cast<double>(cc[1]),
-                                                                         nb::cast<double>(cc[2]),
-                                                                         nb::cast<double>(cc[3])};
+                                spec.clear_color = termin::LinearColor{nb::cast<float>(cc[0]),
+                                                                        nb::cast<float>(cc[1]),
+                                                                        nb::cast<float>(cc[2]),
+                                                                        nb::cast<float>(cc[3])};
                             }
                             if (spec_data.contains("clear_depth"))
                                 spec.clear_depth = nb::cast<float>(spec_data["clear_depth"]);

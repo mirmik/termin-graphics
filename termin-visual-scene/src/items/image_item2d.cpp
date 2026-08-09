@@ -3,18 +3,22 @@
 #include "item_geometry2d_internal.hpp"
 
 #include <stdexcept>
+#include <cmath>
 
 #include <tcbase/tc_log.hpp>
 
 namespace termin::visual {
     namespace {
+        bool finite_color(termin::SrgbColor color) {
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) && std::isfinite(color.a);
+        }
 
         void validate(const std::string& uri,
                       termin::Rect2f rect,
                       termin::Rect2f uv,
-                      tgfx::Color4f tint,
+                      termin::SrgbColor tint,
                       tgfx::DrawTextureSampling2D sampling) {
-            if (uri.empty() || !detail::valid_rect(rect) || !detail::valid_rect(uv) || !tint.is_finite() ||
+            if (uri.empty() || !detail::valid_rect(rect) || !detail::valid_rect(uv) || !finite_color(tint) ||
                 (sampling != tgfx::DrawTextureSampling2D::Linear && sampling != tgfx::DrawTextureSampling2D::Nearest)) {
                 throw std::invalid_argument("invalid ImageItem2D state");
             }
@@ -28,7 +32,7 @@ namespace termin::visual {
     ImageItem2D::ImageItem2D(std::string image_uri,
                              termin::Rect2f rect,
                              termin::Rect2f uv,
-                             tgfx::Color4f tint,
+                             termin::SrgbColor tint,
                              tgfx::DrawTextureSampling2D sampling)
         : ImageItem2D() {
         validate(image_uri, rect, uv, tint, sampling);
@@ -54,7 +58,7 @@ namespace termin::visual {
         uv_ = uv;
     }
 
-    void ImageItem2D::set_tint(tgfx::Color4f tint) {
+    void ImageItem2D::set_tint(termin::SrgbColor tint) {
         validate(image_uri_, rect_, uv_, tint, sampling_);
         tint_ = tint;
     }

@@ -19,7 +19,7 @@ namespace tgfx {
 namespace tcplot {
 
     struct PlotLineSeriesStyle2D {
-        Color4 color{};
+        SrgbColor color{};
         float thickness_px = 1.5f;
         LineStyle line_style = LineStyle::Solid;
         float dash_px = 8.0f;
@@ -31,7 +31,7 @@ namespace tcplot {
     };
 
     struct PlotScatterSeriesStyle2D {
-        Color4 color{};
+        SrgbColor color{};
         float diameter_px = 4.0f;
     };
 

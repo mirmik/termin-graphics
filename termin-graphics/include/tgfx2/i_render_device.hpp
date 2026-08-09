@@ -223,7 +223,7 @@ namespace tgfx {
 
         // Clear a tgfx2 color texture to `color` inside the given viewport
         // rect (scissor).
-        virtual void clear_texture(TextureHandle dst, termin::Color4 color, termin::Bounds2i viewport) {
+        virtual void clear_texture(TextureHandle dst, termin::LinearColor color, termin::Bounds2i viewport) {
             (void)dst;
             (void)color;
             (void)viewport;

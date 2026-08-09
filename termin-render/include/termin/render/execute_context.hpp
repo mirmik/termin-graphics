@@ -34,7 +34,7 @@ namespace termin {
         const char* resource_name = nullptr;
         tgfx::LoadOp load = tgfx::LoadOp::Clear;
         tgfx::StoreOp store = tgfx::StoreOp::Store;
-        float clear_color[4] = {0, 0, 0, 0};
+        LinearColor clear_linear_color{0, 0, 0, 0};
     };
 
     struct FrameGraphDepthAttachment {

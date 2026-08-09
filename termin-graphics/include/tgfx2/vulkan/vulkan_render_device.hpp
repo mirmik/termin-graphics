@@ -546,7 +546,7 @@ namespace tgfx {
                              termin::Bounds2i src_rect,
                              termin::Bounds2i dst_rect) override;
 
-        void clear_texture(TextureHandle dst, termin::Color4 color, termin::Bounds2i viewport) override;
+        void clear_texture(TextureHandle dst, termin::LinearColor color, termin::Bounds2i viewport) override;
 
         // Internal access for command list
         VkDevice device() const {

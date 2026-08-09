@@ -40,20 +40,12 @@ namespace termin {
             .def_rw("depth_format", &RenderTargetConfig::depth_format)
             .def_rw("clear_color", &RenderTargetConfig::clear_color)
             .def_prop_rw(
-                "clear_color_value",
+                "clear_linear_color",
                 [](const RenderTargetConfig& self) {
-                    return nb::make_tuple(self.clear_color_value[0],
-                                          self.clear_color_value[1],
-                                          self.clear_color_value[2],
-                                          self.clear_color_value[3]);
+                    return self.clear_linear_color;
                 },
-                [](RenderTargetConfig& self, nb::sequence value) {
-                    if (nb::len(value) < 4) {
-                        throw nb::value_error("clear_color_value requires 4 values");
-                    }
-                    for (size_t i = 0; i < 4; i++) {
-                        self.clear_color_value[i] = nb::cast<float>(value[i]);
-                    }
+                [](RenderTargetConfig& self, const termin::LinearColor& value) {
+                    self.clear_linear_color = value;
                 })
             .def_rw("clear_depth", &RenderTargetConfig::clear_depth)
             .def_rw("clear_depth_value", &RenderTargetConfig::clear_depth_value)

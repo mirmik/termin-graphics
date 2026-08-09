@@ -106,7 +106,7 @@ void bind_gui_native_window_adapter(nb::module_& m) {
                TcDocument document,
                const std::string& font_path,
                int font_size,
-               std::array<float, 4> clear_color,
+               termin::LinearColor clear_linear_color,
                bool enable_text_input) {
                 if (font_size <= 0) {
                     throw std::invalid_argument("font_size must be positive");
@@ -114,7 +114,7 @@ void bind_gui_native_window_adapter(nb::module_& m) {
                 DocumentRendererConfig config;
                 config.font_path = font_path;
                 config.font_size = font_size;
-                config.clear_color = clear_color;
+                config.clear_linear_color = clear_linear_color;
                 config.enable_text_input = enable_text_input;
                 termin::BackendWindow& window = manager.window(handle);
                 new (self) GuiWindowAdapter(window.graphics_host(), document, std::move(config), window);
@@ -124,7 +124,7 @@ void bind_gui_native_window_adapter(nb::module_& m) {
             nb::arg("document"),
             nb::arg("font_path"),
             nb::arg("font_size") = 14,
-            nb::arg("clear_color") = std::array<float, 4>{0.03f, 0.035f, 0.045f, 1.0f},
+            nb::arg("clear_linear_color") = termin::LinearColor{0.03f, 0.035f, 0.045f, 1.0f},
             nb::arg("enable_text_input") = true,
             nb::keep_alive<1, 2>(),
             nb::keep_alive<1, 4>())

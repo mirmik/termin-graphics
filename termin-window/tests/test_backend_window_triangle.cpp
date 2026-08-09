@@ -179,10 +179,10 @@ void main() {
             tgfx::ColorAttachmentDesc att;
             att.texture = rt;
             att.load = tgfx::LoadOp::Clear;
-            att.clear_color[0] = 0.5f + 0.5f * std::sin(t * 1.7f);
-            att.clear_color[1] = 0.1f;
-            att.clear_color[2] = 0.5f + 0.5f * std::cos(t * 1.1f);
-            att.clear_color[3] = 1.0f;
+            att.clear_color.r = 0.5f + 0.5f * std::sin(t * 1.7f);
+            att.clear_color.g = 0.1f;
+            att.clear_color.b = 0.5f + 0.5f * std::cos(t * 1.1f);
+            att.clear_color.a = 1.0f;
             pass.colors.push_back(att);
 
             cmd->begin_render_pass(pass);

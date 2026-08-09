@@ -47,14 +47,19 @@ namespace tcplot {
             return std::isfinite(point.x) && std::isfinite(point.y);
         }
 
+        bool finite(termin::SrgbColor color) {
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) &&
+                   std::isfinite(color.a);
+        }
+
         bool valid_data_marker(const PlotDataMarker2D& marker) {
             return std::isfinite(marker.data_position.x) && std::isfinite(marker.data_position.y) &&
                    std::isfinite(marker.callout_offset.x) && std::isfinite(marker.callout_offset.y) &&
                    std::isfinite(marker.callout_width) && std::isfinite(marker.callout_height) &&
                    std::isfinite(marker.anchor_radius) && std::isfinite(marker.text_size) &&
                    marker.callout_width > 0.0f && marker.callout_height > 0.0f && marker.anchor_radius > 0.0f &&
-                   marker.text_size > 0.0f && marker.anchor_color.is_finite() && marker.hover_color.is_finite() &&
-                   marker.callout_color.is_finite() && marker.border_color.is_finite() && marker.text_color.is_finite();
+                   marker.text_size > 0.0f && finite(marker.anchor_color) && finite(marker.hover_color) &&
+                   finite(marker.callout_color) && finite(marker.border_color) && finite(marker.text_color);
         }
 
         std::optional<PlotPixelPoint2D>
@@ -230,7 +235,7 @@ namespace tcplot {
                 return;
             const PlotDataMarker2D& marker = record.marker->marker;
             const bool highlighted = record.marker->hovered || record.marker->dragging;
-            const tgfx::Color4f accent = highlighted ? marker.hover_color : marker.anchor_color;
+            const termin::SrgbColor accent = highlighted ? marker.hover_color : marker.anchor_color;
             const float radius = marker.anchor_radius + (highlighted ? 1.5f : 0.0f);
             const float half_width = marker.callout_width * 0.5f;
             const float half_height = marker.callout_height * 0.5f;
@@ -244,9 +249,9 @@ namespace tcplot {
             PlotAnnotationVisual2D anchor;
             anchor.item = std::make_unique<termin::visual::EllipseItem2D>(
                 termin::Rect2f{-radius, -radius, radius * 2.0f, radius * 2.0f},
-                tgfx::FillPaint{accent},
+                tgfx::FillPaint{termin::srgb_to_linear(accent)},
                 tgfx::StrokePaint{
-                    marker.border_color,
+                    termin::srgb_to_linear(marker.border_color),
                     highlighted ? 2.5f : 1.5f,
                 });
             anchor.phase = PlotAnnotationPhase2D::Overlay;
@@ -257,7 +262,7 @@ namespace tcplot {
             PlotAnnotationVisual2D leader;
             leader.item = std::make_unique<termin::visual::PolylineItem2D>(
                 std::vector<termin::Vec2f>{{0.0f, 0.0f}, marker.callout_offset},
-                tgfx::StrokePaint{accent, highlighted ? 2.5f : 1.5f},
+                tgfx::StrokePaint{termin::srgb_to_linear(accent), highlighted ? 2.5f : 1.5f},
                 false);
             leader.phase = PlotAnnotationPhase2D::Overlay;
             leader.clip = PlotAnnotationClip2D::PlotArea;
@@ -269,9 +274,9 @@ namespace tcplot {
             bubble.item = std::make_unique<termin::visual::RoundedRectItem2D>(
                 termin::Rect2f{-half_width, -half_height, marker.callout_width, marker.callout_height},
                 8.0f,
-                tgfx::FillPaint{marker.callout_color},
+                tgfx::FillPaint{termin::srgb_to_linear(marker.callout_color)},
                 tgfx::StrokePaint{
-                    highlighted ? accent : marker.border_color,
+                    termin::srgb_to_linear(highlighted ? accent : marker.border_color),
                     highlighted ? 2.0f : 1.0f,
                 });
             bubble.pixel_offset = marker.callout_offset;
@@ -301,8 +306,8 @@ namespace tcplot {
                 close.item = std::make_unique<termin::visual::RoundedRectItem2D>(
                     termin::Rect2f{-8.0f, -8.0f, 16.0f, 16.0f},
                     4.0f,
-                    tgfx::FillPaint{highlighted ? tgfx::Color4f{0.85f, 0.25f, 0.22f, 1.0f}
-                                                : tgfx::Color4f{0.48f, 0.20f, 0.20f, 1.0f}},
+                    tgfx::FillPaint{termin::srgb_to_linear(highlighted ? termin::SrgbColor{0.85f, 0.25f, 0.22f, 1.0f}
+                                                : termin::SrgbColor{0.48f, 0.20f, 0.20f, 1.0f})},
                     std::nullopt);
                 close.pixel_offset = {
                     marker.callout_offset.x + half_width - 14.0f,

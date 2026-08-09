@@ -40,7 +40,7 @@ namespace termin {
                                          tgfx::IRenderDevice& device,
                                          tgfx::TextureHandle color,
                                          tgfx::TextureHandle depth,
-                                         const float* clear_color,
+                                         const termin::LinearColor* clear_color,
                                          float clear_depth,
                                          bool clear_depth_enabled) {
         uint32_t array_layers = 1;
@@ -62,7 +62,7 @@ namespace termin {
             attachment.texture = color;
             attachment.load = clear_color ? tgfx::LoadOp::Clear : tgfx::LoadOp::Load;
             if (clear_color) {
-                std::copy_n(clear_color, 4, attachment.clear_color);
+                attachment.clear_color = *clear_color;
             }
             pass.colors.push_back(attachment);
         }
@@ -1250,7 +1250,12 @@ namespace termin {
                 continue;
             }
             if (spec.clear_color) {
-                if (merged.clear_color && merged.clear_color != spec.clear_color) {
+                const bool same_clear = merged.clear_color && spec.clear_color &&
+                                        merged.clear_color->r == spec.clear_color->r &&
+                                        merged.clear_color->g == spec.clear_color->g &&
+                                        merged.clear_color->b == spec.clear_color->b &&
+                                        merged.clear_color->a == spec.clear_color->a;
+                if (merged.clear_color && !same_clear) {
                     tc::Log::error("RenderEngine::execute_pipeline: conflicting clear colors for aliased resource '%s'",
                                    canonical.c_str());
                 } else {
@@ -1332,7 +1337,7 @@ namespace termin {
                                               *device,
                                               clear_color ? rt_ctx.output_color_tex : tgfx::TextureHandle{},
                                               clear_depth ? rt_ctx.output_depth_tex : tgfx::TextureHandle{},
-                                              clear_color ? rt_ctx.clear_color : nullptr,
+                                              clear_color ? &rt_ctx.clear_linear_color : nullptr,
                                               rt_ctx.clear_depth,
                                               clear_depth)) {
                     continue;
@@ -1401,12 +1406,11 @@ namespace termin {
                 if (!color && !depth)
                     continue;
 
-                float clear_rgba[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-                const float* clear_color = nullptr;
+                termin::LinearColor clear_rgba{0.0f, 0.0f, 0.0f, 1.0f};
+                const termin::LinearColor* clear_color = nullptr;
                 if (spec.clear_color) {
-                    for (size_t channel = 0; channel < 4; ++channel)
-                        clear_rgba[channel] = static_cast<float>((*spec.clear_color)[channel]);
-                    clear_color = clear_rgba;
+                    clear_rgba = *spec.clear_color;
+                    clear_color = &clear_rgba;
                 }
                 const float clear_depth = spec.clear_depth.value_or(1.0f);
                 if (!begin_clear_texture_pass(
@@ -1540,10 +1544,7 @@ namespace termin {
                                       ? tgfx::LoadOp::Clear
                                       : tgfx::LoadOp::Load;
                 if (deferred_clear && deferred_clear->clear_color) {
-                    for (size_t channel = 0; channel < 4; ++channel) {
-                        attachment.clear_color[channel] =
-                            static_cast<float>((*deferred_clear->clear_color)[channel]);
-                    }
+                    attachment.clear_color = *deferred_clear->clear_color;
                 }
                 if (absorbed_resolve) {
                     attachment.resolve_texture =
@@ -1584,12 +1585,11 @@ namespace termin {
                 tc::Log::error("RenderEngine: failed to open fused raster scope for resource '%s'",
                                first.canonical_raster_target.c_str());
                 if (deferred_clear) {
-                    float clear_rgba[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-                    const float* clear_color = nullptr;
+                    termin::LinearColor clear_rgba{0.0f, 0.0f, 0.0f, 1.0f};
+                    const termin::LinearColor* clear_color = nullptr;
                     if (deferred_clear->clear_color) {
-                        for (size_t channel = 0; channel < 4; ++channel)
-                            clear_rgba[channel] = static_cast<float>((*deferred_clear->clear_color)[channel]);
-                        clear_color = clear_rgba;
+                        clear_rgba = *deferred_clear->clear_color;
+                        clear_color = &clear_rgba;
                     }
                     if (begin_clear_texture_pass(*ctx2,
                                                  *device,

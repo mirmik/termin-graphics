@@ -8,6 +8,12 @@
 
 namespace tgfx {
     namespace {
+        bool finite_color(const termin::LinearColor& color) {
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) &&
+                   std::isfinite(color.a);
+        }
+    }
+    namespace {
 
         bool finite(termin::Vec2f p) {
             return std::isfinite(p.x) && std::isfinite(p.y);
@@ -94,12 +100,8 @@ namespace tgfx {
 
     } // namespace
 
-    bool Color4f::is_finite() const noexcept {
-        return std::isfinite(r) && std::isfinite(g) && std::isfinite(b) && std::isfinite(a);
-    }
-
     bool FillPaint::validate() const {
-        if (!color.is_finite() || (rule != FillRule::NonZero && rule != FillRule::EvenOdd)) {
+        if (!finite_color(color) || (rule != FillRule::NonZero && rule != FillRule::EvenOdd)) {
             tc_log_error("FillPaint: finite color and known fill rule required");
             return false;
         }
@@ -107,7 +109,7 @@ namespace tgfx {
     }
 
     bool StrokePaint::validate() const {
-        if (!color.is_finite() || !std::isfinite(width) || width < 0.0f || !std::isfinite(miter_limit) ||
+        if (!finite_color(color) || !std::isfinite(width) || width < 0.0f || !std::isfinite(miter_limit) ||
             miter_limit < 1.0f || !std::isfinite(dash_offset) ||
             (join != StrokeJoin::Miter && join != StrokeJoin::Round && join != StrokeJoin::Bevel) ||
             (cap != StrokeCap::Butt && cap != StrokeCap::Round && cap != StrokeCap::Square)) {

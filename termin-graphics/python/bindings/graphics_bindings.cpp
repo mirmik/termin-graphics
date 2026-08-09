@@ -12,33 +12,12 @@ using namespace termin;
 namespace tgfx_bindings {
 
     void bind_types(nb::module_& m) {
-        // Color4
-        nb::class_<Color4>(m, "Color4")
-            .def(nb::init<>())
-            .def(nb::init<float, float, float, float>(), nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
-            .def("__init__",
-                 [](Color4* self, nb::tuple t) {
-                     if (t.size() < 3)
-                         throw std::runtime_error("Color tuple must have at least 3 elements");
-                     float a = t.size() >= 4 ? nb::cast<float>(t[3]) : 1.0f;
-                     new (self) Color4(nb::cast<float>(t[0]), nb::cast<float>(t[1]), nb::cast<float>(t[2]), a);
-                 })
-            .def_rw("r", &Color4::r)
-            .def_rw("g", &Color4::g)
-            .def_rw("b", &Color4::b)
-            .def_rw("a", &Color4::a)
-            .def_static("black", &Color4::black)
-            .def_static("white", &Color4::white)
-            .def_static("red", &Color4::red)
-            .def_static("green", &Color4::green)
-            .def_static("blue", &Color4::blue)
-            .def_static("transparent", &Color4::transparent)
-            .def("__iter__", [](const Color4& c) { return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a)); })
-            .def("__getitem__", [](const Color4& c, int i) {
-                if (i < 0 || i > 3)
-                    throw nb::index_error();
-                return (&c.r)[i];
-            });
+        // Re-export the canonical base bindings. Registering the same C++
+        // value type again in this extension would create a competing Python
+        // identity and make cross-module typed APIs unreliable.
+        nb::module_ geom = nb::module_::import_("tcbase._geom_native");
+        m.attr("SrgbColor") = geom.attr("SrgbColor");
+        m.attr("LinearColor") = geom.attr("LinearColor");
 
         // Size2i
         nb::class_<Size2i>(m, "Size2i")
@@ -90,8 +69,7 @@ namespace tgfx_bindings {
                 return (&r.x0)[i];
             });
 
-        // Implicit conversions from Python tuples
-        nb::implicitly_convertible<nb::tuple, Color4>();
+        // Geometry tuples remain supported for Size2i/Bounds2i only.
         nb::implicitly_convertible<nb::tuple, Size2i>();
         nb::implicitly_convertible<nb::tuple, Bounds2i>();
     }
