@@ -99,6 +99,7 @@ class Plot3D(Widget):
 
     def release_gpu(self) -> None:
         self._scene.release_gpu()
+        super().release_gpu()
 
     def plot(self, x, y, z, *, color=None, thickness=1.5, label=""):
         xa, ya, za = self._xyz(x, y, z)

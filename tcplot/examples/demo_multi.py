@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 
 from tcgui.widgets.hstack import HStack
+from tcgui.widgets.units import pct
 
 from tcplot import Plot2D
 from _host import run_demo
@@ -19,6 +20,8 @@ from _host import run_demo
 def make_row():
     row = HStack()
     row.spacing = 10
+    row.preferred_width = pct(100)
+    row.preferred_height = pct(100)
 
     p1 = Plot2D()
     p1.stretch = True
