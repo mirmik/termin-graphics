@@ -1344,20 +1344,20 @@ namespace tgfx_bindings {
                 [resolve_text3d_anchor](tgfx::Text3DRenderer& self,
                                         const std::string& text,
                                         std::tuple<float, float, float> position,
-                                        std::tuple<float, float, float, float> color,
+                                        termin::SrgbColor color,
                                         float size,
                                         nb::object anchor) {
                     auto [px, py, pz] = position;
-                    auto [r, g, b, a] = color;
+                    const termin::LinearColor linear = termin::srgb_to_linear(color);
                     self.draw(text,
                               tgfx::Text3DRenderer::DrawOptions{termin::Vec3f{px, py, pz},
-                                                                termin::Color4{r, g, b, a},
+                                                                linear,
                                                                 size,
                                                                 resolve_text3d_anchor(anchor)});
                 },
                 nb::arg("text"),
                 nb::arg("position"),
-                nb::arg("color") = std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+                nb::arg("color") = termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                 nb::arg("size") = 0.05f,
                 nb::arg("anchor") = "center")
 

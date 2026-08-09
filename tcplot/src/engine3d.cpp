@@ -910,7 +910,8 @@ namespace tcplot {
             ctx->set_blend(true);
             text3d_->begin(ctx, label_mvp, cr, cu, font);
 
-            const Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
+            const termin::LinearColor label_color =
+                termin::srgb_to_linear(termin::SrgbColor{0.8f, 0.8f, 0.8f, 1.0f});
             const double dx = (hi[0] - lo[0]) * x_scale;
             const double dy = (hi[1] - lo[1]) * y_scale;
             const double dz = (hi[2] - lo[2]) * z_scale;
@@ -948,7 +949,7 @@ namespace tcplot {
                     text3d_->draw(axes::format_tick(t),
                                   tgfx::Text3DRenderer::DrawOptions{
                                       pos,
-                                      termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                                      label_color,
                                       tick_text_size_px,
                                       tgfx::Text3DRenderer::Anchor::Center});
                 }
@@ -983,7 +984,7 @@ namespace tcplot {
                 text3d_->draw(*axis_labels[axis],
                               tgfx::Text3DRenderer::DrawOptions{
                                   pos,
-                                  termin::Color4{label_color.r, label_color.g, label_color.b, label_color.a},
+                                  label_color,
                                   label_size,
                                   tgfx::Text3DRenderer::Anchor::Center});
             }
@@ -1003,7 +1004,8 @@ namespace tcplot {
                 };
                 text3d_->draw(label_buf,
                               tgfx::Text3DRenderer::DrawOptions{pos,
-                                                                termin::Color4{1.0f, 1.0f, 0.0f, 1.0f},
+                                                                termin::srgb_to_linear(
+                                                                    termin::SrgbColor{1.0f, 1.0f, 0.0f, 1.0f}),
                                                                 marker_text_size_px,
                                                                 tgfx::Text3DRenderer::Anchor::Center});
                 text3d_->end();

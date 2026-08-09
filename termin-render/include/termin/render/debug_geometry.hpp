@@ -52,19 +52,19 @@ namespace termin {
             return valid();
         }
 
-        bool line(const Vec3& start, const Vec3& end, const Color4& color, bool depth_test = false) const;
+        bool line(const Vec3& start, const Vec3& end, const SrgbColor& color, bool depth_test = false) const;
         bool wire_sphere(
-            const Vec3& center, double radius, const Color4& color, int segments = 16, bool depth_test = false) const;
+            const Vec3& center, double radius, const SrgbColor& color, int segments = 16, bool depth_test = false) const;
         bool wire_box(const Vec3& center,
                       const Vec3& half_axis_x,
                       const Vec3& half_axis_y,
                       const Vec3& half_axis_z,
-                      const Color4& color,
+                      const SrgbColor& color,
                       bool depth_test = false) const;
         bool wire_capsule(const Vec3& start,
                           const Vec3& end,
                           double radius,
-                          const Color4& color,
+                          const SrgbColor& color,
                           int segments = 16,
                           bool depth_test = false) const;
     };

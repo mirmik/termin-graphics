@@ -45,14 +45,15 @@ namespace termin {
         tri_vertices_depth.clear();
     }
 
-    void ImmediateRenderer::_add_vertex(std::vector<float>& buffer, const Vec3& pos, const Color4& color) {
+    void ImmediateRenderer::_add_vertex(std::vector<float>& buffer, const Vec3& pos, const SrgbColor& color) {
+        const LinearColor linear = srgb_to_linear(color);
         buffer.push_back(static_cast<float>(pos.x));
         buffer.push_back(static_cast<float>(pos.y));
         buffer.push_back(static_cast<float>(pos.z));
-        buffer.push_back(color.r);
-        buffer.push_back(color.g);
-        buffer.push_back(color.b);
-        buffer.push_back(color.a);
+        buffer.push_back(linear.r);
+        buffer.push_back(linear.g);
+        buffer.push_back(linear.b);
+        buffer.push_back(linear.a);
     }
 
     std::pair<Vec3, Vec3> ImmediateRenderer::_build_basis(const Vec3& axis) {
@@ -69,14 +70,14 @@ namespace termin {
     // Basic primitives
     // ============================================================
 
-    void ImmediateRenderer::line(const Vec3& start, const Vec3& end, const Color4& color, bool depth_test) {
+    void ImmediateRenderer::line(const Vec3& start, const Vec3& end, const SrgbColor& color, bool depth_test) {
         auto& buf = depth_test ? line_vertices_depth : line_vertices;
         _add_vertex(buf, start, color);
         _add_vertex(buf, end, color);
     }
 
     void
-    ImmediateRenderer::triangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Color4& color, bool depth_test) {
+    ImmediateRenderer::triangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, const SrgbColor& color, bool depth_test) {
         auto& buf = depth_test ? tri_vertices_depth : tri_vertices;
         _add_vertex(buf, p0, color);
         _add_vertex(buf, p1, color);
@@ -84,7 +85,7 @@ namespace termin {
     }
 
     void ImmediateRenderer::quad(
-        const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, const Color4& color, bool depth_test) {
+        const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, const SrgbColor& color, bool depth_test) {
         triangle(p0, p1, p2, color, depth_test);
         triangle(p0, p2, p3, color, depth_test);
     }
@@ -93,7 +94,7 @@ namespace termin {
                                       size_t vertex_count,
                                       const uint32_t* indices,
                                       size_t triangle_count,
-                                      const float* colors,
+                                      const SrgbColor* colors,
                                       bool depth_test) {
         auto& buf = depth_test ? tri_vertices_depth : tri_vertices;
 
@@ -103,15 +104,10 @@ namespace termin {
         for (size_t t = 0; t < triangle_count; ++t) {
             for (size_t v = 0; v < 3; ++v) {
                 uint32_t idx = indices[t * 3 + v];
-                // Position (3 floats)
-                buf.push_back(vertices[idx * 3 + 0]);
-                buf.push_back(vertices[idx * 3 + 1]);
-                buf.push_back(vertices[idx * 3 + 2]);
-                // Color (4 floats)
-                buf.push_back(colors[idx * 4 + 0]);
-                buf.push_back(colors[idx * 4 + 1]);
-                buf.push_back(colors[idx * 4 + 2]);
-                buf.push_back(colors[idx * 4 + 3]);
+                _add_vertex(
+                    buf,
+                    Vec3{vertices[idx * 3 + 0], vertices[idx * 3 + 1], vertices[idx * 3 + 2]},
+                    colors[idx]);
             }
         }
     }
@@ -120,7 +116,7 @@ namespace termin {
                                       size_t vertex_count,
                                       const uint32_t* indices,
                                       size_t triangle_count,
-                                      const Color4& color,
+                                      const SrgbColor& color,
                                       bool depth_test) {
         auto& buf = depth_test ? tri_vertices_depth : tri_vertices;
 
@@ -130,15 +126,10 @@ namespace termin {
         for (size_t t = 0; t < triangle_count; ++t) {
             for (size_t v = 0; v < 3; ++v) {
                 uint32_t idx = indices[t * 3 + v];
-                // Position (3 floats)
-                buf.push_back(vertices[idx * 3 + 0]);
-                buf.push_back(vertices[idx * 3 + 1]);
-                buf.push_back(vertices[idx * 3 + 2]);
-                // Color (4 floats) - same for all vertices
-                buf.push_back(color.r);
-                buf.push_back(color.g);
-                buf.push_back(color.b);
-                buf.push_back(color.a);
+                _add_vertex(
+                    buf,
+                    Vec3{vertices[idx * 3 + 0], vertices[idx * 3 + 1], vertices[idx * 3 + 2]},
+                    color);
             }
         }
     }
@@ -148,7 +139,7 @@ namespace termin {
     // ============================================================
 
     void
-    ImmediateRenderer::polyline(const std::vector<Vec3>& points, const Color4& color, bool closed, bool depth_test) {
+    ImmediateRenderer::polyline(const std::vector<Vec3>& points, const SrgbColor& color, bool closed, bool depth_test) {
         if (points.size() < 2)
             return;
         for (size_t i = 0; i < points.size() - 1; ++i) {
@@ -160,7 +151,7 @@ namespace termin {
     }
 
     void ImmediateRenderer::circle(
-        const Vec3& center, const Vec3& normal, double radius, const Color4& color, int segments, bool depth_test) {
+        const Vec3& center, const Vec3& normal, double radius, const SrgbColor& color, int segments, bool depth_test) {
         Vec3 norm = normal.normalized();
         auto [tangent, bitangent] = _build_basis(norm);
 
@@ -179,7 +170,7 @@ namespace termin {
     void ImmediateRenderer::arrow(const Vec3& origin,
                                   const Vec3& direction,
                                   double length,
-                                  const Color4& color,
+                                  const SrgbColor& color,
                                   double head_length,
                                   double head_width,
                                   bool depth_test) {
@@ -205,7 +196,7 @@ namespace termin {
         line(tip, p4, color, depth_test);
     }
 
-    void ImmediateRenderer::box(const Vec3& min_pt, const Vec3& max_pt, const Color4& color, bool depth_test) {
+    void ImmediateRenderer::box(const Vec3& min_pt, const Vec3& max_pt, const SrgbColor& color, bool depth_test) {
         // 8 corners
         Vec3 corners[8] = {
             {min_pt.x, min_pt.y, min_pt.z},
@@ -240,7 +231,7 @@ namespace termin {
     }
 
     void ImmediateRenderer::cylinder_wireframe(
-        const Vec3& start, const Vec3& end, double radius, const Color4& color, int segments, bool depth_test) {
+        const Vec3& start, const Vec3& end, double radius, const SrgbColor& color, int segments, bool depth_test) {
         Vec3 axis = end - start;
         double length = axis.norm();
         if (length < 1e-6)
@@ -262,7 +253,7 @@ namespace termin {
     }
 
     void ImmediateRenderer::sphere_wireframe(
-        const Vec3& center, double radius, const Color4& color, int segments, bool depth_test) {
+        const Vec3& center, double radius, const SrgbColor& color, int segments, bool depth_test) {
         // 3 orthogonal circles
         circle(center, Vec3{0, 0, 1}, radius, color, segments, depth_test);
         circle(center, Vec3{0, 1, 0}, radius, color, segments, depth_test);
@@ -270,7 +261,7 @@ namespace termin {
     }
 
     void ImmediateRenderer::capsule_wireframe(
-        const Vec3& start, const Vec3& end, double radius, const Color4& color, int segments, bool depth_test) {
+        const Vec3& start, const Vec3& end, double radius, const SrgbColor& color, int segments, bool depth_test) {
         Vec3 axis = end - start;
         double length = axis.norm();
         if (length < 1e-6) {
@@ -325,7 +316,7 @@ namespace termin {
     void ImmediateRenderer::cylinder_solid(const Vec3& start,
                                            const Vec3& end,
                                            double radius,
-                                           const Color4& color,
+                                           const SrgbColor& color,
                                            int segments,
                                            bool caps,
                                            bool depth_test) {
@@ -369,7 +360,7 @@ namespace termin {
     void ImmediateRenderer::cone_solid(const Vec3& base,
                                        const Vec3& tip,
                                        double radius,
-                                       const Color4& color,
+                                       const SrgbColor& color,
                                        int segments,
                                        bool cap,
                                        bool depth_test) {
@@ -405,7 +396,7 @@ namespace termin {
         }
     }
 
-    void ImmediateRenderer::torus_solid(const TorusSolidSpec& spec, const Color4& color, bool depth_test) {
+    void ImmediateRenderer::torus_solid(const TorusSolidSpec& spec, const SrgbColor& color, bool depth_test) {
         Vec3 ax = spec.axis.normalized();
         auto [tangent, bitangent] = _build_basis(ax);
 
@@ -441,7 +432,7 @@ namespace termin {
         }
     }
 
-    void ImmediateRenderer::arrow_solid(const ArrowSolidSpec& spec, const Color4& color, bool depth_test) {
+    void ImmediateRenderer::arrow_solid(const ArrowSolidSpec& spec, const SrgbColor& color, bool depth_test) {
         double dir_len = spec.direction.norm();
         if (dir_len < 1e-6)
             return;

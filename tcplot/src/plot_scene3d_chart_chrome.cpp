@@ -63,7 +63,8 @@ namespace tcplot {
         const double offset = data_size * 0.03;
         constexpr float kTickTextSizePx = 14.0f;
         constexpr float kAxisLabelSizePx = 16.0f;
-        const termin::Color4 label_color{0.8f, 0.8f, 0.8f, 1.0f};
+        const termin::LinearColor label_color =
+            termin::srgb_to_linear(termin::SrgbColor{0.8f, 0.8f, 0.8f, 1.0f});
 
         text_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
         context.set_depth_test(false);

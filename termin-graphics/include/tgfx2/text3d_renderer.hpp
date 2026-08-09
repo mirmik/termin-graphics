@@ -50,7 +50,9 @@ namespace tgfx {
 
         struct DrawOptions {
             termin::Vec3f position{};
-            termin::Color4 color = termin::Color4::white();
+            // GPU-ready scene-linear color. Public authored-color APIs decode
+            // before constructing DrawOptions.
+            termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
             float size = 0.05f;
             Anchor anchor = Anchor::Center;
         };
@@ -86,7 +88,7 @@ namespace tgfx {
 
         // Draw a UTF-8 string at world-space `position`. `size` is the text
         // height in renderer units: world units for WorldPlane, display pixels
-        // for ScreenAligned. Color in [0, 1].
+        // for ScreenAligned. Color is scene-linear and may be HDR.
         void draw(std::string_view text_utf8, const DrawOptions& options);
 
         void end();

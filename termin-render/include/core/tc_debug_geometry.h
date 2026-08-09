@@ -34,6 +34,8 @@ typedef struct tc_debug_geometry_primitive {
     tc_debug_geometry_primitive_kind kind;
     bool depth_test;
     uint16_t segments;
+    // Authored/display-referred sRGB; alpha is linear coverage. The debug
+    // renderer decodes RGB exactly once when producing GPU vertices.
     float color[4];
     union {
         struct {

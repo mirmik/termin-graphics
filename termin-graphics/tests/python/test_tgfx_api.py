@@ -354,10 +354,21 @@ def test_canvas2d_binding_smoke():
 def test_immediate_renderer_binding_smoke():
     renderer = tgfx.ImmediateRenderer()
     renderer.begin()
-    renderer.line(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), tgfx.Color4.red())
+    renderer.line(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), SrgbColor(1.0, 0.0, 0.0, 1.0))
 
     assert renderer.line_count == 1
     assert renderer.triangle_count == 0
+
+    with pytest.raises(TypeError):
+        renderer.line(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), (1.0, 0.0, 0.0, 1.0))
+
+
+def test_text3d_binding_requires_authored_srgb_color():
+    renderer = tgfx.Text3DRenderer()
+    renderer.draw("typed", (0.0, 0.0, 0.0), SrgbColor(0.5, 0.5, 0.5, 0.25))
+
+    with pytest.raises(TypeError):
+        renderer.draw("ambiguous", (0.0, 0.0, 0.0), (0.5, 0.5, 0.5, 0.25))
 
 
 def test_screen_space_line_binding_smoke():

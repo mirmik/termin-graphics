@@ -43,11 +43,11 @@ namespace tgfx_bindings {
                 [](ImmediateRenderer& self,
                    nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> vertices,
                    nb::ndarray<uint32_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> indices,
-                   nb::ndarray<float, nb::shape<-1, 4>, nb::c_contig, nb::device::cpu> colors,
+                   const std::vector<SrgbColor>& colors,
                    bool depth_test) {
                     size_t vertex_count = vertices.shape(0);
                     size_t triangle_count = indices.shape(0);
-                    if (colors.shape(0) != vertex_count) {
+                    if (colors.size() != vertex_count) {
                         throw std::runtime_error(
                             "ImmediateRenderer.triangles colors must have one RGBA row per vertex");
                     }
@@ -58,14 +58,14 @@ namespace tgfx_bindings {
                 nb::arg("indices"),
                 nb::arg("colors"),
                 nb::arg("depth_test") = false,
-                "Batch triangles from buffer-compatible arrays (vertices Nx3, indices Mx3, colors Nx4)")
+                "Batch triangles from buffer-compatible geometry arrays and typed per-vertex SrgbColor values")
             // Batch triangles with single color
             .def(
                 "triangles",
                 [](ImmediateRenderer& self,
                    nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> vertices,
                    nb::ndarray<uint32_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> indices,
-                   const Color4& color,
+                   const SrgbColor& color,
                    bool depth_test) {
                     size_t vertex_count = vertices.shape(0);
                     size_t triangle_count = indices.shape(0);
@@ -155,7 +155,7 @@ namespace tgfx_bindings {
                    const Vec3& axis,
                    double major_radius,
                    double minor_radius,
-                   const Color4& color,
+                   const SrgbColor& color,
                    int major_segments,
                    int minor_segments,
                    bool depth_test) {
@@ -178,7 +178,7 @@ namespace tgfx_bindings {
                    const Vec3& origin,
                    const Vec3& direction,
                    double length,
-                   const Color4& color,
+                   const SrgbColor& color,
                    double shaft_radius,
                    double head_radius,
                    double head_length_ratio,

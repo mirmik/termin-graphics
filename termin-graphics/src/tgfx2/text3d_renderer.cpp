@@ -142,7 +142,7 @@ namespace tgfx {
         if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr)
             return;
         const bool screen_aligned = expansion_mode_ == ExpansionMode::ScreenAligned;
-        const termin::Color4& color = options.color;
+        const termin::LinearColor& color = options.color;
 
         // `size` is world units for WorldPlane and display pixels for ScreenAligned.
         const float metrics_size = screen_aligned ? options.size : kText3DRasterPx;

@@ -89,24 +89,24 @@ namespace termin {
         // Basic primitives
         // ============================================================
 
-        void line(const Vec3& start, const Vec3& end, const Color4& color, bool depth_test = false);
-        void triangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Color4& color, bool depth_test = false);
+        void line(const Vec3& start, const Vec3& end, const SrgbColor& color, bool depth_test = false);
+        void triangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, const SrgbColor& color, bool depth_test = false);
         void quad(const Vec3& p0,
                   const Vec3& p1,
                   const Vec3& p2,
                   const Vec3& p3,
-                  const Color4& color,
+                  const SrgbColor& color,
                   bool depth_test = false);
 
         // Batch triangles from arrays (efficient for meshes)
         // vertices: Nx3 array of positions
         // indices: Mx3 array of triangle indices
-        // colors: Nx4 array of RGBA colors (per-vertex)
+        // colors: per-vertex authored/display-referred sRGB colors
         void triangles(const float* vertices,
                        size_t vertex_count,
                        const uint32_t* indices,
                        size_t triangle_count,
-                       const float* colors,
+                       const SrgbColor* colors,
                        bool depth_test = false);
 
         // Batch triangles with single color
@@ -114,7 +114,7 @@ namespace termin {
                        size_t vertex_count,
                        const uint32_t* indices,
                        size_t triangle_count,
-                       const Color4& color,
+                       const SrgbColor& color,
                        bool depth_test = false);
 
         // ============================================================
@@ -122,39 +122,39 @@ namespace termin {
         // ============================================================
 
         void
-        polyline(const std::vector<Vec3>& points, const Color4& color, bool closed = false, bool depth_test = false);
+        polyline(const std::vector<Vec3>& points, const SrgbColor& color, bool closed = false, bool depth_test = false);
 
         void circle(const Vec3& center,
                     const Vec3& normal,
                     double radius,
-                    const Color4& color,
+                    const SrgbColor& color,
                     int segments = 32,
                     bool depth_test = false);
 
         void arrow(const Vec3& origin,
                    const Vec3& direction,
                    double length,
-                   const Color4& color,
+                   const SrgbColor& color,
                    double head_length = 0.2,
                    double head_width = 0.1,
                    bool depth_test = false);
 
-        void box(const Vec3& min_pt, const Vec3& max_pt, const Color4& color, bool depth_test = false);
+        void box(const Vec3& min_pt, const Vec3& max_pt, const SrgbColor& color, bool depth_test = false);
 
         void cylinder_wireframe(const Vec3& start,
                                 const Vec3& end,
                                 double radius,
-                                const Color4& color,
+                                const SrgbColor& color,
                                 int segments = 16,
                                 bool depth_test = false);
 
         void sphere_wireframe(
-            const Vec3& center, double radius, const Color4& color, int segments = 16, bool depth_test = false);
+            const Vec3& center, double radius, const SrgbColor& color, int segments = 16, bool depth_test = false);
 
         void capsule_wireframe(const Vec3& start,
                                const Vec3& end,
                                double radius,
-                               const Color4& color,
+                               const SrgbColor& color,
                                int segments = 16,
                                bool depth_test = false);
 
@@ -165,7 +165,7 @@ namespace termin {
         void cylinder_solid(const Vec3& start,
                             const Vec3& end,
                             double radius,
-                            const Color4& color,
+                            const SrgbColor& color,
                             int segments = 16,
                             bool caps = true,
                             bool depth_test = false);
@@ -173,14 +173,14 @@ namespace termin {
         void cone_solid(const Vec3& base,
                         const Vec3& tip,
                         double radius,
-                        const Color4& color,
+                        const SrgbColor& color,
                         int segments = 16,
                         bool cap = true,
                         bool depth_test = false);
 
-        void torus_solid(const TorusSolidSpec& spec, const Color4& color, bool depth_test = false);
+        void torus_solid(const TorusSolidSpec& spec, const SrgbColor& color, bool depth_test = false);
 
-        void arrow_solid(const ArrowSolidSpec& spec, const Color4& color, bool depth_test = false);
+        void arrow_solid(const ArrowSolidSpec& spec, const SrgbColor& color, bool depth_test = false);
 
         // ============================================================
         // Rendering
@@ -232,7 +232,7 @@ namespace termin {
         }
 
     private:
-        void _add_vertex(std::vector<float>& buffer, const Vec3& pos, const Color4& color);
+        void _add_vertex(std::vector<float>& buffer, const Vec3& pos, const SrgbColor& color);
         std::pair<Vec3, Vec3> _build_basis(const Vec3& axis);
 
         void _ensure_shader(tgfx::IRenderDevice* device);

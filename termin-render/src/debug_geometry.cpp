@@ -31,7 +31,7 @@ namespace termin {
         return *this;
     }
 
-    bool DebugGeometryDrawer::line(const Vec3& start, const Vec3& end, const Color4& color, bool depth_test) const {
+    bool DebugGeometryDrawer::line(const Vec3& start, const Vec3& end, const SrgbColor& color, bool depth_test) const {
         const float start_data[3] = {
             static_cast<float>(start.x),
             static_cast<float>(start.y),
@@ -47,7 +47,7 @@ namespace termin {
     }
 
     bool DebugGeometryDrawer::wire_sphere(
-        const Vec3& center, double radius, const Color4& color, int segments, bool depth_test) const {
+        const Vec3& center, double radius, const SrgbColor& color, int segments, bool depth_test) const {
         const float center_data[3] = {
             static_cast<float>(center.x),
             static_cast<float>(center.y),
@@ -63,7 +63,7 @@ namespace termin {
                                        const Vec3& half_axis_x,
                                        const Vec3& half_axis_y,
                                        const Vec3& half_axis_z,
-                                       const Color4& color,
+                                       const SrgbColor& color,
                                        bool depth_test) const {
         const float center_data[3] = {
             static_cast<float>(center.x),
@@ -91,7 +91,7 @@ namespace termin {
     }
 
     bool DebugGeometryDrawer::wire_capsule(
-        const Vec3& start, const Vec3& end, double radius, const Color4& color, int segments, bool depth_test) const {
+        const Vec3& start, const Vec3& end, double radius, const SrgbColor& color, int segments, bool depth_test) const {
         const float start_data[3] = {
             static_cast<float>(start.x),
             static_cast<float>(start.y),

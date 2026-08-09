@@ -33,18 +33,6 @@ namespace {
         };
     }
 
-    termin::Color4 sequence_color4(const nb::sequence& value) {
-        if (nb::len(value) != 4) {
-            throw nb::value_error("color must contain 4 values");
-        }
-        return {
-            nb::cast<float>(value[0]),
-            nb::cast<float>(value[1]),
-            nb::cast<float>(value[2]),
-            nb::cast<float>(value[3]),
-        };
-    }
-
     nb::object wrap_attachment_context(const tc_render_attachment_context* context) {
         nb::object capsule = nb::steal<nb::object>(PyCapsule_New(
             const_cast<tc_render_attachment_context*>(context), "termin.RenderAttachmentContext", nullptr));
@@ -117,10 +105,9 @@ NB_MODULE(_render_native, m) {
             [](const termin::DebugGeometryDrawer& self,
                const nb::sequence& start,
                const nb::sequence& end,
-               const nb::sequence& color,
+               const termin::SrgbColor& color,
                bool depth_test) {
-                return self.line(
-                    sequence_vec3(start, "start"), sequence_vec3(end, "end"), sequence_color4(color), depth_test);
+                return self.line(sequence_vec3(start, "start"), sequence_vec3(end, "end"), color, depth_test);
             },
             nb::arg("start"),
             nb::arg("end"),
@@ -131,11 +118,10 @@ NB_MODULE(_render_native, m) {
             [](const termin::DebugGeometryDrawer& self,
                const nb::sequence& center,
                double radius,
-               const nb::sequence& color,
+               const termin::SrgbColor& color,
                int segments,
                bool depth_test) {
-                return self.wire_sphere(
-                    sequence_vec3(center, "center"), radius, sequence_color4(color), segments, depth_test);
+                return self.wire_sphere(sequence_vec3(center, "center"), radius, color, segments, depth_test);
             },
             nb::arg("center"),
             nb::arg("radius"),
@@ -149,13 +135,13 @@ NB_MODULE(_render_native, m) {
                const nb::sequence& half_axis_x,
                const nb::sequence& half_axis_y,
                const nb::sequence& half_axis_z,
-               const nb::sequence& color,
+               const termin::SrgbColor& color,
                bool depth_test) {
                 return self.wire_box(sequence_vec3(center, "center"),
                                      sequence_vec3(half_axis_x, "half_axis_x"),
                                      sequence_vec3(half_axis_y, "half_axis_y"),
                                      sequence_vec3(half_axis_z, "half_axis_z"),
-                                     sequence_color4(color),
+                                     color,
                                      depth_test);
             },
             nb::arg("center"),
@@ -170,13 +156,13 @@ NB_MODULE(_render_native, m) {
                const nb::sequence& start,
                const nb::sequence& end,
                double radius,
-               const nb::sequence& color,
+               const termin::SrgbColor& color,
                int segments,
                bool depth_test) {
                 return self.wire_capsule(sequence_vec3(start, "start"),
                                          sequence_vec3(end, "end"),
                                          radius,
-                                         sequence_color4(color),
+                                         color,
                                          segments,
                                          depth_test);
             },
