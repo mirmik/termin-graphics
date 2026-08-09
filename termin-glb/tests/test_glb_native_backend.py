@@ -703,6 +703,60 @@ def test_native_document_rejects_unknown_required_extension(tmp_path):
         NativeStaticMeshDocument(path)
 
 
+def test_native_document_rejects_required_basisu_without_ktx2_decoder(tmp_path):
+    path = tmp_path / "required-basisu.glb"
+    _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "extensionsUsed": ["KHR_texture_basisu"],
+            "extensionsRequired": ["KHR_texture_basisu"],
+        },
+        b"",
+    )
+
+    with pytest.raises(RuntimeError, match="KHR_texture_basisu"):
+        NativeStaticMeshDocument(path)
+
+
+def test_native_document_ignores_optional_basisu_and_uses_core_fallback(tmp_path):
+    path = tmp_path / "optional-basisu.glb"
+    fallback = b"PNG-fallback"
+    basisu = b"KTX2-unsupported"
+    _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "extensionsUsed": ["KHR_texture_basisu"],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(fallback)},
+                {
+                    "buffer": 0,
+                    "byteOffset": len(fallback),
+                    "byteLength": len(basisu),
+                },
+            ],
+            "images": [
+                {"name": "Fallback", "mimeType": "image/png", "bufferView": 0},
+                {"name": "BasisU", "mimeType": "image/ktx2", "bufferView": 1},
+            ],
+            "textures": [
+                {
+                    "source": 0,
+                    "extensions": {"KHR_texture_basisu": {"source": 1}},
+                }
+            ],
+        },
+        fallback + basisu,
+    )
+
+    document = NativeStaticMeshDocument(path)
+
+    assert document.textures[0].image_index == 0
+    assert not document.textures[0].selected_basisu
+    assert document.image_payload(document.textures[0].image_index) == fallback
+
+
 def test_native_animation_bridge_preserves_step_vec3_scale_and_node_index(tmp_path):
     path = _write_bulk_animation_glb(tmp_path / "bulk-animation.glb")
     document = NativeStaticMeshDocument(path)

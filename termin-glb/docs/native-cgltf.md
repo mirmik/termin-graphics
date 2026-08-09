@@ -76,13 +76,15 @@ material records. This deliberately does not reproduce the legacy
 sampler identity remain distinct. Embedded image bytes stay in the mapped BIN
 chunk and are copied only by an explicit `image_payload()` call.
 
-`EXT_texture_webp` and `KHR_texture_basisu` select their extension image before
-the core texture source. Effective sampler values use the existing Termin
-compatibility defaults `(9729, 9729, 10497, 10497)`. Standard metallic-
+`EXT_texture_webp` selects its extension image before the core texture source.
+`KHR_texture_basisu` is not supported until the image layer has a KTX2 decoder:
+documents that require it fail when opened, while optional uses retain the core
+texture source as their fallback. Effective sampler values use the existing
+Termin compatibility defaults `(9729, 9729, 10497, 10497)`. Standard metallic-
 roughness factors and base-color, metallic-roughness, normal, occlusion, and
 emissive texture views preserve texture index, `texCoord`, and scale/strength.
 The bridge into the existing Python texture/material layer passes encoded
-PNG/JPEG/WebP/KTX2 bytes without decoding them in the cgltf adapter.
+PNG/JPEG/WebP bytes without decoding them in the cgltf adapter.
 
 The current renderer consumes only `TEXCOORD_0`; another texture coordinate
 set therefore fails explicitly during material configuration. Likewise,

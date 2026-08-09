@@ -125,7 +125,6 @@ namespace {
         static const char* supported[] = {
             "EXT_texture_webp",
             "KHR_mesh_quantization",
-            "KHR_texture_basisu",
         };
         for (const char* candidate : supported) {
             if (std::strcmp(extension, candidate) == 0)
@@ -160,8 +159,6 @@ namespace {
     const cgltf_image* selected_image(const cgltf_texture& texture) {
         if (texture.has_webp)
             return texture.webp_image;
-        if (texture.has_basisu)
-            return texture.basisu_image;
         return texture.image;
     }
 
@@ -907,7 +904,7 @@ bool termin_glb_document_texture_info(const termin_glb_document* document,
     info->has_sampler = pointer_index(
         texture.sampler, document->data->samplers, document->data->samplers_count, &info->sampler_index);
     info->selected_webp = texture.has_webp;
-    info->selected_basisu = !texture.has_webp && texture.has_basisu;
+    info->selected_basisu = false;
     info->mag_filter = resolved_filter(texture.sampler ? texture.sampler->mag_filter : cgltf_filter_type_undefined);
     info->min_filter = resolved_filter(texture.sampler ? texture.sampler->min_filter : cgltf_filter_type_undefined);
     info->wrap_s = resolved_wrap(texture.sampler ? texture.sampler->wrap_s : static_cast<cgltf_wrap_mode>(0));
