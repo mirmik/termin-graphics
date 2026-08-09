@@ -413,10 +413,17 @@ def _populate_tc_skeleton_from_glb(tc_skel: "TcSkeleton", skin, nodes) -> bool:
 
 class _PendingSkinnedMesh:
     """Placeholder for skinned mesh that needs skeleton instance set later."""
-    def __init__(self, entity: Entity, mesh: TcMesh, glb_mesh: "GLBMeshData"):
+    def __init__(
+        self,
+        entity: Entity,
+        mesh: TcMesh,
+        glb_mesh: "GLBMeshData",
+        skin_index: int | None,
+    ):
         self.entity = entity
         self.mesh = mesh
         self.glb_mesh = glb_mesh
+        self.skin_index = skin_index
 
 
 def _sampler_identity(texture: "GLBTcTexture") -> tuple[int, int, int, int]:
@@ -1119,7 +1126,8 @@ def _create_entity_from_node(
 
             if mesh_idx not in meshes:
                 # Get tc_mesh from MeshAsset by mesh name
-                mesh_asset = mesh_assets.get(glb_mesh.name)
+                mesh_key = getattr(glb_mesh, "resource_key", glb_mesh.name)
+                mesh_asset = mesh_assets.get(mesh_key)
                 if mesh_asset is None or mesh_asset.data is None:
                     raise RuntimeError(f"[glb_instantiator] MeshAsset for '{glb_mesh.name}' not found or not loaded")
 
@@ -1134,7 +1142,11 @@ def _create_entity_from_node(
             if glb_mesh.is_skinned and pending_skinned is not None:
                 from tcbase import log
                 log.info(f"[glb_instantiator] pending skinned mesh={glb_mesh.name} tc_mesh.is_valid={tc_mesh.is_valid} uuid={tc_mesh.uuid}")
-                pending_skinned.append(_PendingSkinnedMesh(entity, tc_mesh, glb_mesh))
+                pending_skinned.append(
+                    _PendingSkinnedMesh(
+                        entity, tc_mesh, glb_mesh, node.skin_index
+                    )
+                )
             else:
                 _add_mesh_component(entity, tc_mesh)
                 renderer = MeshRenderer(material=base_material)
@@ -1159,6 +1171,7 @@ class GLBInstantiateResult:
         self,
         entity: Entity,
         skeleton_controller: Optional[SkeletonController] = None,
+        skeleton_controllers: Optional[List[SkeletonController]] = None,
         animation_player: Optional[AnimationPlayer] = None,
         # Debug: keep references to prevent premature destruction
         _bone_entities: Optional[List] = None,
@@ -1166,6 +1179,9 @@ class GLBInstantiateResult:
     ):
         self.entity = entity
         self.skeleton_controller = skeleton_controller
+        self.skeleton_controllers = skeleton_controllers or (
+            [skeleton_controller] if skeleton_controller is not None else []
+        )
         self.animation_player = animation_player
         self._bone_entities = _bone_entities
         self._clips = _clips
@@ -1317,7 +1333,8 @@ def instantiate_glb(
         # Fallback: no node hierarchy, create entities for each mesh directly
         root_entity = create_entity(name)
         for i, glb_mesh in enumerate(scene_data.meshes):
-            mesh_asset = mesh_assets.get(glb_mesh.name)
+            mesh_key = getattr(glb_mesh, "resource_key", glb_mesh.name)
+            mesh_asset = mesh_assets.get(mesh_key)
             if mesh_asset is None or mesh_asset.data is None:
                 raise RuntimeError(f"[glb_instantiator] MeshAsset for '{glb_mesh.name}' not found or not loaded")
 
@@ -1333,25 +1350,30 @@ def instantiate_glb(
             mesh_entity.add_component(renderer)
             root_entity.transform.add_child(mesh_entity.transform)
 
-    # Step 2: Create skeleton controller
-    skeleton_controller: Optional[SkeletonController] = None
+    # Step 2: Create one skeleton controller per glTF skin. Renderers select
+    # the controller through the exact node.skin association.
+    skeleton_controllers: List[SkeletonController] = []
     bone_entities: List[Entity] = []  # keep reference for debug
-    if scene_data.skins:
-        skin = scene_data.skins[0]
-
-        # Get skeleton from GLBAsset's child assets
-        skeleton_assets = glb_asset.get_skeleton_assets()
-        skeleton_key = "skeleton"
+    skeleton_assets = glb_asset.get_skeleton_assets()
+    for skin_index, skin in enumerate(scene_data.skins):
+        skeleton_key = "skeleton" if skin_index == 0 else f"skeleton_{skin_index}"
         skeleton_asset = skeleton_assets.get(skeleton_key)
 
         if skeleton_asset is None or skeleton_asset.skeleton_data is None:
-            raise RuntimeError(f"[glb_instantiator] Skeleton not found in GLBAsset '{glb_asset.name}'")
+            raise RuntimeError(
+                f"[glb_instantiator] Skeleton '{skeleton_key}' not found "
+                f"in GLBAsset '{glb_asset.name}'"
+            )
 
-        # Collect bone entities
+        skin_bone_entities: List[Entity] = []
         for node_idx in skin.joint_node_indices:
             entity = node_to_entity.get(node_idx)
             if entity is None:
-                entity = create_entity(f"missing_bone_{node_idx}")
+                raise RuntimeError(
+                    f"[glb_instantiator] Skin '{skeleton_key}' joint node "
+                    f"{node_idx} was not instantiated"
+                )
+            skin_bone_entities.append(entity)
             bone_entities.append(entity)
 
         # Pass the TcSkeleton from the asset, not the asset itself
@@ -1361,25 +1383,38 @@ def instantiate_glb(
 
         skeleton_controller = SkeletonController(
             skeleton=tc_skeleton,
-            bone_entities=bone_entities,
+            bone_entities=skin_bone_entities,
         )
-        skeleton_root = _resolve_skeleton_root_entity(skin, node_to_entity, bone_entities)
+        skeleton_root = _resolve_skeleton_root_entity(
+            skin, node_to_entity, skin_bone_entities
+        )
         if skeleton_root is not None:
             skeleton_controller.skeleton_root = skeleton_root
         root_entity.add_component(skeleton_controller)
+        skeleton_controllers.append(skeleton_controller)
 
     # Step 3: Setup SkinnedMeshRenderers
     from tcbase import log
     for pending in pending_skinned:
-        if skeleton_controller is not None:
-            log.info(f"[glb_instantiator] creating SkinnedMeshRenderer mesh.is_valid={pending.mesh.is_valid} uuid={pending.mesh.uuid} name={pending.mesh.name}")
-            _add_mesh_component(pending.entity, pending.mesh)
-            renderer = SkinnedMeshRenderer(
-                material=base_material,
-                skeleton_controller=skeleton_controller,
+        skin_index = pending.skin_index
+        if skin_index is None and len(skeleton_controllers) == 1:
+            skin_index = 0
+        if skin_index is None or not 0 <= skin_index < len(skeleton_controllers):
+            raise RuntimeError(
+                f"[glb_instantiator] Skinned mesh '{pending.glb_mesh.name}' "
+                f"has invalid skin association {pending.skin_index}"
             )
-            _apply_glb_material_override_if_present(renderer, pending.glb_mesh, scene_data, texture_lookup)
-            pending.entity.add_component(renderer)
+        skeleton_controller = skeleton_controllers[skin_index]
+        log.info(f"[glb_instantiator] creating SkinnedMeshRenderer mesh.is_valid={pending.mesh.is_valid} uuid={pending.mesh.uuid} name={pending.mesh.name}")
+        _add_mesh_component(pending.entity, pending.mesh)
+        renderer = SkinnedMeshRenderer(
+            material=base_material,
+            skeleton_controller=skeleton_controller,
+        )
+        _apply_glb_material_override_if_present(
+            renderer, pending.glb_mesh, scene_data, texture_lookup
+        )
+        pending.entity.add_component(renderer)
 
     # Step 4: Setup animations from GLBAsset's child assets
     animation_player: Optional[AnimationPlayer] = None
@@ -1401,7 +1436,8 @@ def instantiate_glb(
 
     return GLBInstantiateResult(
         entity=root_entity,
-        skeleton_controller=skeleton_controller,
+        skeleton_controller=(skeleton_controllers[0] if skeleton_controllers else None),
+        skeleton_controllers=skeleton_controllers,
         animation_player=animation_player,
         _bone_entities=bone_entities,
         _clips=clips,

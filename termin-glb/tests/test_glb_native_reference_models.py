@@ -1,11 +1,18 @@
 import os
 from pathlib import Path
+import shutil
 import struct
 
 import numpy as np
 import pytest
 
-from termin.glb import GLBSceneData, NativeStaticMeshDocument
+from termin.glb import (
+    GLBAsset,
+    GLBSceneData,
+    NativeGLBSceneData,
+    NativeStaticMeshDocument,
+)
+from termin.default_assets.resource_manager import DefaultResourceManager
 from termin.glb.instantiator import _plan_texture_imports
 from termin.image import decode_rgba8
 
@@ -383,3 +390,31 @@ def test_native_arthur_skinned_geometry_and_bulk_rig_reference():
             )
         )
     assert blender_track["values"] == pytest.approx(expected_values.reshape(-1))
+
+
+def test_glb_asset_cgltf_backend_publishes_arthur_child_resources(tmp_path):
+    _require_reference(_ARTHUR)
+    source = tmp_path / "ArthurDecimated.glb"
+    shutil.copyfile(_ARTHUR, source)
+    DefaultResourceManager._reset_for_testing()
+    resource_manager = DefaultResourceManager.instance()
+    asset = GLBAsset(name="ArthurNative", source_path=source)
+    asset.set_resource_manager(resource_manager)
+    asset.parse_spec(
+        {
+            "uuid": "reference-arthur-production-native",
+            "convert_to_z_up": False,
+        }
+    )
+
+    assert asset.ensure_loaded()
+    assert isinstance(asset.scene_data, NativeGLBSceneData)
+    assert len(asset.get_mesh_assets()) == 20
+    assert all(child.data.is_valid for child in asset.get_mesh_assets().values())
+    assert len(asset.get_skeleton_assets()) == 1
+    skeleton = asset.get_skeleton_assets()["skeleton"].skeleton_data
+    assert skeleton.bone_count == 80
+    assert len(asset.get_animation_assets()) == 53
+    assert sum(
+        child.clip.track_count for child in asset.get_animation_assets().values()
+    ) == 12_702

@@ -56,6 +56,18 @@ PBR tangent field during native unpacking. The native API never falls back to
 the Python loader. JSON `.gltf` remains on the existing Python path until its
 external-buffer and URI contract is migrated intentionally.
 
+`GLBAsset` uses this path by default for binary `.glb`. The asset maps the
+source GLB instead of
+reading it into a Python byte string, discovers compact child-resource
+metadata, and publishes meshes, skeletons, and animation clips directly from
+the native document. Entity hierarchy and material application still use the
+shared Python instantiator, but geometry and animation key tensors never make a
+Python round trip. JSON `.gltf` remains on the Python loader because external
+buffer and URI resolution is a distinct source-format contract. During the
+final validation window, `import_backend: python` is an explicit legacy
+override for `.glb`; selecting either backend never falls back silently after
+an error.
+
 ## Materials and encoded images
 
 The mapped document exposes separate compact image, texture, texture-view, and
@@ -132,6 +144,11 @@ table, so duplicate names cannot retarget an animation. LINEAR and STEP tracks
 play directly; CUBICSPLINE and morph weights are preserved but fail loudly at
 the sampling boundary until their runtime lowering is implemented.
 
+Animation clip names themselves must currently be unique because
+`AnimationPlayer` selects clips by name. The cgltf production bridge rejects a
+document with duplicate clip names instead of allowing the player map to
+overwrite one clip silently.
+
 The current bridge can optionally apply the shared Y-up to Z-up basis mapping
 to translation, rotation, scale, and cubic tangent tuples. Native node/skin
 preparation applies the same policy to node TRS and inverse-bind matrices.
@@ -142,3 +159,8 @@ policy is explicit and is applied after basis conversion to both affected rest
 TRS and animation tuples, while intentionally leaving IBM unchanged to retain
 the established importer contract. Callers must still select the same options
 for prepared rest data, skeletons, meshes, and clips.
+
+The Arthur editor smoke gate exercises this production route end to end: 20
+skinned meshes, one 80-bone skeleton, 53 clips and 12,702 exact tracks are
+published, instantiated, and sampled. Repeated reload replaces their payloads
+under stable child UUIDs.

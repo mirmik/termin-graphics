@@ -6,8 +6,11 @@ import struct
 import numpy as np
 import pytest
 
-from termin.glb import NativeStaticMeshDocument
+from termin.glb import GLBAsset, NativePrimitiveInfo, NativeStaticMeshDocument
 from termin.glb import _glb_native
+from termin.glb.instantiator import instantiate_glb
+from termin.glb.native import NativeGLBSceneData
+from termin.default_assets.resource_manager import DefaultResourceManager
 
 
 _FIXTURES = Path(__file__).parents[2] / "termin-thirdparty" / "cgltf" / "fuzz" / "data"
@@ -97,6 +100,97 @@ def _write_column_major_skin_glb(path: Path) -> Path:
             "skins": [{"name": "Skin", "joints": [0], "inverseBindMatrices": 0}],
         },
         inverse_bind,
+    )
+
+
+def _write_production_native_glb(
+    path: Path, *, duplicate_animation_name: bool = False
+) -> Path:
+    positions = struct.pack(
+        "<9f", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0
+    )
+    indices = struct.pack("<3H", 0, 1, 2)
+    times = struct.pack("<2f", 0.0, 1.0)
+    translations = struct.pack("<6f", 0.0, 0.0, 0.0, 2.0, 3.0, 4.0)
+    chunks = (positions, indices, times, translations)
+    offsets = []
+    binary = b""
+    for chunk in chunks:
+        offsets.append(len(binary))
+        binary += chunk
+    animation = {
+        "name": "Move",
+        "samplers": [{"input": 2, "output": 3, "interpolation": "STEP"}],
+        "channels": [
+            {
+                "sampler": 0,
+                "target": {"node": 1, "path": "translation"},
+            }
+        ],
+    }
+    animations = [animation]
+    if duplicate_animation_name:
+        animations.append(animation.copy())
+    return _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [{"nodes": [0]}],
+            "bufferViews": [
+                {
+                    "buffer": 0,
+                    "byteOffset": offset,
+                    "byteLength": len(chunk),
+                }
+                for offset, chunk in zip(offsets, chunks, strict=True)
+            ],
+            "accessors": [
+                {
+                    "bufferView": 0,
+                    "componentType": 5126,
+                    "count": 3,
+                    "type": "VEC3",
+                },
+                {
+                    "bufferView": 1,
+                    "componentType": 5123,
+                    "count": 3,
+                    "type": "SCALAR",
+                },
+                {
+                    "bufferView": 2,
+                    "componentType": 5126,
+                    "count": 2,
+                    "type": "SCALAR",
+                },
+                {
+                    "bufferView": 3,
+                    "componentType": 5126,
+                    "count": 2,
+                    "type": "VEC3",
+                },
+            ],
+            "meshes": [
+                {
+                    "name": "Body",
+                    "primitives": [
+                        {
+                            "attributes": {"POSITION": 0},
+                            "indices": 1,
+                            "mode": 4,
+                        }
+                    ],
+                }
+            ],
+            "nodes": [
+                {"name": "Root", "scale": [2.0, 2.0, 2.0], "children": [1]},
+                {"name": "Animated", "translation": [1.0, 0.0, 0.0]},
+                {"name": "MeshResource", "mesh": 0},
+            ],
+            "animations": animations,
+        },
+        binary,
     )
 
 
@@ -376,6 +470,14 @@ def test_native_document_discovers_and_builds_box_without_python_geometry_arrays
             vertex_count=24,
             index_count=36,
             skinned=False,
+            primitives=(
+                NativePrimitiveInfo(
+                    first_index=0,
+                    index_count=36,
+                    material_index=0,
+                    material_slot=0,
+                ),
+            ),
         ),
     )
 
@@ -485,6 +587,9 @@ def test_native_static_mesh_preserves_primitive_sections_and_material_slots(tmp_
     path = _write_multi_primitive_glb(tmp_path / "multi.glb")
     document = NativeStaticMeshDocument(path)
     assert document.meshes[0].primitive_count == 2
+    assert [primitive.material_index for primitive in document.meshes[0].primitives] == [0, 1]
+    assert [primitive.material_slot for primitive in document.meshes[0].primitives] == [0, 1]
+    assert [primitive.first_index for primitive in document.meshes[0].primitives] == [0, 3]
     mesh = document.build_mesh(0, "pytest-native-multi", convert_to_z_up=False)
 
     assert (mesh.vertex_count, mesh.index_count, mesh.submesh_count) == (6, 6, 2)
@@ -634,3 +739,103 @@ def test_native_skin_keeps_column_major_inverse_bind_storage(tmp_path):
     assert skeleton.bones[0]["inverse_bind_matrix"][12:15] == pytest.approx(
         (-2.0, -3.0, -4.0)
     )
+
+
+def test_glb_asset_default_cgltf_backend_publishes_children_and_node_targets(
+    tmp_path, monkeypatch
+):
+    import termin_assets
+
+    class _Material:
+        is_valid = True
+
+    class _InstantiationResourceManager:
+        def get_material(self, name):
+            assert name == "NormalizedPBR"
+            return _Material()
+
+        def list_runtime_asset_names(self, asset_type):
+            assert asset_type == "texture"
+            return []
+
+    DefaultResourceManager._reset_for_testing()
+    resource_manager = DefaultResourceManager.instance()
+    path = _write_production_native_glb(tmp_path / "production-native.glb")
+    asset = GLBAsset(name="production-native", source_path=path)
+    asset.set_resource_manager(resource_manager)
+    asset.parse_spec(
+        {
+            "uuid": "pytest-production-native-glb",
+            "convert_to_z_up": False,
+            "normalize_scale": True,
+        }
+    )
+
+    assert asset.ensure_loaded()
+    assert isinstance(asset.scene_data, NativeGLBSceneData)
+    assert list(asset.get_mesh_assets()) == ["Body"]
+    assert asset.get_mesh_assets()["Body"].data.is_valid
+    assert asset.scene_data.meshes[0].submeshes[0].material_index == -1
+    assert list(asset.get_animation_assets()) == ["Move"]
+    clip = asset.get_animation_assets()["Move"].clip
+    assert clip.track_count == 1
+    assert clip.tracks[0]["target_node_index"] == 1
+    assert clip.tracks[0]["interpolation"] == "step"
+    assert clip.sample_track(0, 1.0) == pytest.approx((4.0, 6.0, 8.0))
+
+    monkeypatch.setattr(
+        termin_assets,
+        "get_resource_manager",
+        lambda: _InstantiationResourceManager(),
+    )
+    result = instantiate_glb(asset, name="Model")
+
+    imported_root = result.entity.transform.children[0].entity
+    animated = imported_root.transform.children[0].entity
+    assert imported_root.name == "Root"
+    assert tuple(imported_root.transform.local_scale()) == pytest.approx((1.0, 1.0, 1.0))
+    assert animated.name == "Animated"
+    assert tuple(animated.transform.local_position()) == pytest.approx((2.0, 0.0, 0.0))
+    assert result.animation_player is not None
+    assert result.animation_player.node_targets[1].name == "Animated"
+    assert result.animation_player.node_targets[2] is None
+
+
+def test_glb_asset_cgltf_backend_rejects_duplicate_animation_names(tmp_path):
+    path = _write_production_native_glb(
+        tmp_path / "duplicate-animation.glb", duplicate_animation_name=True
+    )
+    document = NativeStaticMeshDocument(path)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"duplicate-animation\.glb: duplicate animation names.*'Move'",
+    ):
+        NativeGLBSceneData(
+            document,
+            convert_to_z_up=False,
+            blender_z_up_fix=False,
+            normalize_scale=False,
+        )
+
+
+def test_glb_asset_default_cgltf_failure_never_falls_back_to_python(
+    tmp_path, monkeypatch
+):
+    import termin.glb.loader as legacy_loader
+
+    path = tmp_path / "malformed.glb"
+    path.write_bytes(b"not a GLB")
+    legacy_called = False
+
+    def fail_if_called(*_args, **_kwargs):
+        nonlocal legacy_called
+        legacy_called = True
+        raise AssertionError("legacy GLB loader must not be called")
+
+    monkeypatch.setattr(legacy_loader, "load_glb_file_from_buffer", fail_if_called)
+    monkeypatch.setattr(legacy_loader, "load_glb_file_normalized", fail_if_called)
+    asset = GLBAsset(name="malformed", source_path=path)
+
+    assert not asset.ensure_loaded()
+    assert not legacy_called
