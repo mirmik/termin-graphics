@@ -16,6 +16,16 @@ from termin.glb.loader import (
     load_glb_file_from_buffer,
     load_glb_file_normalized,
 )
+from termin.glb.native import (
+    NativeImageInfo,
+    NativeGLBDocument,
+    NativeMaterialInfo,
+    NativeMeshBuildDiagnostics,
+    NativeMeshInfo,
+    NativeStaticMeshDocument,
+    NativeTextureInfo,
+    NativeTextureViewInfo,
+)
 
 __all__ = [
     "GLBAnimationChannel",
@@ -31,6 +41,14 @@ __all__ = [
     "GLBSkinData",
     "GLBSubmeshData",
     "GLBTcTexture",
+    "NativeMeshInfo",
+    "NativeMeshBuildDiagnostics",
+    "NativeImageInfo",
+    "NativeGLBDocument",
+    "NativeMaterialInfo",
+    "NativeStaticMeshDocument",
+    "NativeTextureInfo",
+    "NativeTextureViewInfo",
     "load_glb_file",
     "load_glb_file_from_buffer",
     "load_glb_file_normalized",

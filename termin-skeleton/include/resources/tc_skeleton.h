@@ -26,7 +26,7 @@ typedef struct tc_bone {
     int32_t index;
     int32_t parent_index; // -1 for root bones
 
-    // 4x4 inverse bind matrix (column-major)
+    // 4x4 inverse bind matrix (column-major, project-wide matrix convention)
     double inverse_bind_matrix[16];
 
     // Bind pose local transform
@@ -34,6 +34,16 @@ typedef struct tc_bone {
     double bind_rotation[4]; // quaternion [x, y, z, w]
     double bind_scale[3];
 } tc_bone;
+
+// Non-owning input for transactional bulk skeleton replacement.
+typedef struct tc_skeleton_bone_desc {
+    const char* name;
+    int32_t parent_index;
+    const double* inverse_bind_matrix; // 16 column-major values
+    const double* bind_translation;    // 3 values
+    const double* bind_rotation;       // quaternion xyzw, 4 values
+    const double* bind_scale;          // 3 values
+} tc_skeleton_bone_desc;
 
 // ============================================================================
 // Skeleton data

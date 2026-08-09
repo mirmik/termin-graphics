@@ -237,6 +237,20 @@ def test_material_slots_select_their_declared_lookup_encoding() -> None:
     assert material.assigned["u_occlusion_texture"] is linear
 
 
+def test_material_configuration_rejects_unsupported_texcoord_set() -> None:
+    material = _RecordingMaterial()
+    with pytest.raises(ValueError, match="TEXCOORD_1"):
+        _configure_import_material(
+            material,
+            GLBMaterialData(
+                "SecondUVSet",
+                base_color_texture=0,
+                base_color_texcoord=1,
+            ),
+            {(0, "srgb"): _NamedTexture("srgb")},
+        )
+
+
 class _RuntimeTextureManager:
     def __init__(self):
         self.by_name = {}

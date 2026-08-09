@@ -94,6 +94,32 @@ TGFX_API void tc_mesh_registry_remove_destroy_hook(tc_mesh_destroy_hook_fn cb, v
 // Mesh data helpers
 // ============================================================================
 
+// Transactional owned mesh payload. Storage is allocated and released by
+// termin-mesh so callers from another shared library never transfer memory
+// allocated by a different module/CRT. Callers may write through the exposed
+// pointers, then either commit the complete payload or discard it.
+typedef struct tc_mesh_data_builder {
+    void* vertices;
+    size_t vertex_count;
+    uint32_t* indices;
+    size_t index_count;
+    tc_submesh* submeshes;
+    size_t submesh_count;
+    tc_vertex_layout layout;
+    // Allocation bounds owned by termin-mesh. Callers must not modify them.
+    size_t vertex_capacity_bytes;
+    size_t index_capacity;
+    size_t submesh_capacity;
+} tc_mesh_data_builder;
+
+TGFX_API bool tc_mesh_data_builder_allocate(tc_mesh_data_builder* builder,
+                                            size_t vertex_count,
+                                            const tc_vertex_layout* layout,
+                                            size_t index_count,
+                                            size_t submesh_count);
+TGFX_API void tc_mesh_data_builder_discard(tc_mesh_data_builder* builder);
+TGFX_API bool tc_mesh_data_builder_commit(tc_mesh* mesh, tc_mesh_data_builder* builder, const char* name);
+
 TGFX_API bool
 tc_mesh_set_vertices(tc_mesh* mesh, const void* data, size_t vertex_count, const tc_vertex_layout* layout);
 TGFX_API bool tc_mesh_set_indices(tc_mesh* mesh, const uint32_t* data, size_t index_count);

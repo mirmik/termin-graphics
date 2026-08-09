@@ -23,3 +23,14 @@ Python packages: `termin.animation` and `termin.animation_components` through
 The native component implementation lives in `termin-components-animation`;
 the Python wrapper namespace is shipped by `termin-animation` so importer and
 runtime packages can use `AnimationPlayer` without depending on `termin-app`.
+
+## Bulk track contract
+
+`TcAnimationClip.set_tracks()` atomically replaces a clip with owned flat
+tracks identified by source node index, path, interpolation, component count,
+times, and values. The format keeps vec3 scale and the glTF CUBICSPLINE
+`in/value/out` tensor shape. LINEAR and STEP translation/rotation/scale tracks
+are sampled by the runtime, including shortest-path quaternion interpolation.
+CUBICSPLINE and morph-weight tracks remain round-trippable but sampling them is
+an explicit error until those player paths are implemented. The legacy
+name-grouped channel API remains available only for existing assets.

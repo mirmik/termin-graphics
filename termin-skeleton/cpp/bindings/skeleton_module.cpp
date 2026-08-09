@@ -110,6 +110,84 @@ namespace {
             .def("get", &termin::TcSkeleton::get, nb::rv_policy::reference)
             .def("get_bone", &termin::TcSkeleton::get_bone, nb::arg("index"), nb::rv_policy::reference)
             .def("alloc_bones", &termin::TcSkeleton::alloc_bones, nb::arg("count"), nb::rv_policy::reference)
+            .def_prop_ro(
+                "bones",
+                [](const termin::TcSkeleton& self) {
+                    nb::list result;
+                    tc_skeleton* skeleton = self.get();
+                    if (!skeleton)
+                        return result;
+                    for (size_t i = 0; i < skeleton->bone_count; ++i) {
+                        const tc_bone& bone = skeleton->bones[i];
+                        nb::dict data;
+                        data["name"] = bone.name;
+                        data["parent_index"] = bone.parent_index;
+                        nb::list inverse_bind;
+                        for (double value : bone.inverse_bind_matrix)
+                            inverse_bind.append(value);
+                        data["inverse_bind_matrix"] = std::move(inverse_bind);
+                        data["bind_translation"] = nb::make_tuple(
+                            bone.bind_translation[0], bone.bind_translation[1], bone.bind_translation[2]);
+                        data["bind_rotation"] = nb::make_tuple(bone.bind_rotation[0],
+                                                                 bone.bind_rotation[1],
+                                                                 bone.bind_rotation[2],
+                                                                 bone.bind_rotation[3]);
+                        data["bind_scale"] =
+                            nb::make_tuple(bone.bind_scale[0], bone.bind_scale[1], bone.bind_scale[2]);
+                        result.append(std::move(data));
+                    }
+                    return result;
+                })
+            .def(
+                "set_bones",
+                [](termin::TcSkeleton& self, nb::list bone_data) {
+                    struct PendingBone {
+                        std::string name;
+                        int32_t parent_index = -1;
+                        std::array<double, 16> inverse_bind{};
+                        std::array<double, 3> translation{};
+                        std::array<double, 4> rotation{};
+                        std::array<double, 3> scale{};
+                    };
+
+                    std::vector<PendingBone> pending;
+                    pending.reserve(nb::len(bone_data));
+                    for (size_t i = 0; i < nb::len(bone_data); ++i) {
+                        nb::dict data = nb::cast<nb::dict>(bone_data[i]);
+                        const char* required[] = {"name",
+                                                  "parent_index",
+                                                  "inverse_bind_matrix",
+                                                  "bind_translation",
+                                                  "bind_rotation",
+                                                  "bind_scale"};
+                        for (const char* field : required) {
+                            if (!data.contains(field))
+                                throw std::invalid_argument(std::string("skeleton bone is missing '") + field + "'");
+                        }
+                        PendingBone bone;
+                        bone.name = nb::cast<std::string>(data["name"]);
+                        bone.parent_index = nb::cast<int32_t>(data["parent_index"]);
+                        bone.inverse_bind = nb::cast<std::array<double, 16>>(data["inverse_bind_matrix"]);
+                        bone.translation = nb::cast<std::array<double, 3>>(data["bind_translation"]);
+                        bone.rotation = nb::cast<std::array<double, 4>>(data["bind_rotation"]);
+                        bone.scale = nb::cast<std::array<double, 3>>(data["bind_scale"]);
+                        pending.push_back(std::move(bone));
+                    }
+
+                    std::vector<tc_skeleton_bone_desc> descriptors;
+                    descriptors.reserve(pending.size());
+                    for (PendingBone& bone : pending) {
+                        descriptors.push_back({bone.name.c_str(),
+                                               bone.parent_index,
+                                               bone.inverse_bind.data(),
+                                               bone.translation.data(),
+                                               bone.rotation.data(),
+                                               bone.scale.data()});
+                    }
+                    if (!self.replace_bones(descriptors.data(), descriptors.size()))
+                        throw std::runtime_error("skeleton replacement failed; previous payload was preserved");
+                },
+                nb::arg("bones"))
             .def_static("from_uuid", &termin::TcSkeleton::from_uuid, nb::arg("uuid"))
             .def_static("get_or_create", &termin::TcSkeleton::get_or_create, nb::arg("uuid"))
             .def_static("create", &termin::TcSkeleton::create, nb::arg("name") = "", nb::arg("uuid_hint") = "")

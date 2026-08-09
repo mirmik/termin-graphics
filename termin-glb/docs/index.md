@@ -24,3 +24,22 @@ orchestration stay in `termin-app`. GLB registers embedded mesh, skeleton,
 animation, and texture assets through generic `termin-assets` runtime registry
 APIs; builtin material lookup is still provided by the composing application
 resource manager.
+
+## Native importer migration
+
+The accepted [Native cgltf Importer decision](../../docs/architecture-council/2026-08-09-native-cgltf-importer.md)
+defines the migration of the heavy GLB data path to a pinned cgltf backend.
+The runtime asset contract remains sequential: native parsing and CPU resource
+preparation are followed by deterministic publication into declared embedded
+resources. This migration does not add concurrent `Asset.ensure_loaded()`.
+
+The explicit `NativeGLBDocument` backend now keeps mapped GLB storage alive
+while cgltf accessors refer to it, publishes static and skinned Termin meshes
+without Python per-index processing, and exposes encoded images, materials,
+nodes, skins, and exact animation tensors through compact discovery/bulk
+boundaries. Until the migration card that switches the default backend and the
+exact runtime animation-track prerequisite are completed, the Python loader
+remains the production implementation described above.
+
+The pinned dependency revision and fork policy are documented in
+[`native-cgltf.md`](native-cgltf.md).

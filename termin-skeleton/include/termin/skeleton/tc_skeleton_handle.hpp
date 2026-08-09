@@ -145,6 +145,11 @@ namespace termin {
             return s ? tc_skeleton_alloc_bones(s, count) : nullptr;
         }
 
+        bool replace_bones(const tc_skeleton_bone_desc* bones, size_t count) {
+            tc_skeleton* s = get();
+            return s ? tc_skeleton_replace_bones(s, bones, count) : false;
+        }
+
         // Rebuild root indices after modifying bones
         void rebuild_roots() {
             if (tc_skeleton* s = get()) {

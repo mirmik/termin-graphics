@@ -57,6 +57,51 @@ typedef struct tc_animation_channel {
 } tc_animation_channel;
 
 // ============================================================================
+// Bulk animation tracks
+// ============================================================================
+
+typedef enum tc_animation_path {
+    TC_ANIMATION_PATH_TRANSLATION = 0,
+    TC_ANIMATION_PATH_ROTATION = 1,
+    TC_ANIMATION_PATH_SCALE = 2,
+    TC_ANIMATION_PATH_WEIGHTS = 3,
+} tc_animation_path;
+
+typedef enum tc_animation_interpolation {
+    TC_ANIMATION_INTERPOLATION_LINEAR = 0,
+    TC_ANIMATION_INTERPOLATION_STEP = 1,
+    TC_ANIMATION_INTERPOLATION_CUBIC_SPLINE = 2,
+} tc_animation_interpolation;
+
+// One self-contained track. Times and values are owned by the animation.
+// LINEAR/STEP values contain key_count * components doubles. CUBIC_SPLINE
+// preserves the glTF in-tangent/value/out-tangent representation and contains
+// key_count * 3 * components doubles.
+typedef struct tc_animation_track {
+    int32_t target_node_index;
+    uint8_t path;          // tc_animation_path
+    uint8_t interpolation; // tc_animation_interpolation
+    uint16_t _pad;
+    uint32_t components;
+    size_t key_count;
+    size_t value_count;
+    double* times;
+    double* values;
+} tc_animation_track;
+
+// Non-owning input used by transactional bulk replacement.
+typedef struct tc_animation_track_desc {
+    int32_t target_node_index;
+    tc_animation_path path;
+    tc_animation_interpolation interpolation;
+    uint32_t components;
+    size_t key_count;
+    size_t value_count;
+    const double* times;
+    const double* values;
+} tc_animation_track_desc;
+
+// ============================================================================
 // Animation clip
 // ============================================================================
 
@@ -65,6 +110,9 @@ typedef struct tc_animation {
 
     tc_animation_channel* channels; // array of channels (owned, malloc'd)
     size_t channel_count;
+
+    tc_animation_track* tracks; // bulk tracks (owned, malloc'd)
+    size_t track_count;
 
     double duration; // in seconds
     double tps;      // ticks per second

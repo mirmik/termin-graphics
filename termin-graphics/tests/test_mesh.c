@@ -110,6 +110,94 @@ static int test_mesh_data(void) {
     return 0;
 }
 
+static int test_mesh_transactional_data_builder(void) {
+    printf("Testing Mesh Transactional Data Builder...\n");
+
+    tc_mesh_init();
+    tc_mesh* mesh = tc_mesh_add("transaction-test");
+    TEST_ASSERT(mesh != NULL, "transaction mesh created");
+
+    tc_vertex_layout layout = tc_vertex_layout_pos();
+    float initial_vertices[] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+    uint32_t initial_indices[] = {0, 1, 2};
+    TEST_ASSERT(tc_mesh_set_data(mesh, initial_vertices, 3, &layout, initial_indices, 3, "initial"),
+                "initial mesh data set");
+
+    void* initial_vertex_ptr = mesh->vertices;
+    uint32_t* initial_index_ptr = mesh->indices;
+    tc_submesh* initial_submesh_ptr = mesh->submeshes;
+    uint32_t initial_version = mesh->header.version;
+
+    tc_mesh_data_builder builder;
+    TEST_ASSERT(tc_mesh_data_builder_allocate(&builder, 4, &layout, 6, 2), "builder allocated");
+    TEST_ASSERT(builder.vertices != NULL, "builder vertices allocated");
+    TEST_ASSERT(builder.indices != NULL, "builder indices allocated");
+    TEST_ASSERT(builder.submeshes != NULL, "builder submeshes allocated");
+
+    float replacement_vertices[] = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    uint32_t replacement_indices[] = {0, 1, 2, 0, 2, 3};
+    memcpy(builder.vertices, replacement_vertices, sizeof(replacement_vertices));
+    memcpy(builder.indices, replacement_indices, sizeof(replacement_indices));
+    builder.submeshes[0].first_index = 0;
+    builder.submeshes[0].index_count = 3;
+    builder.submeshes[0].material_slot = 4;
+    snprintf(builder.submeshes[0].name, sizeof(builder.submeshes[0].name), "%s", "first");
+    builder.submeshes[1].first_index = 3;
+    builder.submeshes[1].index_count = 3;
+    builder.submeshes[1].material_slot = 9;
+    snprintf(builder.submeshes[1].name, sizeof(builder.submeshes[1].name), "%s", "second");
+
+    TEST_ASSERT(tc_mesh_data_builder_commit(mesh, &builder, "replacement"), "builder committed");
+    TEST_ASSERT(builder.vertices == NULL && builder.indices == NULL && builder.submeshes == NULL,
+                "successful commit clears builder");
+    TEST_ASSERT(mesh->vertices != initial_vertex_ptr, "vertices replaced");
+    TEST_ASSERT(mesh->indices != initial_index_ptr, "indices replaced");
+    TEST_ASSERT(mesh->submeshes != initial_submesh_ptr, "submeshes replaced");
+    TEST_ASSERT(mesh->vertex_count == 4, "replacement vertex count");
+    TEST_ASSERT(mesh->index_count == 6, "replacement index count");
+    TEST_ASSERT(mesh->submesh_count == 2, "replacement submesh count");
+    TEST_ASSERT(mesh->submeshes[1].material_slot == 9, "replacement material slot");
+    TEST_ASSERT(strcmp(mesh->submeshes[1].name, "second") == 0, "replacement submesh name");
+    TEST_ASSERT(mesh->header.version == initial_version + 1, "commit bumps version once");
+    TEST_ASSERT(mesh->header.is_loaded == 1, "commit marks mesh loaded");
+
+    void* committed_vertices = mesh->vertices;
+    uint32_t* committed_indices = mesh->indices;
+    tc_submesh* committed_submeshes = mesh->submeshes;
+    uint32_t committed_version = mesh->header.version;
+
+    TEST_ASSERT(tc_mesh_data_builder_allocate(&builder, 3, &layout, 3, 1), "invalid builder allocated");
+    builder.submeshes[0].first_index = 2;
+    builder.submeshes[0].index_count = 3;
+    TEST_ASSERT(!tc_mesh_data_builder_commit(mesh, &builder, "must-not-commit"), "invalid range rejected");
+    TEST_ASSERT(mesh->vertices == committed_vertices, "failed commit preserves vertices");
+    TEST_ASSERT(mesh->indices == committed_indices, "failed commit preserves indices");
+    TEST_ASSERT(mesh->submeshes == committed_submeshes, "failed commit preserves submeshes");
+    TEST_ASSERT(mesh->header.version == committed_version, "failed commit preserves version");
+    TEST_ASSERT(strcmp(mesh->header.name, "replacement") == 0, "failed commit preserves name");
+    tc_mesh_data_builder_discard(&builder);
+    TEST_ASSERT(builder.vertices == NULL && builder.indices == NULL && builder.submeshes == NULL,
+                "discard clears builder");
+
+    tc_vertex_layout overflow_layout = layout;
+    overflow_layout.stride = 2;
+    TEST_ASSERT(!tc_mesh_data_builder_allocate(&builder, SIZE_MAX, &overflow_layout, 0, 0),
+                "vertex size overflow rejected");
+    TEST_ASSERT(mesh->vertices == committed_vertices, "overflow leaves mesh unchanged");
+
+    TEST_ASSERT(tc_mesh_data_builder_allocate(&builder, 3, &layout, 3, 1), "bounds builder allocated");
+    builder.vertex_count = 4;
+    TEST_ASSERT(!tc_mesh_data_builder_commit(mesh, &builder, "must-not-exceed-capacity"),
+                "builder capacity violation rejected");
+    TEST_ASSERT(mesh->vertices == committed_vertices, "capacity failure preserves vertices");
+    TEST_ASSERT(mesh->header.version == committed_version, "capacity failure preserves version");
+    tc_mesh_data_builder_discard(&builder);
+
+    tc_mesh_shutdown();
+    printf("  Mesh Transactional Data Builder: PASS\n");
+    return 0;
+}
+
 static int test_ref_counting(void) {
     printf("Testing Ref Counting...\n");
 
@@ -179,6 +267,7 @@ int main(void) {
     result |= test_vertex_layout();
     result |= test_mesh_global_api();
     result |= test_mesh_data();
+    result |= test_mesh_transactional_data_builder();
     result |= test_ref_counting();
     result |= test_mesh_handle_rebootstrap();
 

@@ -72,7 +72,24 @@ TC_API tc_keyframe_vec3* tc_animation_channel_alloc_translation(tc_animation_cha
 TC_API tc_keyframe_quat* tc_animation_channel_alloc_rotation(tc_animation_channel* ch, size_t count);
 TC_API tc_keyframe_scalar* tc_animation_channel_alloc_scale(tc_animation_channel* ch, size_t count);
 
-// Recompute animation duration from channels
+// Atomically replace all bulk tracks. The old channels/tracks remain intact if
+// validation or allocation fails. A successful replacement clears legacy
+// channels so one clip has one authoritative payload model.
+TC_API bool tc_animation_replace_tracks(tc_animation* anim,
+                                        const tc_animation_track_desc* tracks,
+                                        size_t count);
+
+TC_API const tc_animation_track* tc_animation_get_track(const tc_animation* anim, size_t index);
+
+// Sample one supported bulk track at a time expressed in animation ticks.
+// LINEAR and STEP are supported for translation/rotation/scale. CUBIC_SPLINE
+// and weights are preserved exactly but return false with an error log.
+TC_API bool tc_animation_track_sample(const tc_animation_track* track,
+                                      double t_ticks,
+                                      double* values,
+                                      size_t value_count);
+
+// Recompute animation duration from the active legacy channels or bulk tracks.
 TC_API void tc_animation_recompute_duration(tc_animation* anim);
 
 // ============================================================================
