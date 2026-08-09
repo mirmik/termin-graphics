@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include <termin/geom/rect2.hpp>
 #include <termin/geom/color.hpp>
+#include <termin/geom/rect2.hpp>
 #include <tgfx2/draw_list2d.hpp>
 
 #include "termin_visual_scene/export.h"
@@ -35,7 +35,8 @@ namespace termin::visual {
                   termin::Vec2f origin,
                   float size_px,
                   termin::SrgbColor color,
-                  tgfx::TextAnchor2D anchor = tgfx::TextAnchor2D::Left);
+                  tgfx::TextAnchor2D anchor = tgfx::TextAnchor2D::Left,
+                  std::optional<float> coverage_gamma = std::nullopt);
         bool image(std::string image_uri,
                    termin::Rect2f rect,
                    termin::Rect2f uv = {0.0f, 0.0f, 1.0f, 1.0f},

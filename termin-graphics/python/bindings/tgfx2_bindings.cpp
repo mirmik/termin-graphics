@@ -1172,7 +1172,8 @@ namespace tgfx_bindings {
                    std::optional<tgfx::CanvasSrgbColor> tint,
                    bool flip_v,
                    tgfx::CanvasTextureSampling sampling) {
-                    self.draw_texture(texture, x, y, w, h, tint.value_or(tgfx::CanvasSrgbColor{1, 1, 1, 1}), flip_v, sampling);
+                    self.draw_texture(
+                        texture, x, y, w, h, tint.value_or(tgfx::CanvasSrgbColor{1, 1, 1, 1}), flip_v, sampling);
                 },
                 nb::arg("texture"),
                 nb::arg("x"),
@@ -1191,14 +1192,16 @@ namespace tgfx_bindings {
                                         float size_px,
                                         std::optional<tgfx::CanvasSrgbColor> color,
                                         tgfx::FontAtlas* font,
-                                        nb::object anchor) {
+                                        nb::object anchor,
+                                        std::optional<float> coverage_gamma) {
                     self.draw_text(text,
                                    x,
                                    y,
                                    size_px,
                                    color.value_or(tgfx::CanvasSrgbColor{1, 1, 1, 1}),
                                    font,
-                                   resolve_text2d_anchor(anchor));
+                                   resolve_text2d_anchor(anchor),
+                                   coverage_gamma);
                 },
                 nb::arg("text"),
                 nb::arg("x"),
@@ -1207,6 +1210,7 @@ namespace tgfx_bindings {
                 nb::arg("color").none() = nb::none(),
                 nb::arg("font").none() = nb::none(),
                 nb::arg("anchor") = "left",
+                nb::arg("coverage_gamma").none() = nb::none(),
                 nb::keep_alive<1, 7>())
             .def(
                 "measure_text",
@@ -1251,17 +1255,25 @@ namespace tgfx_bindings {
                                         float y,
                                         termin::SrgbColor color,
                                         float size,
-                                        nb::object anchor) {
+                                        nb::object anchor,
+                                        std::optional<float> coverage_gamma) {
                     self.draw(text,
                               tgfx::Text2DRenderer::DrawOptions{
-                                  x, y, color, size, resolve_text2d_anchor(anchor)});
+                                  .x = x,
+                                  .y = y,
+                                  .color = color,
+                                  .size = size,
+                                  .anchor = resolve_text2d_anchor(anchor),
+                                  .coverage_gamma = coverage_gamma,
+                              });
                 },
                 nb::arg("text"),
                 nb::arg("x"),
                 nb::arg("y"),
                 nb::arg("color") = termin::SrgbColor::white(),
                 nb::arg("size") = 14.0f,
-                nb::arg("anchor") = "left")
+                nb::arg("anchor") = "left",
+                nb::arg("coverage_gamma").none() = nb::none())
 
             .def(
                 "measure",
@@ -1320,10 +1332,8 @@ namespace tgfx_bindings {
                     auto [px, py, pz] = position;
                     const termin::LinearColor linear = termin::srgb_to_linear(color);
                     self.draw(text,
-                              tgfx::Text3DRenderer::DrawOptions{termin::Vec3f{px, py, pz},
-                                                                linear,
-                                                                size,
-                                                                resolve_text3d_anchor(anchor)});
+                              tgfx::Text3DRenderer::DrawOptions{
+                                  termin::Vec3f{px, py, pz}, linear, size, resolve_text3d_anchor(anchor)});
                 },
                 nb::arg("text"),
                 nb::arg("position"),

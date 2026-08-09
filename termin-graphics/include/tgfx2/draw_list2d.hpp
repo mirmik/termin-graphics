@@ -89,6 +89,7 @@ namespace tgfx {
         termin::LinearColor color{1.0f, 1.0f, 1.0f, 1.0f};
         FontHandle font{};
         TextAnchor2D anchor = TextAnchor2D::Left;
+        std::optional<float> coverage_gamma = std::nullopt;
     };
 
     struct DrawImage2D {
@@ -212,7 +213,8 @@ namespace tgfx {
                   float size_px,
                   termin::LinearColor color,
                   FontHandle font,
-                  TextAnchor2D anchor = TextAnchor2D::Left);
+                  TextAnchor2D anchor = TextAnchor2D::Left,
+                  std::optional<float> coverage_gamma = std::nullopt);
         bool image(TextureHandle texture,
                    termin::Rect2f rect,
                    termin::Rect2f uv = {0.0f, 0.0f, 1.0f, 1.0f},

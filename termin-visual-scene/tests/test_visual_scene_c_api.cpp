@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "termin_visual_scene/graphic_item2d.hpp"
+#include "termin_visual_scene/items/text_item2d.hpp"
 #include "termin_visual_scene/tc_builtin_items2d.h"
 
 namespace {
@@ -95,6 +96,8 @@ int main() {
         .color = color(0.0f, 0.0f, 0.0f),
         .anchor = TC_VISUAL_TEXT_ANCHOR_LEFT,
         .layout_bounds = {0.0f, 0.0f, 60.0f, 20.0f},
+        .has_coverage_gamma = true,
+        .coverage_gamma = 1.3f,
     };
     const auto text = tc_visual_text_item2d_create(scene, group, &text_desc);
     const tc_visual_image_desc2d image_desc{
@@ -108,6 +111,10 @@ int main() {
     const auto hit = tc_visual_hit_region_item2d_create(scene, group, triangle(), TC_VISUAL_FILL_RULE_EVEN_ODD);
     assert(tc_visual_scene_item_is_valid(scene, path));
     assert(tc_visual_scene_item_is_valid(scene, text));
+    const auto* text_base = tc_visual_scene_resolve_item_const(scene, text);
+    assert(text_base != nullptr);
+    const auto* text_body = static_cast<const termin::visual::TextItem2D*>(text_base->body);
+    assert(text_body->coverage_gamma() && *text_body->coverage_gamma() == 1.3f);
     assert(tc_visual_scene_item_is_valid(scene, image));
     assert(tc_visual_scene_item_is_valid(scene, hit));
     assert(tc_visual_scene_item_set_parent(scene, hit, group, 0));

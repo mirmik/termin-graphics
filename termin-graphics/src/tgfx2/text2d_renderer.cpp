@@ -11,6 +11,7 @@
 #include "tgfx2/builtin_shader_sources.hpp"
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
 #include <vector>
 
 #include "tgfx2/font_atlas.hpp"
@@ -41,13 +42,26 @@ namespace tgfx {
 
         constexpr const char* TEXT2D_SHADER_UUID = "termin-engine-text2d";
         constexpr const char* TEXT2D_SDF_SHADER_UUID = "termin-engine-text2d-sdf";
+        constexpr float kFullBitmapCoverageCorrectionPx = 14.0f;
+        constexpr float kNeutralBitmapCoverageCorrectionPx = 24.0f;
 
-        // Python-side struct Text2DPushData mirror. mat4 (64B) + vec4 (16B) = 80B.
+        float bitmap_coverage_gamma_for_size(float configured_gamma, float display_px) {
+            const float correction =
+                std::clamp((kNeutralBitmapCoverageCorrectionPx - display_px) /
+                               (kNeutralBitmapCoverageCorrectionPx - kFullBitmapCoverageCorrectionPx),
+                           0.0f,
+                           1.0f);
+            return 1.0f + (configured_gamma - 1.0f) * correction;
+        }
+
+        // mat4 + vec4 + scalar, padded to std140 vec4 alignment.
         struct Text2DPushData {
             float projection[16];
             float color[4];
+            float coverage_gamma;
+            float _pad[3];
         };
-        static_assert(sizeof(Text2DPushData) == 80, "Text2DPushData layout drift — shader and C++ disagree");
+        static_assert(sizeof(Text2DPushData) == 96, "Text2DPushData layout drift — shader and C++ disagree");
 
         // SDF push constants: mat4 + vec4 + float, padded to std140 vec4 alignment.
         struct Text2DSdfPushData {
@@ -174,6 +188,11 @@ namespace tgfx {
     void Text2DRenderer::draw(std::string_view text_utf8, const DrawOptions& options) {
         if (text_utf8.empty() || font_ == nullptr || ctx_ == nullptr)
             return;
+        if (options.coverage_gamma.has_value() &&
+            (!std::isfinite(*options.coverage_gamma) || *options.coverage_gamma <= 0.0f)) {
+            tc::Log::error("[Text2DRenderer] per-draw coverage gamma must be finite and positive");
+            return;
+        }
 
         const bool profile = tc_profiler_enabled();
         const termin::LinearColor color = termin::srgb_to_linear(options.color);
@@ -255,7 +274,7 @@ namespace tgfx {
         // (see build_ortho_pixel_to_ndc's comment). Transpose here before
         // shipping raw bytes to GPU.
         if (use_sdf) {
-            Text2DSdfPushData push;
+            Text2DSdfPushData push{};
             for (int row = 0; row < 4; ++row) {
                 for (int col = 0; col < 4; ++col) {
                     push.projection[col * 4 + row] = proj_[row * 4 + col];
@@ -271,7 +290,7 @@ namespace tgfx {
             push.smoothing = 1.0f / (2.0f * static_cast<float>(font_->sdf_spread()));
             ctx.bind_uniform_data("text2d_sdf_draw", &push, static_cast<uint32_t>(sizeof(push)));
         } else {
-            Text2DPushData push;
+            Text2DPushData push{};
             for (int row = 0; row < 4; ++row) {
                 for (int col = 0; col < 4; ++col) {
                     push.projection[col * 4 + row] = proj_[row * 4 + col];
@@ -281,6 +300,8 @@ namespace tgfx {
             push.color[1] = color.g;
             push.color[2] = color.b;
             push.color[3] = color.a;
+            push.coverage_gamma =
+                options.coverage_gamma.value_or(bitmap_coverage_gamma_for_size(bitmap_coverage_gamma_, options.size));
             ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
         }
         if (profile)
@@ -368,15 +389,21 @@ namespace tgfx {
     void Text2DRenderer::draw_mesh(std::span<const Text2DVertex> vertices,
                                    termin::SrgbColor color,
                                    float display_px,
-                                   FontAtlas* font) {
-        draw_mesh_linear(vertices, termin::srgb_to_linear(color), display_px, font);
+                                   FontAtlas* font,
+                                   std::optional<float> coverage_gamma) {
+        draw_mesh_linear(vertices, termin::srgb_to_linear(color), display_px, font, coverage_gamma);
     }
 
     void Text2DRenderer::draw_mesh_linear(std::span<const Text2DVertex> vertices,
                                           termin::LinearColor color,
                                           float display_px,
-                                          FontAtlas* font) {
+                                          FontAtlas* font,
+                                          std::optional<float> coverage_gamma) {
         if (vertices.empty() || vertices.size() % 3 != 0 || font == nullptr || ctx_ == nullptr) {
+            return;
+        }
+        if (coverage_gamma.has_value() && (!std::isfinite(*coverage_gamma) || *coverage_gamma <= 0.0f)) {
+            tc::Log::error("[Text2DRenderer] per-mesh coverage gamma must be finite and positive");
             return;
         }
 
@@ -419,6 +446,8 @@ namespace tgfx {
             push.color[1] = color.g;
             push.color[2] = color.b;
             push.color[3] = color.a;
+            push.coverage_gamma =
+                coverage_gamma.value_or(bitmap_coverage_gamma_for_size(bitmap_coverage_gamma_, display_px));
             ctx.use_shader_resource_layout(raw);
             ctx.bind_uniform_data("text2d_draw", &push, static_cast<uint32_t>(sizeof(push)));
         }
@@ -437,6 +466,14 @@ namespace tgfx {
 
     void Text2DRenderer::end() {
         ctx_ = nullptr;
+    }
+
+    void Text2DRenderer::set_bitmap_coverage_gamma(float gamma) {
+        if (!std::isfinite(gamma) || gamma <= 0.0f) {
+            tc::Log::error("[Text2DRenderer] bitmap coverage gamma must be finite and positive");
+            throw std::invalid_argument("Text2DRenderer bitmap coverage gamma must be finite and positive");
+        }
+        bitmap_coverage_gamma_ = gamma;
     }
 
 } // namespace tgfx

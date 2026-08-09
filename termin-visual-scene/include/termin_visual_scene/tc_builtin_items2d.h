@@ -57,6 +57,8 @@ typedef struct tc_visual_text_desc2d {
     tc_visual_color4f color;
     tc_visual_text_anchor2d anchor;
     tc_bounds2f layout_bounds;
+    bool has_coverage_gamma;
+    float coverage_gamma;
 } tc_visual_text_desc2d;
 
 typedef struct tc_visual_image_desc2d {

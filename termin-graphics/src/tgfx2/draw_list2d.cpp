@@ -7,10 +7,9 @@
 namespace tgfx {
     namespace {
         bool finite_color(const termin::LinearColor& color) {
-            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) &&
-                   std::isfinite(color.a);
+            return std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) && std::isfinite(color.a);
         }
-    }
+    } // namespace
     namespace {
 
         bool finite(float value) {
@@ -187,18 +186,23 @@ namespace tgfx {
                                  float size_px,
                                  termin::LinearColor color,
                                  FontHandle font,
-                                 TextAnchor2D anchor) {
+                                 TextAnchor2D anchor,
+                                 std::optional<float> coverage_gamma) {
         if (text_value.empty() || !finite(origin) || !finite(size_px) || size_px <= 0.0f || !finite_color(color) ||
-            !font || !valid_anchor(anchor)) {
+            !font || !valid_anchor(anchor) ||
+            (coverage_gamma.has_value() && (!finite(*coverage_gamma) || *coverage_gamma <= 0.0f))) {
             tc::Log::error("[DrawList2DBuilder] invalid text draw rejected");
             return false;
         }
-        commands_.emplace_back(DrawText2D{std::move(text_value), origin, size_px, color, font, anchor});
+        commands_.emplace_back(DrawText2D{std::move(text_value), origin, size_px, color, font, anchor, coverage_gamma});
         return true;
     }
 
-    bool DrawList2DBuilder::image(
-        TextureHandle texture, termin::Rect2f rect, termin::Rect2f uv, termin::LinearColor tint, DrawTextureSampling2D sampling) {
+    bool DrawList2DBuilder::image(TextureHandle texture,
+                                  termin::Rect2f rect,
+                                  termin::Rect2f uv,
+                                  termin::LinearColor tint,
+                                  DrawTextureSampling2D sampling) {
         if (!texture || !valid_rect(rect) || rect.width <= 0.0f || rect.height <= 0.0f || !valid_rect(uv) ||
             !finite_color(tint) || !valid_sampling(sampling)) {
             tc::Log::error("[DrawList2DBuilder] invalid image draw rejected");

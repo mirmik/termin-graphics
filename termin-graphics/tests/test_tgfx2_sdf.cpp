@@ -69,7 +69,7 @@ int main() {
 
     // Exercise bitmap path (below threshold).
     printf("\n--- Bitmap path ---\n");
-    for (float sz : {8.0f, 10.0f, 12.0f, 14.0f, 16.0f}) {
+    for (float sz : {8.0f, 10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 24.0f, 28.0f, 32.0f}) {
         font.ensure_glyphs(test_str, sz);
         auto m = font.measure_text(test_str, sz);
         printf("  size=%.0f  measure=(%.1f, %.1f)  sdf=%d\n", sz, m.width, m.height, font.is_sdf_size(sz));
@@ -90,7 +90,7 @@ int main() {
 
     // Exercise SDF path (above threshold).
     printf("\n--- SDF path ---\n");
-    for (float sz : {18.0f, 20.0f, 24.0f, 28.0f, 32.0f, 48.0f, 64.0f}) {
+    for (float sz : {48.0f, 64.0f}) {
         font.ensure_glyphs(test_str, sz);
         auto m = font.measure_text(test_str, sz);
         printf("  size=%.0f  measure=(%.1f, %.1f)  sdf=%d\n", sz, m.width, m.height, font.is_sdf_size(sz));
@@ -99,8 +99,8 @@ int main() {
         check(m.height == sz, "SDF text measure height should match requested size");
     }
     check(font.sdf_atlas_data() != nullptr, "SDF CPU atlas should be allocated");
-    auto sdf_a = font.get_glyph('A', 24.0f);
-    check(sdf_a.has_value(), "SDF glyph A should be present at 24px");
+    auto sdf_a = font.get_glyph('A', 48.0f);
+    check(sdf_a.has_value(), "SDF glyph A should be present at 48px");
     if (sdf_a) {
         check_glyph(*sdf_a, "SDF glyph A metrics/UV should be valid");
         check(atlas_region_has_signal(
@@ -112,7 +112,7 @@ int main() {
     printf("\n--- Glyph lookup ---\n");
     uint32_t test_cps[] = {'A', 'a', '0', '@', 'g', 'W', 0};
     for (int i = 0; test_cps[i]; ++i) {
-        for (float sz : {14.0f, 24.0f}) {
+        for (float sz : {14.0f, 28.0f, 48.0f}) {
             auto gi = font.get_glyph(test_cps[i], sz);
             if (gi) {
                 printf("  U+%04X size=%.0f sdf=%d uv=(%.3f,%.3f)-(%.3f,%.3f) "
@@ -146,11 +146,11 @@ int main() {
                              "\xe2\x80\xa2\xe2\x80\xa3\xe2\x97\xa6"              // •‣◦
                              "\xe2\x9c\x93\xe2\x9c\x97\xe2\x9c\x95"              // ✓✗✕
                              "\xe2\x86\x90\xe2\x86\x92\xe2\x86\x91\xe2\x86\x93"; // ←→↑↓
-    font.ensure_glyphs(stress_str, 24.0f);
-    auto m = font.measure_text(stress_str, 24.0f);
-    printf("  Stress string measure at 24px: %.1f x %.1f\n", m.width, m.height);
+    font.ensure_glyphs(stress_str, 48.0f);
+    auto m = font.measure_text(stress_str, 48.0f);
+    printf("  Stress string measure at 48px: %.1f x %.1f\n", m.width, m.height);
     check(m.width > 0.0f, "stress string measure width should be positive");
-    check(m.height == 24.0f, "stress string measure height should match requested size");
+    check(m.height == 48.0f, "stress string measure height should match requested size");
 
     if (failures != 0) {
         fprintf(stderr, "\nSDF atlas test failed with %d assertion(s).\n", failures);

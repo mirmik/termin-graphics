@@ -1,5 +1,5 @@
-#include <cstdint>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 
 #include <termin/geom/color.hpp>
@@ -363,7 +364,12 @@ NB_MODULE(_visual_scene_native, m) {
             nb::arg("parent").none() = nb::none())
         .def(
             "create_polyline",
-            [](TcVisualScene self, nb::sequence points, termin::SrgbColor color, float width, bool closed, nb::object parent) {
+            [](TcVisualScene self,
+               nb::sequence points,
+               termin::SrgbColor color,
+               float width,
+               bool closed,
+               nb::object parent) {
                 auto object = std::make_unique<PolylineItem2D>(
                     parse_points(points), tgfx::StrokePaint{parse_color(color), width}, closed);
                 const auto handle = self.adopt(std::move(object), parent_object(self, parent));
@@ -388,7 +394,8 @@ NB_MODULE(_visual_scene_native, m) {
                float size_px,
                termin::SrgbColor color,
                nb::tuple layout_bounds,
-               nb::object parent) {
+               nb::object parent,
+               std::optional<float> coverage_gamma) {
                 const auto bounds = parse_rect(layout_bounds);
                 return wrap(self,
                             self.adopt(std::make_unique<termin::visual::TextItem2D>(
@@ -399,7 +406,8 @@ NB_MODULE(_visual_scene_native, m) {
                                            validate_color(color),
                                            tgfx::TextAnchor2D::Left,
                                            termin::Bounds2f{
-                                               bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height}),
+                                               bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height},
+                                           coverage_gamma),
                                        parent_object(self, parent)));
             },
             nb::arg("text"),
@@ -407,7 +415,8 @@ NB_MODULE(_visual_scene_native, m) {
             nb::arg("size_px"),
             nb::arg("color"),
             nb::arg("layout_bounds"),
-            nb::arg("parent").none() = nb::none())
+            nb::arg("parent").none() = nb::none(),
+            nb::arg("coverage_gamma").none() = nb::none())
         .def("clear", &TcVisualScene::clear)
         .def(
             "destroy",

@@ -3,6 +3,7 @@ import termin_prelude;
 struct Text2DPushData {
     column_major float4x4 u_projection;
     float4 u_color;
+    float u_coverage_gamma;
 };
 
 [[TerminScope("draw")]]
@@ -41,7 +42,13 @@ struct FragmentOutput {
 [shader("fragment")]
 FragmentOutput fs_main(FragmentInput input) {
     FragmentOutput output;
-    float a = u_font_atlas.Sample(input.uv).r * text2d_draw.u_color.a;
+    float coverage = saturate(u_font_atlas.Sample(input.uv).r);
+    // Grayscale glyph masks describe geometric coverage. When their edge
+    // values are blended directly into a linear target, small light glyphs
+    // look heavier than the rasterised outline. Keep solid stem pixels intact
+    // while gently reducing only the partially covered bitmap fringe.
+    coverage = pow(coverage, text2d_draw.u_coverage_gamma);
+    float a = coverage * text2d_draw.u_color.a;
     if (a < (1.0 / 255.0)) {
         discard;
     }

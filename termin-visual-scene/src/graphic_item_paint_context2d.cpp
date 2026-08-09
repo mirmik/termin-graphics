@@ -10,7 +10,7 @@ namespace termin::visual {
             const auto linear = termin::srgb_to_linear(color);
             return {linear.r, linear.g, linear.b, linear.a};
         }
-    }
+    } // namespace
 
     bool GraphicItemPaintContext2D::rect(termin::Rect2f rect, tgfx::FillPaint fill) {
         return sink_ != nullptr && sink_->builder != nullptr && sink_->builder->rect(rect, fill);
@@ -49,7 +49,8 @@ namespace termin::visual {
                                          termin::Vec2f origin,
                                          float size_px,
                                          termin::SrgbColor color,
-                                         tgfx::TextAnchor2D anchor) {
+                                         tgfx::TextAnchor2D anchor,
+                                         std::optional<float> coverage_gamma) {
         if (sink_ == nullptr || sink_->builder == nullptr || sink_->resolver == nullptr) {
             return false;
         }
@@ -58,7 +59,8 @@ namespace termin::visual {
             tc::Log::error("graphic item font '%s' was not resolved", font_uri.c_str());
             return false;
         }
-        return sink_->builder->text(std::move(text), origin, size_px, to_gpu_color(color), *font, anchor);
+        return sink_->builder->text(
+            std::move(text), origin, size_px, to_gpu_color(color), *font, anchor, coverage_gamma);
     }
 
     bool GraphicItemPaintContext2D::image(std::string image_uri,

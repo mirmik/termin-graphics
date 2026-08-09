@@ -19,6 +19,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -44,6 +45,13 @@ namespace tgfx {
 
     class TGFX2_TYPE_API Text2DRenderer {
     public:
+        // Small bitmap glyphs are composited into a linear render target. A
+        // mild transfer on their grayscale coverage keeps partially covered
+        // edge pixels from looking heavier than the rasterised outline. SDF
+        // text is intentionally unaffected: it is used for larger display
+        // sizes where the unadjusted result already has the intended weight.
+        static constexpr float kDefaultBitmapCoverageGamma = 1.5f;
+
         enum class Anchor : uint8_t {
             Left,
             Center,
@@ -56,6 +64,9 @@ namespace tgfx {
             termin::SrgbColor color = termin::SrgbColor::white();
             float size = 14.0f;
             Anchor anchor = Anchor::Left;
+            // Absent: use the renderer's size-aware bitmap policy. Present:
+            // apply this exponent literally to bitmap glyph coverage.
+            std::optional<float> coverage_gamma = std::nullopt;
         };
 
     private:
@@ -75,6 +86,7 @@ namespace tgfx {
         RenderContext2* ctx_ = nullptr;
         FontAtlas* font_ = nullptr;
         float proj_[16]{};
+        float bitmap_coverage_gamma_ = kDefaultBitmapCoverageGamma;
 
     public:
         explicit Text2DRenderer(FontAtlas* font = nullptr);
@@ -99,11 +111,16 @@ namespace tgfx {
         // Draw caller-prepared glyph triangles. This is used by DrawList2D after
         // affine transformation and CPU geometric clipping. The caller must have
         // populated glyphs on `font` for `display_px`; the atlas remains borrowed.
-        void draw_mesh(std::span<const Text2DVertex> vertices, termin::SrgbColor color, float display_px, FontAtlas* font);
+        void draw_mesh(std::span<const Text2DVertex> vertices,
+                       termin::SrgbColor color,
+                       float display_px,
+                       FontAtlas* font,
+                       std::optional<float> coverage_gamma = std::nullopt);
         void draw_mesh_linear(std::span<const Text2DVertex> vertices,
                               termin::LinearColor color,
                               float display_px,
-                              FontAtlas* font);
+                              FontAtlas* font,
+                              std::optional<float> coverage_gamma = std::nullopt);
 
         // End batch. Currently a no-op — shader/state stays bound on ctx
         // until the caller rebinds or ends its pass.
@@ -112,6 +129,15 @@ namespace tgfx {
         // Drop the compiled shader. Call when the GL context is torn down
         // so the destructor does not reach into a dead device.
         void release_gpu();
+
+        // A value of 1 disables bitmap coverage correction. Values greater
+        // than 1 reduce only partially covered edge pixels at small UI sizes;
+        // the correction fades to neutral as the display size approaches
+        // 24 px. Zero and non-finite values are rejected.
+        void set_bitmap_coverage_gamma(float gamma);
+        float bitmap_coverage_gamma() const {
+            return bitmap_coverage_gamma_;
+        }
 
         // Current font atlas (may be null).
         FontAtlas* font() const {

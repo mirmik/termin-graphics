@@ -100,6 +100,11 @@ namespace tgfx {
         void begin(RenderContext2& ctx, int x, int y, int width, int height);
         void end();
 
+        // Controls the small bitmap-text coverage correction used by this
+        // canvas. Set to 1 for unadjusted linear coverage blending.
+        void set_bitmap_text_coverage_gamma(float gamma);
+        float bitmap_text_coverage_gamma() const;
+
         // Executes a frozen backend-neutral list inside the current Canvas frame.
         // The list retains no resolver or render-context pointer. Returns false
         // when a runtime resource cannot be resolved or geometry cannot be lowered.
@@ -132,7 +137,8 @@ namespace tgfx {
                        float size_px,
                        CanvasSrgbColor color,
                        FontAtlas* font = nullptr,
-                       Text2DRenderer::Anchor anchor = Text2DRenderer::Anchor::Left);
+                       Text2DRenderer::Anchor anchor = Text2DRenderer::Anchor::Left,
+                       std::optional<float> coverage_gamma = std::nullopt);
         FontAtlas::Size2f measure_text(std::string_view text, float size_px, FontAtlas* font = nullptr) const;
 
         void set_default_font(FontAtlas* font) {

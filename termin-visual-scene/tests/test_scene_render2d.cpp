@@ -83,7 +83,8 @@ int main() {
                                                     13.0f,
                                                     termin::SrgbColor{},
                                                     tgfx::TextAnchor2D::Left,
-                                                    termin::Bounds2f{1.0f, 2.0f, 40.0f, 15.0f}),
+                                                    termin::Bounds2f{1.0f, 2.0f, 40.0f, 15.0f},
+                                                    1.2f),
                        root_ptr));
     assert(scene.adopt(std::make_unique<ImageItem2D>("image://logo",
                                                      termin::Rect2f{3.0f, 4.0f, 8.0f, 9.0f},
@@ -116,7 +117,7 @@ int main() {
         } else if (std::holds_alternative<tgfx::DrawPath2D>(command)) {
             saw_path = true;
         } else if (const auto* value = std::get_if<tgfx::DrawText2D>(&command)) {
-            saw_text = value->font.id == 17;
+            saw_text = value->font.id == 17 && value->coverage_gamma && *value->coverage_gamma == 1.2f;
         } else if (const auto* value = std::get_if<tgfx::DrawImage2D>(&command)) {
             saw_image = value->texture.id == 23;
         } else if (std::holds_alternative<tgfx::DrawCustomBatch2D>(command)) {

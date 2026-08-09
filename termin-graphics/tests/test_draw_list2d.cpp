@@ -44,7 +44,8 @@ namespace {
         assert(builder.path(make_path(), fill, stroke));
         const termin::Vec2f points[] = {{1, 1}, {2, 4}, {8, 3}};
         assert(builder.polyline(points, stroke, true));
-        assert(builder.text("frozen text", {7, 9}, 18, {1, 1, 1, 1}, tgfx::FontHandle{17}, tgfx::TextAnchor2D::Center));
+        assert(builder.text(
+            "frozen text", {7, 9}, 18, {1, 1, 1, 1}, tgfx::FontHandle{17}, tgfx::TextAnchor2D::Center, 1.25f));
         assert(builder.image(tgfx::TextureHandle{23},
                              {9, 10, 40, 30},
                              {0.1f, 0.2f, 0.5f, 0.6f},
@@ -121,6 +122,7 @@ int main() {
     const auto* custom = std::get_if<tgfx::DrawCustomBatch2D>(&first.commands()[12]);
     const auto* retained = std::get_if<tgfx::DrawRetainedBatch2D>(&first.commands()[13]);
     assert(text && text->text == "frozen text" && text->font.id == 17);
+    assert(text->coverage_gamma && *text->coverage_gamma == 1.25f);
     assert(image && image->texture.id == 23);
     assert(custom && custom->vertices.size() == 3);
     assert(retained && retained->batch);
@@ -145,4 +147,5 @@ int main() {
     assert(!invalid.pop_clip());
     invalid.clear();
     assert(!invalid.text("missing runtime font", {}, 12, {}, tgfx::FontHandle{}));
+    assert(!invalid.text("invalid gamma", {}, 12, {}, tgfx::FontHandle{1}, tgfx::TextAnchor2D::Left, 0.0f));
 }

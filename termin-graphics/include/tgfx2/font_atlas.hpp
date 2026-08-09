@@ -84,8 +84,11 @@ namespace tgfx {
         // Default reference size for SDF baking.
         static constexpr int kDefaultSdfReferencePx = 64;
 
-        // Default threshold: sizes >= this use the SDF path.
-        static constexpr int kDefaultSdfThresholdPx = 18;
+        // Exact per-size bitmap rasterisation is sharper for ordinary UI
+        // text. Reserve the scale-independent SDF path for genuinely large
+        // text where atlas pressure and arbitrary scaling outweigh its lower
+        // edge fidelity.
+        static constexpr int kDefaultSdfThresholdPx = 48;
 
     private:
         // Per-size font vmetrics, resolved lazily on first request.

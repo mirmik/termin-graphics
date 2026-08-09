@@ -67,3 +67,36 @@ def test_cross_scene_parent_is_rejected():
         second.create_group(parent)
     tc_visual_scene_destroy(second)
     tc_visual_scene_destroy(first)
+
+
+def test_text_accepts_optional_literal_coverage_gamma():
+    scene = tc_visual_scene_create()
+    inherited = scene.create_text(
+        "inherited",
+        (0.0, 0.0),
+        14.0,
+        SrgbColor(1.0, 1.0, 1.0, 1.0),
+        (0.0, 0.0, 80.0, 20.0),
+    )
+    overridden = scene.create_text(
+        "overridden",
+        (0.0, 20.0),
+        14.0,
+        SrgbColor(1.0, 1.0, 1.0, 1.0),
+        (0.0, 20.0, 80.0, 20.0),
+        coverage_gamma=1.25,
+    )
+    assert inherited.valid
+    assert overridden.valid
+
+    with pytest.raises(ValueError, match="invalid TextItem2D state"):
+        scene.create_text(
+            "invalid",
+            (0.0, 40.0),
+            14.0,
+            SrgbColor(1.0, 1.0, 1.0, 1.0),
+            (0.0, 40.0, 80.0, 20.0),
+            coverage_gamma=0.0,
+        )
+
+    tc_visual_scene_destroy(scene)

@@ -299,8 +299,16 @@ tc_graphic_item_handle tc_visual_text_item2d_create(tc_visual_scene_handle scene
         if (desc == nullptr || desc->text == nullptr || desc->font_uri == nullptr || !anchor) {
             throw std::invalid_argument("invalid text descriptor");
         }
-        return std::make_unique<termin::visual::TextItem2D>(
-            desc->text, desc->font_uri, desc->origin, desc->size_px, authored_color(desc->color), *anchor, desc->layout_bounds);
+        const std::optional<float> coverage_gamma =
+            desc->has_coverage_gamma ? std::optional<float>{desc->coverage_gamma} : std::nullopt;
+        return std::make_unique<termin::visual::TextItem2D>(desc->text,
+                                                            desc->font_uri,
+                                                            desc->origin,
+                                                            desc->size_px,
+                                                            authored_color(desc->color),
+                                                            *anchor,
+                                                            desc->layout_bounds,
+                                                            coverage_gamma);
     });
 }
 
@@ -312,8 +320,16 @@ bool tc_visual_text_item2d_set(tc_visual_scene_handle scene,
         if (desc == nullptr || desc->text == nullptr || desc->font_uri == nullptr || !anchor) {
             throw std::invalid_argument("invalid text descriptor");
         }
-        return std::make_unique<termin::visual::TextItem2D>(
-            desc->text, desc->font_uri, desc->origin, desc->size_px, authored_color(desc->color), *anchor, desc->layout_bounds);
+        const std::optional<float> coverage_gamma =
+            desc->has_coverage_gamma ? std::optional<float>{desc->coverage_gamma} : std::nullopt;
+        return std::make_unique<termin::visual::TextItem2D>(desc->text,
+                                                            desc->font_uri,
+                                                            desc->origin,
+                                                            desc->size_px,
+                                                            authored_color(desc->color),
+                                                            *anchor,
+                                                            desc->layout_bounds,
+                                                            coverage_gamma);
     });
 }
 

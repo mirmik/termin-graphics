@@ -18,9 +18,12 @@ namespace termin::visual {
                       termin::Vec2f origin,
                       float size_px,
                       termin::SrgbColor color,
-                      termin::Bounds2f layout_bounds) {
+                      termin::Bounds2f layout_bounds,
+                      std::optional<float> coverage_gamma) {
             if (text.empty() || font_uri.empty() || !detail::valid_point(origin) || !std::isfinite(size_px) ||
-                size_px <= 0.0f || !finite_color(color) || !detail::valid_bounds(layout_bounds)) {
+                size_px <= 0.0f || !finite_color(color) || !detail::valid_bounds(layout_bounds) ||
+                (coverage_gamma.has_value() && (!std::isfinite(*coverage_gamma) || *coverage_gamma <= 0.0f))) {
+                tc::Log::error("TextItem2D state is invalid");
                 throw std::invalid_argument("invalid TextItem2D state");
             }
         }
@@ -56,9 +59,10 @@ namespace termin::visual {
                            float size_px,
                            termin::SrgbColor color,
                            tgfx::TextAnchor2D anchor,
-                           termin::Bounds2f layout_bounds)
+                           termin::Bounds2f layout_bounds,
+                           std::optional<float> coverage_gamma)
         : TextItem2D() {
-        validate(text, font_uri, origin, size_px, color, layout_bounds);
+        validate(text, font_uri, origin, size_px, color, layout_bounds, coverage_gamma);
         text_ = std::move(text);
         font_uri_ = std::move(font_uri);
         origin_ = origin;
@@ -66,30 +70,31 @@ namespace termin::visual {
         color_ = color;
         anchor_ = anchor;
         layout_bounds_ = layout_bounds;
+        coverage_gamma_ = coverage_gamma;
     }
 
     void TextItem2D::set_text(std::string text) {
-        validate(text, font_uri_, origin_, size_px_, color_, layout_bounds_);
+        validate(text, font_uri_, origin_, size_px_, color_, layout_bounds_, coverage_gamma_);
         text_ = std::move(text);
     }
 
     void TextItem2D::set_font_uri(std::string uri) {
-        validate(text_, uri, origin_, size_px_, color_, layout_bounds_);
+        validate(text_, uri, origin_, size_px_, color_, layout_bounds_, coverage_gamma_);
         font_uri_ = std::move(uri);
     }
 
     void TextItem2D::set_origin(termin::Vec2f origin) {
-        validate(text_, font_uri_, origin, size_px_, color_, layout_bounds_);
+        validate(text_, font_uri_, origin, size_px_, color_, layout_bounds_, coverage_gamma_);
         origin_ = origin;
     }
 
     void TextItem2D::set_size_px(float size) {
-        validate(text_, font_uri_, origin_, size, color_, layout_bounds_);
+        validate(text_, font_uri_, origin_, size, color_, layout_bounds_, coverage_gamma_);
         size_px_ = size;
     }
 
     void TextItem2D::set_color(termin::SrgbColor color) {
-        validate(text_, font_uri_, origin_, size_px_, color, layout_bounds_);
+        validate(text_, font_uri_, origin_, size_px_, color, layout_bounds_, coverage_gamma_);
         color_ = color;
     }
 
@@ -98,8 +103,13 @@ namespace termin::visual {
     }
 
     void TextItem2D::set_layout_bounds(termin::Bounds2f bounds) {
-        validate(text_, font_uri_, origin_, size_px_, color_, bounds);
+        validate(text_, font_uri_, origin_, size_px_, color_, bounds, coverage_gamma_);
         layout_bounds_ = bounds;
+    }
+
+    void TextItem2D::set_coverage_gamma(std::optional<float> coverage_gamma) {
+        validate(text_, font_uri_, origin_, size_px_, color_, layout_bounds_, coverage_gamma);
+        coverage_gamma_ = coverage_gamma;
     }
 
     std::optional<termin::Bounds2f> TextItem2D::local_bounds() const {
@@ -111,7 +121,7 @@ namespace termin::visual {
     }
 
     bool TextItem2D::paint(GraphicItemPaintContext2D& context) const {
-        return context.text(text_, font_uri_, origin_, size_px_, color_, anchor_);
+        return context.text(text_, font_uri_, origin_, size_px_, color_, anchor_, coverage_gamma_);
     }
 
 } // namespace termin::visual

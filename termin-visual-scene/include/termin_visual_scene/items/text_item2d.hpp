@@ -1,9 +1,10 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
-#include <tgfx2/draw_list2d.hpp>
 #include <termin/geom/color.hpp>
+#include <tgfx2/draw_list2d.hpp>
 
 #include "termin_visual_scene/native_graphic_item2d.hpp"
 
@@ -18,7 +19,8 @@ namespace termin::visual {
                    float size_px,
                    termin::SrgbColor color,
                    tgfx::TextAnchor2D anchor,
-                   termin::Bounds2f layout_bounds);
+                   termin::Bounds2f layout_bounds,
+                   std::optional<float> coverage_gamma = std::nullopt);
 
         void set_text(std::string text);
         void set_font_uri(std::string font_uri);
@@ -27,6 +29,11 @@ namespace termin::visual {
         void set_color(termin::SrgbColor color);
         void set_anchor(tgfx::TextAnchor2D anchor);
         void set_layout_bounds(termin::Bounds2f bounds);
+        void set_coverage_gamma(std::optional<float> coverage_gamma);
+
+        std::optional<float> coverage_gamma() const noexcept {
+            return coverage_gamma_;
+        }
 
         std::optional<termin::Bounds2f> local_bounds() const;
         bool hit_test(termin::Vec2f point, float tolerance) const;
@@ -40,6 +47,7 @@ namespace termin::visual {
         termin::SrgbColor color_{};
         tgfx::TextAnchor2D anchor_ = tgfx::TextAnchor2D::Left;
         termin::Bounds2f layout_bounds_{};
+        std::optional<float> coverage_gamma_ = std::nullopt;
     };
 
 } // namespace termin::visual

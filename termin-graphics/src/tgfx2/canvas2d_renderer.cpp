@@ -503,6 +503,14 @@ namespace tgfx {
         ctx_ = nullptr;
     }
 
+    void Canvas2DRenderer::set_bitmap_text_coverage_gamma(float gamma) {
+        text2d_.set_bitmap_coverage_gamma(gamma);
+    }
+
+    float Canvas2DRenderer::bitmap_text_coverage_gamma() const {
+        return text2d_.bitmap_coverage_gamma();
+    }
+
     bool Canvas2DRenderer::execute(const DrawList2D& list, DrawResourceResolver2D& resources) {
         if (ctx_ == nullptr) {
             tc::Log::error("[Canvas2DRenderer] execute requires an active Canvas frame");
@@ -718,8 +726,11 @@ namespace tgfx {
                                                       vertex.position.y - static_cast<float>(viewport_y_)},
                                                      vertex.uv});
                         }
-                        text2d_.draw_mesh_linear(
-                            text_vertices, with_opacity(value.color, opacities.back()), value.size_px, font);
+                        text2d_.draw_mesh_linear(text_vertices,
+                                                 with_opacity(value.color, opacities.back()),
+                                                 value.size_px,
+                                                 font,
+                                                 value.coverage_gamma);
                         return true;
                     }
                     return false;
@@ -890,7 +901,8 @@ namespace tgfx {
         draw_polyline(points, arc.color, arc.thickness);
     }
 
-    void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h, CanvasSrgbColor color, float thickness) {
+    void
+    Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h, CanvasSrgbColor color, float thickness) {
         if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f)
             return;
         const float t = std::min(thickness, std::min(w, h));
@@ -988,12 +1000,11 @@ namespace tgfx {
             return;
         const float v0 = flip_v ? 1.0f : 0.0f;
         const float v1 = flip_v ? 0.0f : 1.0f;
-        append_textured_quad_(
-            termin::Rect2f{x, y, w, h}.bounds(),
-            termin::Bounds2f{0.0f, v0, 1.0f, v1},
-            termin::srgb_to_linear(tint),
-            texture,
-            sampling);
+        append_textured_quad_(termin::Rect2f{x, y, w, h}.bounds(),
+                              termin::Bounds2f{0.0f, v0, 1.0f, v1},
+                              termin::srgb_to_linear(tint),
+                              texture,
+                              sampling);
     }
 
     void Canvas2DRenderer::draw_text(std::string_view text,
@@ -1002,7 +1013,8 @@ namespace tgfx {
                                      float size_px,
                                      CanvasSrgbColor color,
                                      FontAtlas* font,
-                                     Text2DRenderer::Anchor anchor) {
+                                     Text2DRenderer::Anchor anchor,
+                                     std::optional<float> coverage_gamma) {
         if (ctx_ == nullptr || text.empty())
             return;
         FontAtlas* active_font = font ? font : default_font_;
@@ -1011,11 +1023,14 @@ namespace tgfx {
 
         flush_();
         text2d_.draw(text,
-                     Text2DRenderer::DrawOptions{x - static_cast<float>(viewport_x_),
-                                                 y - static_cast<float>(viewport_y_),
-                                                 color,
-                                                 size_px,
-                                                 anchor});
+                     Text2DRenderer::DrawOptions{
+                         .x = x - static_cast<float>(viewport_x_),
+                         .y = y - static_cast<float>(viewport_y_),
+                         .color = color,
+                         .size = size_px,
+                         .anchor = anchor,
+                         .coverage_gamma = coverage_gamma,
+                     });
     }
 
     FontAtlas::Size2f Canvas2DRenderer::measure_text(std::string_view text, float size_px, FontAtlas* font) const {
@@ -1160,9 +1175,8 @@ namespace tgfx {
         return true;
     }
 
-    bool Canvas2DRenderer::bind_texture_(termin::LinearColor tint,
-                                         TextureHandle texture,
-                                         CanvasTextureSampling sampling) {
+    bool
+    Canvas2DRenderer::bind_texture_(termin::LinearColor tint, TextureHandle texture, CanvasTextureSampling sampling) {
         if (texture_vs_.id == 0 || texture_fs_.id == 0) {
             tc::Log::error("[Canvas2DRenderer] texture shader is unavailable; skipping batch");
             return false;
@@ -1211,8 +1225,8 @@ namespace tgfx {
         push_quad_(bounds, termin::Bounds2f{0.0f, 0.0f, 1.0f, 1.0f});
     }
 
-    void Canvas2DRenderer::append_solid_triangle_(
-        CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, termin::LinearColor color) {
+    void
+    Canvas2DRenderer::append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, termin::LinearColor color) {
         if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
             flush_();
             batch_mode_ = BatchMode::Solid;

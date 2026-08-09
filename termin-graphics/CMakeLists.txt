@@ -923,6 +923,26 @@ if(BUILD_TGFX2_TESTS)
         termin_add_test_labels(
             tgfx2_draw_list2d_pixel_smoke "termin:capability:vulkan")
 
+        add_executable(tgfx2_text2d_coverage_pixel_smoke
+            tests/test_text2d_coverage_pixel_smoke.cpp)
+        target_compile_definitions(tgfx2_text2d_coverage_pixel_smoke
+            PRIVATE
+                TGFX2_TEST_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+        target_link_libraries(tgfx2_text2d_coverage_pixel_smoke
+            PRIVATE termin_graphics2)
+        if(TARGET termin_shaderc)
+            add_dependencies(tgfx2_text2d_coverage_pixel_smoke termin_shaderc)
+        endif()
+        termin_set_rpath_test(tgfx2_text2d_coverage_pixel_smoke)
+        add_test(NAME tgfx2_text2d_coverage_pixel_smoke
+            COMMAND tgfx2_text2d_coverage_pixel_smoke)
+        set_tests_properties(tgfx2_text2d_coverage_pixel_smoke PROPERTIES
+            TIMEOUT 20
+            SKIP_REGULAR_EXPRESSION
+                "Vulkan backend not compiled|Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
+        termin_add_test_labels(
+            tgfx2_text2d_coverage_pixel_smoke "termin:capability:vulkan")
+
         add_executable(tgfx2_output_transform_pixel_smoke
             tests/test_output_transform_pixel_smoke.cpp)
         target_link_libraries(tgfx2_output_transform_pixel_smoke
