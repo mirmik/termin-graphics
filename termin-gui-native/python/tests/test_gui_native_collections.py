@@ -351,7 +351,6 @@ def test_native_command_model_toolbar_and_status_bar_contracts():
         CommandData(
             "save",
             "Save",
-            icon="S",
             shortcut="Ctrl+S",
             tooltip="Save scene",
         )
@@ -367,6 +366,11 @@ def test_native_command_model_toolbar_and_status_bar_contracts():
     assert len(toolbar.item_rects) == 4
     assert toolbar.item_rects[0].width >= toolbar.item_height
     assert toolbar.item_rects[1].width < toolbar.item_height
+
+    icon_only = CommandData("refresh-icon", icon_id="refresh", tooltip="Refresh")
+    assert icon_only.icon_id == "refresh"
+    with pytest.raises(ValueError, match="icon id is not registered"):
+        model.append(CommandData("unknown-icon", icon_id="missing"))
 
     activations = []
     toolbar.connect_activated(

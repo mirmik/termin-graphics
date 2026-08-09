@@ -262,6 +262,32 @@ void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
     append_draw_command(context, command);
 }
 
+void tc_ui_painter_draw_icon(
+    tc_ui_paint_context* context, const char* icon_id, tc_ui_rect rect, tc_ui_srgb_color tint) {
+    if (!context || !context->draw_list) {
+        tc_log_error("[termin-gui-native] cannot append icon without paint context");
+        return;
+    }
+    if (!icon_id || icon_id[0] == '\0' || !finite_rect(rect) || rect.width <= 0.0f || rect.height <= 0.0f) {
+        tc_log_error("[termin-gui-native] rejected invalid icon command");
+        return;
+    }
+    try {
+        auto owned_id = std::make_unique<std::string>(icon_id);
+        const char* stable_id = owned_id->c_str();
+        context->draw_list->text_storage.push_back(std::move(owned_id));
+
+        tc_ui_draw_command command{};
+        command.type = TC_UI_DRAW_ICON;
+        command.rect = rect;
+        command.color = tint;
+        command.text = stable_id;
+        append_draw_command(context, command);
+    } catch (const std::exception& error) {
+        tc_log_error("[termin-gui-native] failed to own icon id: %s", error.what());
+    }
+}
+
 void tc_ui_painter_draw_text(
     tc_ui_paint_context* context, const char* text, tc_ui_point position, float font_size, tc_ui_srgb_color color) {
     if (!context || !context->draw_list) {

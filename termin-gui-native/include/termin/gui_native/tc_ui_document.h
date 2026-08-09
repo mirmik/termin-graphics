@@ -246,7 +246,10 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_TEXTURE = 12,
     // C++-owned tgfx::DrawList2D command. The opaque pointer is valid for the
     // lifetime of its tc_ui_draw_list and is consumed by UiDrawListRenderer.
-    TC_UI_DRAW_CANVAS2D_LIST = 13
+    TC_UI_DRAW_CANVAS2D_LIST = 13,
+    // Semantic icon command. The draw list owns the icon id in `text` and the
+    // renderer resolves it into a device-local antialiased mask.
+    TC_UI_DRAW_ICON = 14
 } tc_ui_draw_command_type;
 
 typedef enum tc_ui_texture_sampling {
@@ -786,6 +789,8 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_texture(tc_ui_paint_context* conte
                                                       tc_ui_srgb_color tint,
                                                       tc_ui_texture_sampling sampling,
                                                       bool flip_v);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_icon(
+    tc_ui_paint_context* context, const char* icon_id, tc_ui_rect rect, tc_ui_srgb_color tint);
 TERMIN_GUI_NATIVE_API void
 tc_ui_painter_draw_text(tc_ui_paint_context* context,
                         const char* text,

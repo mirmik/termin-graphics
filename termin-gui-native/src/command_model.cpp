@@ -30,9 +30,13 @@ namespace termin::gui_native {
 
     void CommandModel::validate_command(const CommandData& command) {
         if (command.stable_id.empty() || !valid_utf8(command.stable_id) || !valid_utf8(command.label) ||
-            !valid_utf8(command.icon) || !valid_utf8(command.shortcut) || !valid_utf8(command.tooltip)) {
+            !valid_utf8(command.icon_id) || !valid_utf8(command.shortcut) || !valid_utf8(command.tooltip)) {
             tc_log_error("[termin-gui-native] command model rejected invalid command strings");
             throw std::invalid_argument("command id must be non-empty and strings valid UTF-8");
+        }
+        if (!command.icon_id.empty() && !UiIconRegistry::builtin().contains(command.icon_id)) {
+            tc_log_error("[termin-gui-native] command model rejected unknown icon id");
+            throw std::invalid_argument("command icon id is not registered");
         }
         if (command.kind == CommandKind::Separator && (command.checkable || command.checked || command.submenu)) {
             tc_log_error("[termin-gui-native] separator command carries action-only state");

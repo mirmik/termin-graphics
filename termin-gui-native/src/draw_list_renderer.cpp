@@ -1,5 +1,6 @@
 #include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/ui_icon_registry.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -119,6 +120,54 @@ namespace termin::gui_native {
         target.height = source.height;
         target.revision = source.revision;
         return true;
+    }
+
+    void UiDrawListRenderer::destroy_icon_textures() {
+        const bool device_is_live = icon_device_ != nullptr && tgfx2_interop_get_device() == icon_device_;
+        if (device_is_live) {
+            for (const IconTexture& icon : icon_textures_) {
+                if (icon.texture)
+                    icon_device_->destroy(icon.texture);
+            }
+        }
+        icon_textures_.clear();
+        icon_device_ = nullptr;
+    }
+
+    tgfx::TextureHandle UiDrawListRenderer::sync_icon_texture(tgfx::IRenderDevice& device,
+                                                              std::string_view icon_id,
+                                                              uint32_t width,
+                                                              uint32_t height) {
+        if (icon_device_ != &device) {
+            destroy_icon_textures();
+            icon_device_ = &device;
+        }
+        const auto found = std::find_if(icon_textures_.begin(), icon_textures_.end(), [&](const IconTexture& icon) {
+            return icon.icon_id == icon_id && icon.width == width && icon.height == height;
+        });
+        if (found != icon_textures_.end())
+            return found->texture;
+
+        std::vector<uint8_t> rgba = UiIconRegistry::builtin().rasterize(icon_id, width, height);
+        if (rgba.empty()) {
+            tc_log_error("[termin-gui-native] failed to rasterize UI icon '%.*s'",
+                         static_cast<int>(icon_id.size()),
+                         icon_id.data());
+            return {};
+        }
+        tgfx::TextureDesc desc{};
+        desc.width = width;
+        desc.height = height;
+        desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+        desc.usage = tgfx::TextureUsage::Sampled | tgfx::TextureUsage::CopyDst;
+        const tgfx::TextureHandle texture = device.create_texture(desc);
+        if (!texture) {
+            tc_log_error("[termin-gui-native] failed to create UI icon texture");
+            return {};
+        }
+        device.upload_texture(texture, rgba);
+        icon_textures_.push_back(IconTexture{std::string(icon_id), width, height, texture});
+        return texture;
     }
 
     bool UiDrawListRenderer::set_default_font_path(const std::string& path, int default_size_px) {
@@ -351,6 +400,34 @@ namespace termin::gui_native {
                                          texture_sampling(command->texture_sampling));
                     break;
                 }
+                case TC_UI_DRAW_ICON: {
+                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    constexpr float kMaxIconExtent = 256.0f;
+                    const float rounded_width = std::round(rect.width);
+                    const float rounded_height = std::round(rect.height);
+                    if (!std::isfinite(rounded_width) || !std::isfinite(rounded_height) || rounded_width < 1.0f ||
+                        rounded_height < 1.0f || rounded_width > kMaxIconExtent || rounded_height > kMaxIconExtent) {
+                        tc_log_error("[termin-gui-native] skipping invalid physical icon extent %.1fx%.1f",
+                                     rounded_width,
+                                     rounded_height);
+                        break;
+                    }
+                    const uint32_t icon_width = static_cast<uint32_t>(rounded_width);
+                    const uint32_t icon_height = static_cast<uint32_t>(rounded_height);
+                    const tgfx::TextureHandle texture = sync_icon_texture(
+                        context.device(), command->text ? command->text : "", icon_width, icon_height);
+                    if (texture) {
+                        canvas_.draw_texture(texture,
+                                             rect.x,
+                                             rect.y,
+                                             rect.width,
+                                             rect.height,
+                                             canvas_color(command->color),
+                                             false,
+                                             tgfx::CanvasTextureSampling::Linear);
+                    }
+                    break;
+                }
                 case TC_UI_DRAW_PUSH_CLIP: {
                     const tc_ui_rect rect = physical_rect(command->rect, scale);
                     canvas_.begin_clip(rect.x, rect.y, rect.width, rect.height);
@@ -437,6 +514,7 @@ namespace termin::gui_native {
         }
         color_picker_textures_.clear();
         color_picker_device_ = nullptr;
+        destroy_icon_textures();
     }
 
 } // namespace termin::gui_native

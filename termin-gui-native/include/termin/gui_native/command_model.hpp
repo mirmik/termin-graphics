@@ -23,7 +23,7 @@ namespace termin::gui_native {
     struct CommandData {
         std::string stable_id;
         std::string label;
-        std::string icon;
+        std::string icon_id;
         std::string shortcut;
         std::string tooltip;
         CommandKind kind = CommandKind::Action;

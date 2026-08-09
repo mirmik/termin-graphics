@@ -113,10 +113,8 @@ namespace termin::gui_native {
                 continue;
             }
             tc_ui_text_metrics label{};
-            tc_ui_text_metrics icon{};
             measure_text(document, command.data.label, style.font_size, label);
-            measure_text(document, command.data.icon, std::max(18.0f, style.font_size), icon);
-            const bool has_icon = command.data.texture_id != 0 || !command.data.icon.empty();
+            const bool has_icon = command.data.texture_id != 0 || !command.data.icon_id.empty();
             float item_width = command.data.label.empty() ? item_height_ : label.width + padding_ * 2.0f;
             if (has_icon && !command.data.label.empty())
                 item_width += item_height_ * 0.55f + icon_gap_;
@@ -138,7 +136,7 @@ namespace termin::gui_native {
             if (command.data.kind == CommandKind::Action) {
                 tc_ui_text_metrics label{};
                 measure_text(document, command.data.label, style.font_size, label);
-                const bool has_icon = command.data.texture_id != 0 || !command.data.icon.empty();
+                const bool has_icon = command.data.texture_id != 0 || !command.data.icon_id.empty();
                 width = command.data.label.empty() ? item_height_ : label.width + padding_ * 2.0f;
                 if (has_icon && !command.data.label.empty())
                     width += item_height_ * 0.55f + icon_gap_;
@@ -193,7 +191,7 @@ namespace termin::gui_native {
             tc_ui_srgb_color foreground = style.foreground;
             if (!command.enabled)
                 foreground.a *= 0.45f;
-            const bool has_icon = command.texture_id != 0 || !command.icon.empty();
+            const bool has_icon = command.texture_id != 0 || !command.icon_id.empty();
             const float icon_extent = rect.height * 0.55f;
             float text_x = rect.x + padding_;
             if (has_icon) {
@@ -202,16 +200,8 @@ namespace termin::gui_native {
                 if (command.texture_id != 0) {
                     tc_ui_painter_draw_texture(
                         context, command.texture_id, icon_rect, foreground, TC_UI_TEXTURE_SAMPLING_LINEAR, false);
-                } else {
-                    tc_ui_text_metrics metrics{};
-                    const float icon_size = std::max(18.0f, style.font_size);
-                    measure_text(document, command.icon, icon_size, metrics);
-                    tc_ui_painter_draw_text(context,
-                                            command.icon.c_str(),
-                                            tc_ui_point{icon_rect.x + (icon_rect.width - metrics.width) * 0.5f,
-                                                        rect.y + rect.height * 0.68f},
-                                            icon_size,
-                                            foreground);
+                } else if (!command.icon_id.empty()) {
+                    UiIconRegistry::builtin().paint(context, command.icon_id, icon_rect, foreground);
                 }
                 text_x = icon_rect.x + icon_rect.width + icon_gap_;
             }

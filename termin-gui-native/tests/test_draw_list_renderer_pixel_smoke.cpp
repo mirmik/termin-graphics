@@ -150,6 +150,10 @@ namespace {
                                        tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
+            tc_ui_painter_draw_icon(painter,
+                                    "add",
+                                    tc_ui_rect{64.0f, 72.0f, 16.0f, 16.0f},
+                                    tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
             tc_ui_painter_draw_text(
                 painter, "Native", tc_ui_point{72.0f, 30.0f}, 20.0f, tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
             if (picker_image != 0) {
@@ -308,6 +312,8 @@ namespace {
         const bool nearest_left_ok = read_ok && looks_red(pixel_at(pixels, 15, 80));
         const bool nearest_right_ok = read_ok && looks_blue(pixel_at(pixels, 16, 80));
         const bool linear_mid_ok = read_ok && looks_purple(pixel_at(pixels, 39, 80));
+        const bool icon_center_ok = read_ok && pixel_at(pixels, 72, 80)[0] > 0.8f;
+        const bool icon_corner_ok = read_ok && looks_black(pixel_at(pixels, 66, 74));
         const bool ordering_ok = read_ok && looks_red(pixel_at(pixels, 116, 76));
         constexpr float picker_left = 90.0f;
         constexpr float picker_top = 40.0f;
@@ -388,10 +394,11 @@ namespace {
 
         if (painted != std::size(submissions) - 1 || !read_ok || !image_ok || !nested_clip_inside_ok ||
             !authored_gray_ok || !nested_clip_outside_ok || !rounded_center_ok || !rounded_corner_ok || !circle_ok ||
-            !picker_texture_ok || !text_ok || !scaled_geometry_ok) {
+            !picker_texture_ok || !icon_center_ok || !icon_corner_ok || !text_ok || !scaled_geometry_ok) {
             std::fprintf(stderr,
                          "UI renderer %s pixel smoke failed: read=%d image=%d authored_gray=%d clip_in=%d clip_out=%d "
-                         "round_center=%d round_corner=%d circle=%d picker=%d picker_rgb=(%.3f,%.3f,%.3f) "
+                         "round_center=%d round_corner=%d circle=%d picker=%d icon_center=%d icon_corner=%d "
+                         "picker_rgb=(%.3f,%.3f,%.3f) "
                          "text=%d scaled=%d signal=%zu y=[%u,%u]\n",
                          tgfx::backend_name(backend),
                          read_ok,
@@ -403,6 +410,8 @@ namespace {
                          rounded_corner_ok,
                          circle_ok,
                          picker_texture_ok,
+                         icon_center_ok,
+                         icon_corner_ok,
                          picker_pixel[0],
                          picker_pixel[1],
                          picker_pixel[2],

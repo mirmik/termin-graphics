@@ -125,11 +125,11 @@ namespace {
         tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);
         document.paint(paint_context);
 
-        require_equal(tc_ui_draw_list_command_count(draw_list), 229, "showcase total commands");
+        require_equal(tc_ui_draw_list_command_count(draw_list), 228, "showcase total commands");
         require_equal(count_commands(draw_list, TC_UI_DRAW_FILL_RECT), 33, "showcase fill commands");
         require_equal(count_commands(draw_list, TC_UI_DRAW_STROKE_RECT), 14, "showcase stroke commands");
         require_equal(count_commands(draw_list, TC_UI_DRAW_LINE), 11, "showcase line commands");
-        require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 56, "showcase text commands");
+        require_equal(count_commands(draw_list, TC_UI_DRAW_TEXT), 55, "showcase text commands");
         require_equal(count_commands(draw_list, TC_UI_DRAW_PUSH_CLIP), 48, "showcase push clip commands");
         require_equal(count_commands(draw_list, TC_UI_DRAW_POP_CLIP), 48, "showcase pop clip commands");
 

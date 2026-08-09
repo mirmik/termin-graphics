@@ -47,7 +47,7 @@ namespace termin::gui_native {
 
         auto toolbar_model = std::make_shared<CommandModel>();
         toolbar_model->set_commands({
-            CommandData{"save", "Save", "S", "Ctrl+S", "Save scene", CommandKind::Action, true, false, false, 0, {}},
+            CommandData{"save", "Save", {}, "Ctrl+S", "Save scene", CommandKind::Action, true, false, false, 0, {}},
             CommandData{"separator", {}, {}, {}, {}, CommandKind::Separator, true, false, false, 0, {}},
             CommandData{"snap", "Snap", {}, {}, "Toggle snapping", CommandKind::Action, true, true, true, 0, {}},
         });

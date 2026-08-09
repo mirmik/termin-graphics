@@ -1,5 +1,6 @@
 #pragma once
 
+#include <termin/gui_native/ui_icon_registry.hpp>
 #include <termin/gui_native/widgets.hpp>
 
 #include <algorithm>

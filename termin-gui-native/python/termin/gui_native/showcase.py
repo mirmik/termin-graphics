@@ -69,7 +69,7 @@ def build_python_showcase(document: TcDocument) -> PythonShowcase:
     command_model = CommandModel()
     command_model.set_commands(
         [
-            CommandData("save", "Save", icon="S", shortcut="Ctrl+S"),
+            CommandData("save", "Save", shortcut="Ctrl+S"),
             CommandData("separator", kind=CommandKind.Separator),
             CommandData("snap", "Snap", checkable=True, checked=True),
         ]

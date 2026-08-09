@@ -3,7 +3,9 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include <termin/gui_native/tc_ui_document.h>
 
@@ -33,10 +35,18 @@ namespace termin::gui_native {
             ColorPickerSurfaceTexture hue;
             ColorPickerSurfaceTexture alpha;
         };
+        struct IconTexture {
+            std::string icon_id;
+            uint32_t width = 0;
+            uint32_t height = 0;
+            tgfx::TextureHandle texture;
+        };
         std::unique_ptr<tgfx::FontAtlas> owned_font_;
         tgfx::Canvas2DRenderer canvas_;
         std::unordered_map<ColorPicker*, ColorPickerTextures> color_picker_textures_;
         tgfx::IRenderDevice* color_picker_device_ = nullptr;
+        std::vector<IconTexture> icon_textures_;
+        tgfx::IRenderDevice* icon_device_ = nullptr;
         bool missing_font_logged_ = false;
 
     public:
@@ -66,6 +76,11 @@ namespace termin::gui_native {
         static bool sync_picker_surface(tgfx::IRenderDevice& device,
                                         const ColorPickerSurface& source,
                                         ColorPickerSurfaceTexture& target);
+        tgfx::TextureHandle sync_icon_texture(tgfx::IRenderDevice& device,
+                                              std::string_view icon_id,
+                                              uint32_t width,
+                                              uint32_t height);
+        void destroy_icon_textures();
     };
 
 } // namespace termin::gui_native

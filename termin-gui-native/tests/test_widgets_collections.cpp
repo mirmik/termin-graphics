@@ -1,4 +1,5 @@
 #include <termin/gui_native/tc_document.hpp>
+#include <termin/gui_native/ui_icon_registry.hpp>
 
 #include "widgets_test_support.hpp"
 
@@ -859,6 +860,14 @@ namespace termin_gui_native_test {
         }
         assert(rejected_checked);
 
+        bool rejected_unknown_icon = false;
+        try {
+            model.append(CommandData{.stable_id = "unknown-icon", .icon_id = "missing"});
+        } catch (const std::invalid_argument&) {
+            rejected_unknown_icon = true;
+        }
+        assert(rejected_unknown_icon);
+
         model.erase(first);
         assert(!model.contains(first));
         assert(model.index_of(checked) == 1);
@@ -871,7 +880,7 @@ namespace termin_gui_native_test {
         DocumentBuilder ui(document);
         auto model = std::make_shared<CommandModel>();
         const CommandId save = model->append(
-            CommandData{"save", "Save", "S", "Ctrl+S", "Save scene", CommandKind::Action, true, false, false, 0, {}});
+            CommandData{"save", "Save", {}, "Ctrl+S", "Save scene", CommandKind::Action, true, false, false, 0, {}});
         model->append(CommandData{"separator", {}, {}, {}, {}, CommandKind::Separator, true, false, false, 0, {}});
         const CommandId snap = model->append(
             CommandData{"snap", "Snap", {}, {}, "Toggle snap", CommandKind::Action, true, true, false, 0, {}});
@@ -946,6 +955,52 @@ namespace termin_gui_native_test {
         assert(tc_ui_document_destroy_widget(document.get(), handle));
         assert(weak_model.expired());
 
+        tc_ui_document_destroy(document_handle);
+    }
+
+    void test_builtin_ui_icons_and_command_toolbar_paint() {
+        const UiIconRegistry& icons = UiIconRegistry::builtin();
+        assert(icons.contains("add"));
+        assert(icons.contains("collapse-all"));
+        assert(icons.contains("refresh"));
+        assert(!icons.contains("missing"));
+        const std::vector<uint8_t> refresh_mask = icons.rasterize("refresh", 18, 18);
+        assert(refresh_mask.size() == 18 * 18 * 4);
+        bool has_opaque = false;
+        bool has_antialiasing = false;
+        for (size_t alpha = 3; alpha < refresh_mask.size(); alpha += 4) {
+            has_opaque = has_opaque || refresh_mask[alpha] == 255;
+            has_antialiasing = has_antialiasing || (refresh_mask[alpha] > 0 && refresh_mask[alpha] < 255);
+        }
+        assert(has_opaque);
+        assert(has_antialiasing);
+
+        tc_ui_document_handle document_handle = tc_ui_document_create();
+        TcDocument document(document_handle);
+        install_test_text_measurer(document);
+        DocumentBuilder ui(document);
+        auto model = std::make_shared<CommandModel>();
+        model->append(CommandData{.stable_id = "add", .icon_id = "add", .tooltip = "Add"});
+        model->append(CommandData{.stable_id = "collapse", .icon_id = "collapse-all", .tooltip = "Collapse"});
+        model->append(CommandData{.stable_id = "refresh", .icon_id = "refresh", .tooltip = "Refresh"});
+        auto& toolbar = ui.make_root<ToolBar>(model);
+        document.layout_roots(tc_ui_rect{0.0f, 0.0f, 180.0f, 40.0f});
+        assert(toolbar.item_rects().size() == 3);
+        for (const tc_ui_rect rect : toolbar.item_rects())
+            assert(near(rect.width, toolbar.item_height()));
+
+        tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
+        tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
+        document.paint_roots(context);
+        assert(count_commands(draw_list, TC_UI_DRAW_ICON) == 3);
+        assert(count_commands(draw_list, TC_UI_DRAW_LINE) == 0);
+        assert(count_commands(draw_list, TC_UI_DRAW_POLYLINE) == 0);
+        assert(count_commands(draw_list, TC_UI_DRAW_ARC) == 0);
+        assert(count_commands(draw_list, TC_UI_DRAW_TEXT) == 0);
+        assert(count_commands(draw_list, TC_UI_DRAW_TEXTURE) == 0);
+        assert(!icons.paint(context, "missing", tc_ui_rect{0.0f, 0.0f, 16.0f, 16.0f}, tc_ui_srgb_color{}));
+        tc_ui_paint_context_destroy(context);
+        tc_ui_draw_list_destroy(draw_list);
         tc_ui_document_destroy(document_handle);
     }
 

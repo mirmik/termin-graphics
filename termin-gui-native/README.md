@@ -248,8 +248,14 @@ The current foundation includes:
   exposes header-click and activation signals, and resizes columns through
   document pointer capture with the same API in C++ and Python;
 - `CommandModel` is the shared stable-ID source for chrome actions and
-  separators, including enabled/checkable/checked, icon, shortcut, tooltip and
-  nested-model metadata. `ToolBar` renders and activates that model without
+  separators, including enabled/checkable/checked, backend-neutral `icon_id`,
+  shortcut, tooltip and nested-model metadata.
+  `UiIconRegistry::builtin()` records semantic icon commands from immutable
+  24-unit vector recipes. `UiDrawListRenderer` rasterizes their masks at the exact
+  physical size with supersampled coverage and caches the resulting device-local
+  textures, preserving crisp DPI scaling, theme tint and disabled state; `release_gpu()`
+  owns their teardown. Raw `texture_id` remains available for caller-owned dynamic
+  images. `ToolBar` renders and activates that model without
   per-action widgets and uses pointer capture for press/release. `StatusBar`
   exposes deterministic persistent/temporary text; host scheduling explicitly
   decides when to clear temporary messages. `Menu` presents the same model as

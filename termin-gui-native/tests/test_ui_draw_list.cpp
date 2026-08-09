@@ -126,6 +126,7 @@ namespace {
         tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
         tc_ui_paint_context* context = tc_ui_paint_context_create(draw_list);
         char text[] = "owned text";
+        char icon_id[] = "refresh";
         tc_ui_point points[]{
             {1.0f, 2.0f},
             {3.0f, 4.0f},
@@ -147,14 +148,17 @@ namespace {
                                    TC_UI_TEXTURE_SAMPLING_NEAREST,
                                    true);
         tc_ui_painter_draw_text(context, text, tc_ui_point{18.0f, 19.0f}, 14.0f, white);
+        tc_ui_painter_draw_icon(context, icon_id, tc_ui_rect{20.0f, 21.0f, 16.0f, 16.0f}, white);
 
         text[0] = 'X';
+        icon_id[0] = 'X';
         points[1] = tc_ui_point{99.0f, 100.0f};
-        assert(tc_ui_draw_list_command_count(draw_list) == 8);
+        assert(tc_ui_draw_list_command_count(draw_list) == 9);
         const tc_ui_draw_command* rounded = tc_ui_draw_list_command_at(draw_list, 0);
         const tc_ui_draw_command* polyline = tc_ui_draw_list_command_at(draw_list, 5);
         const tc_ui_draw_command* texture = tc_ui_draw_list_command_at(draw_list, 6);
         const tc_ui_draw_command* owned_text = tc_ui_draw_list_command_at(draw_list, 7);
+        const tc_ui_draw_command* owned_icon = tc_ui_draw_list_command_at(draw_list, 8);
         assert(rounded && rounded->type == TC_UI_DRAW_FILL_ROUNDED_RECT);
         assert(rounded->radius == 4.0f);
         assert(polyline && polyline->type == TC_UI_DRAW_POLYLINE);
@@ -165,6 +169,8 @@ namespace {
         assert(texture->texture_sampling == TC_UI_TEXTURE_SAMPLING_NEAREST);
         assert(owned_text && owned_text->type == TC_UI_DRAW_TEXT);
         assert(std::string(owned_text->text) == "owned text");
+        assert(owned_icon && owned_icon->type == TC_UI_DRAW_ICON);
+        assert(std::string(owned_icon->text) == "refresh");
 
         tc_ui_draw_list_clear(draw_list);
         assert(tc_ui_draw_list_command_count(draw_list) == 0);

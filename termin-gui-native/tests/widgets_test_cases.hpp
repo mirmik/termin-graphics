@@ -72,6 +72,7 @@ namespace termin_gui_native_test {
     void test_file_grid_widget_input_scrollbar_signals_and_lifetime();
     void test_command_model_stable_ids_validation_and_mutation();
     void test_tool_bar_layout_activation_capture_and_model_lifetime();
+    void test_builtin_ui_icons_and_command_toolbar_paint();
     void test_status_bar_explicit_message_lifecycle_and_utf8_validation();
     void test_menu_overlay_navigation_submenus_scrolling_and_dismissal();
     void test_menu_bar_adjacent_switching_shortcuts_and_overlay_lifetime();

@@ -149,8 +149,8 @@ def test_python_native_showcase_builds_stable_headless_snapshot():
 
     assert showcase.root.stable_id == "python-showcase.root"
     assert document.live_widget_count == 15
-    assert draw_list.command_count == 117
-    assert sum(command.type == DrawCommandType.Text for command in draw_list.commands) == 31
+    assert draw_list.command_count == 116
+    assert sum(command.type == DrawCommandType.Text for command in draw_list.commands) == 30
     assert sum(command.type == DrawCommandType.PushClip for command in draw_list.commands) == 26
     assert sum(command.type == DrawCommandType.PopClip for command in draw_list.commands) == 26
     assert showcase.widgets["list"].selected_indices == [1]

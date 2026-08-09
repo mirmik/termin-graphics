@@ -10,7 +10,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             [](termin::gui_native::CommandData* self,
                std::string stable_id,
                std::string label,
-               std::string icon,
+               std::string icon_id,
                std::string shortcut,
                std::string tooltip,
                termin::gui_native::CommandKind kind,
@@ -19,21 +19,22 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                bool checked,
                uint32_t texture_id,
                std::shared_ptr<termin::gui_native::CommandModel> submenu) {
-                new (self) termin::gui_native::CommandData{std::move(stable_id),
-                                                           std::move(label),
-                                                           std::move(icon),
-                                                           std::move(shortcut),
-                                                           std::move(tooltip),
-                                                           kind,
-                                                           enabled,
-                                                           checkable,
-                                                           checked,
-                                                           texture_id,
-                                                           std::move(submenu)};
+                new (self) termin::gui_native::CommandData{};
+                self->stable_id = std::move(stable_id);
+                self->label = std::move(label);
+                self->icon_id = std::move(icon_id);
+                self->shortcut = std::move(shortcut);
+                self->tooltip = std::move(tooltip);
+                self->kind = kind;
+                self->enabled = enabled;
+                self->checkable = checkable;
+                self->checked = checked;
+                self->texture_id = texture_id;
+                self->submenu = std::move(submenu);
             },
             nb::arg("stable_id"),
             nb::arg("label") = "",
-            nb::arg("icon") = "",
+            nb::arg("icon_id") = "",
             nb::arg("shortcut") = "",
             nb::arg("tooltip") = "",
             nb::arg("kind") = termin::gui_native::CommandKind::Action,
@@ -44,7 +45,7 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             nb::arg("submenu") = nullptr)
         .def_rw("stable_id", &termin::gui_native::CommandData::stable_id)
         .def_rw("label", &termin::gui_native::CommandData::label)
-        .def_rw("icon", &termin::gui_native::CommandData::icon)
+        .def_rw("icon_id", &termin::gui_native::CommandData::icon_id)
         .def_rw("shortcut", &termin::gui_native::CommandData::shortcut)
         .def_rw("tooltip", &termin::gui_native::CommandData::tooltip)
         .def_rw("kind", &termin::gui_native::CommandData::kind)

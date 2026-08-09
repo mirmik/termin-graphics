@@ -65,6 +65,7 @@ add_library(termin_gui_native SHARED
     src/ui_document_asset.cpp
     src/tc_ui_interaction.c
     src/tc_ui_draw_list.cpp
+    src/ui_icon_registry.cpp
     src/widgets_helpers.cpp
     src/native_widget.cpp
     src/overlay_layout.cpp

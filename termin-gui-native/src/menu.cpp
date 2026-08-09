@@ -106,7 +106,7 @@ namespace termin::gui_native {
             label_width = std::max(label_width, metrics.width);
             measure_text(document, command.data.shortcut, style.font_size * 0.9f, metrics);
             shortcut_width = std::max(shortcut_width, metrics.width);
-            has_icon = has_icon || command.data.texture_id != 0 || !command.data.icon.empty();
+            has_icon = has_icon || command.data.texture_id != 0 || !command.data.icon_id.empty();
             has_check = has_check || command.data.checkable;
             has_submenu = has_submenu || static_cast<bool>(command.data.submenu);
         }
@@ -327,7 +327,7 @@ namespace termin::gui_native {
         bool has_check = false;
         bool has_submenu = false;
         for (const Command& command : model_->commands()) {
-            has_icon = has_icon || command.data.texture_id != 0 || !command.data.icon.empty();
+            has_icon = has_icon || command.data.texture_id != 0 || !command.data.icon_id.empty();
             has_check = has_check || command.data.checkable;
             has_submenu = has_submenu || static_cast<bool>(command.data.submenu);
         }
@@ -375,9 +375,12 @@ namespace termin::gui_native {
                                                foreground,
                                                TC_UI_TEXTURE_SAMPLING_LINEAR,
                                                false);
-                } else if (!data.icon.empty()) {
-                    tc_ui_painter_draw_text(
-                        context, data.icon.c_str(), tc_ui_point{prefix_x, baseline}, style.font_size, foreground);
+                } else if (!data.icon_id.empty()) {
+                    const float extent = item_height_ * 0.55f;
+                    UiIconRegistry::builtin().paint(context,
+                                                    data.icon_id,
+                                                    tc_ui_rect{prefix_x, y + (height - extent) / 2, extent, extent},
+                                                    foreground);
                 }
             }
             tc_ui_painter_draw_text(
