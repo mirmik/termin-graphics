@@ -314,9 +314,12 @@ typedef struct tc_shader_surface_producer {
 } tc_shader_surface_producer;
 
 // One field inside a shader's generated std140 material UBO block.
-// Populated by the shader parser (see termin-app/cpp/termin/render/shader_parser.cpp)
+// Populated by the shader parser (see termin/materials/shader_parser.hpp)
 // and pushed onto the shader via tc_shader_set_material_ubo_layout() so that
 // migrated passes can pack material values into the UBO at draw time.
+// property_type is an explicit descriptor (never inferred from the field name).
+// Canonical float4 descriptors are Vec4, SrgbColor, and LinearColor; all have
+// a 16-byte std140 payload while retaining their semantic distinction.
 typedef struct tc_material_ubo_entry {
     char name[TC_MATERIAL_UBO_NAME_MAX];
     char property_type[TC_MATERIAL_UBO_TYPE_MAX];

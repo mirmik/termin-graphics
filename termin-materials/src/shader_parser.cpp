@@ -159,25 +159,64 @@ namespace termin {
         MaterialProperty::DefaultValue parse_property_value(const std::string& value_str,
                                                             const std::string& property_type) {
             std::string val = trim(value_str);
+            auto parse_double_exact = [](const std::string& token) {
+                const std::string input = trim(token);
+                size_t consumed = 0;
+                const double result = std::stod(input, &consumed);
+                if (consumed != input.size()) {
+                    throw std::runtime_error("Invalid numeric property default: '" + input + "'");
+                }
+                return result;
+            };
+            auto parse_int_exact = [](const std::string& token) {
+                const std::string input = trim(token);
+                size_t consumed = 0;
+                const int result = std::stoi(input, &consumed);
+                if (consumed != input.size()) {
+                    throw std::runtime_error("Invalid integer property default: '" + input + "'");
+                }
+                return result;
+            };
+
+            // Keep the old constructor spelling diagnosable even when it is
+            // supplied for a non-vector declaration (where stod/stoi would
+            // otherwise produce an opaque conversion error).
+            std::smatch legacy_match;
+            const std::regex constructor_shape(R"(^\s*(\w+)\s*\([^()]*\)\s*$)");
+            if (std::regex_match(val, legacy_match, constructor_shape) && legacy_match[1].str() == "Color") {
+                throw std::runtime_error(
+                    "Legacy Color(...) constructor is not supported for property type '" + property_type +
+                    "'; use SrgbColor(...) or LinearColor(...) matching the declared type");
+            }
 
             if (property_type == "Float") {
-                return std::stod(val);
+                return parse_double_exact(val);
             } else if (property_type == "Int") {
-                return std::stoi(val);
+                return parse_int_exact(val);
             } else if (property_type == "Bool") {
                 return parse_bool(val);
             } else if (property_type == "Vec2" || property_type == "Vec3" || property_type == "Vec4" ||
-                       property_type == "Color") {
-                // Parse: Color(1.0, 0.5, 0.0, 1.0) or Vec3(1, 2, 3) or [1.0, 0.5, 0.0, 1.0] or "1.0 0.5 0.0"
+                       property_type == "SrgbColor" || property_type == "LinearColor") {
+                // Parse a typed constructor (for example SrgbColor(1, 0.5, 0, 1))
+                // or an untyped vector literal. Constructors are deliberately
+                // checked against the declared property type below: color
+                // encodings are semantic types, not Vec4 aliases.
                 std::vector<double> values;
 
                 // Try constructor format: Type(...)
-                std::regex ctor_regex(R"(\w+\s*\(\s*([^)]+)\s*\))");
+                std::regex ctor_regex(R"(^\s*(\w+)\s*\(\s*([^()]*)\s*\)\s*$)");
                 std::smatch match;
                 std::string inner;
 
-                if (std::regex_search(val, match, ctor_regex)) {
-                    inner = match[1].str();
+                const bool has_constructor = std::regex_match(val, match, ctor_regex);
+                if (has_constructor) {
+                    const std::string constructor_type = match[1].str();
+                    if (constructor_type != property_type) {
+                        throw std::runtime_error("Default constructor '" + constructor_type +
+                                                 "(...)' does not match property type '" + property_type +
+                                                 "'; use " + property_type + "(...)");
+                    }
+                    inner = match[2].str();
                 } else {
                     inner = val;
                 }
@@ -187,7 +226,7 @@ namespace termin {
                 for (char c : inner) {
                     if (c == ',' || c == ' ' || c == '\t' || c == '[' || c == ']') {
                         if (!num.empty()) {
-                            values.push_back(std::stod(trim(num)));
+                            values.push_back(parse_double_exact(num));
                             num.clear();
                         }
                     } else {
@@ -195,7 +234,7 @@ namespace termin {
                     }
                 }
                 if (!num.empty()) {
-                    values.push_back(std::stod(trim(num)));
+                    values.push_back(parse_double_exact(num));
                 }
 
                 // Ensure correct size
@@ -205,10 +244,12 @@ namespace termin {
                 else if (property_type == "Vec3")
                     expected = 3;
                 else
-                    expected = 4; // Vec4 or Color
+                    expected = 4; // Vec4, SrgbColor, or LinearColor
 
-                while (values.size() < expected) {
-                    values.push_back(property_type == "Color" ? 1.0 : 0.0);
+                if (values.size() != expected) {
+                    throw std::runtime_error("Default for property type '" + property_type + "' requires exactly " +
+                                             std::to_string(expected) + " components; got " +
+                                             std::to_string(values.size()));
                 }
 
                 return values;
@@ -239,7 +280,7 @@ namespace termin {
                 return std::vector<double>{0.0, 0.0, 0.0};
             if (type == "Vec4")
                 return std::vector<double>{0.0, 0.0, 0.0, 0.0};
-            if (type == "Color")
+            if (type == "SrgbColor" || type == "LinearColor")
                 return std::vector<double>{1.0, 1.0, 1.0, 1.0};
             if (type == "Mat4") {
                 // 4x4 identity, column-major like Mat44f storage.
@@ -296,7 +337,7 @@ namespace termin {
             return {12u, 16u};
         }
         // Four-component vectors.
-        if (property_type == "Vec4" || property_type == "Color") {
+        if (property_type == "Vec4" || property_type == "SrgbColor" || property_type == "LinearColor") {
             return {16u, 16u};
         }
         // 4x4 matrix — four column vec4s, base alignment 16.
@@ -358,7 +399,7 @@ namespace termin {
                 return "float3";
             if (prop_type == "Vec4")
                 return "float4";
-            if (prop_type == "Color")
+            if (prop_type == "SrgbColor" || prop_type == "LinearColor")
                 return "float4";
             if (prop_type == "Mat4")
                 return "column_major float4x4";
@@ -790,7 +831,7 @@ ConstantBuffer<DrawData> draw_data;
         }
 
         // Write up to `count` floats from a vector<double> source. Missing elements
-        // default to 0.0. Used for Vec2/Vec3/Vec4/Color.
+        // default to 0.0. Used for Vec2/Vec3/Vec4/SrgbColor/LinearColor.
         inline void write_float_array(uint8_t* dst, const std::vector<double>& src, size_t count) {
             for (size_t i = 0; i < count; ++i) {
                 float v = i < src.size() ? static_cast<float>(src[i]) : 0.0f;
@@ -835,7 +876,7 @@ ConstantBuffer<DrawData> draw_data;
                 return false;
             }
             if (property_type == "Vec2" || property_type == "Vec3" || property_type == "Vec4" ||
-                property_type == "Color") {
+                property_type == "SrgbColor" || property_type == "LinearColor") {
                 auto* arr = std::get_if<std::vector<double>>(&value);
                 if (!arr)
                     return false;
@@ -845,7 +886,7 @@ ConstantBuffer<DrawData> draw_data;
                     count = 2;
                 else if (property_type == "Vec3")
                     count = 3;
-                // Vec4 / Color → 4.
+                // Vec4 / SrgbColor / LinearColor → 4.
                 write_float_array(dst, *arr, count);
                 return true;
             }
@@ -871,16 +912,13 @@ ConstantBuffer<DrawData> draw_data;
         // Two property_type strings are "compatible" for std140 packing if they
         // pack to the same std140 slot layout. This is needed because the
         // runtime value side (tc_uniform_value → MaterialProperty) doesn't know
-        // whether the original declaration was `Color` or `Vec4` — both round-
-        // trip through a vec4 of floats. Similarly, Float/Int can be written
+        // whether the original declaration was a color or Vec4 — values retain
+        // their semantic type even though they occupy a vec4 slot. Similarly, Float/Int can be written
         // through the same 4-byte slot. Bool fields also accept Int values because
         // editor/runtime material APIs commonly expose bool toggles through integer
         // setters; they are normalized to 0/1 by pack_one().
         bool property_types_compatible(const std::string& a, const std::string& b) {
             if (a == b)
-                return true;
-            // Color and Vec4 are the same std140 payload.
-            if ((a == "Color" && b == "Vec4") || (a == "Vec4" && b == "Color"))
                 return true;
             // Scalar std140 slots are 4 bytes. Reflected layouts may only know
             // the slot size; allow the packer to coerce numeric scalar values.
@@ -917,8 +955,7 @@ ConstantBuffer<DrawData> draw_data;
                 continue;
 
             // Always dispatch on the layout's declared type — pack_one reads
-            // the layout type to know how many floats to write, and Color
-            // packs as a 4-float Vec4.
+            // the layout type to know how many floats to write.
             pack_one(entry.property_type, match->default_value, out_buffer + entry.offset);
         }
     }
@@ -995,8 +1032,12 @@ ConstantBuffer<DrawData> draw_data;
         if (property_type == "Texture2D") {
             property_type = "Texture";
         }
+        if (property_type == "Color") {
+            throw std::runtime_error(
+                "Legacy property type 'Color' is no longer supported; use SrgbColor or LinearColor explicitly");
+        }
         static const std::vector<std::string> valid_types = {
-            "Float", "Int", "Bool", "Vec2", "Vec3", "Vec4", "Color", "Mat4", "Texture"};
+            "Float", "Int", "Bool", "Vec2", "Vec3", "Vec4", "SrgbColor", "LinearColor", "Mat4", "Texture"};
         bool type_valid = std::find(valid_types.begin(), valid_types.end(), property_type) != valid_types.end();
         if (!type_valid) {
             throw std::runtime_error("Unknown property type: " + property_type);

@@ -88,6 +88,48 @@ static bool tc_shader_upsert_resource_binding(tc_shader* shader, const tc_shader
     return true;
 }
 
+static bool tc_shader_material_ubo_entry_valid(const tc_material_ubo_entry* entry) {
+    if (!entry || entry->name[0] == '\0' || entry->property_type[0] == '\0' ||
+        !memchr(entry->name, '\0', sizeof(entry->name)) ||
+        !memchr(entry->property_type, '\0', sizeof(entry->property_type))) {
+        tc_log(TC_LOG_ERROR, "tc_shader_set_material_ubo_layout: entry requires name and property type");
+        return false;
+    }
+
+    uint32_t expected_size = 0;
+    if (strcmp(entry->property_type, "Float") == 0 || strcmp(entry->property_type, "Int") == 0 ||
+        strcmp(entry->property_type, "Bool") == 0) {
+        expected_size = 4;
+    } else if (strcmp(entry->property_type, "Vec2") == 0) {
+        expected_size = 8;
+    } else if (strcmp(entry->property_type, "Vec3") == 0) {
+        expected_size = 12;
+    } else if (strcmp(entry->property_type, "Vec4") == 0 ||
+               strcmp(entry->property_type, "SrgbColor") == 0 ||
+               strcmp(entry->property_type, "LinearColor") == 0) {
+        expected_size = 16;
+    } else if (strcmp(entry->property_type, "Mat4") == 0) {
+        expected_size = 64;
+    } else {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_material_ubo_layout: unsupported property type '%s' for '%s'",
+               entry->property_type,
+               entry->name);
+        return false;
+    }
+
+    if (entry->size != expected_size) {
+        tc_log(TC_LOG_ERROR,
+               "tc_shader_set_material_ubo_layout: property '%s' type '%s' has size %u, expected %u",
+               entry->name,
+               entry->property_type,
+               entry->size,
+               expected_size);
+        return false;
+    }
+    return true;
+}
+
 void tc_shader_set_material_ubo_layout(tc_shader* shader,
                                        const tc_material_ubo_entry* entries,
                                        uint32_t count,
@@ -97,16 +139,24 @@ void tc_shader_set_material_ubo_layout(tc_shader* shader,
         return;
     }
 
-    // Release any previous layout.
-    if (shader->material_ubo_entries) {
-        free(shader->material_ubo_entries);
-        shader->material_ubo_entries = NULL;
-    }
-    shader->material_ubo_entry_count = 0;
-    shader->material_ubo_block_size = 0;
-
     if (count == 0 || !entries) {
+        // An empty descriptor explicitly clears the current layout.
+        if (shader->material_ubo_entries) {
+            free(shader->material_ubo_entries);
+            shader->material_ubo_entries = NULL;
+        }
+        shader->material_ubo_entry_count = 0;
+        shader->material_ubo_block_size = 0;
         return;
+    }
+
+    // Validate before replacing the current layout. A malformed descriptor is
+    // rejected atomically, leaving the last valid reflection available.
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!tc_shader_material_ubo_entry_valid(&entries[i])) {
+            tc_log(TC_LOG_ERROR, "tc_shader_set_material_ubo_layout: rejecting invalid entry %u", i);
+            return;
+        }
     }
 
     size_t bytes = (size_t)count * sizeof(tc_material_ubo_entry);
@@ -117,6 +167,10 @@ void tc_shader_set_material_ubo_layout(tc_shader* shader,
     }
     memcpy(copy, entries, bytes);
 
+    // Allocate first so replacement is atomic even under allocation failure.
+    if (shader->material_ubo_entries) {
+        free(shader->material_ubo_entries);
+    }
     shader->material_ubo_entries = copy;
     shader->material_ubo_entry_count = count;
     shader->material_ubo_block_size = block_size;

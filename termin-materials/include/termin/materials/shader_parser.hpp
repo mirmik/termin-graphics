@@ -18,7 +18,7 @@ namespace termin {
     /**
      * Material property for inspector.
      *
-     * Types: Float, Int, Bool, Vec2, Vec3, Vec4, Color, Texture
+     * Types: Float, Int, Bool, Vec2, Vec3, Vec4, SrgbColor, LinearColor, Texture
      */
     struct MaterialProperty {
         std::string name;
@@ -29,7 +29,7 @@ namespace termin {
                                           bool,                // Bool
                                           int,                 // Int
                                           double,              // Float
-                                          std::vector<double>, // Vec2, Vec3, Vec4, Color
+                                          std::vector<double>, // Vec2, Vec3, Vec4, SrgbColor, LinearColor
                                           std::string          // Texture path
                                           >;
         DefaultValue default_value;
@@ -314,7 +314,7 @@ namespace termin {
      *   Float / Int / Bool  : size=4,  align=4
      *   Vec2                : size=8,  align=8
      *   Vec3                : size=12, align=16
-     *   Vec4 / Color        : size=16, align=16
+     *   Vec4 / SrgbColor / LinearColor : size=16, align=16
      */
     TERMIN_MATERIALS_API std::pair<uint32_t, uint32_t> std140_size_align(const std::string& property_type);
 

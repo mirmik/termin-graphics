@@ -216,12 +216,70 @@ def test_parse_property_directive_float_with_range():
     assert prop.range_max == 1.0
 
 
-def test_parse_property_directive_color():
-    """Тест парсинга @property директивы для Color."""
-    prop = parse_property_directive("@property Color u_color = Color(1.0, 0.5, 0.0, 1.0)")
+def test_parse_property_directive_srgb_color():
+    """SrgbColor keeps its explicit semantic type and constructor."""
+    prop = parse_property_directive("@property SrgbColor u_color = SrgbColor(1.0, 0.5, 0.0, 1.0)")
     assert prop.name == "u_color"
-    assert prop.property_type == "Color"
+    assert prop.property_type == "SrgbColor"
     assert prop.default == (1.0, 0.5, 0.0, 1.0)
+
+
+def test_parse_property_directive_linear_color_defaults_to_white():
+    prop = parse_property_directive("@property LinearColor u_color")
+    assert prop.property_type == "LinearColor"
+    assert prop.default == (1.0, 1.0, 1.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "@property Color u_color = Color(1, 1, 1, 1)",
+        "@property SrgbColor u_color = Color(1, 1, 1, 1)",
+        "@property LinearColor u_color = SrgbColor(1, 1, 1, 1)",
+    ],
+)
+def test_parse_property_directive_rejects_legacy_or_mismatched_color_constructor(directive):
+    with pytest.raises(RuntimeError, match="SrgbColor|LinearColor"):
+        parse_property_directive(directive)
+
+
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "@property Float u_value = Color(1, 1, 1, 1)",
+        "@property Vec4 u_value = Color(1, 1, 1, 1)",
+    ],
+)
+def test_legacy_color_constructor_is_actionable_for_any_declared_type(directive):
+    with pytest.raises(RuntimeError, match="SrgbColor.*LinearColor"):
+        parse_property_directive(directive)
+
+
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "@property Vec3 u_value = Vec3(1, 2)",
+        "@property LinearColor u_value = LinearColor(1, 2, 3)",
+        "@property SrgbColor u_value = SrgbColor(1, 2, 3, 4, 5)",
+        "@property Vec2 u_value = [1, 2, 3]",
+    ],
+)
+def test_parse_property_directive_rejects_wrong_component_count(directive):
+    with pytest.raises(RuntimeError, match="exactly"):
+        parse_property_directive(directive)
+
+
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "@property Float u_value = 1.0junk",
+        "@property Int u_value = 2.5",
+        "@property SrgbColor u_value = SrgbColor(1, 0.5junk, 0, 1)",
+    ],
+)
+def test_parse_property_directive_rejects_partial_numeric_defaults(directive):
+    with pytest.raises(RuntimeError, match="Invalid"):
+        parse_property_directive(directive)
 
 
 def test_parse_property_directive_vec3():
@@ -482,7 +540,7 @@ def test_parse_property_in_phase():
         "@language slang",
         "@phase main",
         "@property Float u_roughness = 0.5",
-        "@property Color u_color = Color(1.0, 0.0, 0.0, 1.0)",
+        "@property SrgbColor u_color = SrgbColor(1.0, 0.0, 0.0, 1.0)",
         "@property Float u_metallic = 0.0 range(0.0, 1.0)",
         "@stage vertex",
         "void main() {}",
@@ -503,7 +561,7 @@ def test_parse_property_in_phase():
 
     u_color = parsed.material_properties[1]
     assert u_color.name == "u_color"
-    assert u_color.property_type == "Color"
+    assert u_color.property_type == "SrgbColor"
     assert u_color.default == (1.0, 0.0, 0.0, 1.0)
 
     u_metallic = parsed.material_properties[2]
@@ -572,7 +630,7 @@ def test_slang_shader_synthesizes_material_params_for_scalar_properties():
     shader_text = "\n".join([
         "@program SlangWithProps",
         "@language slang",
-        "@property Color u_color = Color(1, 1, 1, 1)",
+        "@property SrgbColor u_color = SrgbColor(1, 1, 1, 1)",
         "@phase opaque",
         "@stage vertex",
         "struct VertexOutput { float4 position : SV_Position; };",
@@ -614,7 +672,7 @@ def test_slang_material_layout_sets_shader_contract_before_sidecar_reflection():
     shader_text = "\n".join([
         "@program SlangWithRuntimeLayout",
         "@language slang",
-        "@property Color tint = Color(1, 1, 1, 1)",
+        "@property SrgbColor tint = SrgbColor(1, 1, 1, 1)",
         "@phase opaque",
         "@stage vertex",
         "struct VertexInput {",
@@ -667,7 +725,7 @@ def test_slang_material_layout_sets_shader_contract_before_sidecar_reflection():
     assert material_requirement["scope_name"] == "material"
     assert material_requirement["size"] == 16
     assert material_requirement["fields"] == [
-        {"name": "tint", "type": "Color", "offset": 0, "size": 16}
+        {"name": "tint", "type": "SrgbColor", "offset": 0, "size": 16}
     ]
 
     shader.set_resource_layout([])
@@ -692,7 +750,7 @@ def test_parse_shader_text_rejects_explicit_glsl_shader():
     shader_text = "\n".join([
         "@program GlslWithRuntimeLayout",
         "@language glsl",
-        "@property Color tint = Color(1, 1, 1, 1)",
+        "@property SrgbColor tint = SrgbColor(1, 1, 1, 1)",
         "@phase opaque",
         "@stage vertex",
         "#version 450",
