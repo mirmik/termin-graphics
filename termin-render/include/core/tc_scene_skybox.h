@@ -23,7 +23,10 @@ typedef struct tc_scene_skybox {
     int type;                    // tc_skybox_type
     tc_srgb_color color;         // Solid authored sRGB color
     tc_srgb_color top_color;     // Gradient authored sRGB color
+    tc_srgb_color horizon_color; // Gradient authored sRGB color at the horizon
     tc_srgb_color bottom_color;  // Gradient authored sRGB color
+    float top_exponent;          // Horizon-to-zenith curve, positive
+    float bottom_exponent;       // Horizon-to-nadir curve, positive
     tc_mesh_handle mesh;         // Skybox cube mesh (refcounted via handle)
     tc_material_handle material; // Optional external skybox material handle
 } tc_scene_skybox;

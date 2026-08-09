@@ -117,11 +117,18 @@ void tc_scene_skybox_init(tc_scene_skybox* skybox) {
     skybox->top_color.g = 0.6f;
     skybox->top_color.b = 0.9f;
     skybox->top_color.a = 1.0f;
+    // Authored midpoint between the default top and bottom colors.
+    skybox->horizon_color.r = 0.5f;
+    skybox->horizon_color.g = 0.55f;
+    skybox->horizon_color.b = 0.65f;
+    skybox->horizon_color.a = 1.0f;
     // Gradient bottom: warm horizon
     skybox->bottom_color.r = 0.6f;
     skybox->bottom_color.g = 0.5f;
     skybox->bottom_color.b = 0.4f;
     skybox->bottom_color.a = 1.0f;
+    skybox->top_exponent = 1.0f;
+    skybox->bottom_exponent = 1.0f;
     skybox->mesh = tc_mesh_handle_invalid();
     skybox->material = tc_material_handle_invalid();
 }

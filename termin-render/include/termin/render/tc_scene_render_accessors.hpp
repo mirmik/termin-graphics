@@ -16,8 +16,17 @@ namespace termin {
     RENDER_API SrgbColor scene_skybox_top_srgb_color(const TcSceneRef& scene);
     RENDER_API void scene_set_skybox_top_srgb_color(const TcSceneRef& scene, SrgbColor color);
 
+    RENDER_API SrgbColor scene_skybox_horizon_srgb_color(const TcSceneRef& scene);
+    RENDER_API void scene_set_skybox_horizon_srgb_color(const TcSceneRef& scene, SrgbColor color);
+
     RENDER_API SrgbColor scene_skybox_bottom_srgb_color(const TcSceneRef& scene);
     RENDER_API void scene_set_skybox_bottom_srgb_color(const TcSceneRef& scene, SrgbColor color);
+
+    RENDER_API float scene_skybox_top_exponent(const TcSceneRef& scene);
+    RENDER_API void scene_set_skybox_top_exponent(const TcSceneRef& scene, float exponent);
+
+    RENDER_API float scene_skybox_bottom_exponent(const TcSceneRef& scene);
+    RENDER_API void scene_set_skybox_bottom_exponent(const TcSceneRef& scene, float exponent);
 
     RENDER_API SrgbColor scene_ambient_srgb_color(const TcSceneRef& scene);
     RENDER_API void scene_set_ambient_srgb_color(const TcSceneRef& scene, SrgbColor color);

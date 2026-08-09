@@ -39,8 +39,14 @@ TC_API void tc_scene_set_skybox_srgb_color(tc_scene_handle h, tc_srgb_color colo
 TC_API void tc_scene_get_skybox_srgb_color(tc_scene_handle h, tc_srgb_color* out_color);
 TC_API void tc_scene_set_skybox_top_srgb_color(tc_scene_handle h, tc_srgb_color color);
 TC_API void tc_scene_get_skybox_top_srgb_color(tc_scene_handle h, tc_srgb_color* out_color);
+TC_API void tc_scene_set_skybox_horizon_srgb_color(tc_scene_handle h, tc_srgb_color color);
+TC_API void tc_scene_get_skybox_horizon_srgb_color(tc_scene_handle h, tc_srgb_color* out_color);
 TC_API void tc_scene_set_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color color);
 TC_API void tc_scene_get_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color* out_color);
+TC_API void tc_scene_set_skybox_top_exponent(tc_scene_handle h, float exponent);
+TC_API float tc_scene_get_skybox_top_exponent(tc_scene_handle h);
+TC_API void tc_scene_set_skybox_bottom_exponent(tc_scene_handle h, float exponent);
+TC_API float tc_scene_get_skybox_bottom_exponent(tc_scene_handle h);
 TC_API void tc_scene_set_skybox_mesh(tc_scene_handle h, struct tc_mesh* mesh);
 TC_API struct tc_mesh* tc_scene_get_skybox_mesh(tc_scene_handle h);
 TC_API void tc_scene_set_skybox_material(tc_scene_handle h, struct tc_material* material);

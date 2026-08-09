@@ -3,7 +3,9 @@
 #include "core/tc_scene.h"
 #include "core/tc_scene_extension.h"
 #include "tc_value.h"
+#include <math.h>
 #include <stdlib.h>
+#include <tcbase/tc_log.h>
 #include <tgfx/resources/tc_material.h>
 #include <tgfx/resources/tc_material_registry.h>
 #include <tgfx/resources/tc_mesh.h>
@@ -48,6 +50,10 @@ static bool value_to_float(const tc_value* v, float* out) {
     default:
         return false;
     }
+}
+
+static bool skybox_exponent_valid(float exponent) {
+    return isfinite(exponent) && exponent > 0.0f;
 }
 
 static tc_value make_color3(float r, float g, float b) {
@@ -174,10 +180,17 @@ static bool render_state_serialize(void* ext, tc_value* out_data, void* type_use
     tc_value_dict_set(&skybox,
                       "top_color",
                       make_color3(state->skybox.top_color.r, state->skybox.top_color.g, state->skybox.top_color.b));
+    tc_value_dict_set(&skybox,
+                      "horizon_color",
+                      make_color3(state->skybox.horizon_color.r,
+                                  state->skybox.horizon_color.g,
+                                  state->skybox.horizon_color.b));
     tc_value_dict_set(
         &skybox,
         "bottom_color",
         make_color3(state->skybox.bottom_color.r, state->skybox.bottom_color.g, state->skybox.bottom_color.b));
+    tc_value_dict_set(&skybox, "top_exponent", tc_value_double((double)state->skybox.top_exponent));
+    tc_value_dict_set(&skybox, "bottom_exponent", tc_value_double((double)state->skybox.bottom_exponent));
     tc_value_dict_set(out_data, "skybox", skybox);
 
     return true;
@@ -263,6 +276,35 @@ static bool render_state_deserialize(void* ext, const tc_value* in_data, void* t
                 state->skybox.bottom_color.r = values[0]; state->skybox.bottom_color.g = values[1];
                 state->skybox.bottom_color.b = values[2]; state->skybox.bottom_color.a = 1.0f;
             }
+        }
+        tc_value* horizon_color = tc_value_dict_get(skybox, "horizon_color");
+        if (horizon_color) {
+            float values[3];
+            if (read_color3(horizon_color, values)) {
+                state->skybox.horizon_color.r = values[0]; state->skybox.horizon_color.g = values[1];
+                state->skybox.horizon_color.b = values[2]; state->skybox.horizon_color.a = 1.0f;
+            }
+        } else {
+            // Legacy two-color skyboxes had no authored horizon. Migrate them
+            // to the perceptual midpoint of their authored sRGB endpoints.
+            state->skybox.horizon_color.r = (state->skybox.top_color.r + state->skybox.bottom_color.r) * 0.5f;
+            state->skybox.horizon_color.g = (state->skybox.top_color.g + state->skybox.bottom_color.g) * 0.5f;
+            state->skybox.horizon_color.b = (state->skybox.top_color.b + state->skybox.bottom_color.b) * 0.5f;
+            state->skybox.horizon_color.a = 1.0f;
+        }
+        tc_value* top_exponent = tc_value_dict_get(skybox, "top_exponent");
+        float exponent = 1.0f;
+        if (top_exponent && value_to_float(top_exponent, &exponent) && skybox_exponent_valid(exponent)) {
+            state->skybox.top_exponent = exponent;
+        } else if (top_exponent) {
+            tc_log(TC_LOG_ERROR, "render_state_deserialize: skybox.top_exponent must be finite and positive");
+        }
+        tc_value* bottom_exponent = tc_value_dict_get(skybox, "bottom_exponent");
+        exponent = 1.0f;
+        if (bottom_exponent && value_to_float(bottom_exponent, &exponent) && skybox_exponent_valid(exponent)) {
+            state->skybox.bottom_exponent = exponent;
+        } else if (bottom_exponent) {
+            tc_log(TC_LOG_ERROR, "render_state_deserialize: skybox.bottom_exponent must be finite and positive");
         }
     }
 
@@ -383,6 +425,22 @@ void tc_scene_get_skybox_top_srgb_color(tc_scene_handle h, tc_srgb_color* out_co
         *out_color = state->skybox.top_color;
 }
 
+void tc_scene_set_skybox_horizon_srgb_color(tc_scene_handle h, tc_srgb_color color) {
+    if (!tc_scene_alive(h) || !tc_scene_render_state_ensure(h))
+        return;
+    tc_scene_render_state* state = tc_scene_render_state_get(h);
+    if (state)
+        state->skybox.horizon_color = color;
+}
+
+void tc_scene_get_skybox_horizon_srgb_color(tc_scene_handle h, tc_srgb_color* out_color) {
+    if (!tc_scene_alive(h) || !out_color)
+        return;
+    tc_scene_render_state* state = tc_scene_render_state_get(h);
+    if (state)
+        *out_color = state->skybox.horizon_color;
+}
+
 void tc_scene_set_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color color) {
     if (!tc_scene_alive(h))
         return;
@@ -402,6 +460,40 @@ void tc_scene_get_skybox_bottom_srgb_color(tc_scene_handle h, tc_srgb_color* out
         return;
     if (out_color)
         *out_color = state->skybox.bottom_color;
+}
+
+void tc_scene_set_skybox_top_exponent(tc_scene_handle h, float exponent) {
+    if (!skybox_exponent_valid(exponent)) {
+        tc_log(TC_LOG_ERROR, "tc_scene_set_skybox_top_exponent: exponent must be finite and positive");
+        return;
+    }
+    if (!tc_scene_alive(h) || !tc_scene_render_state_ensure(h))
+        return;
+    tc_scene_render_state* state = tc_scene_render_state_get(h);
+    if (state)
+        state->skybox.top_exponent = exponent;
+}
+
+float tc_scene_get_skybox_top_exponent(tc_scene_handle h) {
+    tc_scene_render_state* state = tc_scene_alive(h) ? tc_scene_render_state_get(h) : NULL;
+    return state ? state->skybox.top_exponent : 1.0f;
+}
+
+void tc_scene_set_skybox_bottom_exponent(tc_scene_handle h, float exponent) {
+    if (!skybox_exponent_valid(exponent)) {
+        tc_log(TC_LOG_ERROR, "tc_scene_set_skybox_bottom_exponent: exponent must be finite and positive");
+        return;
+    }
+    if (!tc_scene_alive(h) || !tc_scene_render_state_ensure(h))
+        return;
+    tc_scene_render_state* state = tc_scene_render_state_get(h);
+    if (state)
+        state->skybox.bottom_exponent = exponent;
+}
+
+float tc_scene_get_skybox_bottom_exponent(tc_scene_handle h) {
+    tc_scene_render_state* state = tc_scene_alive(h) ? tc_scene_render_state_get(h) : NULL;
+    return state ? state->skybox.bottom_exponent : 1.0f;
 }
 
 void tc_scene_set_skybox_mesh(tc_scene_handle h, tc_mesh* mesh) {

@@ -62,6 +62,20 @@ namespace termin {
         state->skybox.top_color = tc_srgb_color{color.r, color.g, color.b, 1.0f};
     }
 
+    SrgbColor scene_skybox_horizon_srgb_color(const TcSceneRef& scene) {
+        if (tc_scene_render_state* state = tc_scene_render_state_get(scene.handle()))
+            return {state->skybox.horizon_color.r,
+                    state->skybox.horizon_color.g,
+                    state->skybox.horizon_color.b,
+                    1.0f};
+        return {0.5f, 0.55f, 0.65f, 1.0f};
+    }
+
+    void scene_set_skybox_horizon_srgb_color(const TcSceneRef& scene, SrgbColor color) {
+        tc_scene_set_skybox_horizon_srgb_color(
+            scene.handle(), tc_srgb_color{color.r, color.g, color.b, 1.0f});
+    }
+
     SrgbColor scene_skybox_bottom_srgb_color(const TcSceneRef& scene) {
         if (tc_scene_render_state* state = tc_scene_render_state_get(scene.handle()))
             return {state->skybox.bottom_color.r, state->skybox.bottom_color.g, state->skybox.bottom_color.b, 1.0f};
@@ -77,6 +91,22 @@ namespace termin {
             return;
 
         state->skybox.bottom_color = tc_srgb_color{color.r, color.g, color.b, 1.0f};
+    }
+
+    float scene_skybox_top_exponent(const TcSceneRef& scene) {
+        return tc_scene_get_skybox_top_exponent(scene.handle());
+    }
+
+    void scene_set_skybox_top_exponent(const TcSceneRef& scene, float exponent) {
+        tc_scene_set_skybox_top_exponent(scene.handle(), exponent);
+    }
+
+    float scene_skybox_bottom_exponent(const TcSceneRef& scene) {
+        return tc_scene_get_skybox_bottom_exponent(scene.handle());
+    }
+
+    void scene_set_skybox_bottom_exponent(const TcSceneRef& scene, float exponent) {
+        tc_scene_set_skybox_bottom_exponent(scene.handle(), exponent);
     }
 
     SrgbColor scene_ambient_srgb_color(const TcSceneRef& scene) {
@@ -237,7 +267,9 @@ namespace termin {
             bool has_legacy_render_state = data.contains("background_color") || data.contains("ambient_color") ||
                                            data.contains("ambient_intensity") || data.contains("shadow_settings") ||
                                            data.contains("skybox_type") || data.contains("skybox_color") ||
-                                           data.contains("skybox_top_color") || data.contains("skybox_bottom_color");
+                                           data.contains("skybox_top_color") || data.contains("skybox_horizon_color") ||
+                                           data.contains("skybox_bottom_color") || data.contains("skybox_top_exponent") ||
+                                           data.contains("skybox_bottom_exponent");
 
             if (has_legacy_render_state) {
                 nos::trent render_state;
@@ -284,8 +316,20 @@ namespace termin {
                     skybox["top_color"] = data["skybox_top_color"];
                     has_skybox = true;
                 }
+                if (data.contains("skybox_horizon_color")) {
+                    skybox["horizon_color"] = data["skybox_horizon_color"];
+                    has_skybox = true;
+                }
                 if (data.contains("skybox_bottom_color")) {
                     skybox["bottom_color"] = data["skybox_bottom_color"];
+                    has_skybox = true;
+                }
+                if (data.contains("skybox_top_exponent")) {
+                    skybox["top_exponent"] = data["skybox_top_exponent"];
+                    has_skybox = true;
+                }
+                if (data.contains("skybox_bottom_exponent")) {
+                    skybox["bottom_exponent"] = data["skybox_bottom_exponent"];
                     has_skybox = true;
                 }
                 if (has_skybox) {

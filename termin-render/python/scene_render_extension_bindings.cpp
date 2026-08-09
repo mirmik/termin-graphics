@@ -198,12 +198,32 @@ namespace termin {
                     scene_set_skybox_top_srgb_color(TcSceneRef(self.handle()), color);
                 })
             .def_prop_rw(
+                "skybox_horizon_srgb_color",
+                [](const SceneRenderState& self) -> SrgbColor {
+                    return scene_skybox_horizon_srgb_color(TcSceneRef(self.handle()));
+                },
+                [](SceneRenderState& self, SrgbColor color) {
+                    scene_set_skybox_horizon_srgb_color(TcSceneRef(self.handle()), color);
+                })
+            .def_prop_rw(
                 "skybox_bottom_srgb_color",
                 [](const SceneRenderState& self) -> SrgbColor {
                     return scene_skybox_bottom_srgb_color(TcSceneRef(self.handle()));
                 },
                 [](SceneRenderState& self, SrgbColor color) {
                     scene_set_skybox_bottom_srgb_color(TcSceneRef(self.handle()), color);
+                })
+            .def_prop_rw(
+                "skybox_top_exponent",
+                [](const SceneRenderState& self) { return scene_skybox_top_exponent(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, float exponent) {
+                    scene_set_skybox_top_exponent(TcSceneRef(self.handle()), exponent);
+                })
+            .def_prop_rw(
+                "skybox_bottom_exponent",
+                [](const SceneRenderState& self) { return scene_skybox_bottom_exponent(TcSceneRef(self.handle())); },
+                [](SceneRenderState& self, float exponent) {
+                    scene_set_skybox_bottom_exponent(TcSceneRef(self.handle()), exponent);
                 })
             .def("skybox_mesh",
                  [](const SceneRenderState& self) -> TcMesh {
