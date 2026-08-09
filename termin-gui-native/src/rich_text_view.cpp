@@ -16,7 +16,7 @@ namespace termin::gui_native {
         using detail::utf8_floor_boundary;
         using detail::utf8_next_boundary;
 
-        bool color_equal(const tc_ui_color& lhs, const tc_ui_color& rhs) {
+        bool color_equal(const tc_ui_srgb_color& lhs, const tc_ui_srgb_color& rhs) {
             return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
         }
 
@@ -415,7 +415,7 @@ namespace termin::gui_native {
         const tc_ui_rect content = prepare_layout(document, style);
         tc_ui_painter_push_clip(context, content);
         if (model_->text().empty() && !placeholder_.empty()) {
-            tc_ui_color placeholder_color = style.foreground;
+            tc_ui_srgb_color placeholder_color = style.foreground;
             placeholder_color.a *= 0.55f;
             tc_ui_painter_draw_text(context,
                                     placeholder_.c_str(),
@@ -436,7 +436,7 @@ namespace termin::gui_native {
                     if (end > start) {
                         const float x0 = row_x_for_offset(document, row, start, style.font_size);
                         const float x1 = row_x_for_offset(document, row, end, style.font_size);
-                        tc_ui_color selection = style.accent;
+                        tc_ui_srgb_color selection = style.accent;
                         selection.a = std::min(selection.a, 0.55f);
                         tc_ui_painter_fill_rect(
                             context, tc_ui_rect{content.x + x0, row_top, x1 - x0, cached_line_height_}, selection);
@@ -444,7 +444,7 @@ namespace termin::gui_native {
                 }
                 float draw_x = content.x;
                 for (const VisualRun& run : row.runs) {
-                    const tc_ui_color color = run.style.color.value_or(style.foreground);
+                    const tc_ui_srgb_color color = run.style.color.value_or(style.foreground);
                     const float italic_offset = run.style.italic ? style.font_size * 0.12f : 0.0f;
                     tc_ui_painter_draw_text(context,
                                             run.text.c_str(),
@@ -466,7 +466,7 @@ namespace termin::gui_native {
 
         const ScrollbarGeometry scrollbar = scrollbar_geometry(content);
         if (scrollbar.visible) {
-            tc_ui_color color = style.border;
+            tc_ui_srgb_color color = style.border;
             color.a = std::max(color.a, 0.75f);
             tc_ui_painter_fill_rounded_rect(context, scrollbar.thumb, scrollbar_width_ * 0.5f, color);
         }

@@ -237,7 +237,7 @@ namespace termin::gui_native {
         const float baseline = clip.y + std::max(0.0f, (clip.height - line_height_value) * 0.5f) + ascent;
         tc_ui_painter_push_clip(context, clip);
         if (editing_ && has_selection()) {
-            tc_ui_color selection_color = style.accent;
+            tc_ui_srgb_color selection_color = style.accent;
             selection_color.a *= 0.45f;
             const float start_x = prefix_width(document, selection_start(), style.font_size);
             const float end_x = prefix_width(document, selection_end(), style.font_size);

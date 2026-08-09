@@ -16,8 +16,10 @@
 namespace termin::gui_native {
     namespace {
 
-        tgfx::CanvasColor canvas_color(tc_ui_color color) {
-            return tgfx::CanvasColor{color.r, color.g, color.b, color.a};
+        tgfx::CanvasSrgbColor canvas_color(tc_ui_srgb_color color) {
+            // CanvasSrgbColor is the renderer boundary; the backend performs the
+            // single sRGB -> linear composition step for authored UI colors.
+            return tgfx::CanvasSrgbColor{color.r, color.g, color.b, color.a};
         }
 
         tgfx::CanvasTextureSampling texture_sampling(tc_ui_texture_sampling sampling) {

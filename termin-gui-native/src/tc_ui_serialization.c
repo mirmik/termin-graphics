@@ -51,7 +51,7 @@ static tc_value serialize_layout_spec(tc_ui_widget_layout_spec value) {
     return result;
 }
 
-static tc_value serialize_color(tc_ui_color value) {
+static tc_value serialize_color(tc_ui_srgb_color value) {
     const float values[] = {value.r, value.g, value.b, value.a};
     return serialize_float_list(values, 4);
 }
@@ -322,7 +322,7 @@ static bool read_style(const tc_value* data, tc_ui_style* out) {
         value = tc_value_dict_get((tc_value*)data, #field);                                                            \
         if (!read_float_list(value, color, 4))                                                                         \
             return false;                                                                                              \
-        out->field = (tc_ui_color){color[0], color[1], color[2], color[3]};                                            \
+        out->field = (tc_ui_srgb_color){color[0], color[1], color[2], color[3]};                                            \
     } while (0)
     if (!data || data->type != TC_VALUE_DICT || !out) {
         return false;

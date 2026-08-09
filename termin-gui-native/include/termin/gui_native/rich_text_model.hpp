@@ -12,7 +12,7 @@
 namespace termin::gui_native {
 
     struct RichTextStyle {
-        std::optional<tc_ui_color> color;
+        std::optional<tc_ui_srgb_color> color;
         bool bold = false;
         bool italic = false;
     };

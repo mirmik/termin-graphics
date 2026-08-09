@@ -97,7 +97,7 @@ static bool finite_rect(tc_ui_rect rect) {
     return std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.width) && std::isfinite(rect.height);
 }
 
-void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_color color) {
+void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_srgb_color color) {
     tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_FILL_RECT;
     command.rect = rect;
@@ -105,7 +105,7 @@ void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_u
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_color color) {
+void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_srgb_color color) {
     if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f) {
         tc_log_error("[termin-gui-native] rejected invalid rounded rectangle command");
         return;
@@ -118,7 +118,7 @@ void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect re
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_stroke_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_color color, float thickness) {
+void tc_ui_painter_stroke_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_srgb_color color, float thickness) {
     tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_STROKE_RECT;
     command.rect = rect;
@@ -128,7 +128,7 @@ void tc_ui_painter_stroke_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc
 }
 
 void tc_ui_painter_stroke_rounded_rect(
-    tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_color color, float thickness) {
+    tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_srgb_color color, float thickness) {
     if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f || !std::isfinite(thickness) ||
         thickness <= 0.0f) {
         tc_log_error("[termin-gui-native] rejected invalid rounded rectangle stroke command");
@@ -144,7 +144,7 @@ void tc_ui_painter_stroke_rounded_rect(
 }
 
 void tc_ui_painter_fill_circle(
-    tc_ui_paint_context* context, tc_ui_point center, float radius, tc_ui_color color, int32_t segments) {
+    tc_ui_paint_context* context, tc_ui_point center, float radius, tc_ui_srgb_color color, int32_t segments) {
     if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f || segments < 0) {
         tc_log_error("[termin-gui-native] rejected invalid circle command");
         return;
@@ -161,7 +161,7 @@ void tc_ui_painter_fill_circle(
 void tc_ui_painter_stroke_circle(tc_ui_paint_context* context,
                                  tc_ui_point center,
                                  float radius,
-                                 tc_ui_color color,
+                                 tc_ui_srgb_color color,
                                  float thickness,
                                  int32_t segments) {
     if (!finite_point(center) || !std::isfinite(radius) || radius <= 0.0f || !std::isfinite(thickness) ||
@@ -199,7 +199,7 @@ void tc_ui_painter_draw_arc(tc_ui_paint_context* context, const tc_ui_arc_draw_d
 }
 
 void tc_ui_painter_draw_line(
-    tc_ui_paint_context* context, tc_ui_point p0, tc_ui_point p1, tc_ui_color color, float thickness) {
+    tc_ui_paint_context* context, tc_ui_point p0, tc_ui_point p1, tc_ui_srgb_color color, float thickness) {
     tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_LINE;
     command.p0 = p0;
@@ -210,7 +210,7 @@ void tc_ui_painter_draw_line(
 }
 
 void tc_ui_painter_draw_polyline(
-    tc_ui_paint_context* context, const tc_ui_point* points, size_t point_count, tc_ui_color color, float thickness) {
+    tc_ui_paint_context* context, const tc_ui_point* points, size_t point_count, tc_ui_srgb_color color, float thickness) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append polyline without paint context");
         return;
@@ -244,7 +244,7 @@ void tc_ui_painter_draw_polyline(
 void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
                                 uint32_t texture_id,
                                 tc_ui_rect rect,
-                                tc_ui_color tint,
+                                tc_ui_srgb_color tint,
                                 tc_ui_texture_sampling sampling,
                                 bool flip_v) {
     if (texture_id == 0 || !finite_rect(rect) ||
@@ -263,7 +263,7 @@ void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
 }
 
 void tc_ui_painter_draw_text(
-    tc_ui_paint_context* context, const char* text, tc_ui_point position, float font_size, tc_ui_color color) {
+    tc_ui_paint_context* context, const char* text, tc_ui_point position, float font_size, tc_ui_srgb_color color) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append UI text command without paint context");
         return;

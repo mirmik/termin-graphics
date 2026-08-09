@@ -76,8 +76,8 @@ namespace termin::gui_native {
         float g = 0.0f;
         float b = 0.0f;
         float a = 1.0f;
-        tc_ui_color c_color() const {
-            return tc_ui_color{r, g, b, a};
+        tc_ui_srgb_color c_color() const {
+            return tc_ui_srgb_color{r, g, b, a};
         }
     };
 

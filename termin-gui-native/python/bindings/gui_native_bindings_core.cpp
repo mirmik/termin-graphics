@@ -165,16 +165,16 @@ void bind_gui_native_core(nb::module_& m) {
         .value("FullViewport", TC_UI_ROOT_LAYOUT_FULL_VIEWPORT)
         .value("SafeArea", TC_UI_ROOT_LAYOUT_SAFE_AREA);
 
-    nb::class_<tc_ui_color>(m, "Color")
+    nb::class_<tc_ui_srgb_color>(m, "Color")
         .def(nb::init<float, float, float, float>(),
              nb::arg("r") = 0.0f,
              nb::arg("g") = 0.0f,
              nb::arg("b") = 0.0f,
              nb::arg("a") = 1.0f)
-        .def_rw("r", &tc_ui_color::r)
-        .def_rw("g", &tc_ui_color::g)
-        .def_rw("b", &tc_ui_color::b)
-        .def_rw("a", &tc_ui_color::a);
+        .def_rw("r", &tc_ui_srgb_color::r)
+        .def_rw("g", &tc_ui_srgb_color::g)
+        .def_rw("b", &tc_ui_srgb_color::b)
+        .def_rw("a", &tc_ui_srgb_color::a);
 
     nb::class_<termin::gui_native::EdgeInsets>(m, "EdgeInsets")
         .def(nb::init<float, float, float, float>(),

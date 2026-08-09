@@ -16,6 +16,7 @@
 #include "tgfx2/i_render_device.hpp"
 #include "tgfx2/render_context.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
+#include <termin/geom/color.hpp>
 
 extern "C" {
 #include <tgfx/resources/tc_shader.h>
@@ -78,7 +79,7 @@ namespace tgfx {
             }
         }
 
-        bool same_color(CanvasColor a, CanvasColor b) {
+        bool same_color(CanvasSrgbColor a, CanvasSrgbColor b) {
             return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
@@ -518,7 +519,10 @@ namespace tgfx {
                                          TextureHandle texture = {},
                                          CanvasTextureSampling sampling = CanvasTextureSampling::Linear) {
             const auto vertices = flatten_and_clip(triangles, clips);
-            append_mesh_(vertices, color, texture, sampling);
+            append_mesh_(vertices,
+                         CanvasSrgbColor{color.r, color.g, color.b, color.a},
+                         texture,
+                         sampling);
         };
 
         for (const auto& command : list.commands()) {
@@ -718,8 +722,10 @@ namespace tgfx {
                                                      vertex.uv});
                         }
                         const auto color = with_opacity(value.color, opacities.back());
+                        const termin::LinearColor linear = termin::srgb_to_linear(
+                            termin::SrgbColor{color.r, color.g, color.b, color.a});
                         text2d_.draw_mesh(
-                            text_vertices, termin::Color4{color.r, color.g, color.b, color.a}, value.size_px, font);
+                            text_vertices, termin::Color4{linear.r, linear.g, linear.b, linear.a}, value.size_px, font);
                         return true;
                     }
                     return false;
@@ -793,7 +799,7 @@ namespace tgfx {
         }
     }
 
-    void Canvas2DRenderer::draw_rect(float x, float y, float w, float h, CanvasColor color, float radius) {
+    void Canvas2DRenderer::draw_rect(float x, float y, float w, float h, CanvasSrgbColor color, float radius) {
         if (ctx_ == nullptr || w <= 0.0f || h <= 0.0f)
             return;
         radius = std::clamp(radius, 0.0f, std::min(w, h) * 0.5f);
@@ -827,7 +833,7 @@ namespace tgfx {
         }
     }
 
-    void Canvas2DRenderer::draw_circle(float cx, float cy, float radius, CanvasColor color, int segments) {
+    void Canvas2DRenderer::draw_circle(float cx, float cy, float radius, CanvasSrgbColor color, int segments) {
         if (ctx_ == nullptr || radius <= 0.0f)
             return;
         segments = std::clamp(segments, 8, 96);
@@ -856,7 +862,7 @@ namespace tgfx {
     }
 
     void Canvas2DRenderer::draw_circle_outline(
-        float cx, float cy, float radius, CanvasColor color, float thickness, int segments) {
+        float cx, float cy, float radius, CanvasSrgbColor color, float thickness, int segments) {
         constexpr float kTau = 6.2831853071795864769f;
         draw_arc(CanvasArc{{cx, cy}, radius, 0.0f, kTau, color, thickness, segments});
     }
@@ -888,7 +894,7 @@ namespace tgfx {
         draw_polyline(points, arc.color, arc.thickness);
     }
 
-    void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h, CanvasColor color, float thickness) {
+    void Canvas2DRenderer::draw_rect_outline(float x, float y, float w, float h, CanvasSrgbColor color, float thickness) {
         if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f)
             return;
         const float t = std::min(thickness, std::min(w, h));
@@ -903,7 +909,7 @@ namespace tgfx {
         const float y = outline.y;
         const float w = outline.width;
         const float h = outline.height;
-        const CanvasColor color = outline.color;
+        const CanvasSrgbColor color = outline.color;
         const float thickness = outline.thickness;
         float radius = outline.radius;
         if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f)
@@ -927,7 +933,7 @@ namespace tgfx {
         draw_arc(CanvasArc{{x + radius, y + h - radius}, radius, kPi * 0.5f, kPi, color, thickness, corner_segments});
     }
 
-    void Canvas2DRenderer::draw_line(float x0, float y0, float x1, float y1, CanvasColor color, float thickness) {
+    void Canvas2DRenderer::draw_line(float x0, float y0, float x1, float y1, CanvasSrgbColor color, float thickness) {
         if (ctx_ == nullptr || thickness <= 0.0f)
             return;
 
@@ -965,7 +971,7 @@ namespace tgfx {
         batch_vertices_.insert(batch_vertices_.end(), std::begin(quad), std::end(quad));
     }
 
-    void Canvas2DRenderer::draw_polyline(std::span<const CanvasVec2> points, CanvasColor color, float thickness) {
+    void Canvas2DRenderer::draw_polyline(std::span<const CanvasVec2> points, CanvasSrgbColor color, float thickness) {
         if (points.size() < 2)
             return;
         for (size_t i = 1; i < points.size(); ++i) {
@@ -978,7 +984,7 @@ namespace tgfx {
                                         float y,
                                         float w,
                                         float h,
-                                        CanvasColor tint,
+                                        CanvasSrgbColor tint,
                                         bool flip_v,
                                         CanvasTextureSampling sampling) {
         if (ctx_ == nullptr || !texture || w <= 0.0f || h <= 0.0f)
@@ -993,7 +999,7 @@ namespace tgfx {
                                      float x,
                                      float y,
                                      float size_px,
-                                     CanvasColor color,
+                                     CanvasSrgbColor color,
                                      FontAtlas* font,
                                      Text2DRenderer::Anchor anchor) {
         if (ctx_ == nullptr || text.empty())
@@ -1003,10 +1009,12 @@ namespace tgfx {
             return;
 
         flush_();
+        const termin::LinearColor linear = termin::srgb_to_linear(
+            termin::SrgbColor{color.r, color.g, color.b, color.a});
         text2d_.draw(text,
                      Text2DRenderer::DrawOptions{x - static_cast<float>(viewport_x_),
                                                  y - static_cast<float>(viewport_y_),
-                                                 termin::Color4{color.r, color.g, color.b, color.a},
+                                                 termin::Color4{linear.r, linear.g, linear.b, linear.a},
                                                  size_px,
                                                  anchor});
     }
@@ -1133,7 +1141,7 @@ namespace tgfx {
         return true;
     }
 
-    bool Canvas2DRenderer::bind_solid_(CanvasColor color) {
+    bool Canvas2DRenderer::bind_solid_(CanvasSrgbColor color) {
         if (solid_vs_.id == 0 || solid_fs_.id == 0) {
             tc::Log::error("[Canvas2DRenderer] solid shader is unavailable; skipping batch");
             return false;
@@ -1141,10 +1149,12 @@ namespace tgfx {
 
         CanvasPushData push;
         std::memcpy(push.projection, projection_, sizeof(projection_));
-        push.color[0] = color.r;
-        push.color[1] = color.g;
-        push.color[2] = color.b;
-        push.color[3] = color.a;
+        const termin::LinearColor linear = termin::srgb_to_linear(
+            termin::SrgbColor{color.r, color.g, color.b, color.a});
+        push.color[0] = linear.r;
+        push.color[1] = linear.g;
+        push.color[2] = linear.b;
+        push.color[3] = linear.a;
 
         ctx_->bind_shader(solid_vs_, solid_fs_);
         tc_shader* raw = tc_shader_get(solid_shader_handle());
@@ -1153,7 +1163,7 @@ namespace tgfx {
         return true;
     }
 
-    bool Canvas2DRenderer::bind_texture_(CanvasColor tint, TextureHandle texture, CanvasTextureSampling sampling) {
+    bool Canvas2DRenderer::bind_texture_(CanvasSrgbColor tint, TextureHandle texture, CanvasTextureSampling sampling) {
         if (texture_vs_.id == 0 || texture_fs_.id == 0) {
             tc::Log::error("[Canvas2DRenderer] texture shader is unavailable; skipping batch");
             return false;
@@ -1165,10 +1175,12 @@ namespace tgfx {
 
         CanvasPushData push;
         std::memcpy(push.projection, projection_, sizeof(projection_));
-        push.color[0] = tint.r;
-        push.color[1] = tint.g;
-        push.color[2] = tint.b;
-        push.color[3] = tint.a;
+        const termin::LinearColor linear = termin::srgb_to_linear(
+            termin::SrgbColor{tint.r, tint.g, tint.b, tint.a});
+        push.color[0] = linear.r;
+        push.color[1] = linear.g;
+        push.color[2] = linear.b;
+        push.color[3] = linear.a;
 
         ctx_->bind_shader(texture_vs_, texture_fs_);
         tc_shader* raw = tc_shader_get(texture_shader_handle());
@@ -1192,7 +1204,7 @@ namespace tgfx {
         batch_vertices_.insert(batch_vertices_.end(), std::begin(quad), std::end(quad));
     }
 
-    void Canvas2DRenderer::append_solid_quad_(termin::Bounds2f bounds, CanvasColor color) {
+    void Canvas2DRenderer::append_solid_quad_(termin::Bounds2f bounds, CanvasSrgbColor color) {
         if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
             flush_();
             batch_mode_ = BatchMode::Solid;
@@ -1202,7 +1214,7 @@ namespace tgfx {
         push_quad_(bounds, termin::Bounds2f{0.0f, 0.0f, 1.0f, 1.0f});
     }
 
-    void Canvas2DRenderer::append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, CanvasColor color) {
+    void Canvas2DRenderer::append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, CanvasSrgbColor color) {
         if (batch_mode_ != BatchMode::Solid || !same_color(batch_color_, color)) {
             flush_();
             batch_mode_ = BatchMode::Solid;
@@ -1218,7 +1230,7 @@ namespace tgfx {
 
     void Canvas2DRenderer::append_textured_quad_(termin::Bounds2f bounds,
                                                  termin::Bounds2f uv,
-                                                 CanvasColor tint,
+                                                 CanvasSrgbColor tint,
                                                  TextureHandle texture,
                                                  CanvasTextureSampling sampling) {
         if (batch_mode_ != BatchMode::Texture || !same_color(batch_color_, tint) || batch_texture_.id != texture.id ||
@@ -1233,7 +1245,7 @@ namespace tgfx {
     }
 
     void Canvas2DRenderer::append_mesh_(std::span<const DrawVertex2D> vertices,
-                                        CanvasColor color,
+                                        CanvasSrgbColor color,
                                         TextureHandle texture,
                                         CanvasTextureSampling sampling) {
         if (vertices.empty())

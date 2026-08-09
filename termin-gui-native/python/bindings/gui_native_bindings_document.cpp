@@ -156,14 +156,14 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
         .def(nb::init<DrawList&>(), nb::arg("draw_list"), nb::keep_alive<1, 2>())
         .def(
             "fill_rect",
-            [](PaintContext& self, tc_ui_rect rect, tc_ui_color color) {
+            [](PaintContext& self, tc_ui_rect rect, tc_ui_srgb_color color) {
                 tc_ui_painter_fill_rect(self.get(), rect, color);
             },
             nb::arg("rect"),
             nb::arg("color"))
         .def(
             "fill_rounded_rect",
-            [](PaintContext& self, tc_ui_rect rect, float radius, tc_ui_color color) {
+            [](PaintContext& self, tc_ui_rect rect, float radius, tc_ui_srgb_color color) {
                 tc_ui_painter_fill_rounded_rect(self.get(), rect, radius, color);
             },
             nb::arg("rect"),
@@ -171,7 +171,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("color"))
         .def(
             "stroke_rect",
-            [](PaintContext& self, tc_ui_rect rect, tc_ui_color color, float thickness) {
+            [](PaintContext& self, tc_ui_rect rect, tc_ui_srgb_color color, float thickness) {
                 tc_ui_painter_stroke_rect(self.get(), rect, color, thickness);
             },
             nb::arg("rect"),
@@ -179,7 +179,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("thickness"))
         .def(
             "stroke_rounded_rect",
-            [](PaintContext& self, tc_ui_rect rect, float radius, tc_ui_color color, float thickness) {
+            [](PaintContext& self, tc_ui_rect rect, float radius, tc_ui_srgb_color color, float thickness) {
                 tc_ui_painter_stroke_rounded_rect(self.get(), rect, radius, color, thickness);
             },
             nb::arg("rect"),
@@ -188,7 +188,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("thickness") = 1.0f)
         .def(
             "fill_circle",
-            [](PaintContext& self, tc_ui_point center, float radius, tc_ui_color color, int32_t segments) {
+            [](PaintContext& self, tc_ui_point center, float radius, tc_ui_srgb_color color, int32_t segments) {
                 tc_ui_painter_fill_circle(self.get(), center, radius, color, segments);
             },
             nb::arg("center"),
@@ -200,7 +200,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             [](PaintContext& self,
                tc_ui_point center,
                float radius,
-               tc_ui_color color,
+               tc_ui_srgb_color color,
                float thickness,
                int32_t segments) {
                 tc_ui_painter_stroke_circle(self.get(), center, radius, color, thickness, segments);
@@ -217,7 +217,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                float radius,
                float start_radians,
                float end_radians,
-               tc_ui_color color,
+               tc_ui_srgb_color color,
                float thickness,
                int32_t segments) {
                 const tc_ui_arc_draw_desc desc{center, radius, start_radians, end_radians, color, thickness, segments};
@@ -232,7 +232,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("segments") = 0)
         .def(
             "draw_line",
-            [](PaintContext& self, tc_ui_point p0, tc_ui_point p1, tc_ui_color color, float thickness) {
+            [](PaintContext& self, tc_ui_point p0, tc_ui_point p1, tc_ui_srgb_color color, float thickness) {
                 tc_ui_painter_draw_line(self.get(), p0, p1, color, thickness);
             },
             nb::arg("p0"),
@@ -241,7 +241,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("thickness"))
         .def(
             "draw_polyline",
-            [](PaintContext& self, const std::vector<tc_ui_point>& points, tc_ui_color color, float thickness) {
+            [](PaintContext& self, const std::vector<tc_ui_point>& points, tc_ui_srgb_color color, float thickness) {
                 tc_ui_painter_draw_polyline(self.get(), points.data(), points.size(), color, thickness);
             },
             nb::arg("points"),
@@ -252,11 +252,11 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             [](PaintContext& self,
                tgfx::TextureHandle texture,
                tc_ui_rect rect,
-               std::optional<tc_ui_color> tint,
+               std::optional<tc_ui_srgb_color> tint,
                bool flip_v,
                tc_ui_texture_sampling sampling) {
                 tc_ui_painter_draw_texture(
-                    self.get(), texture.id, rect, tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling, flip_v);
+                    self.get(), texture.id, rect, tint.value_or(tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling, flip_v);
             },
             nb::arg("texture"),
             nb::arg("rect"),
@@ -268,11 +268,11 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             [](PaintContext& self,
                tgfx::TextureHandle texture,
                tc_ui_rect rect,
-               std::optional<tc_ui_color> tint,
+               std::optional<tc_ui_srgb_color> tint,
                bool flip_v,
                tc_ui_texture_sampling sampling) {
                 tc_ui_painter_draw_texture(
-                    self.get(), texture.id, rect, tint.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling, flip_v);
+                    self.get(), texture.id, rect, tint.value_or(tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f}), sampling, flip_v);
             },
             nb::arg("texture"),
             nb::arg("rect"),
@@ -281,7 +281,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("sampling") = TC_UI_TEXTURE_SAMPLING_LINEAR)
         .def(
             "draw_text",
-            [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, tc_ui_color color) {
+            [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, tc_ui_srgb_color color) {
                 tc_ui_painter_draw_text(self.get(), text.c_str(), position, font_size, color);
             },
             nb::arg("text"),
@@ -538,7 +538,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("size"))
         .def(
             "create_swatch",
-            [](termin::gui_native::TcDocument& self, tc_ui_color color) {
+            [](termin::gui_native::TcDocument& self, tc_ui_srgb_color color) {
                 return SwatchRef{document_make_native<termin::gui_native::Swatch>(
                     self, termin::gui_native::Color{color.r, color.g, color.b, color.a})};
             },
@@ -730,10 +730,10 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
         .def(
             "create_color_dialog",
             [](termin::gui_native::TcDocument& self,
-               std::optional<tc_ui_color> initial,
+               std::optional<tc_ui_srgb_color> initial,
                bool show_alpha,
                const std::string& title) {
-                const tc_ui_color resolved_initial = initial.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
+                const tc_ui_srgb_color resolved_initial = initial.value_or(tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
                 return ColorDialogRef{document_make_native<termin::gui_native::ColorDialog>(
                     self,
                     termin::gui_native::Color{

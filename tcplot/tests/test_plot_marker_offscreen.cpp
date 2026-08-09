@@ -40,10 +40,12 @@ namespace {
                 const float a = pixels[i + 3];
                 if (a > 0.9f)
                     ++opaque;
-                if (r > 0.75f && g > 0.30f && g < 0.85f && b < 0.35f) {
+                // Marker colors are authored in sRGB and reach this linear
+                // render target after exactly one decode.
+                if (r > 0.80f && g > 0.20f && g < 0.35f && b < 0.05f) {
                     ++orange;
                 }
-                if (r > 0.68f && g > 0.70f && b > 0.76f) {
+                if (r > 0.52f && g > 0.58f && b > 0.72f) {
                     ++light_border;
                 }
                 if (b > 0.70f && r < 0.35f && g < 0.65f)

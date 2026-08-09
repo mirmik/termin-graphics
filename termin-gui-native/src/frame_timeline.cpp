@@ -230,7 +230,7 @@ namespace termin::gui_native {
         tc_ui_painter_fill_rect(context, rect, style.background);
         const auto [begin, end] = visible_range();
         if (begin == end) {
-            tc_ui_color muted = style.foreground;
+            tc_ui_srgb_color muted = style.foreground;
             muted.a *= 0.6f;
             tc_ui_painter_draw_text(
                 context, "No frame capture", {rect.x + 8.0f, rect.y + 24.0f}, style.font_size, muted);
@@ -255,7 +255,7 @@ namespace termin::gui_native {
         const auto y_for = [&](float value) {
             return graph.y + graph.height - std::min(value / scale, 1.0f) * graph.height;
         };
-        tc_ui_color target_color = style.foreground;
+        tc_ui_srgb_color target_color = style.foreground;
         target_color.a *= 0.45f;
         tc_ui_painter_draw_line(
             context, {graph.x, y_for(target)}, {graph.x + graph.width, y_for(target)}, target_color, 1.0f);
@@ -264,8 +264,8 @@ namespace termin::gui_native {
             const FrameTimelineSample& sample = model_->samples()[index];
             const float x = graph.x + static_cast<float>(index - begin) * slot_width;
             const float interval_height = std::min(graph.height, sample.interval_ms / scale * graph.height);
-            tc_ui_color interval_color =
-                sample.hitch ? tc_ui_color{0.82f, 0.27f, 0.24f, 1.0f} : tc_ui_color{0.35f, 0.67f, 0.83f, 1.0f};
+            tc_ui_srgb_color interval_color =
+                sample.hitch ? tc_ui_srgb_color{0.82f, 0.27f, 0.24f, 1.0f} : tc_ui_srgb_color{0.35f, 0.67f, 0.83f, 1.0f};
             if (index == hovered_index_)
                 interval_color.a = 0.78f;
             tc_ui_painter_fill_rect(
@@ -274,10 +274,10 @@ namespace termin::gui_native {
             tc_ui_painter_fill_rect(
                 context,
                 {x + bar_width * 0.2f, graph.y + graph.height - active_height, bar_width * 0.6f, active_height},
-                tc_ui_color{0.34f, 0.78f, 0.38f, 1.0f});
+                tc_ui_srgb_color{0.34f, 0.78f, 0.38f, 1.0f});
             if (sample.gap_before) {
                 tc_ui_painter_draw_line(
-                    context, {x, graph.y}, {x, graph.y + graph.height}, tc_ui_color{0.95f, 0.55f, 0.18f, 1.0f}, 2.0f);
+                    context, {x, graph.y}, {x, graph.y + graph.height}, tc_ui_srgb_color{0.95f, 0.55f, 0.18f, 1.0f}, 2.0f);
             }
             if (selected_id_ && sample.stable_id == *selected_id_) {
                 tc_ui_painter_stroke_rect(

@@ -181,7 +181,7 @@ namespace termin::gui_native {
                 tc_ui_painter_fill_rect(
                     context,
                     tc_ui_rect{x, y, std::min(cell, rect.x + rect.width - x), std::min(cell, rect.y + rect.height - y)},
-                    tc_ui_color{shade, shade, shade, 1.0f});
+                    tc_ui_srgb_color{shade, shade, shade, 1.0f});
             }
         }
     }
@@ -242,20 +242,20 @@ namespace termin::gui_native {
             tc_ui_painter_draw_texture(context,
                                        texture_ids_.saturation_value,
                                        sv,
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
             tc_ui_painter_draw_texture(context,
                                        texture_ids_.hue,
                                        hue,
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
             if (model_->show_alpha())
                 tc_ui_painter_draw_texture(context,
                                            texture_ids_.alpha,
                                            alpha,
-                                           tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                           tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                            TC_UI_TEXTURE_SAMPLING_LINEAR,
                                            false);
         } else {
@@ -266,11 +266,11 @@ namespace termin::gui_native {
         const float marker_y = sv.y + (1.0f - model_->value()) * sv.height;
         tc_ui_painter_stroke_rect(context,
                                   tc_ui_rect{marker_x - 5.0f, marker_y - 5.0f, 10.0f, 10.0f},
-                                  tc_ui_color{1.0f, 1.0f, 1.0f, 0.95f},
+                                  tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 0.95f},
                                   2.0f);
         tc_ui_painter_stroke_rect(context,
                                   tc_ui_rect{marker_x - 3.5f, marker_y - 3.5f, 7.0f, 7.0f},
-                                  tc_ui_color{0.0f, 0.0f, 0.0f, 0.65f},
+                                  tc_ui_srgb_color{0.0f, 0.0f, 0.0f, 0.65f},
                                   1.0f);
         const float hue_y = hue.y + model_->hue() * hue.height;
         tc_ui_painter_stroke_rect(

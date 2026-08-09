@@ -120,7 +120,7 @@ namespace termin_gui_native_test {
         inherited.fields = TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_FOREGROUND;
         inherited.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
         inherited.value.font_size = 18.0f;
-        inherited.value.foreground = tc_ui_color{0.8f, 0.7f, 0.6f, 1.0f};
+        inherited.value.foreground = tc_ui_srgb_color{0.8f, 0.7f, 0.6f, 1.0f};
         assert(root.set_style_override(inherited));
         tc_ui_style style = document.resolve_style(button);
         assert(near(style.font_size, 18.0f));
@@ -131,7 +131,7 @@ namespace termin_gui_native_test {
         assert(near(style.background.r, document.theme().roles[TC_UI_STYLE_BUTTON].disabled.value.background.r));
 
         tc_ui_theme theme = document.theme();
-        theme.roles[TC_UI_STYLE_BUTTON].base.accent = tc_ui_color{0.91f, 0.2f, 0.1f, 1.0f};
+        theme.roles[TC_UI_STYLE_BUTTON].base.accent = tc_ui_srgb_color{0.91f, 0.2f, 0.1f, 1.0f};
         const uint64_t revision = document.theme_revision();
         button.clear_dirty(TC_WIDGET_DIRTY_MASK);
         assert(document.set_theme(theme));

@@ -322,7 +322,7 @@ namespace termin::gui_native {
         tc_ui_painter_fill_rect(context, bounds(), style.background);
         tc_ui_painter_push_clip(context, bounds());
         if (visible_.empty()) {
-            tc_ui_color muted = style.foreground;
+            tc_ui_srgb_color muted = style.foreground;
             muted.a *= 0.6f;
             tc_ui_painter_draw_text(context,
                                     "No items",
@@ -338,15 +338,15 @@ namespace termin::gui_native {
                 const float y = bounds().y + static_cast<float>(index) * stride - scroll_y_;
                 const tc_ui_rect row{bounds().x, y, bounds().width, row_height_};
                 if (selected_ == node.id || hovered_ == node.id) {
-                    tc_ui_color highlight = style.accent;
+                    tc_ui_srgb_color highlight = style.accent;
                     highlight.a *= selected_ == node.id ? 0.42f : 0.20f;
                     tc_ui_painter_fill_rounded_rect(context, row, std::min(4.0f, row_height_ * 0.2f), highlight);
                 }
                 if (dragging_ && drag_target_ == node.id) {
-                    tc_ui_color drop_color = style.accent;
+                    tc_ui_srgb_color drop_color = style.accent;
                     drop_color.a = 0.9f;
                     if (drag_position_ == TreeDropPosition::Inside) {
-                        tc_ui_color fill = drop_color;
+                        tc_ui_srgb_color fill = drop_color;
                         fill.a = 0.28f;
                         tc_ui_painter_fill_rounded_rect(context, row, std::min(4.0f, row_height_ * 0.2f), fill);
                     } else {
@@ -359,7 +359,7 @@ namespace termin::gui_native {
                                                 2.0f);
                     }
                 }
-                tc_ui_color foreground = style.foreground;
+                tc_ui_srgb_color foreground = style.foreground;
                 if (!node.item.enabled)
                     foreground.a *= 0.45f;
                 const float toggle_x = row.x + static_cast<float>(row_info.depth) * indent_size_;
@@ -376,14 +376,14 @@ namespace termin::gui_native {
                 const float accessory_y = row.y + (row.height - accessory_size) * 0.5f;
                 const auto draw_toggle = [&](bool checked, bool secondary) {
                     const tc_ui_rect box{text_x, accessory_y, accessory_size, accessory_size};
-                    tc_ui_color toggle_color = secondary ? tc_ui_color{0.85f, 0.68f, 0.14f, 1.0f} : style.accent;
+                    tc_ui_srgb_color toggle_color = secondary ? tc_ui_srgb_color{0.85f, 0.68f, 0.14f, 1.0f} : style.accent;
                     if (!node.item.enabled)
                         toggle_color.a *= 0.45f;
                     if (checked) {
-                        tc_ui_color fill = toggle_color;
+                        tc_ui_srgb_color fill = toggle_color;
                         fill.a *= 0.78f;
                         tc_ui_painter_fill_rounded_rect(context, box, 2.5f, fill);
-                        tc_ui_color mark{1.0f, 1.0f, 1.0f, toggle_color.a};
+                        tc_ui_srgb_color mark{1.0f, 1.0f, 1.0f, toggle_color.a};
                         tc_ui_painter_draw_line(context,
                                                 tc_ui_point{box.x + box.width * 0.22f, box.y + box.height * 0.53f},
                                                 tc_ui_point{box.x + box.width * 0.43f, box.y + box.height * 0.74f},
@@ -411,7 +411,7 @@ namespace termin::gui_native {
         }
         tc_ui_painter_pop_clip(context);
         if (dragging_ && drag_position_ == TreeDropPosition::Root) {
-            tc_ui_color drop_color = style.accent;
+            tc_ui_srgb_color drop_color = style.accent;
             drop_color.a = 0.9f;
             const float line_y = bounds().y + bounds().height - 2.0f;
             tc_ui_painter_draw_line(context,

@@ -20,14 +20,14 @@ namespace termin::gui_native {
 
         void paint(tc_ui_document_handle document, tc_ui_paint_context* context) override {
             const tc_ui_style style = owner_.computed_style(document);
-            tc_ui_painter_fill_rect(context, bounds(), tc_ui_color{0.18f, 0.18f, 0.22f, 0.98f});
+            tc_ui_painter_fill_rect(context, bounds(), tc_ui_srgb_color{0.18f, 0.18f, 0.22f, 0.98f});
             tc_ui_painter_push_clip(context, bounds());
             for (size_t index = 0; index < owner_.items_.size(); ++index) {
                 const float y = bounds().y + static_cast<float>(index) * owner_.item_height_ - scroll_y_;
                 if (y + owner_.item_height_ < bounds().y || y > bounds().y + bounds().height)
                     continue;
                 if (static_cast<int>(index) == hovered_ || static_cast<int>(index) == owner_.selected_index_) {
-                    tc_ui_color color = style.accent;
+                    tc_ui_srgb_color color = style.accent;
                     color.a = static_cast<int>(index) == hovered_ ? 0.45f : 0.25f;
                     tc_ui_painter_fill_rect(
                         context, tc_ui_rect{bounds().x, y, bounds().width, owner_.item_height_}, color);

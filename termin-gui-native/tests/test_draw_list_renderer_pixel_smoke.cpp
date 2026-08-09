@@ -109,7 +109,7 @@ namespace {
         uint32_t image = 0;
         uint32_t sampling_image = 0;
         uint32_t picker_image = 0;
-        tc_ui_color order_color{};
+        tc_ui_srgb_color order_color{};
         tc_ui_rect order_rect{112.0f, 72.0f, 8.0f, 8.0f};
 
         void paint(tc_ui_document_handle, tc_ui_paint_context* painter) override {
@@ -122,38 +122,38 @@ namespace {
             tc_ui_painter_draw_texture(painter,
                                        image,
                                        tc_ui_rect{8.0f, 8.0f, 16.0f, 16.0f},
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
             tc_ui_painter_push_clip(painter, tc_ui_rect{40.0f, 8.0f, 24.0f, 24.0f});
             tc_ui_painter_push_clip(painter, tc_ui_rect{48.0f, 12.0f, 8.0f, 8.0f});
             tc_ui_painter_fill_rect(
-                painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f}, tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f});
+                painter, tc_ui_rect{36.0f, 4.0f, 40.0f, 40.0f}, tc_ui_srgb_color{0.9f, 0.05f, 0.05f, 1.0f});
             tc_ui_painter_pop_clip(painter);
             tc_ui_painter_pop_clip(painter);
             tc_ui_painter_fill_rounded_rect(
-                painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f, tc_ui_color{0.05f, 0.15f, 0.9f, 1.0f});
+                painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f, tc_ui_srgb_color{0.05f, 0.15f, 0.9f, 1.0f});
             tc_ui_painter_fill_circle(
-                painter, tc_ui_point{48.0f, 50.0f}, 8.0f, tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
+                painter, tc_ui_point{48.0f, 50.0f}, 8.0f, tc_ui_srgb_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
             tc_ui_painter_draw_texture(painter,
                                        sampling_image,
                                        tc_ui_rect{8.0f, 72.0f, 16.0f, 16.0f},
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_NEAREST,
                                        false);
             tc_ui_painter_draw_texture(painter,
                                        sampling_image,
                                        tc_ui_rect{32.0f, 72.0f, 16.0f, 16.0f},
-                                       tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
             tc_ui_painter_draw_text(
-                painter, "Native", tc_ui_point{72.0f, 30.0f}, 20.0f, tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
+                painter, "Native", tc_ui_point{72.0f, 30.0f}, 20.0f, tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
             if (picker_image != 0) {
                 tc_ui_painter_draw_texture(painter,
                                            picker_image,
                                            tc_ui_rect{90.0f, 40.0f, 28.0f, 20.0f},
-                                           tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                           tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                            TC_UI_TEXTURE_SAMPLING_LINEAR,
                                            false);
             }
@@ -254,11 +254,11 @@ namespace {
         commands.probe->image = image.id;
         commands.probe->sampling_image = sampling_image.id;
         ProbeDocument early;
-        early.probe->order_color = tc_ui_color{0.9f, 0.85f, 0.05f, 1.0f};
+        early.probe->order_color = tc_ui_srgb_color{0.9f, 0.85f, 0.05f, 1.0f};
         ProbeDocument identity_first;
-        identity_first.probe->order_color = tc_ui_color{0.05f, 0.85f, 0.05f, 1.0f};
+        identity_first.probe->order_color = tc_ui_srgb_color{0.05f, 0.85f, 0.05f, 1.0f};
         ProbeDocument identity_last;
-        identity_last.probe->order_color = tc_ui_color{0.9f, 0.05f, 0.05f, 1.0f};
+        identity_last.probe->order_color = tc_ui_srgb_color{0.9f, 0.05f, 0.05f, 1.0f};
 
         termin::gui_native::ColorPicker color_picker;
 
@@ -321,7 +321,7 @@ namespace {
 
         bool scaled_geometry_ok = true;
         ProbeDocument scaled_document;
-        scaled_document.probe->order_color = tc_ui_color{0.05f, 0.85f, 0.05f, 1.0f};
+        scaled_document.probe->order_color = tc_ui_srgb_color{0.05f, 0.85f, 0.05f, 1.0f};
         scaled_document.probe->order_rect = tc_ui_rect{8.0f, 8.0f, 8.0f, 8.0f};
         for (const float scale : {1.0f, 1.5f, 2.0f, 3.0f}) {
             const tc_ui_presentation_metrics scaled_metrics{

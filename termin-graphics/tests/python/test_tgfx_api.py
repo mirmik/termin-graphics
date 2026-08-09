@@ -339,7 +339,8 @@ def test_slang_material_add_phase_accepts_explicit_stage_entries():
 
 
 def test_canvas2d_binding_smoke():
-    color = tgfx.CanvasColor(1.0, 0.5, 0.25, 1.0)
+    color = tgfx.CanvasSrgbColor(1.0, 0.5, 0.25, 1.0)
+    assert isinstance(color, SrgbColor)
     assert tuple(color) == (1.0, 0.5, 0.25, 1.0)
 
     point = tgfx.CanvasVec2(3.0, 4.0)
@@ -349,6 +350,8 @@ def test_canvas2d_binding_smoke():
     renderer = tgfx.Canvas2DRenderer()
     assert renderer.default_font is None
     assert renderer.measure_text("no font", 14.0) == (0.0, 0.0)
+    with pytest.raises(TypeError):
+        renderer.draw_rect(0.0, 0.0, 1.0, 1.0, (1.0, 0.5, 0.25, 1.0))
 
 
 def test_immediate_renderer_binding_smoke():

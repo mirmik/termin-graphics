@@ -168,7 +168,7 @@ namespace termin::gui_native {
                          style.font_size,
                          selection_metrics);
             selection_width = selection_metrics.width;
-            tc_ui_color selection_color = style.accent;
+            tc_ui_srgb_color selection_color = style.accent;
             selection_color.a *= 0.45f;
             tc_ui_painter_fill_rect(context,
                                     tc_ui_rect{text_x + selection_x,
@@ -177,7 +177,7 @@ namespace termin::gui_native {
                                                line_height},
                                     selection_color);
         }
-        tc_ui_color text_color = style.foreground;
+        tc_ui_srgb_color text_color = style.foreground;
         if (has_placeholder) {
             text_color.a *= 0.55f;
         }

@@ -130,7 +130,7 @@ namespace {
         auto model = std::make_shared<RichTextModel>();
         RichTextStyle bold;
         bold.bold = true;
-        bold.color = tc_ui_color{0.2f, 0.8f, 0.3f, 1.0f};
+        bold.color = tc_ui_srgb_color{0.2f, 0.8f, 0.3f, 1.0f};
         std::vector<RichTextLine> lines;
         for (size_t index = 0; index < 20; ++index) {
             lines.push_back(RichTextLine{RichTextSegment{"styled row", bold}});

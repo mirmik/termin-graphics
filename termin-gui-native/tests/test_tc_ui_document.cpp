@@ -1097,7 +1097,7 @@ static void test_theme_style_resolution_inheritance_and_invalidation() {
     inherited.fields = TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_FOREGROUND;
     inherited.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
     inherited.value.font_size = 19.0f;
-    inherited.value.foreground = tc_ui_color{1.0f, 0.5f, 0.25f, 1.0f};
+    inherited.value.foreground = tc_ui_srgb_color{1.0f, 0.5f, 0.25f, 1.0f};
     assert(tc_widget_set_style_override(&parent_a.widget, &inherited));
     assert(tc_ui_document_resolve_style(document, &child.widget, 0, &style));
     assert(style.font_size == 19.0f);

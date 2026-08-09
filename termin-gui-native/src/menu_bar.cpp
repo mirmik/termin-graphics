@@ -168,7 +168,7 @@ namespace termin::gui_native {
         for (size_t index = 0; index < entries_.size(); ++index) {
             const tc_ui_rect rect = item_rects_[index];
             if (index == hovered_ || index == open_index_) {
-                tc_ui_color highlight = style.accent;
+                tc_ui_srgb_color highlight = style.accent;
                 highlight.a *= index == open_index_ ? 0.34f : 0.20f;
                 tc_ui_painter_fill_rect(context, rect, highlight);
             }

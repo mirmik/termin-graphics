@@ -351,12 +351,12 @@ namespace termin::gui_native {
                 continue;
             }
             if (index == current_ && data.enabled) {
-                tc_ui_color highlight = style.accent;
+                tc_ui_srgb_color highlight = style.accent;
                 highlight.a *= 0.24f;
                 tc_ui_painter_fill_rect(
                     context, tc_ui_rect{bounds().x + 2.0f, y, bounds().width - 4.0f, height}, highlight);
             }
-            tc_ui_color foreground = style.foreground;
+            tc_ui_srgb_color foreground = style.foreground;
             if (!data.enabled)
                 foreground.a *= 0.45f;
             const float baseline = y + height * 0.68f;

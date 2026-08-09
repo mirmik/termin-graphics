@@ -13,7 +13,7 @@ namespace termin::gui_native {
 
         using detail::valid_utf8;
 
-        bool color_equal(const tc_ui_color& lhs, const tc_ui_color& rhs) {
+        bool color_equal(const tc_ui_srgb_color& lhs, const tc_ui_srgb_color& rhs) {
             return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
         }
 
@@ -42,7 +42,7 @@ namespace termin::gui_native {
             return value;
         }
 
-        std::optional<tc_ui_color> parse_css_color(std::string_view value) {
+        std::optional<tc_ui_srgb_color> parse_css_color(std::string_view value) {
             value = trim(value);
             if (value.size() != 4 && value.size() != 7) {
                 return std::nullopt;
@@ -68,7 +68,7 @@ namespace termin::gui_native {
                              value.data());
                 return std::nullopt;
             }
-            return tc_ui_color{static_cast<float>((packed >> 16) & 0xffu) / 255.0f,
+            return tc_ui_srgb_color{static_cast<float>((packed >> 16) & 0xffu) / 255.0f,
                                static_cast<float>((packed >> 8) & 0xffu) / 255.0f,
                                static_cast<float>(packed & 0xffu) / 255.0f,
                                1.0f};
@@ -303,7 +303,7 @@ namespace termin::gui_native {
                     throw std::invalid_argument("rich text segments must be valid UTF-8 without newlines");
                 }
                 if (segment.style.color) {
-                    const tc_ui_color color = *segment.style.color;
+                    const tc_ui_srgb_color color = *segment.style.color;
                     if (!std::isfinite(color.r) || !std::isfinite(color.g) || !std::isfinite(color.b) ||
                         !std::isfinite(color.a)) {
                         tc_log_error("[termin-gui-native] RichTextModel rejected non-finite color");

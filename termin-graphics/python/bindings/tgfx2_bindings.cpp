@@ -1097,34 +1097,9 @@ namespace tgfx_bindings {
             .value("Linear", tgfx::CanvasTextureSampling::Linear)
             .value("Nearest", tgfx::CanvasTextureSampling::Nearest);
 
-        nb::class_<tgfx::Color4f>(m, "Color4f")
-            .def(nb::init<>())
-            .def(nb::init<float, float, float, float>(), nb::arg("r"), nb::arg("g"), nb::arg("b"), nb::arg("a") = 1.0f)
-            .def("__init__",
-                 [](tgfx::CanvasColor* self, nb::tuple t) {
-                     if (t.size() < 3) {
-                         throw std::runtime_error("CanvasColor tuple must have at least 3 elements");
-                     }
-                     const float a = t.size() >= 4 ? nb::cast<float>(t[3]) : 1.0f;
-                     new (self) tgfx::CanvasColor{
-                         nb::cast<float>(t[0]),
-                         nb::cast<float>(t[1]),
-                         nb::cast<float>(t[2]),
-                         a,
-                     };
-                 })
-            .def_rw("r", &tgfx::CanvasColor::r)
-            .def_rw("g", &tgfx::CanvasColor::g)
-            .def_rw("b", &tgfx::CanvasColor::b)
-            .def_rw("a", &tgfx::CanvasColor::a)
-            .def_static("white", &tgfx::CanvasColor::white)
-            .def_static("transparent", &tgfx::CanvasColor::transparent)
-            .def("__iter__", [](const tgfx::CanvasColor& c) { return nb::iter(nb::make_tuple(c.r, c.g, c.b, c.a)); });
+        m.attr("CanvasSrgbColor") = nb::module_::import_("tcbase._geom_native").attr("SrgbColor");
 
-        m.attr("CanvasColor") = m.attr("Color4f");
         m.attr("CanvasVec2") = nb::module_::import_("tcbase._geom_native").attr("Vec2f");
-
-        nb::implicitly_convertible<nb::tuple, tgfx::CanvasColor>();
 
         nb::class_<tgfx::Canvas2DRenderer>(m, "Canvas2DRenderer")
             .def(nb::init<tgfx::FontAtlas*>(), nb::arg("font").none() = nb::none(), nb::keep_alive<1, 2>())
@@ -1182,7 +1157,7 @@ namespace tgfx_bindings {
                 "draw_polyline",
                 [](tgfx::Canvas2DRenderer& self,
                    const std::vector<tgfx::CanvasVec2>& points,
-                   tgfx::CanvasColor color,
+                   tgfx::CanvasSrgbColor color,
                    float thickness) {
                     self.draw_polyline(
                         std::span<const tgfx::CanvasVec2>(points.data(), points.size()), color, thickness);
@@ -1198,10 +1173,10 @@ namespace tgfx_bindings {
                    float y,
                    float w,
                    float h,
-                   std::optional<tgfx::CanvasColor> tint,
+                   std::optional<tgfx::CanvasSrgbColor> tint,
                    bool flip_v,
                    tgfx::CanvasTextureSampling sampling) {
-                    self.draw_texture(texture, x, y, w, h, tint.value_or(tgfx::CanvasColor::white()), flip_v, sampling);
+                    self.draw_texture(texture, x, y, w, h, tint.value_or(tgfx::CanvasSrgbColor{1, 1, 1, 1}), flip_v, sampling);
                 },
                 nb::arg("texture"),
                 nb::arg("x"),
@@ -1218,14 +1193,14 @@ namespace tgfx_bindings {
                                         float x,
                                         float y,
                                         float size_px,
-                                        std::optional<tgfx::CanvasColor> color,
+                                        std::optional<tgfx::CanvasSrgbColor> color,
                                         tgfx::FontAtlas* font,
                                         nb::object anchor) {
                     self.draw_text(text,
                                    x,
                                    y,
                                    size_px,
-                                   color.value_or(tgfx::CanvasColor::white()),
+                                   color.value_or(tgfx::CanvasSrgbColor{1, 1, 1, 1}),
                                    font,
                                    resolve_text2d_anchor(anchor));
                 },

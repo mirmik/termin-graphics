@@ -183,14 +183,14 @@ namespace termin::gui_native {
                 continue;
             }
             if (index == hovered_ || index == pressed_ || command.checked) {
-                tc_ui_color highlight = style.accent;
+                tc_ui_srgb_color highlight = style.accent;
                 highlight.a *= index == pressed_ ? 0.48f : (command.checked ? 0.36f : 0.20f);
                 tc_ui_painter_fill_rounded_rect(context, rect, 4.0f, highlight);
             }
             if (index == keyboard_ && tc_widget_handle_eq(tc_ui_document_focused_widget(document), handle())) {
                 tc_ui_painter_stroke_rect(context, rect, style.accent, 1.5f);
             }
-            tc_ui_color foreground = style.foreground;
+            tc_ui_srgb_color foreground = style.foreground;
             if (!command.enabled)
                 foreground.a *= 0.45f;
             const bool has_icon = command.texture_id != 0 || !command.icon.empty();

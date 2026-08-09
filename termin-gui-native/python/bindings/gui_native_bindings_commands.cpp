@@ -684,8 +684,8 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
     nb::class_<termin::gui_native::ColorPickerModel>(m, "ColorPickerModel")
         .def(
             "__init__",
-            [](termin::gui_native::ColorPickerModel* self, std::optional<tc_ui_color> initial, bool show_alpha) {
-                const tc_ui_color resolved_initial = initial.value_or(tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f});
+            [](termin::gui_native::ColorPickerModel* self, std::optional<tc_ui_srgb_color> initial, bool show_alpha) {
+                const tc_ui_srgb_color resolved_initial = initial.value_or(tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
                 new (self) termin::gui_native::ColorPickerModel(
                     termin::gui_native::Color{
                         resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
@@ -695,8 +695,8 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             nb::arg("show_alpha") = true)
         .def_prop_rw(
             "color",
-            [](const termin::gui_native::ColorPickerModel& self) { return self.color().c_color(); },
-            [](termin::gui_native::ColorPickerModel& self, tc_ui_color color) {
+            [](const termin::gui_native::ColorPickerModel& self) { return self.srgb_color(); },
+            [](termin::gui_native::ColorPickerModel& self, tc_ui_srgb_color color) {
                 self.set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
         .def_prop_rw("srgb_color",
@@ -784,8 +784,8 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
                      })
         .def_prop_rw(
             "color",
-            [](const ColorDialogRef& self) { return self.get().color().c_color(); },
-            [](const ColorDialogRef& self, tc_ui_color color) {
+            [](const ColorDialogRef& self) { return self.get().model()->srgb_color(); },
+            [](const ColorDialogRef& self, tc_ui_srgb_color color) {
                 self.get().set_color(termin::gui_native::Color{color.r, color.g, color.b, color.a});
             })
         .def_prop_rw(

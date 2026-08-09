@@ -792,7 +792,7 @@ namespace termin_gui_native_test {
         canvas.set_paint_callback([&custom_paints](Canvas&, tc_ui_paint_context* context) {
             ++custom_paints;
             tc_ui_painter_draw_line(
-                context, tc_ui_point{0.0f, 0.0f}, tc_ui_point{1.0f, 1.0f}, tc_ui_color{1.0f, 0.0f, 0.0f, 1.0f}, 1.0f);
+                context, tc_ui_point{0.0f, 0.0f}, tc_ui_point{1.0f, 1.0f}, tc_ui_srgb_color{1.0f, 0.0f, 0.0f, 1.0f}, 1.0f);
         });
         root.add_fixed_child(icon, 28.0f);
         root.add_fixed_child(image, 80.0f);

@@ -26,11 +26,11 @@ namespace {
             self->paint_count += 1;
 
             tc_ui_painter_push_clip(context, tc_ui_rect{0.0f, 0.0f, 64.0f, 32.0f});
-            tc_ui_painter_fill_rect(context, tc_ui_rect{1.0f, 2.0f, 30.0f, 10.0f}, tc_ui_color{0.1f, 0.2f, 0.3f, 1.0f});
+            tc_ui_painter_fill_rect(context, tc_ui_rect{1.0f, 2.0f, 30.0f, 10.0f}, tc_ui_srgb_color{0.1f, 0.2f, 0.3f, 1.0f});
             tc_ui_painter_draw_line(
-                context, tc_ui_point{4.0f, 5.0f}, tc_ui_point{6.0f, 7.0f}, tc_ui_color{0.8f, 0.7f, 0.6f, 1.0f}, 2.0f);
+                context, tc_ui_point{4.0f, 5.0f}, tc_ui_point{6.0f, 7.0f}, tc_ui_srgb_color{0.8f, 0.7f, 0.6f, 1.0f}, 2.0f);
             tc_ui_painter_draw_text(
-                context, "Hello", tc_ui_point{8.0f, 9.0f}, 13.0f, tc_ui_color{0.9f, 0.9f, 0.7f, 1.0f});
+                context, "Hello", tc_ui_point{8.0f, 9.0f}, 13.0f, tc_ui_srgb_color{0.9f, 0.9f, 0.7f, 1.0f});
             tc_ui_painter_pop_clip(context);
         }
 
@@ -131,7 +131,7 @@ namespace {
             {3.0f, 4.0f},
             {5.0f, 6.0f},
         };
-        const tc_ui_color white{1.0f, 1.0f, 1.0f, 1.0f};
+        const tc_ui_srgb_color white{1.0f, 1.0f, 1.0f, 1.0f};
 
         tc_ui_painter_fill_rounded_rect(context, tc_ui_rect{1.0f, 2.0f, 30.0f, 20.0f}, 4.0f, white);
         tc_ui_painter_stroke_rounded_rect(context, tc_ui_rect{2.0f, 3.0f, 28.0f, 18.0f}, 3.0f, white, 2.0f);
@@ -143,7 +143,7 @@ namespace {
         tc_ui_painter_draw_texture(context,
                                    42,
                                    tc_ui_rect{16.0f, 17.0f, 8.0f, 9.0f},
-                                   tc_ui_color{0.5f, 0.6f, 0.7f, 0.8f},
+                                   tc_ui_srgb_color{0.5f, 0.6f, 0.7f, 0.8f},
                                    TC_UI_TEXTURE_SAMPLING_NEAREST,
                                    true);
         tc_ui_painter_draw_text(context, text, tc_ui_point{18.0f, 19.0f}, 14.0f, white);

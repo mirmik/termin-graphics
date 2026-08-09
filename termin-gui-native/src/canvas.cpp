@@ -94,10 +94,10 @@ namespace termin::gui_native {
             const tc_ui_rect destination{
                 bounds().x + offset_.x, bounds().y + offset_.y, image_size_.width * zoom_, image_size_.height * zoom_};
             tc_ui_painter_draw_texture(
-                context, texture_id_, destination, tc_ui_color{1, 1, 1, 1}, texture_sampling_, false);
+                context, texture_id_, destination, tc_ui_srgb_color{1, 1, 1, 1}, texture_sampling_, false);
             if (overlay_texture_id_ != 0) {
                 tc_ui_painter_draw_texture(
-                    context, overlay_texture_id_, destination, tc_ui_color{1, 1, 1, 1}, texture_sampling_, false);
+                    context, overlay_texture_id_, destination, tc_ui_srgb_color{1, 1, 1, 1}, texture_sampling_, false);
             }
         }
         if (paint_callback_)

@@ -14,11 +14,11 @@ namespace termin::gui_native::detail {
         return color.a > 0.0f;
     }
 
-    bool color_visible(tc_ui_color color) {
+    bool color_visible(tc_ui_srgb_color color) {
         return color.a > 0.0f;
     }
 
-    void set_style_color(Widget& widget, tc_ui_style_field_mask field, tc_ui_color color) {
+    void set_style_color(Widget& widget, tc_ui_style_field_mask field, tc_ui_srgb_color color) {
         tc_ui_style_override style_override = widget.style_override();
         style_override.fields |= field;
         if (field == TC_UI_STYLE_BACKGROUND)

@@ -96,31 +96,31 @@ void bind_gui_native_control_views(nb::module_& m) {
             [](const IconButtonRef& self, const std::string& tooltip) { self.get().set_tooltip(tooltip); })
         .def(
             "set_background_color",
-            [](const IconButtonRef& self, tc_ui_color color) {
+            [](const IconButtonRef& self, tc_ui_srgb_color color) {
                 self.get().set_background_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_hover_color",
-            [](const IconButtonRef& self, tc_ui_color color) {
+            [](const IconButtonRef& self, tc_ui_srgb_color color) {
                 self.get().set_hover_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_pressed_color",
-            [](const IconButtonRef& self, tc_ui_color color) {
+            [](const IconButtonRef& self, tc_ui_srgb_color color) {
                 self.get().set_pressed_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_active_color",
-            [](const IconButtonRef& self, tc_ui_color color) {
+            [](const IconButtonRef& self, tc_ui_srgb_color color) {
                 self.get().set_active_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
         .def(
             "set_icon_color",
-            [](const IconButtonRef& self, tc_ui_color color) {
+            [](const IconButtonRef& self, tc_ui_srgb_color color) {
                 self.get().set_icon_color({color.r, color.g, color.b, color.a});
             },
             nb::arg("color"))
@@ -177,7 +177,7 @@ void bind_gui_native_control_views(nb::module_& m) {
         .def("clear_texture", [](const ImageWidgetRef& self) { self.get().clear_texture(); })
         .def(
             "set_tint",
-            [](const ImageWidgetRef& self, tc_ui_color tint) {
+            [](const ImageWidgetRef& self, tc_ui_srgb_color tint) {
                 self.get().set_tint(termin::gui_native::Color{tint.r, tint.g, tint.b, tint.a});
             },
             nb::arg("tint"))

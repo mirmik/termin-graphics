@@ -106,7 +106,7 @@ namespace {
         tc_ui_style_override style{};
         style.fields = TC_UI_STYLE_BACKGROUND | TC_UI_STYLE_FONT_SIZE | TC_UI_STYLE_CORNER_RADIUS;
         style.flags = TC_UI_STYLE_OVERRIDE_INHERIT;
-        style.value.background = tc_ui_color{0.1f, 0.2f, 0.3f, 1.0f};
+        style.value.background = tc_ui_srgb_color{0.1f, 0.2f, 0.3f, 1.0f};
         style.value.font_size = 19.0f;
         style.value.corner_radius = 7.0f;
         assert(tc_widget_set_style_override(child_widget, &style));

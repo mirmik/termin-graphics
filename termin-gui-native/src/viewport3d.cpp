@@ -210,7 +210,7 @@ namespace termin::gui_native {
                 tc_ui_painter_draw_texture(context,
                                            texture,
                                            destination,
-                                           tc_ui_color{1.0f, 1.0f, 1.0f, 1.0f},
+                                           tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                            TC_UI_TEXTURE_SAMPLING_LINEAR,
                                            false);
             }

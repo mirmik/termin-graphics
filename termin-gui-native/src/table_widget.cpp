@@ -285,7 +285,7 @@ namespace termin::gui_native {
         sync_models();
         const tc_ui_style style = computed_style(document);
         const tc_ui_rect header{bounds().x, bounds().y, bounds().width, header_height_};
-        tc_ui_color header_color = style.accent;
+        tc_ui_srgb_color header_color = style.accent;
         header_color.a *= 0.20f;
         tc_ui_painter_fill_rect(context, bounds(), style.background);
         tc_ui_painter_push_clip(context, bounds());
@@ -319,7 +319,7 @@ namespace termin::gui_native {
         const tc_ui_rect body{bounds().x, bounds().y + header_height_, bounds().width, body_height()};
         tc_ui_painter_push_clip(context, body);
         if (model_->empty()) {
-            tc_ui_color muted = style.foreground;
+            tc_ui_srgb_color muted = style.foreground;
             muted.a *= 0.6f;
             tc_ui_painter_draw_text(context,
                                     "No data",
@@ -332,14 +332,14 @@ namespace termin::gui_native {
                 const TableRow& row = model_->row_at(row_index);
                 const float y = body.y + static_cast<float>(row_index) * row_height_ - scroll_y_;
                 const tc_ui_rect row_rect{body.x, y, body.width, row_height_};
-                tc_ui_color row_color = row_index % 2 == 0 ? style.background : style.border;
+                tc_ui_srgb_color row_color = row_index % 2 == 0 ? style.background : style.border;
                 row_color.a = row_index % 2 == 0 ? 0.18f : 0.10f;
                 if (selection_.contains(row_index) || hovered_ == row_index) {
                     row_color = style.accent;
                     row_color.a *= selection_.contains(row_index) ? 0.42f : 0.20f;
                 }
                 tc_ui_painter_fill_rect(context, row_rect, row_color);
-                tc_ui_color foreground = style.foreground;
+                tc_ui_srgb_color foreground = style.foreground;
                 if (!row.data.enabled)
                     foreground.a *= 0.45f;
                 const size_t cell_count = std::min(row.data.cells.size(), column_layout_.size());

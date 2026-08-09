@@ -251,11 +251,11 @@ static bool valid_text_metric(float value) {
     return isfinite(value) && value >= 0.0f;
 }
 
-static tc_ui_color style_color(float r, float g, float b, float a) {
-    return (tc_ui_color){r, g, b, a};
+static tc_ui_srgb_color style_color(float r, float g, float b, float a) {
+    return (tc_ui_srgb_color){r, g, b, a};
 }
 
-static bool valid_style_color(tc_ui_color color) {
+static bool valid_style_color(tc_ui_srgb_color color) {
     return isfinite(color.r) && isfinite(color.g) && isfinite(color.b) && isfinite(color.a) && color.r >= 0.0f &&
            color.r <= 1.0f && color.g >= 0.0f && color.g <= 1.0f && color.b >= 0.0f && color.b <= 1.0f &&
            color.a >= 0.0f && color.a <= 1.0f;
@@ -377,7 +377,7 @@ static tc_ui_style default_base_style(void) {
     return style;
 }
 
-static tc_ui_style_override color_override(tc_ui_style_field_mask field, tc_ui_color color) {
+static tc_ui_style_override color_override(tc_ui_style_field_mask field, tc_ui_srgb_color color) {
     tc_ui_style_override result;
     memset(&result, 0, sizeof(result));
     result.value = default_base_style();

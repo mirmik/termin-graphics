@@ -34,35 +34,35 @@ namespace termin::gui_native {
 
     namespace detail {
 
-        tc_ui_color semantic_file_icon_color(std::string_view icon) {
+        tc_ui_srgb_color semantic_file_icon_color(std::string_view icon) {
             if (icon == "folder")
-                return tc_ui_color{0.80f, 0.67f, 0.24f, 1.0f};
+                return tc_ui_srgb_color{0.80f, 0.67f, 0.24f, 1.0f};
             if (icon == "image")
-                return tc_ui_color{0.31f, 0.73f, 0.47f, 1.0f};
+                return tc_ui_srgb_color{0.31f, 0.73f, 0.47f, 1.0f};
             if (icon == "audio")
-                return tc_ui_color{0.69f, 0.39f, 0.80f, 1.0f};
+                return tc_ui_srgb_color{0.69f, 0.39f, 0.80f, 1.0f};
             if (icon == "video")
-                return tc_ui_color{0.86f, 0.39f, 0.31f, 1.0f};
+                return tc_ui_srgb_color{0.86f, 0.39f, 0.31f, 1.0f};
             if (icon == "archive")
-                return tc_ui_color{0.75f, 0.53f, 0.24f, 1.0f};
+                return tc_ui_srgb_color{0.75f, 0.53f, 0.24f, 1.0f};
             if (icon == "exec")
-                return tc_ui_color{0.31f, 0.78f, 0.57f, 1.0f};
+                return tc_ui_srgb_color{0.31f, 0.78f, 0.57f, 1.0f};
             if (icon == "code")
-                return tc_ui_color{0.39f, 0.61f, 0.88f, 1.0f};
+                return tc_ui_srgb_color{0.39f, 0.61f, 0.88f, 1.0f};
             if (icon == "pdf")
-                return tc_ui_color{0.86f, 0.29f, 0.29f, 1.0f};
+                return tc_ui_srgb_color{0.86f, 0.29f, 0.29f, 1.0f};
             if (icon == "spreadsheet")
-                return tc_ui_color{0.31f, 0.75f, 0.39f, 1.0f};
-            return tc_ui_color{0.55f, 0.61f, 0.69f, 1.0f};
+                return tc_ui_srgb_color{0.31f, 0.75f, 0.39f, 1.0f};
+            return tc_ui_srgb_color{0.55f, 0.61f, 0.69f, 1.0f};
         }
 
         void draw_semantic_file_icon(tc_ui_paint_context* context,
                                      tc_ui_rect rect,
                                      std::string_view icon,
-                                     tc_ui_color tint) {
+                                     tc_ui_srgb_color tint) {
             if (icon.empty() || rect.width <= 0.0f || rect.height <= 0.0f)
                 return;
-            tc_ui_color color = semantic_file_icon_color(icon);
+            tc_ui_srgb_color color = semantic_file_icon_color(icon);
             color.a *= tint.a;
             if (icon == "folder") {
                 const float tab_height = rect.height * 0.27f;
@@ -71,7 +71,7 @@ namespace termin::gui_native {
                     tc_ui_rect{rect.x, rect.y + tab_height * 0.26f, rect.width * 0.52f, tab_height},
                     2.0f,
                     color);
-                tc_ui_color highlight = color;
+                tc_ui_srgb_color highlight = color;
                 highlight.r = std::min(1.0f, highlight.r * 1.15f);
                 highlight.g = std::min(1.0f, highlight.g * 1.15f);
                 highlight.b = std::min(1.0f, highlight.b * 1.15f);
@@ -84,12 +84,12 @@ namespace termin::gui_native {
             }
             tc_ui_painter_fill_rounded_rect(context, rect, 2.0f, color);
             const float fold = std::min(rect.width, rect.height) * 0.28f;
-            tc_ui_color fold_color = color;
+            tc_ui_srgb_color fold_color = color;
             fold_color.r *= 0.58f;
             fold_color.g *= 0.58f;
             fold_color.b *= 0.58f;
             tc_ui_painter_fill_rect(context, tc_ui_rect{rect.x + rect.width - fold, rect.y, fold, fold}, fold_color);
-            tc_ui_color line = color;
+            tc_ui_srgb_color line = color;
             line.r = std::min(1.0f, line.r * 1.35f);
             line.g = std::min(1.0f, line.g * 1.35f);
             line.b = std::min(1.0f, line.b * 1.35f);
@@ -385,7 +385,7 @@ namespace termin::gui_native {
         tc_ui_painter_fill_rect(context, bounds(), style.background);
         tc_ui_painter_push_clip(context, bounds());
         if (model_->empty()) {
-            tc_ui_color muted = style.foreground;
+            tc_ui_srgb_color muted = style.foreground;
             muted.a *= 0.6f;
             tc_ui_painter_draw_text(context,
                                     empty_text_.c_str(),
@@ -399,11 +399,11 @@ namespace termin::gui_native {
                 const tc_ui_rect tile = item_rect(index);
                 tc_ui_painter_push_clip(context, tile);
                 if (selection_.contains(index) || hovered_ == index) {
-                    tc_ui_color highlight = style.accent;
+                    tc_ui_srgb_color highlight = style.accent;
                     highlight.a *= selection_.contains(index) ? 0.42f : 0.20f;
                     tc_ui_painter_fill_rounded_rect(context, tile, 5.0f, highlight);
                 }
-                tc_ui_color foreground = style.foreground;
+                tc_ui_srgb_color foreground = style.foreground;
                 if (!item.enabled)
                     foreground.a *= 0.45f;
                 if (icon_size_ > 0.0f) {
@@ -428,7 +428,7 @@ namespace termin::gui_native {
                                         name_size,
                                         foreground);
                 if (!item.subtitle.empty()) {
-                    tc_ui_color subtitle = foreground;
+                    tc_ui_srgb_color subtitle = foreground;
                     subtitle.a *= 0.65f;
                     const std::string subtitle_text =
                         elide_text(document, item.subtitle, subtitle_size, tile.width - 10.0f);
@@ -445,7 +445,7 @@ namespace termin::gui_native {
             }
         }
         if (has_scrollbar()) {
-            tc_ui_color thumb = style.border;
+            tc_ui_srgb_color thumb = style.border;
             if (dragging_scrollbar_)
                 thumb = style.accent;
             tc_ui_painter_fill_rounded_rect(context, scrollbar_thumb_rect(), scrollbar_width_ * 0.5f, thumb);

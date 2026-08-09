@@ -55,7 +55,7 @@ namespace termin::gui_native {
                                 style.border,
                                 style.border_width);
         if (!displayed_text().empty()) {
-            tc_ui_color foreground = style.foreground;
+            tc_ui_srgb_color foreground = style.foreground;
             if (!has_message())
                 foreground.a *= 0.65f;
             const float font_size = std::max(9.0f, style.font_size - 2.0f);

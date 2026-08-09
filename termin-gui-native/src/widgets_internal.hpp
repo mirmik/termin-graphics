@@ -19,8 +19,8 @@ namespace termin::gui_native::detail {
 
     float clamp_float(float value, float lo, float hi);
     bool color_visible(Color color);
-    bool color_visible(tc_ui_color color);
-    void set_style_color(Widget& widget, tc_ui_style_field_mask field, tc_ui_color color);
+    bool color_visible(tc_ui_srgb_color color);
+    void set_style_color(Widget& widget, tc_ui_style_field_mask field, tc_ui_srgb_color color);
     void set_style_metric(Widget& widget, tc_ui_style_field_mask field, float value);
     bool rect_contains(tc_ui_rect rect, float x, float y);
     bool command_modifier(int32_t modifiers);
@@ -53,9 +53,9 @@ namespace termin::gui_native::detail {
     NativeWidget* native_widget_body(tc_widget* widget);
     void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect);
     void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
-    tc_ui_color semantic_file_icon_color(std::string_view icon);
+    tc_ui_srgb_color semantic_file_icon_color(std::string_view icon);
     void
-    draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect, std::string_view icon, tc_ui_color tint);
+    draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect, std::string_view icon, tc_ui_srgb_color tint);
     tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding);
     float primary_size(tc_ui_size size, Orientation orientation);
     float cross_size(tc_ui_size size, Orientation orientation);

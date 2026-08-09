@@ -629,6 +629,11 @@ if(BUILD_TGFX2_TESTS)
         termin_add_test_labels(tgfx2_immediate_color_contract_test)
     endif()
 
+    add_executable(tgfx2_canvas_color_contract_test tests/test_canvas_color_contract.cpp)
+    target_link_libraries(tgfx2_canvas_color_contract_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_canvas_color_contract_test)
+    add_test(NAME tgfx2_canvas_color_contract_test COMMAND tgfx2_canvas_color_contract_test)
+
     add_executable(tgfx2_front_face_contract_test
         tests/test_tgfx2_front_face_contract.cpp)
     target_link_libraries(tgfx2_front_face_contract_test PRIVATE termin_graphics2)

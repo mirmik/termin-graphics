@@ -27,8 +27,8 @@ namespace tcplot {
 
     namespace {
 
-        tgfx::CanvasColor canvas_color(const Color4& c) {
-            return tgfx::CanvasColor{c.r, c.g, c.b, c.a};
+        tgfx::CanvasSrgbColor canvas_color(const Color4& c) {
+            return tgfx::CanvasSrgbColor{c.r, c.g, c.b, c.a};
         }
 
     } // namespace

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <termin/geom/bounds2.hpp>
+#include <termin/geom/color.hpp>
 #include <termin/geom/rect2.hpp>
 
 #include "tgfx2/draw_list2d.hpp"
@@ -24,7 +25,7 @@ namespace tgfx {
     class IRenderDevice;
 
     // Compatibility names; Canvas uses the canonical shared value vocabulary.
-    using CanvasColor = Color4f;
+    using CanvasSrgbColor = termin::SrgbColor;
     using CanvasVec2 = termin::Vec2f;
 
     using CanvasTextureSampling = DrawTextureSampling2D;
@@ -34,7 +35,7 @@ namespace tgfx {
         float radius = 0.0f;
         float start_radians = 0.0f;
         float end_radians = 0.0f;
-        CanvasColor color;
+        CanvasSrgbColor color;
         float thickness = 1.0f;
         int segments = 0;
     };
@@ -45,7 +46,7 @@ namespace tgfx {
         float width = 0.0f;
         float height = 0.0f;
         float radius = 0.0f;
-        CanvasColor color;
+        CanvasSrgbColor color;
         float thickness = 1.0f;
         int corner_segments = 6;
     };
@@ -75,7 +76,7 @@ namespace tgfx {
         ShaderHandle solid_vs_{}, solid_fs_{}, texture_vs_{}, texture_fs_{};
         std::vector<ClipRect> clip_stack_;
         BatchMode batch_mode_ = BatchMode::None;
-        CanvasColor batch_color_{};
+        CanvasSrgbColor batch_color_{};
         TextureHandle batch_texture_{};
         CanvasTextureSampling batch_texture_sampling_ = CanvasTextureSampling::Linear;
         SamplerHandle linear_sampler_{};
@@ -107,21 +108,21 @@ namespace tgfx {
         void begin_clip(float x, float y, float w, float h);
         void end_clip();
 
-        void draw_rect(float x, float y, float w, float h, CanvasColor color, float radius = 0.0f);
-        void draw_circle(float cx, float cy, float radius, CanvasColor color, int segments = 24);
+        void draw_rect(float x, float y, float w, float h, CanvasSrgbColor color, float radius = 0.0f);
+        void draw_circle(float cx, float cy, float radius, CanvasSrgbColor color, int segments = 24);
         void draw_circle_outline(
-            float cx, float cy, float radius, CanvasColor color, float thickness = 1.0f, int segments = 24);
+            float cx, float cy, float radius, CanvasSrgbColor color, float thickness = 1.0f, int segments = 24);
         void draw_arc(const CanvasArc& arc);
-        void draw_rect_outline(float x, float y, float w, float h, CanvasColor color, float thickness = 1.0f);
+        void draw_rect_outline(float x, float y, float w, float h, CanvasSrgbColor color, float thickness = 1.0f);
         void draw_rounded_rect_outline(const CanvasRoundedRectOutline& outline);
-        void draw_line(float x0, float y0, float x1, float y1, CanvasColor color, float thickness = 1.0f);
-        void draw_polyline(std::span<const CanvasVec2> points, CanvasColor color, float thickness = 1.0f);
+        void draw_line(float x0, float y0, float x1, float y1, CanvasSrgbColor color, float thickness = 1.0f);
+        void draw_polyline(std::span<const CanvasVec2> points, CanvasSrgbColor color, float thickness = 1.0f);
         void draw_texture(TextureHandle texture,
                           float x,
                           float y,
                           float w,
                           float h,
-                          CanvasColor tint = CanvasColor::white(),
+                          CanvasSrgbColor tint = CanvasSrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                           bool flip_v = false,
                           CanvasTextureSampling sampling = CanvasTextureSampling::Linear);
 
@@ -129,7 +130,7 @@ namespace tgfx {
                        float x,
                        float y,
                        float size_px,
-                       CanvasColor color,
+                       CanvasSrgbColor color,
                        FontAtlas* font = nullptr,
                        Text2DRenderer::Anchor anchor = Text2DRenderer::Anchor::Left);
         FontAtlas::Size2f measure_text(std::string_view text, float size_px, FontAtlas* font = nullptr) const;
@@ -148,18 +149,18 @@ namespace tgfx {
         void ensure_samplers_(IRenderDevice& device);
         void build_projection_();
         bool flush_();
-        bool bind_solid_(CanvasColor color);
-        bool bind_texture_(CanvasColor tint, TextureHandle texture, CanvasTextureSampling sampling);
+        bool bind_solid_(CanvasSrgbColor color);
+        bool bind_texture_(CanvasSrgbColor tint, TextureHandle texture, CanvasTextureSampling sampling);
         void push_quad_(termin::Bounds2f bounds, termin::Bounds2f uv);
-        void append_solid_quad_(termin::Bounds2f bounds, CanvasColor color);
-        void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, CanvasColor color);
+        void append_solid_quad_(termin::Bounds2f bounds, CanvasSrgbColor color);
+        void append_solid_triangle_(CanvasVec2 p0, CanvasVec2 p1, CanvasVec2 p2, CanvasSrgbColor color);
         void append_textured_quad_(termin::Bounds2f bounds,
                                    termin::Bounds2f uv,
-                                   CanvasColor tint,
+                                   CanvasSrgbColor tint,
                                    TextureHandle texture,
                                    CanvasTextureSampling sampling);
         void append_mesh_(std::span<const DrawVertex2D> vertices,
-                          CanvasColor color,
+                          CanvasSrgbColor color,
                           TextureHandle texture,
                           CanvasTextureSampling sampling);
     };

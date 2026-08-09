@@ -201,7 +201,7 @@ namespace termin::gui_native {
         tc_ui_painter_fill_rect(context, bounds(), style.background);
         tc_ui_painter_push_clip(context, bounds());
         if (model_->empty()) {
-            tc_ui_color muted = style.foreground;
+            tc_ui_srgb_color muted = style.foreground;
             muted.a *= 0.6f;
             tc_ui_painter_draw_text(context,
                                     "No items",
@@ -216,11 +216,11 @@ namespace termin::gui_native {
                 const float y = bounds().y + static_cast<float>(index) * stride - scroll_y_;
                 const tc_ui_rect row{bounds().x, y, bounds().width, row_height_};
                 if (selection_.contains(index) || hovered_ == index) {
-                    tc_ui_color highlight = style.accent;
+                    tc_ui_srgb_color highlight = style.accent;
                     highlight.a *= selection_.contains(index) ? 0.42f : 0.20f;
                     tc_ui_painter_fill_rounded_rect(context, row, std::min(4.0f, row_height_ * 0.2f), highlight);
                 }
-                tc_ui_color foreground = style.foreground;
+                tc_ui_srgb_color foreground = style.foreground;
                 if (!item.enabled)
                     foreground.a *= 0.45f;
                 float text_x = row.x + item_padding_;
@@ -248,7 +248,7 @@ namespace termin::gui_native {
                                             tc_ui_point{text_x, row.y + style.font_size + 3.0f},
                                             style.font_size,
                                             foreground);
-                    tc_ui_color subtitle = foreground;
+                    tc_ui_srgb_color subtitle = foreground;
                     subtitle.a *= 0.65f;
                     tc_ui_painter_draw_text(context,
                                             item.subtitle.c_str(),

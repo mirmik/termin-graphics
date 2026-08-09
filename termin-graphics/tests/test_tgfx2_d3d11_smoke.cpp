@@ -1627,8 +1627,8 @@ int main() {
             ctx.begin_pass(color, {}, canvas_clear, 1.0f, false);
             tgfx::Canvas2DRenderer solid_canvas;
             solid_canvas.begin(ctx, 4, 4);
-            solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f, tgfx::CanvasColor{0.90f, 0.10f, 0.10f, 1.0f});
-            solid_canvas.draw_rect(2.0f, 2.0f, 2.0f, 2.0f, tgfx::CanvasColor{0.10f, 0.20f, 0.90f, 1.0f});
+            solid_canvas.draw_rect(0.0f, 0.0f, 2.0f, 2.0f, tgfx::CanvasSrgbColor{0.90f, 0.10f, 0.10f, 1.0f});
+            solid_canvas.draw_rect(2.0f, 2.0f, 2.0f, 2.0f, tgfx::CanvasSrgbColor{0.10f, 0.20f, 0.90f, 1.0f});
             solid_canvas.end();
             ctx.end_pass();
             ctx.end_frame();
@@ -1700,7 +1700,7 @@ int main() {
                                         8.0f,
                                         8.0f,
                                         18.0f,
-                                        tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                        tgfx::CanvasSrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                                         &bitmap_font,
                                         tgfx::Text2DRenderer::Anchor::Left);
                 bitmap_canvas.end();
@@ -1720,7 +1720,7 @@ int main() {
                                      8.0f,
                                      8.0f,
                                      28.0f,
-                                     tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                     tgfx::CanvasSrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                                      &sdf_font,
                                      tgfx::Text2DRenderer::Anchor::Left);
                 sdf_canvas.end();
@@ -1771,14 +1771,14 @@ int main() {
                                        0.0f,
                                        static_cast<float>(text_desc.width),
                                        static_cast<float>(text_desc.height),
-                                       tgfx::CanvasColor{0.02f, 0.02f, 0.03f, 1.0f});
+                                       tgfx::CanvasSrgbColor{0.02f, 0.02f, 0.03f, 1.0f});
                 mixed_canvas.draw_texture(mixed_texture, 4.0f, 4.0f, 24.0f, 24.0f);
-                mixed_canvas.draw_rect(34.0f, 4.0f, 80.0f, 32.0f, tgfx::CanvasColor{0.12f, 0.12f, 0.16f, 1.0f});
+                mixed_canvas.draw_rect(34.0f, 4.0f, 80.0f, 32.0f, tgfx::CanvasSrgbColor{0.12f, 0.12f, 0.16f, 1.0f});
                 mixed_canvas.draw_text("Text",
                                        38.0f,
                                        8.0f,
                                        18.0f,
-                                       tgfx::CanvasColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                       tgfx::CanvasSrgbColor{1.0f, 1.0f, 1.0f, 1.0f},
                                        &bitmap_font,
                                        tgfx::Text2DRenderer::Anchor::Left);
                 mixed_canvas.end();

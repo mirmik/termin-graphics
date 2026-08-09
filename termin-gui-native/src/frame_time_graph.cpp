@@ -133,9 +133,9 @@ namespace termin::gui_native {
         const auto y_for = [&](float milliseconds) {
             return rect.y + rect.height - (milliseconds / scale) * rect.height;
         };
-        tc_ui_color grid = style.border;
+        tc_ui_srgb_color grid = style.border;
         grid.a *= 0.7f;
-        tc_ui_color target = style.foreground;
+        tc_ui_srgb_color target = style.foreground;
         target.a *= 0.55f;
         for (float threshold : {target_frame_ms_, warning_frame_ms_}) {
             if (threshold < scale) {
@@ -165,10 +165,10 @@ namespace termin::gui_native {
             const float milliseconds = model_->samples()[index];
             const float height = std::min(rect.height, milliseconds / scale * rect.height);
             const float x = rect.x + static_cast<float>(model_->max_samples() - count + index) * slot_width;
-            tc_ui_color color = milliseconds < target_frame_ms_
-                                    ? tc_ui_color{0.31f, 0.71f, 0.31f, 1.0f}
-                                    : (milliseconds < warning_frame_ms_ ? tc_ui_color{0.78f, 0.71f, 0.31f, 1.0f}
-                                                                        : tc_ui_color{0.78f, 0.31f, 0.31f, 1.0f});
+            tc_ui_srgb_color color = milliseconds < target_frame_ms_
+                                    ? tc_ui_srgb_color{0.31f, 0.71f, 0.31f, 1.0f}
+                                    : (milliseconds < warning_frame_ms_ ? tc_ui_srgb_color{0.78f, 0.71f, 0.31f, 1.0f}
+                                                                        : tc_ui_srgb_color{0.78f, 0.31f, 0.31f, 1.0f});
             tc_ui_painter_fill_rect(context, tc_ui_rect{x, rect.y + rect.height - height, bar_width, height}, color);
         }
     }

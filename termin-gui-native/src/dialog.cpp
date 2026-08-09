@@ -222,7 +222,7 @@ namespace termin::gui_native {
         if (style.border_width > 0.0f && color_visible(style.border)) {
             tc_ui_painter_stroke_rounded_rect(context, bounds(), style.corner_radius, style.border, style.border_width);
         }
-        tc_ui_color title_background = style.accent;
+        tc_ui_srgb_color title_background = style.accent;
         title_background.a *= 0.22f;
         tc_ui_painter_fill_rect(
             context, tc_ui_rect{bounds().x, bounds().y, bounds().width, title_height_}, title_background);

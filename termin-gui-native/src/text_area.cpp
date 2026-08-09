@@ -214,7 +214,7 @@ namespace termin::gui_native {
                     float x1 = 0.0f;
                     measure_range(document, line.start, start, style.font_size, x0);
                     measure_range(document, line.start, end, style.font_size, x1);
-                    tc_ui_color selection_color = style.accent;
+                    tc_ui_srgb_color selection_color = style.accent;
                     selection_color.a *= 0.45f;
                     tc_ui_painter_fill_rect(
                         context, tc_ui_rect{clip.x + x0 - scroll_x_, row_y, x1 - x0, height}, selection_color);
@@ -222,7 +222,7 @@ namespace termin::gui_native {
             }
             const std::string line_text =
                 text_.empty() ? placeholder_ : text_.substr(line.start, line.end - line.start);
-            tc_ui_color text_color = style.foreground;
+            tc_ui_srgb_color text_color = style.foreground;
             if (text_.empty() && !placeholder_.empty()) {
                 text_color.a *= 0.55f;
             }

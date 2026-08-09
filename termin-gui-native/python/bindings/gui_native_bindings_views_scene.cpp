@@ -93,7 +93,7 @@ void bind_gui_native_scene_views(nb::module_& m) {
         .def(nb::init<>())
         .def(
             "__init__",
-            [](termin::gui_native::RichTextStyle* self, std::optional<tc_ui_color> color, bool bold, bool italic) {
+            [](termin::gui_native::RichTextStyle* self, std::optional<tc_ui_srgb_color> color, bool bold, bool italic) {
                 new (self) termin::gui_native::RichTextStyle{std::move(color), bold, italic};
             },
             nb::arg("color") = nb::none(),
@@ -501,7 +501,7 @@ void bind_gui_native_scene_views(nb::module_& m) {
             nb::arg("maximum"))
         .def(
             "set_scene_colors",
-            [](const SceneViewRef& self, tc_ui_color background, tc_ui_color grid, tc_ui_color axes) {
+            [](const SceneViewRef& self, tc_ui_srgb_color background, tc_ui_srgb_color grid, tc_ui_srgb_color axes) {
                 self.get().set_scene_colors(
                     termin::gui_native::Color{background.r, background.g, background.b, background.a},
                     termin::gui_native::Color{grid.r, grid.g, grid.b, grid.a},

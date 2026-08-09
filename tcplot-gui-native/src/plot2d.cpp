@@ -26,7 +26,7 @@ namespace tcplot::gui_native {
         constexpr float label_font_size = 11.0f;
         constexpr float title_font_size = 13.0f;
 
-        tc_ui_color ui_color(Color4 color) {
+        tc_ui_srgb_color ui_color(Color4 color) {
             return {color.r, color.g, color.b, color.a};
         }
 
@@ -322,8 +322,8 @@ namespace tcplot::gui_native {
             tc::Log::error("[Plot2D] failed to paint retained chart items");
         }
 
-        const tc_ui_color axis = ui_color(styles::axis_color());
-        const tc_ui_color label = ui_color(styles::label_color());
+        const tc_ui_srgb_color axis = ui_color(styles::axis_color());
+        const tc_ui_srgb_color label = ui_color(styles::label_color());
         tc_ui_painter_draw_line(context,
                                 {global_area.x, global_area.y + global_area.height},
                                 {global_area.x + global_area.width, global_area.y + global_area.height},
