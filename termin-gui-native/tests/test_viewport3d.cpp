@@ -115,6 +115,16 @@ namespace {
                    tc_ui_pointer_event{TC_UI_POINTER_DOWN, 42.0f, 65.0f, 1, 2, 7, 0.0f, 0.0f}) == TC_UI_EVENT_HANDLED);
         assert((trace->moves.back() == std::tuple<double, double>{32.0, 45.0}));
         assert((trace->buttons.back() == std::tuple<int, int, int, uint32_t>{1, 1, 7, 2}));
+        assert(tc_widget_handle_eq(document.pointer_capture(), handle));
+        assert(document.dispatch_pointer_event(
+                   tc_ui_pointer_event{TC_UI_POINTER_MOVE, 420.0f, 365.0f, 0, 0, 0, 0.0f, 0.0f}) ==
+               TC_UI_EVENT_HANDLED);
+        assert((trace->moves.back() == std::tuple<double, double>{410.0, 345.0}));
+        assert(document.dispatch_pointer_event(
+                   tc_ui_pointer_event{TC_UI_POINTER_UP, 420.0f, 365.0f, 1, 1, 7, 0.0f, 0.0f}) ==
+               TC_UI_EVENT_HANDLED);
+        assert(tc_widget_handle_is_invalid(document.pointer_capture()));
+        assert((trace->buttons.back() == std::tuple<int, int, int, uint32_t>{1, 0, 7, 1}));
         assert(document.dispatch_pointer_event(tc_ui_pointer_event{
                    TC_UI_POINTER_WHEEL, 14.0f, 26.0f, 0, 0, 5, 6.0f, -2.0f}) == TC_UI_EVENT_HANDLED);
         assert((trace->moves.back() == std::tuple<double, double>{4.0, 6.0}));

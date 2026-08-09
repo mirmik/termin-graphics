@@ -476,7 +476,7 @@
       "id": "termin-build-tools-tests",
       "module": "termin-build-tools",
       "executor": "pytest",
-      "roots": ["termin-build-tools/tests"]
+      "roots": ["termin-build-tools/tests", "scripts/tests"]
     },
     {
       "id": "termin-cli-tests",
