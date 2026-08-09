@@ -9,6 +9,12 @@
 
 namespace termin::gui_native {
 
+    enum class ToolBarAlignment {
+        Start,
+        Center,
+        End
+    };
+
     class ToolBar final : public NativeWidget {
     private:
         std::shared_ptr<CommandModel> model_;
@@ -20,7 +26,7 @@ namespace termin::gui_native {
         float separator_margin_ = 6.0f;
         float separator_width_ = 1.0f;
         float icon_gap_ = 4.0f;
-        bool centered_ = false;
+        ToolBarAlignment alignment_ = ToolBarAlignment::Start;
         size_t hovered_ = SIZE_MAX;
         size_t pressed_ = SIZE_MAX;
         size_t keyboard_ = SIZE_MAX;
@@ -52,9 +58,9 @@ namespace termin::gui_native {
         float padding() const {
             return padding_;
         }
-        void set_centered(bool centered);
-        bool centered() const {
-            return centered_;
+        void set_alignment(ToolBarAlignment alignment);
+        ToolBarAlignment alignment() const {
+            return alignment_;
         }
 
         Signal<ToolBar&, size_t, CommandId, const CommandData&>& activated() {

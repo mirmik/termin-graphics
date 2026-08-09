@@ -85,6 +85,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
         .def("erase", &termin::gui_native::CommandModel::erase, nb::arg("command"))
         .def("clear", &termin::gui_native::CommandModel::clear);
 
+    nb::enum_<termin::gui_native::ToolBarAlignment>(m, "ToolBarAlignment")
+        .value("Start", termin::gui_native::ToolBarAlignment::Start)
+        .value("Center", termin::gui_native::ToolBarAlignment::Center)
+        .value("End", termin::gui_native::ToolBarAlignment::End);
+
     nb::class_<ToolBarRef>(m, "ToolBar")
         .def_prop_ro("widget", [](const ToolBarRef& self) { return self.widget; })
         .def_prop_ro("handle", [](const ToolBarRef& self) { return WidgetHandle{self.widget.handle}; })
@@ -114,10 +119,11 @@ void bind_gui_native_commands_and_dialogs(nb::module_& m) {
             "padding",
             [](const ToolBarRef& self) { return self.get().padding(); },
             [](const ToolBarRef& self, float value) { self.get().set_padding(value); })
-        .def_prop_rw(
-            "centered",
-            [](const ToolBarRef& self) { return self.get().centered(); },
-            [](const ToolBarRef& self, bool value) { self.get().set_centered(value); })
+        .def_prop_rw("alignment",
+                     [](const ToolBarRef& self) { return self.get().alignment(); },
+                     [](const ToolBarRef& self, termin::gui_native::ToolBarAlignment value) {
+                         self.get().set_alignment(value);
+                     })
         .def(
             "connect_activated",
             [](const ToolBarRef& self, nb::object callback) {

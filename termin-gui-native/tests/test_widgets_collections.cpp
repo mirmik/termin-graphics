@@ -891,13 +891,17 @@ namespace termin_gui_native_test {
         assert(toolbar.item_rects().size() == 4);
         assert(toolbar.item_rects()[0].width > toolbar.item_height());
         assert(toolbar.item_rects()[1].width < toolbar.item_height());
-        toolbar.set_centered(true);
+        toolbar.set_alignment(ToolBarAlignment::Center);
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
         const auto& centered_rects = toolbar.item_rects();
         const float content_center =
             (centered_rects.front().x + centered_rects.back().x + centered_rects.back().width) * 0.5f;
         assert(std::abs(content_center - 180.0f) < 0.01f);
-        toolbar.set_centered(false);
+        toolbar.set_alignment(ToolBarAlignment::End);
+        document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
+        const tc_ui_rect& end_rect = toolbar.item_rects().back();
+        assert(near(end_rect.x + end_rect.width, 360.0f - toolbar.padding()));
+        toolbar.set_alignment(ToolBarAlignment::Start);
         document.layout_roots(tc_ui_rect{0.0f, 0.0f, 360.0f, 40.0f});
 
         std::vector<CommandId> activated;

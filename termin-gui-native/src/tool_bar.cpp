@@ -90,10 +90,10 @@ namespace termin::gui_native {
         mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     }
 
-    void ToolBar::set_centered(bool centered) {
-        if (centered_ == centered)
+    void ToolBar::set_alignment(ToolBarAlignment alignment) {
+        if (alignment_ == alignment)
             return;
-        centered_ = centered;
+        alignment_ = alignment;
         mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT);
     }
 
@@ -145,11 +145,18 @@ namespace termin::gui_native {
             item_rects_.push_back(tc_ui_rect{x, y, width, item_height_});
             x += width + (command.data.kind == CommandKind::Action ? padding_ : 0.0f);
         }
-        if (centered_ && !item_rects_.empty()) {
+        if (alignment_ != ToolBarAlignment::Start && !item_rects_.empty()) {
             const float content_left = item_rects_.front().x;
             const tc_ui_rect& last_rect = item_rects_.back();
             const float content_right = last_rect.x + last_rect.width;
-            const float offset = bounds().x + (bounds().width - (content_right - content_left)) * 0.5f - content_left;
+            const float content_width = content_right - content_left;
+            const float available_width = std::max(0.0f, bounds().width - padding_ * 2.0f);
+            if (content_width >= available_width)
+                return;
+            const float aligned_left = alignment_ == ToolBarAlignment::Center
+                                           ? bounds().x + (bounds().width - content_width) * 0.5f
+                                           : bounds().x + bounds().width - padding_ - content_width;
+            const float offset = aligned_left - content_left;
             for (tc_ui_rect& item_rect : item_rects_)
                 item_rect.x += offset;
         }

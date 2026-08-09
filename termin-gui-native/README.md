@@ -255,8 +255,9 @@ The current foundation includes:
   physical size with supersampled coverage and caches the resulting device-local
   textures, preserving crisp DPI scaling, theme tint and disabled state; `release_gpu()`
   owns their teardown. Raw `texture_id` remains available for caller-owned dynamic
-  images. `ToolBar` renders and activates that model without
-  per-action widgets and uses pointer capture for press/release. `StatusBar`
+  images. `ToolBar` renders and activates that model without per-action widgets,
+  aligns its command strip at the start, center or end, and uses pointer capture
+  for press/release. `StatusBar`
   exposes deterministic persistent/temporary text; host scheduling explicitly
   decides when to clear temporary messages. `Menu` presents the same model as
   a clamped, bounded-scroll overlay with nested submenu ownership, keyboard

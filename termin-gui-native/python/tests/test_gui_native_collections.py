@@ -45,6 +45,7 @@ from termin.gui_native import (
     TreeModel,
     TreeTableModel,
     TreeTableRowData,
+    ToolBarAlignment,
     ViewportExternalDragEvent,
     ViewportExternalDragPhase,
     ViewportSurfaceHost,
@@ -366,6 +367,10 @@ def test_native_command_model_toolbar_and_status_bar_contracts():
     assert len(toolbar.item_rects) == 4
     assert toolbar.item_rects[0].width >= toolbar.item_height
     assert toolbar.item_rects[1].width < toolbar.item_height
+    toolbar.alignment = ToolBarAlignment.End
+    document.layout_roots(Rect(0.0, 0.0, 360.0, 40.0))
+    assert toolbar.alignment == ToolBarAlignment.End
+    assert toolbar.item_rects[-1].x + toolbar.item_rects[-1].width == pytest.approx(356.0)
 
     icon_only = CommandData("refresh-icon", icon_id="refresh", tooltip="Refresh")
     assert icon_only.icon_id == "refresh"
