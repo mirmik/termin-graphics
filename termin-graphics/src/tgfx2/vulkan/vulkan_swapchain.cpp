@@ -2,6 +2,7 @@
 
 #include "tgfx2/vulkan/vulkan_swapchain.hpp"
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
+#include "tgfx2/vulkan/vulkan_type_conversions.hpp"
 #include "vulkan_stats.hpp"
 
 #include <algorithm>
@@ -457,24 +458,44 @@ namespace tgfx {
                              1,
                              &sc_to_dst);
 
-        // Blit rt_tex → swapchain image (linear filter for any scale).
-        VkImageBlit blit{};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.layerCount = 1;
-        blit.srcOffsets[0] = {0, 0, 0};
-        blit.srcOffsets[1] = {static_cast<int32_t>(rt->desc.width), static_cast<int32_t>(rt->desc.height), 1};
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.layerCount = 1;
-        blit.dstOffsets[0] = {0, 0, 0};
-        blit.dstOffsets[1] = {static_cast<int32_t>(width_), static_cast<int32_t>(height_), 1};
-        vkCmdBlitImage(cb,
-                       rt->image,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       sc_image,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       1,
-                       &blit,
-                       VK_FILTER_LINEAR);
+        const bool raw_copy = rt->desc.width == width_ && rt->desc.height == height_ &&
+                              rt->desc.sample_count == 1 && vk::to_vk_format(rt->desc.format) == format_;
+        if (raw_copy) {
+            VkImageCopy copy{};
+            copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copy.srcSubresource.layerCount = 1;
+            copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copy.dstSubresource.layerCount = 1;
+            copy.extent = {width_, height_, 1};
+            vkCmdCopyImage(cb,
+                           rt->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           sc_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1,
+                           &copy);
+        } else {
+            // Legacy callers may still provide a differently-sized source.
+            // Presentation-aware callers pre-transform into a target-native
+            // texture and therefore take the raw-copy path above.
+            VkImageBlit blit{};
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.layerCount = 1;
+            blit.srcOffsets[0] = {0, 0, 0};
+            blit.srcOffsets[1] = {static_cast<int32_t>(rt->desc.width), static_cast<int32_t>(rt->desc.height), 1};
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.layerCount = 1;
+            blit.dstOffsets[0] = {0, 0, 0};
+            blit.dstOffsets[1] = {static_cast<int32_t>(width_), static_cast<int32_t>(height_), 1};
+            vkCmdBlitImage(cb,
+                           rt->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           sc_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1,
+                           &blit,
+                           VK_FILTER_LINEAR);
+        }
 
         // swapchain image: TRANSFER_DST → PRESENT_SRC.
         VkImageMemoryBarrier sc_to_present{};

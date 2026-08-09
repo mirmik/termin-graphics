@@ -1,10 +1,10 @@
-// Target-aware display color transform. The shader writes renderer-working
-// linear values; an sRGB attachment applies the final OETF in hardware.
+// Array-layer variant of the target-aware display output transform. Vulkan
+// SV_ViewID selects the matching source and destination layer for OpenXR.
 
 import termin_prelude;
 
 [[TerminScope("transient")]]
-Sampler2D u_input;
+Sampler2DArray u_input;
 
 struct OutputTransformParams {
     uint sampled_input_is_srgb;
@@ -49,18 +49,22 @@ float3 srgb_to_linear(float3 value) {
     return float3(srgb_to_linear(value.r), srgb_to_linear(value.g), srgb_to_linear(value.b));
 }
 
-// Stable interleaved-gradient noise. Keeping it fixed in physical pixel space
-// avoids temporal shimmer in editor UI and VR while decorrelating 8-bit
-// quantization boundaries. One scalar is shared by RGB to avoid chromatic
-// speckle.
 float output_dither(float2 pixel_position) {
     float2 pixel = floor(pixel_position);
     return frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715)))) - 0.5;
 }
 
 [shader("fragment")]
-FragmentOutput fs_main(FragmentInput input) {
-    float4 sampled = u_input.Sample(input.uv);
+FragmentOutput fs_main(
+    FragmentInput input
+#if TERMIN_SHADER_TARGET_VULKAN
+    , uint view_id : SV_ViewID
+#endif
+) {
+#if !TERMIN_SHADER_TARGET_VULKAN
+    const uint view_id = 0;
+#endif
+    float4 sampled = u_input.Sample(float3(input.uv, float(view_id)));
     float3 linear = u_params.sampled_input_is_srgb != 0
                         ? srgb_to_linear(sampled.rgb)
                         : sampled.rgb;
@@ -72,10 +76,6 @@ FragmentOutput fs_main(FragmentInput input) {
                                ? linear_to_srgb(linear)
                                : linear;
     target_domain = clamp(target_domain + noise, 0.0, 1.0);
-
-    // sRGB attachments expect linear shader output and encode on write. Move
-    // the dithered target-domain value back to linear so that hardware
-    // encoding lands on the intended 8-bit code.
     float3 shader_output = u_params.target_is_srgb != 0
                                ? srgb_to_linear(target_domain)
                                : target_domain;

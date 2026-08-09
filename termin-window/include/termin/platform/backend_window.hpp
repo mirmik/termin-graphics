@@ -78,6 +78,8 @@ namespace termin {
         // presentation-local state and may change when the window moves between
         // displays. Hosts without a platform scale source return 1.0 explicitly.
         virtual float content_scale() const = 0;
+        // Presents display-referred linear color. The physical window sink
+        // owns transfer encoding and final target-precision quantization.
         virtual void present(tgfx::TextureHandle color_tex) = 0;
 
     protected:

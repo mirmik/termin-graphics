@@ -362,18 +362,18 @@ namespace termin {
             find_shader_abi_resource_binding(shader, ShaderAbiResourceId::MaterialParams);
 
         bool bound_any = false;
-        const bool has_legacy_material_ubo_layout =
+        const bool has_authored_material_ubo_layout =
             shader->material_ubo_entry_count > 0 && shader->material_ubo_block_size > 0;
         const bool has_reflected_material_fields =
             material_rb && material_rb->kind == TC_SHADER_RESOURCE_CONSTANT_BUFFER && material_rb->field_count > 0 &&
             material_rb->fields && material_rb->size > 0;
 
-        if (has_legacy_material_ubo_layout || has_reflected_material_fields) {
+        if (has_authored_material_ubo_layout || has_reflected_material_fields) {
             const uint32_t block_size =
-                has_legacy_material_ubo_layout ? shader->material_ubo_block_size : material_rb->size;
+                has_authored_material_ubo_layout ? shader->material_ubo_block_size : material_rb->size;
             std::vector<uint8_t> staging(block_size, 0);
             const bool packed_layout =
-                has_legacy_material_ubo_layout
+                has_authored_material_ubo_layout
                     ? pack_material_ubo_from_legacy_entries(phase, shader, staging.data(), block_size)
                     : pack_material_ubo_from_reflected_fields(phase, shader, material_rb, staging.data(), block_size);
 

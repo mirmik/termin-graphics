@@ -1727,10 +1727,22 @@ namespace termin {
                 continue;
             }
             try {
-                // Backend blits are format-aware: they perform MSAA resolve,
-                // size/format conversion and sRGB attachment transfer as
-                // required by the binding plan.
-                ctx2->blit(binding.source, binding.target);
+                if (binding.plan.operation == ColorOutputBindingOp::Transform) {
+                    const tgfx::TextureDesc source_desc = device->texture_desc(binding.source);
+                    const tgfx::TextureDesc target_desc = device->texture_desc(binding.target);
+                    if (!output_transform_.record(*ctx2,
+                                                  binding.source,
+                                                  binding.target,
+                                                  make_output_transform_params(source_desc,
+                                                                               binding.export_desc.content,
+                                                                               target_desc))) {
+                        tc::Log::error("RenderEngine: color export '%s' output transform failed",
+                                       binding.export_desc.resource.c_str());
+                    }
+                } else {
+                    // Pure transport/resolve remains a backend copy operation.
+                    ctx2->blit(binding.source, binding.target);
+                }
             } catch (const std::exception& error) {
                 tc::Log::error("RenderEngine: color export '%s' binding failed: %s",
                                binding.export_desc.resource.c_str(),

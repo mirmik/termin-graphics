@@ -699,7 +699,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("color output binding planner separates direct copy transfer and scene rejection") {
+TEST_CASE("color output binding planner separates direct copy transform and scene rejection") {
     tgfx::TextureDesc rgba16;
     rgba16.width = 640;
     rgba16.height = 480;
@@ -713,13 +713,27 @@ TEST_CASE("color output binding planner separates direct copy transfer and scene
     CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, rgba16).operation ==
           termin::ColorOutputBindingOp::Direct);
     CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, linear8).operation ==
-          termin::ColorOutputBindingOp::CopyOrResolve);
+          termin::ColorOutputBindingOp::Transform);
     CHECK(termin::plan_color_output_binding(rgba16, termin::ColorContent::DisplayLinear, srgb8).operation ==
-          termin::ColorOutputBindingOp::EncodeSRGB);
+          termin::ColorOutputBindingOp::Transform);
     CHECK(termin::plan_color_output_binding(srgb8, termin::ColorContent::DisplaySRGB, srgb8).operation ==
           termin::ColorOutputBindingOp::Direct);
     CHECK(termin::plan_color_output_binding(srgb8, termin::ColorContent::DisplaySRGB, linear8).operation ==
-          termin::ColorOutputBindingOp::DecodeSRGB);
+          termin::ColorOutputBindingOp::Transform);
+
+    const auto srgb_params =
+        termin::make_output_transform_params(rgba16, termin::ColorContent::DisplayLinear, srgb8);
+    CHECK(srgb_params.sampled_input_encoding == tgfx::TextureEncoding::Linear);
+    CHECK(srgb_params.target_encoding == tgfx::TextureEncoding::SRGB);
+    CHECK(srgb_params.dither == tgfx::OutputDitherMode::StableSpatial);
+    CHECK(srgb_params.target_rgb_bits == 8);
+
+    const auto linear_params =
+        termin::make_output_transform_params(srgb8, termin::ColorContent::DisplaySRGB, linear8);
+    CHECK(linear_params.sampled_input_encoding == tgfx::TextureEncoding::Linear);
+    CHECK(linear_params.target_encoding == tgfx::TextureEncoding::Linear);
+    CHECK(linear_params.dither == tgfx::OutputDitherMode::StableSpatial);
+    CHECK(linear_params.target_rgb_bits == 8);
 
     const auto rejected = termin::plan_color_output_binding(rgba16, termin::ColorContent::SceneLinear, linear8);
     CHECK_FALSE(rejected.valid);
@@ -731,6 +745,15 @@ TEST_CASE("color output binding planner separates direct copy transfer and scene
     msaa.sample_count = 4;
     CHECK(termin::plan_color_output_binding(msaa, termin::ColorContent::DisplayLinear, rgba16).operation ==
           termin::ColorOutputBindingOp::CopyOrResolve);
+
+    tgfx::TextureDesc multiview_source = rgba16;
+    multiview_source.array_layers = 2;
+    tgfx::TextureDesc multiview_target = srgb8;
+    multiview_target.array_layers = 2;
+    CHECK(termin::plan_color_output_binding(multiview_source,
+                                            termin::ColorContent::DisplayLinear,
+                                            multiview_target)
+              .operation == termin::ColorOutputBindingOp::Transform);
 }
 
 TEST_CASE("compatible color export is bound directly to the physical target") {
@@ -780,7 +803,7 @@ TEST_CASE("compatible color export is bound directly to the physical target") {
     pipeline.destroy();
 }
 
-TEST_CASE("incompatible color export records one output epilogue") {
+TEST_CASE("incompatible float color export records one copy epilogue") {
     termin::RenderPipeline pipeline("color-export-epilogue-test");
     REQUIRE(pipeline.is_valid());
     pipeline.add_pass((new ClearRasterProbe("final_color"))->tc_pass_ptr());
@@ -796,7 +819,7 @@ TEST_CASE("incompatible color export records one output epilogue") {
     tgfx::TextureDesc output_desc;
     output_desc.width = 16;
     output_desc.height = 16;
-    output_desc.format = tgfx::PixelFormat::RGBA8_sRGB;
+    output_desc.format = tgfx::PixelFormat::RGBA32F;
     output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
     const tgfx::TextureHandle output = device->create_texture(output_desc);
     auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
@@ -804,7 +827,7 @@ TEST_CASE("incompatible color export records one output epilogue") {
     termin::RenderItemSnapshot snapshot;
     publish_empty_snapshot(snapshot);
     termin::RenderTargetContext target;
-    target.name = "EncodedColorTarget";
+    target.name = "FloatColorTarget";
     target.render_rect = {0, 0, 16, 16};
     target.output_color.texture = output;
     termin::RenderExecution execution;

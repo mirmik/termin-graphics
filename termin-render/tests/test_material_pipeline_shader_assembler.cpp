@@ -405,6 +405,50 @@ TEST_CASE("material contract projects reflected resources to fragment stage") {
     tc_shader_shutdown();
 }
 
+TEST_CASE("assembled material shader preserves authored color semantics") {
+    tc_shader_init();
+
+    termin::MaterialPipelineMaterialContract material = material_contract();
+    REQUIRE_EQ(material.resources.size(), 1u);
+
+    tc_material_ubo_entry entry{};
+    std::snprintf(entry.name, sizeof(entry.name), "%s", "u_color");
+    std::snprintf(entry.property_type, sizeof(entry.property_type), "%s", "SrgbColor");
+    entry.offset = 0u;
+    entry.size = 16u;
+    tc_shader_set_material_ubo_layout(material.shader.get(), &entry, 1u, 16u);
+    material = termin::material_pipeline_material_contract_from_shader(
+        material.shader, termin::material_pipeline_standard_material_fragment_interface());
+    REQUIRE_EQ(material.resources.size(), 1u);
+    REQUIRE_EQ(material.resources[0].requirement.fields.size(), 1u);
+    CHECK_EQ(std::string(material.resources[0].requirement.fields[0].type), std::string("SrgbColor"));
+
+    termin::MaterialPipelineShaderAssemblyRequest request{};
+    request.material = material;
+    request.pass = material_pass_contract();
+    request.vertex_transform = *request.pass.static_vertex_transform;
+    request.shader_name = "assembler-srgb-color-semantics";
+    request.shader_uuid = "assembler-srgb-color-semantics";
+
+    termin::MaterialPipelineShaderAssemblyResult result = termin::material_pipeline_assemble_shader(request);
+    REQUIRE(result.ok());
+
+    REQUIRE_EQ(tc_shader_material_ubo_entry_count(result.shader.get()), 1u);
+    const tc_material_ubo_entry* assembled_entries = tc_shader_material_ubo_entries(result.shader.get());
+    REQUIRE(assembled_entries != nullptr);
+    CHECK_EQ(std::string(assembled_entries[0].property_type), std::string("SrgbColor"));
+
+    tc_shader_contract_view view{};
+    REQUIRE(tc_shader_get_contract_view(result.shader.get(), &view));
+    const tc_shader_resource_requirement* resource = contract_resource(view, TC_SHADER_RESOURCE_MATERIAL);
+    REQUIRE(resource != nullptr);
+    REQUIRE_EQ(resource->field_count, 1u);
+    REQUIRE(resource->fields != nullptr);
+    CHECK_EQ(std::string(resource->fields[0].type), std::string("SrgbColor"));
+
+    tc_shader_shutdown();
+}
+
 TEST_CASE("surface producer composes with distinct pass consumers") {
     tc_shader_init();
     tc_surface_contract_registry_clear();

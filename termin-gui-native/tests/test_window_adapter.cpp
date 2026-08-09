@@ -261,6 +261,10 @@ int main() {
             std::fprintf(stderr, "adapter did not execute renderer extensions before presentation\n");
             return 1;
         }
+        if (graphics->device().texture_desc(window.last_presented).format != tgfx::PixelFormat::RGBA16F) {
+            std::fprintf(stderr, "window adapter quantized DisplayLinear output before presentation\n");
+            return 1;
+        }
         graphics->device().wait_idle();
         std::vector<float> pixels(static_cast<size_t>(framebuffer_size.first) *
                                   static_cast<size_t>(framebuffer_size.second) * 4u);

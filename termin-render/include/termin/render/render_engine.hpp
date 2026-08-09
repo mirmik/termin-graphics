@@ -95,6 +95,7 @@ namespace termin {
         std::unique_ptr<tgfx::GraphicsHost> owned_graphics_host_;
         tgfx::GraphicsHost* graphics_host_ = nullptr;
         std::unique_ptr<ShaderArtifactResolver> shader_artifact_resolver_;
+        tgfx::OutputTransformRenderer output_transform_;
 
     public:
         void set_graphics_host(tgfx::GraphicsHost& graphics_host);

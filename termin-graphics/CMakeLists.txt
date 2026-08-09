@@ -135,6 +135,7 @@ set(TGFX2_SOURCES
     src/tgfx2/immediate_renderer.cpp
     src/tgfx2/line_renderer_common.cpp
     src/tgfx2/line_mesh_builder.cpp
+    src/tgfx2/output_transform.cpp
     src/tgfx2/path2d.cpp
     src/tgfx2/screen_space_line_renderer.cpp
     src/tgfx2/standalone_shader_runtime.cpp
@@ -161,6 +162,7 @@ if(EMSCRIPTEN)
     set(TGFX2_SOURCES
         src/tgfx2/builtin_shader_sources.cpp
         src/tgfx2/device_factory.cpp
+        src/tgfx2/output_transform.cpp
         src/tgfx2/pixel_format_utils.cpp
         src/tgfx2/pipeline_cache.cpp
         src/tgfx2/render_context.cpp
@@ -920,6 +922,23 @@ if(BUILD_TGFX2_TESTS)
             SKIP_REGULAR_EXPRESSION "${TGFX2_VULKAN_RUNTIME_SKIP_RE}")
         termin_add_test_labels(
             tgfx2_draw_list2d_pixel_smoke "termin:capability:vulkan")
+
+        add_executable(tgfx2_output_transform_pixel_smoke
+            tests/test_output_transform_pixel_smoke.cpp)
+        target_link_libraries(tgfx2_output_transform_pixel_smoke
+            PRIVATE termin_graphics2)
+        if(TARGET termin_shaderc)
+            add_dependencies(tgfx2_output_transform_pixel_smoke termin_shaderc)
+        endif()
+        termin_set_rpath_test(tgfx2_output_transform_pixel_smoke)
+        add_test(NAME tgfx2_output_transform_pixel_smoke
+            COMMAND tgfx2_output_transform_pixel_smoke)
+        set_tests_properties(tgfx2_output_transform_pixel_smoke PROPERTIES
+            TIMEOUT 20
+            SKIP_REGULAR_EXPRESSION
+                "Vulkan backend not compiled|Failed to create Vulkan device: Failed to create Vulkan instance|Failed to create Vulkan device: No Vulkan-capable GPU found")
+        termin_add_test_labels(
+            tgfx2_output_transform_pixel_smoke "termin:capability:vulkan")
     endif()
 
     if(TGFX2_ENABLE_VULKAN AND BUILD_TGFX2_WINDOW_TESTS)

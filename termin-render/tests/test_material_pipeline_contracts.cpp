@@ -3,6 +3,7 @@
 GUARD_TEST_MAIN();
 
 #include <array>
+#include <cstdio>
 #include <vector>
 
 #include <termin/render/material_pipeline_contracts.hpp>
@@ -20,6 +21,15 @@ namespace {
         result.requirement.scope = scope;
         result.requirement.stage_mask = stage_mask;
         result.owner = owner;
+        return result;
+    }
+
+    tc_shader_resource_field field(const char* name, const char* type, uint32_t offset, uint32_t size) {
+        tc_shader_resource_field result{};
+        std::snprintf(result.name, sizeof(result.name), "%s", name);
+        std::snprintf(result.type, sizeof(result.type), "%s", type);
+        result.offset = offset;
+        result.size = size;
         return result;
     }
 
@@ -172,4 +182,44 @@ TEST_CASE("Material pipeline resource merge carries resource requirements") {
     REQUIRE_EQ(resources.size(), 1u);
     CHECK((resources[0].requirement.stage_mask & TC_SHADER_STAGE_VERTEX) != 0);
     CHECK((resources[0].requirement.stage_mask & TC_SHADER_STAGE_FRAGMENT) != 0);
+}
+
+TEST_CASE("Material pipeline resource merge preserves compatible field semantics") {
+    auto material = resource("material",
+                             TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                             TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                             TC_SHADER_STAGE_FRAGMENT,
+                             termin::MaterialPipelineResourceOwner::Material);
+    material.requirement.fields.push_back(field("u_color", "SrgbColor", 0u, 16u));
+
+    auto vertex = material;
+    vertex.requirement.stage_mask = TC_SHADER_STAGE_VERTEX;
+
+    const std::array resources{material, vertex};
+    termin::MaterialPipelineResourceMergeResult result = termin::material_pipeline_merge_resources(resources);
+
+    REQUIRE(result.ok());
+    REQUIRE_EQ(result.resources.size(), 1u);
+    REQUIRE_EQ(result.resources[0].requirement.fields.size(), 1u);
+    CHECK_EQ(std::string(result.resources[0].requirement.fields[0].type), std::string("SrgbColor"));
+}
+
+TEST_CASE("Material pipeline resource merge rejects conflicting field semantics") {
+    auto srgb = resource("material",
+                         TC_SHADER_RESOURCE_CONSTANT_BUFFER,
+                         TC_SHADER_RESOURCE_SCOPE_MATERIAL,
+                         TC_SHADER_STAGE_FRAGMENT,
+                         termin::MaterialPipelineResourceOwner::Material);
+    srgb.requirement.fields.push_back(field("u_color", "SrgbColor", 0u, 16u));
+
+    auto linear = srgb;
+    linear.requirement.fields[0] = field("u_color", "LinearColor", 0u, 16u);
+
+    const std::array resources{srgb, linear};
+    termin::MaterialPipelineResourceMergeResult result = termin::material_pipeline_merge_resources(resources);
+
+    REQUIRE(!result.ok());
+    REQUIRE_EQ(result.diagnostics.size(), 1u);
+    CHECK(result.diagnostics[0].code == termin::MaterialPipelineDiagnosticCode::ResourceNameConflict);
+    CHECK(result.diagnostics[0].message.find("field layouts") != std::string::npos);
 }

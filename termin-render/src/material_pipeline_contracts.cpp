@@ -1,6 +1,7 @@
 #include <termin/render/material_pipeline_contracts.hpp>
 
 #include <cstdio>
+#include <cstring>
 #include <utility>
 
 namespace termin {
@@ -15,6 +16,21 @@ namespace termin {
                                                    const MaterialPipelineResourceDecl& b) {
             return a.requirement.name == b.requirement.name &&
                    (a.requirement.kind != b.requirement.kind || a.requirement.scope != b.requirement.scope);
+        }
+
+        bool same_resource_fields(const std::vector<tc_shader_resource_field>& a,
+                                  const std::vector<tc_shader_resource_field>& b) {
+            if (a.size() != b.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < a.size(); ++i) {
+                if (std::strncmp(a[i].name, b[i].name, sizeof(a[i].name)) != 0 ||
+                    std::strncmp(a[i].type, b[i].type, sizeof(a[i].type)) != 0 || a[i].offset != b[i].offset ||
+                    a[i].size != b[i].size) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         std::string resource_label(const MaterialPipelineResourceDecl& resource) {
@@ -143,6 +159,18 @@ namespace termin {
 
         for (MaterialPipelineResourceDecl& existing : resources) {
             if (same_resource_identity(existing, incoming)) {
+                if (!existing.requirement.fields.empty() && !incoming.requirement.fields.empty() &&
+                    !same_resource_fields(existing.requirement.fields, incoming.requirement.fields)) {
+                    add_diagnostic(diagnostics,
+                                   MaterialPipelineDiagnosticCode::ResourceNameConflict,
+                                   existing,
+                                   incoming,
+                                   "resource field layouts are incompatible");
+                    return false;
+                }
+                if (existing.requirement.fields.empty() && !incoming.requirement.fields.empty()) {
+                    existing.requirement.fields = incoming.requirement.fields;
+                }
                 existing.requirement.stage_mask |= incoming.requirement.stage_mask;
                 if (incoming.requirement.size > existing.requirement.size) {
                     existing.requirement.size = incoming.requirement.size;

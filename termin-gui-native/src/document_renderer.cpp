@@ -56,7 +56,10 @@ namespace termin::gui_native {
             tgfx::TextureDesc description;
             description.width = static_cast<uint32_t>(width);
             description.height = static_cast<uint32_t>(height);
-            description.format = tgfx::PixelFormat::RGBA8_UNorm;
+            // The painter publishes DisplayLinear. Quantizing that content to
+            // linear UNORM8 creates severe banding in dark gradients before the
+            // physical sink can apply its sRGB output transform.
+            description.format = tgfx::PixelFormat::RGBA16F;
             description.usage =
                 tgfx::TextureUsage::Sampled | tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
             return device.create_texture(description);

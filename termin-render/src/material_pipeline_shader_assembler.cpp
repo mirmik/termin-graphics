@@ -42,6 +42,9 @@ namespace termin {
             result.requirement.scope = binding.scope;
             result.requirement.stage_mask = stage_mask;
             result.requirement.size = binding.size;
+            if (binding.fields && binding.field_count > 0) {
+                result.requirement.fields.assign(binding.fields, binding.fields + binding.field_count);
+            }
             result.owner = owner;
             return result;
         }
@@ -54,8 +57,36 @@ namespace termin {
             result.requirement.scope = requirement.scope;
             result.requirement.stage_mask = requirement.stage_mask;
             result.requirement.size = requirement.size;
+            if (requirement.fields && requirement.field_count > 0) {
+                result.requirement.fields.assign(requirement.fields, requirement.fields + requirement.field_count);
+            }
             result.owner = owner;
             return result;
+        }
+
+        void apply_authored_material_ubo_fields(const tc_shader& shader,
+                                                std::vector<MaterialPipelineResourceDecl>& resources) {
+            if (!shader.material_ubo_entries || shader.material_ubo_entry_count == 0) {
+                return;
+            }
+            for (MaterialPipelineResourceDecl& resource : resources) {
+                if (resource.requirement.name != TC_SHADER_RESOURCE_MATERIAL ||
+                    resource.requirement.kind != TC_SHADER_RESOURCE_CONSTANT_BUFFER) {
+                    continue;
+                }
+                resource.requirement.size = shader.material_ubo_block_size;
+                resource.requirement.fields.clear();
+                resource.requirement.fields.reserve(shader.material_ubo_entry_count);
+                for (uint32_t i = 0; i < shader.material_ubo_entry_count; ++i) {
+                    const tc_material_ubo_entry& entry = shader.material_ubo_entries[i];
+                    tc_shader_resource_field field{};
+                    std::snprintf(field.name, sizeof(field.name), "%s", entry.name);
+                    std::snprintf(field.type, sizeof(field.type), "%s", entry.property_type);
+                    field.offset = entry.offset;
+                    field.size = entry.size;
+                    resource.requirement.fields.push_back(field);
+                }
+            }
         }
 
         std::optional<MaterialPipelineValueType> material_pipeline_value_type(uint32_t type) {
@@ -75,7 +106,7 @@ namespace termin {
             }
         }
 
-        tc_shader_resource_requirement resource_requirement_from_decl(const MaterialPipelineResourceDecl& decl) {
+        tc_shader_resource_requirement resource_requirement_from_decl(MaterialPipelineResourceDecl& decl) {
             tc_shader_resource_requirement requirement{};
             std::snprintf(requirement.name, sizeof(requirement.name), "%s", decl.requirement.name.c_str());
             requirement.kind = decl.requirement.kind;
@@ -83,6 +114,8 @@ namespace termin {
             requirement.stage_mask = decl.requirement.stage_mask;
             requirement.size = decl.requirement.size;
             requirement.element_stride = 0;
+            requirement.fields = decl.requirement.fields.empty() ? nullptr : decl.requirement.fields.data();
+            requirement.field_count = static_cast<uint32_t>(decl.requirement.fields.size());
             return requirement;
         }
 
@@ -283,6 +316,7 @@ namespace termin {
                     contract.resources.push_back(
                         resource_decl_from_requirement(producer.resources[i], MaterialPipelineResourceOwner::Material));
                 }
+                apply_authored_material_ubo_fields(*raw, contract.resources);
                 return contract;
             }
 
@@ -297,6 +331,7 @@ namespace termin {
                 contract.resources.push_back(resource_decl_from_binding(
                     bindings[i], MaterialPipelineResourceOwner::Material, fragment_stage_mask));
             }
+            apply_authored_material_ubo_fields(*raw, contract.resources);
         }
 
         return contract;
@@ -489,7 +524,7 @@ namespace termin {
 
         std::vector<tc_shader_resource_requirement> requirements;
         requirements.reserve(merged.resources.size());
-        for (const MaterialPipelineResourceDecl& resource : merged.resources) {
+        for (MaterialPipelineResourceDecl& resource : merged.resources) {
             requirements.push_back(resource_requirement_from_decl(resource));
         }
         apply_instance_stream_strides(request.vertex_transform, requirements);
@@ -536,6 +571,18 @@ namespace termin {
         }
         if (request.material.shader.is_valid()) {
             shader->features = request.material.shader.get()->features;
+        }
+
+        // Slang reflection can only recover the physical float4 ABI of color
+        // properties.  Preserve the authored material layout so CPU packing of
+        // assembled shaders retains the SrgbColor/LinearColor distinction.
+        // Pass-owned fragments do not consume the material shader's UBO.
+        if (request.material.shader.is_valid() && fragment_composition != MaterialFragmentComposition::PassOwned) {
+            const tc_shader* material_shader = request.material.shader.get();
+            tc_shader_set_material_ubo_layout(shader,
+                                              material_shader->material_ubo_entries,
+                                              material_shader->material_ubo_entry_count,
+                                              material_shader->material_ubo_block_size);
         }
 
         tc_shader_contract_desc contract_desc{};

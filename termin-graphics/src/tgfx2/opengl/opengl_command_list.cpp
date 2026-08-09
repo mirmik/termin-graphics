@@ -1,6 +1,7 @@
 #include "tgfx2/opengl/opengl_command_list.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -59,6 +60,24 @@ namespace tgfx {
         current_fbo_ = device_.get_or_create_fbo(pass);
         glBindFramebuffer(GL_FRAMEBUFFER, current_fbo_);
         in_render_pass_ = true;
+
+        // Match Vulkan/D3D attachment semantics: fragment shaders always
+        // produce linear values, and an sRGB color attachment owns the OETF.
+        // OpenGL exposes that behavior as mutable global state, so every pass
+        // must derive it from its attachments instead of inheriting whatever a
+        // previous pass or embedding host happened to leave behind.
+        bool has_srgb_color_attachment = false;
+        for (const auto& color : pass.colors) {
+            const auto* texture = device_.get_texture(color.texture);
+            if (texture && is_srgb_format(texture->desc.format)) {
+                has_srgb_color_attachment = true;
+                break;
+            }
+        }
+        if (has_srgb_color_attachment)
+            glEnable(GL_FRAMEBUFFER_SRGB);
+        else
+            glDisable(GL_FRAMEBUFFER_SRGB);
 
         // FBO draw-buffer selection is persistent object state in OpenGL, but
         // embedding hosts and direct GL users may modify it between passes.
@@ -547,6 +566,7 @@ namespace tgfx {
         // would sidestep this entirely but glad in this project is loaded
         // for GL 4.1 only.
         GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
+        GLboolean was_framebuffer_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
         GLboolean color_mask[4];
         glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
         GLboolean depth_mask = GL_TRUE;
@@ -554,6 +574,10 @@ namespace tgfx {
 
         if (was_scissor)
             glDisable(GL_SCISSOR_TEST);
+        // Texture copies are transport operations. They must preserve stored
+        // codes even when the previous render pass targeted an sRGB texture.
+        if (was_framebuffer_srgb)
+            glDisable(GL_FRAMEBUFFER_SRGB);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
@@ -587,6 +611,8 @@ namespace tgfx {
         glDepthMask(depth_mask);
         if (was_scissor)
             glEnable(GL_SCISSOR_TEST);
+        if (was_framebuffer_srgb)
+            glEnable(GL_FRAMEBUFFER_SRGB);
     }
 
     // --- Dynamic state ---

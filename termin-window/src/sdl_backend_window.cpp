@@ -16,6 +16,8 @@
 #include "tgfx2/device_factory.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/output_transform.hpp"
+#include "tgfx2/pixel_format_utils.hpp"
 #ifdef TGFX2_HAS_OPENGL
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #endif
@@ -42,6 +44,19 @@ extern "C" {
 namespace termin {
 
     namespace {
+
+#ifdef TGFX2_HAS_VULKAN
+        tgfx::PixelFormat vulkan_presentation_format(VkFormat format) {
+            switch (format) {
+            case VK_FORMAT_B8G8R8A8_SRGB:
+                return tgfx::PixelFormat::BGRA8_sRGB;
+            case VK_FORMAT_R8G8B8A8_SRGB:
+                return tgfx::PixelFormat::RGBA8_sRGB;
+            default:
+                return tgfx::PixelFormat::Undefined;
+            }
+        }
+#endif
 
         void configure_sdl_window_hints() {
 #ifdef SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH
@@ -337,6 +352,11 @@ namespace termin {
         tgfx::PresentationMode requested_presentation_mode = tgfx::PresentationMode::VSync;
         tgfx::PresentationMode presentation_mode = tgfx::PresentationMode::VSync;
         tgfx::IRenderDevice* device_ref = nullptr;
+        tgfx::OutputTransformRenderer output_transform;
+        tgfx::TextureHandle presentation_texture{};
+        tgfx::PixelFormat presentation_texture_format = tgfx::PixelFormat::Undefined;
+        uint32_t presentation_texture_width = 0;
+        uint32_t presentation_texture_height = 0;
         SDLWindowEventQueue pending_events;
 
 #ifdef TGFX2_HAS_VULKAN
@@ -349,6 +369,66 @@ namespace termin {
         // secondary windows share the same device model.
         std::unique_ptr<tgfx::D3D11Swapchain> d3d11_swapchain;
 #endif
+
+        tgfx::PixelFormat target_presentation_format() const {
+            if (backend == tgfx::BackendType::OpenGL)
+                return tgfx::PixelFormat::RGBA8_sRGB;
+#ifdef TGFX2_HAS_VULKAN
+            if (backend == tgfx::BackendType::Vulkan && swapchain)
+                return vulkan_presentation_format(swapchain->format());
+#endif
+#ifdef TGFX2_HAS_D3D11
+            if (backend == tgfx::BackendType::D3D11 && d3d11_swapchain) {
+                return device_ref->texture_desc(d3d11_swapchain->backbuffer_texture()).format;
+            }
+#endif
+            return tgfx::PixelFormat::Undefined;
+        }
+
+        bool ensure_presentation_texture(uint32_t width, uint32_t height) {
+            if (!device_ref || width == 0 || height == 0)
+                return false;
+            const tgfx::PixelFormat format = target_presentation_format();
+            if (format == tgfx::PixelFormat::Undefined) {
+                tc_log_error("[BackendWindow] unsupported presentation texture format");
+                return false;
+            }
+            if (presentation_texture && presentation_texture_width == width &&
+                presentation_texture_height == height && presentation_texture_format == format) {
+                return true;
+            }
+            if (presentation_texture) {
+                device_ref->wait_idle();
+                device_ref->destroy(presentation_texture);
+                presentation_texture = {};
+            }
+            tgfx::TextureDesc desc;
+            desc.width = width;
+            desc.height = height;
+            desc.format = format;
+            desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::Sampled |
+                         tgfx::TextureUsage::CopySrc;
+            presentation_texture = device_ref->create_texture(desc);
+            if (!presentation_texture) {
+                tc_log_error("[BackendWindow] failed to allocate presentation texture");
+                return false;
+            }
+            presentation_texture_format = format;
+            presentation_texture_width = width;
+            presentation_texture_height = height;
+            return true;
+        }
+
+        void release_presentation_texture() {
+            output_transform.close();
+            if (presentation_texture && device_ref) {
+                device_ref->destroy(presentation_texture);
+            }
+            presentation_texture = {};
+            presentation_texture_format = tgfx::PixelFormat::Undefined;
+            presentation_texture_width = 0;
+            presentation_texture_height = 0;
+        }
     };
 
     // ---------------------------------------------------------------------------
@@ -780,6 +860,10 @@ namespace termin {
         set_text_input_enabled(false);
         unregister_window_event_queue(window_);
         impl_->pending_events.clear();
+        if (impl_->device_ref) {
+            impl_->device_ref->wait_idle();
+        }
+        impl_->release_presentation_texture();
 
         // Teardown only this window's presentation resources. The shared device
         // and context belong to SDLWindowSystem and remain available to every
@@ -1030,6 +1114,47 @@ namespace termin {
         if (w <= 0 || h <= 0)
             return;
 
+#ifdef TGFX2_HAS_VULKAN
+        if (impl_->backend == tgfx::BackendType::Vulkan && impl_->swapchain &&
+            (impl_->swapchain->width() != static_cast<uint32_t>(w) ||
+             impl_->swapchain->height() != static_cast<uint32_t>(h))) {
+            impl_->swapchain->recreate(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+        }
+#endif
+#ifdef TGFX2_HAS_D3D11
+        if (impl_->backend == tgfx::BackendType::D3D11 && impl_->d3d11_swapchain &&
+            (impl_->d3d11_swapchain->width() != static_cast<uint32_t>(w) ||
+             impl_->d3d11_swapchain->height() != static_cast<uint32_t>(h))) {
+            impl_->d3d11_swapchain->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+        }
+#endif
+
+        if (!impl_->ensure_presentation_texture(static_cast<uint32_t>(w), static_cast<uint32_t>(h)))
+            return;
+
+        tgfx::RenderContext2& output_context = impl_->graphics_host->context();
+        const tgfx::TextureDesc presentation_desc =
+            impl_->device_ref->texture_desc(impl_->presentation_texture);
+        const bool low_precision_target = tgfx::is_rgba8_family(presentation_desc.format);
+        output_context.begin_frame();
+        const bool transformed = impl_->output_transform.record(
+            output_context,
+            color_tex,
+            impl_->presentation_texture,
+            tgfx::OutputTransformParams{
+                .sampled_input_encoding = tgfx::TextureEncoding::Linear,
+                .target_encoding = tgfx::texture_encoding_for_format(presentation_desc.format),
+                .dither = low_precision_target ? tgfx::OutputDitherMode::StableSpatial
+                                               : tgfx::OutputDitherMode::Disabled,
+                .target_rgb_bits = static_cast<uint8_t>(low_precision_target ? 8 : 0),
+            });
+        output_context.end_frame();
+        if (!transformed) {
+            tc_log_error("[BackendWindow] output transform failed");
+            return;
+        }
+        const tgfx::TextureHandle presentation_texture = impl_->presentation_texture;
+
         if (impl_->backend == tgfx::BackendType::OpenGL) {
 #ifdef TGFX2_HAS_OPENGL
             SDL_GLContext gl_ctx = impl_->window_system ? impl_->window_system->impl_->gl_context : nullptr;
@@ -1043,7 +1168,7 @@ namespace termin {
             }
 
             auto* gl_dev = static_cast<tgfx::OpenGLRenderDevice*>(impl_->device_ref);
-            gl_dev->present_to_default_framebuffer(color_tex, w, h);
+            gl_dev->present_to_default_framebuffer(presentation_texture, w, h);
             SDL_GL_SwapWindow(window_);
 #endif
         }
@@ -1055,13 +1180,7 @@ namespace termin {
                 return;
             }
 
-            // If the window drawable size changed (resize event), recreate
-            // the swapchain before acquiring.
-            if (sc->width() != static_cast<uint32_t>(w) || sc->height() != static_cast<uint32_t>(h)) {
-                sc->recreate(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-            }
-
-            if (sc->compose_and_present(color_tex)) {
+            if (sc->compose_and_present(presentation_texture)) {
                 // OUT_OF_DATE / SUBOPTIMAL after present — schedule
                 // recreate for next frame by resampling current size.
                 int nw = 0, nh = 0;
@@ -1078,11 +1197,7 @@ namespace termin {
                 return;
             }
 
-            if (sc->width() != static_cast<uint32_t>(w) || sc->height() != static_cast<uint32_t>(h)) {
-                sc->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-            }
-
-            if (!sc->compose_and_present(color_tex)) {
+            if (!sc->compose_and_present(presentation_texture)) {
                 tc_log(TC_LOG_ERROR, "[BackendWindow] present: D3D11 present failed");
             }
         }

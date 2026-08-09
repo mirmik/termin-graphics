@@ -42,6 +42,7 @@ namespace termin {
         uint32_t scope = TC_SHADER_RESOURCE_SCOPE_MATERIAL;
         uint32_t stage_mask = 0;
         uint32_t size = 0;
+        std::vector<tc_shader_resource_field> fields;
     };
 
     struct MaterialPipelineResourceDecl {

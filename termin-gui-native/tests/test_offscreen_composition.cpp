@@ -82,6 +82,11 @@ int main() {
             std::fprintf(stderr, "offscreen composition did not publish a frame\n");
             return 1;
         }
+        if (composition.graphics().device().texture_desc(composition.latest_frame_texture()).format !=
+            tgfx::PixelFormat::RGBA16F) {
+            std::fprintf(stderr, "offscreen composition quantized DisplayLinear output\n");
+            return 1;
+        }
         const tc_frame_profile* profile = tc_profiler_history_at(0);
         const int compose = profile ? find_section(*profile, "UI Compose", -1) : -1;
         const char* stages[] = {

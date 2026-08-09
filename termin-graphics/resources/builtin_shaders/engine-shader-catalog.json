@@ -746,6 +746,17 @@
           "entry": "fs_main"
         }
       }
+    },
+    {
+      "uuid": "termin-engine-multiview-output-transform",
+      "name": "MultiviewOutputTransformEngineFS",
+      "language": "slang",
+      "stages": {
+        "fragment": {
+          "path": "termin-engine-multiview-output-transform.frag.slang",
+          "entry": "fs_main"
+        }
+      }
     }
   ]
 }

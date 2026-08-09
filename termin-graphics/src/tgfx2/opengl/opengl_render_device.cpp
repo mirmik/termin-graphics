@@ -1421,8 +1421,11 @@ namespace tgfx {
 
         if (was_scissor)
             glDisable(GL_SCISSOR_TEST);
-        if (!was_framebuffer_srgb)
-            glEnable(GL_FRAMEBUFFER_SRGB);
+        // The window presenter supplies an already transformed sRGB8 texture.
+        // This blit is raw transport; applying framebuffer sRGB conversion a
+        // second time would destroy the target-domain dithering pattern.
+        if (was_framebuffer_srgb)
+            glDisable(GL_FRAMEBUFFER_SRGB);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
@@ -1449,8 +1452,8 @@ namespace tgfx {
         glDepthMask(depth_mask);
         if (was_scissor)
             glEnable(GL_SCISSOR_TEST);
-        if (!was_framebuffer_srgb)
-            glDisable(GL_FRAMEBUFFER_SRGB);
+        if (was_framebuffer_srgb)
+            glEnable(GL_FRAMEBUFFER_SRGB);
     }
 
     void OpenGLRenderDevice::reset_state() {

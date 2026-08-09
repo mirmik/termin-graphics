@@ -5,6 +5,7 @@
 #include <tgfx/texture_encoding.h>
 #include <tgfx2/handles.hpp>
 #include <tgfx2/descriptors.hpp>
+#include <tgfx2/output_transform.hpp>
 #include <string>
 #include <type_traits>
 
@@ -35,8 +36,7 @@ namespace termin {
     enum class ColorOutputBindingOp : uint8_t {
         Direct,
         CopyOrResolve,
-        EncodeSRGB,
-        DecodeSRGB,
+        Transform,
         RejectSceneLinear,
     };
 
@@ -48,6 +48,11 @@ namespace termin {
     RENDER_CORE_API ColorOutputBindingPlan plan_color_output_binding(const tgfx::TextureDesc& source,
                                                                      ColorContent content,
                                                                      const tgfx::TextureDesc& target);
+
+    RENDER_CORE_API tgfx::OutputTransformParams
+    make_output_transform_params(const tgfx::TextureDesc& source,
+                                 ColorContent content,
+                                 const tgfx::TextureDesc& target);
 
     static_assert(std::is_standard_layout_v<ColorTarget>);
 
