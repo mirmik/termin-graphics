@@ -20,6 +20,7 @@ include(TerminRpath)
 
 add_library(termin_glb SHARED
     src/cgltf_impl.cpp
+    src/document.cpp
     src/native_backend.cpp
 )
 add_library(termin_glb::termin_glb ALIAS termin_glb)
@@ -62,6 +63,9 @@ if(TERMIN_BUILD_TESTS)
         tests/test_native_backend.cpp
     )
     target_link_libraries(termin_glb_native_backend_test PRIVATE termin_glb)
+    target_compile_definitions(termin_glb_native_backend_test PRIVATE
+        TERMIN_GLB_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/cgltf/fuzz/data"
+    )
     termin_set_rpath_test(termin_glb_native_backend_test)
     add_test(NAME termin_glb_native_backend_test COMMAND termin_glb_native_backend_test)
     if(COMMAND termin_label_tests_in_directory)
@@ -110,4 +114,3 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_glbConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_glb
 )
-
