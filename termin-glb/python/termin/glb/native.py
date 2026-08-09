@@ -14,12 +14,21 @@ from termin.glb import _glb_native
 
 
 @dataclass(frozen=True)
+class NativePrimitiveInfo:
+    first_index: int
+    index_count: int
+    material_index: int | None
+    material_slot: int
+
+
+@dataclass(frozen=True)
 class NativeMeshInfo:
     name: str
     primitive_count: int
     vertex_count: int
     index_count: int
     skinned: bool
+    primitives: tuple[NativePrimitiveInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,8 +105,12 @@ class NativeGLBDocument:
                 vertex_count=entry["vertex_count"],
                 index_count=entry["index_count"],
                 skinned=entry["skinned"],
+                primitives=tuple(
+                    self._primitive_info(mesh_index, primitive_index)
+                    for primitive_index in range(entry["primitive_count"])
+                ),
             )
-            for entry in self._document.meshes
+            for mesh_index, entry in enumerate(self._document.meshes)
         )
         self._images = tuple(
             NativeImageInfo(
@@ -131,7 +144,7 @@ class NativeGLBDocument:
             self._material_info(entry) for entry in self._document.materials
         )
         self._rig_snapshot: dict | None = None
-        self._prepared_rigs: dict[tuple[bool, bool], dict] = {}
+        self._prepared_rigs: dict[tuple[bool, bool, bool], dict] = {}
 
     @property
     def path(self) -> Path:
@@ -152,6 +165,17 @@ class NativeGLBDocument:
     @property
     def materials(self) -> tuple[NativeMaterialInfo, ...]:
         return self._materials
+
+    def _primitive_info(
+        self, mesh_index: int, primitive_index: int
+    ) -> NativePrimitiveInfo:
+        entry = self._document.primitive_info(mesh_index, primitive_index)
+        return NativePrimitiveInfo(
+            first_index=entry["first_index"],
+            index_count=entry["index_count"],
+            material_index=entry["material_index"],
+            material_slot=entry["material_slot"],
+        )
 
     def image_payload(self, image_index: int) -> bytes:
         """Copy one encoded embedded image from the mapped GLB on demand."""
@@ -177,6 +201,7 @@ class NativeGLBDocument:
         name: str = "",
         convert_to_z_up: bool = False,
         blender_z_up_fix: bool = False,
+        normalize_scale: bool = False,
     ):
         """Publish one animation as exact bulk tracks.
 
@@ -296,6 +321,25 @@ class NativeGLBDocument:
                         vectors[:] = self._quaternion_left_multiply(
                             (0.70710678, 0.0, 0.0, 0.70710678), vectors
                         )
+            if normalize_scale and path != "weights":
+                prepared = self.prepared_rig_data(
+                    convert_to_z_up=convert_to_z_up,
+                    blender_z_up_fix=blender_z_up_fix,
+                    normalize_scale=False,
+                )
+                if prepared["root_nodes"]:
+                    root_index = prepared["root_nodes"][0]
+                    root_scale = prepared["nodes"][root_index]["scale"]
+                    scale_factor = self._uniform_scale_factor(root_scale)
+                    if target_node_index == root_index and path == "scale":
+                        track_values.reshape(-1, components)[:] /= root_scale
+                    elif (
+                        path == "translation"
+                        and self._is_descendant(
+                            prepared["nodes"], target_node_index, root_index
+                        )
+                    ):
+                        track_values *= scale_factor
             tracks.append(
                 {
                     "target_node_index": target_node_index,
@@ -308,7 +352,9 @@ class NativeGLBDocument:
             )
 
         clip_name = name or animation["name"]
-        clip = TcAnimationClip.create(clip_name, animation_uuid)
+        clip = TcAnimationClip.from_uuid(animation_uuid)
+        if not clip.is_valid:
+            clip = TcAnimationClip.create(clip_name, animation_uuid)
         clip.set_tps(1.0)
         clip.set_loop(True)
         clip.set_tracks(tracks)
@@ -319,13 +365,14 @@ class NativeGLBDocument:
         *,
         convert_to_z_up: bool = True,
         blender_z_up_fix: bool = False,
+        normalize_scale: bool = False,
     ) -> dict:
         """Return a cached, consistently converted node/skin snapshot."""
         import numpy as np
 
         from termin.glb.loader import _decompose_node_matrix
 
-        key = (convert_to_z_up, blender_z_up_fix)
+        key = (convert_to_z_up, blender_z_up_fix, normalize_scale)
         cached = self._prepared_rigs.get(key)
         if cached is not None:
             return cached
@@ -407,12 +454,33 @@ class NativeGLBDocument:
                     positive_x, root_joint["rotation"].reshape(1, 4)
                 )[0]
 
+        skin_scale = 1.0
+        root_nodes = tuple(
+            index for index, node in enumerate(nodes) if node["default_scene_root"]
+        )
+        if normalize_scale and root_nodes:
+            root_index = root_nodes[0]
+            root_scale = nodes[root_index]["scale"].copy()
+            skin_scale = self._uniform_scale_factor(root_scale)
+            if not np.allclose(root_scale, (1.0, 1.0, 1.0)):
+                nodes[root_index]["scale"] = np.ones(3, dtype=np.float64)
+                scale_matrix = np.diag((*root_scale, 1.0))
+                for skin in skins:
+                    skin["inverse_bind_matrices"] = (
+                        scale_matrix @ skin["inverse_bind_matrices"]
+                    )
+
+                pending = list(nodes[root_index]["children"])
+                while pending:
+                    node_index = pending.pop()
+                    nodes[node_index]["translation"] *= skin_scale
+                    pending.extend(nodes[node_index]["children"])
+
         prepared = {
             "nodes": nodes,
             "skins": skins,
-            "root_nodes": tuple(
-                index for index, node in enumerate(nodes) if node["default_scene_root"]
-            ),
+            "root_nodes": root_nodes,
+            "skin_scale": skin_scale,
         }
         self._prepared_rigs[key] = prepared
         return prepared
@@ -425,6 +493,7 @@ class NativeGLBDocument:
         name: str = "",
         convert_to_z_up: bool = True,
         blender_z_up_fix: bool = False,
+        normalize_scale: bool = False,
     ):
         """Publish one prepared skin through the transactional bulk API."""
         from termin.skeleton import TcSkeleton
@@ -432,6 +501,7 @@ class NativeGLBDocument:
         prepared = self.prepared_rig_data(
             convert_to_z_up=convert_to_z_up,
             blender_z_up_fix=blender_z_up_fix,
+            normalize_scale=normalize_scale,
         )
         if skin_index < 0 or skin_index >= len(prepared["skins"]):
             raise IndexError(
@@ -477,6 +547,28 @@ class NativeGLBDocument:
                 w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
             )
         )
+
+    @staticmethod
+    def _uniform_scale_factor(scale) -> float:
+        import numpy as np
+
+        values = np.asarray(scale, dtype=np.float64)
+        if not np.all(np.isfinite(values)) or np.any(np.abs(values) <= 1.0e-12):
+            raise RuntimeError("GLB root scale normalization requires finite non-zero scale")
+        if not np.allclose(values, values[0], atol=1.0e-6, rtol=1.0e-6):
+            raise RuntimeError(
+                "GLB root scale normalization requires a uniform root scale"
+            )
+        return float(values[0])
+
+    @staticmethod
+    def _is_descendant(nodes, node_index: int, ancestor_index: int) -> bool:
+        parent_index = nodes[node_index]["parent_index"]
+        while parent_index is not None:
+            if parent_index == ancestor_index:
+                return True
+            parent_index = nodes[parent_index]["parent_index"]
+        return False
 
     def build_material_texture_data(self):
         """Bridge native metadata to the existing Python resource-layer records."""
@@ -656,6 +748,149 @@ class NativeGLBDocument:
     @staticmethod
     def _view_scale(view: NativeTextureViewInfo | None, default: float) -> float:
         return default if view is None else view.scale
+
+
+@dataclass(frozen=True)
+class NativeRuntimeMeshData:
+    """Compact mesh metadata consumed by the existing entity instantiator."""
+
+    native_index: int
+    resource_key: str
+    name: str
+    material_index: int
+    submeshes: tuple
+    is_skinned: bool
+
+
+@dataclass(frozen=True)
+class NativeRuntimeAnimationData:
+    native_index: int
+    resource_key: str
+    name: str
+
+
+class NativeGLBSceneData:
+    """Production-facing compact scene backed by one mapped cgltf document.
+
+    Geometry and animation tensors deliberately do not become Python arrays.
+    The object carries only metadata needed for child-resource discovery and
+    entity construction; publication delegates back to ``NativeGLBDocument``.
+    """
+
+    def __init__(
+        self,
+        document: NativeGLBDocument,
+        *,
+        convert_to_z_up: bool,
+        blender_z_up_fix: bool,
+        normalize_scale: bool,
+    ):
+        from collections import Counter
+
+        from termin.glb.loader import GLBNodeData, GLBSkinData, GLBSubmeshData
+
+        self.native_document = document
+        self.convert_to_z_up = convert_to_z_up
+        self.blender_z_up_fix = blender_z_up_fix
+        self.normalize_scale = normalize_scale
+
+        materials, textures = document.build_material_texture_data()
+        self.materials = list(materials)
+        self.textures = list(textures)
+
+        prepared = document.prepared_rig_data(
+            convert_to_z_up=convert_to_z_up,
+            blender_z_up_fix=blender_z_up_fix,
+            normalize_scale=normalize_scale,
+        )
+        self.nodes = [
+            GLBNodeData(
+                name=node["name"],
+                children=list(node["children"]),
+                mesh_index=node["mesh_index"],
+                skin_index=node["skin_index"],
+                translation=node["translation"],
+                rotation=node["rotation"],
+                scale=node["scale"],
+            )
+            for node in prepared["nodes"]
+        ]
+        self.skins = [
+            GLBSkinData(
+                name=skin["name"],
+                joint_node_indices=list(skin["joints"]),
+                inverse_bind_matrices=skin["inverse_bind_matrices"],
+                armature_node_index=skin["skeleton_node_index"],
+            )
+            for skin in prepared["skins"]
+        ]
+        self.root_nodes = list(prepared["root_nodes"])
+        self.skin_scale = prepared["skin_scale"]
+
+        mesh_name_counts = Counter(mesh.name for mesh in document.meshes)
+        self.meshes = []
+        self.mesh_index_map = {}
+        for mesh_index, mesh in enumerate(document.meshes):
+            resource_key = (
+                mesh.name if mesh_name_counts[mesh.name] == 1 else f"mesh_{mesh_index}"
+            )
+            submeshes = tuple(
+                GLBSubmeshData(
+                    name=f"{mesh.name}/primitive_{primitive_index}",
+                    first_index=primitive.first_index,
+                    index_count=primitive.index_count,
+                    material_index=(
+                        -1
+                        if primitive.material_index is None
+                        else primitive.material_index
+                    ),
+                    material_slot=primitive.material_slot,
+                )
+                for primitive_index, primitive in enumerate(mesh.primitives)
+            )
+            first_material = next(
+                (
+                    primitive.material_index
+                    for primitive in mesh.primitives
+                    if primitive.material_index is not None
+                ),
+                -1,
+            )
+            self.meshes.append(
+                NativeRuntimeMeshData(
+                    native_index=mesh_index,
+                    resource_key=resource_key,
+                    name=mesh.name,
+                    material_index=first_material,
+                    submeshes=submeshes,
+                    is_skinned=mesh.skinned,
+                )
+            )
+            self.mesh_index_map[mesh_index] = [mesh_index]
+
+        rig = document.rig_data()
+        animation_name_counts = Counter(
+            animation["name"] for animation in rig["animations"]
+        )
+        duplicate_animation_names = sorted(
+            name for name, count in animation_name_counts.items() if count > 1
+        )
+        if duplicate_animation_names:
+            names = ", ".join(repr(name) for name in duplicate_animation_names)
+            raise RuntimeError(
+                f"{document.path}: duplicate animation names are unsupported by "
+                f"AnimationPlayer: {names}"
+            )
+        self.animations = []
+        for animation_index, animation in enumerate(rig["animations"]):
+            animation_name = animation["name"]
+            self.animations.append(
+                NativeRuntimeAnimationData(
+                    native_index=animation_index,
+                    resource_key=animation_name,
+                    name=animation_name,
+                )
+            )
 
 
 # Compatibility name for the stage-1 static-mesh API.

@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #if defined(_WIN32)
 #if defined(TERMIN_GLB_EXPORTS)
@@ -45,6 +46,14 @@ typedef struct termin_glb_mesh_info {
     size_t index_count;
     bool skinned;
 } termin_glb_mesh_info;
+
+typedef struct termin_glb_primitive_info {
+    size_t first_index;
+    size_t index_count;
+    bool has_material;
+    size_t material_index;
+    uint32_t material_slot;
+} termin_glb_primitive_info;
 
 typedef struct termin_glb_image_info {
     const char* name;
@@ -155,6 +164,11 @@ TERMIN_GLB_API bool termin_glb_document_mesh_info(const termin_glb_document* doc
                                                   size_t mesh_index,
                                                   termin_glb_mesh_info* info,
                                                   termin_glb_error* error);
+TERMIN_GLB_API bool termin_glb_document_primitive_info(const termin_glb_document* document,
+                                                       size_t mesh_index,
+                                                       size_t primitive_index,
+                                                       termin_glb_primitive_info* info,
+                                                       termin_glb_error* error);
 TERMIN_GLB_API size_t termin_glb_document_image_count(const termin_glb_document* document);
 TERMIN_GLB_API bool termin_glb_document_image_info(const termin_glb_document* document,
                                                    size_t image_index,

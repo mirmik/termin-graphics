@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import threading
 import time
-from typing import TYPE_CHECKING, Dict, Iterator, Protocol, cast
+from typing import TYPE_CHECKING, Dict, Iterator, Literal, Protocol, cast
 
 from tcbase import log
 from termin_assets import DataAsset, EmbeddedAssetSpec, get_resource_manager
@@ -59,6 +59,10 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         self._normalize_scale: bool = False
         self._convert_to_z_up: bool = True
         self._blender_z_up_fix: bool = False
+        # None follows the source-format policy: binary GLB uses cgltf, while
+        # JSON glTF keeps the Python external-resource loader. A concrete value
+        # is an explicit migration override and never an error fallback.
+        self._import_backend_override: Literal["python", "cgltf"] | None = None
 
         # Child assets (created during spec parsing)
         self._mesh_assets: Dict[str, "MeshAsset"] = {}
@@ -151,6 +155,12 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         self._normalize_scale = spec_data.get("normalize_scale", False)
         self._convert_to_z_up = spec_data.get("convert_to_z_up", True)
         self._blender_z_up_fix = spec_data.get("blender_z_up_fix", False)
+        import_backend = spec_data.get("import_backend")
+        if import_backend is not None and import_backend not in {"python", "cgltf"}:
+            raise ValueError(
+                f"GLB import_backend must be 'python' or 'cgltf', got {import_backend!r}"
+            )
+        self._import_backend_override = import_backend
 
         # Create child assets from resources section
         resources = spec_data.get("resources", {})
@@ -248,6 +258,8 @@ class GLBAsset(DataAsset["GLBSceneData"]):
             spec["convert_to_z_up"] = False
         if self._blender_z_up_fix:
             spec["blender_z_up_fix"] = True
+        if self._import_backend_override is not None:
+            spec["import_backend"] = self._import_backend_override
 
         # Child asset UUIDs
         resources: Dict[str, Dict[str, str]] = {}
@@ -272,8 +284,38 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
     # --- Content parsing ---
 
+    def _effective_import_backend(self) -> Literal["python", "cgltf"]:
+        if self._import_backend_override is not None:
+            return self._import_backend_override
+        if self._source_path is not None and self._source_path.suffix.lower() == ".glb":
+            return "cgltf"
+        return "python"
+
+    def _read_file(self) -> bytes:
+        """Avoid copying a GLB that the cgltf backend will map read-only."""
+        if self._effective_import_backend() == "cgltf":
+            return b""
+        return super()._read_file()
+
     def _parse_content(self, content: bytes) -> "GLBSceneData | None":
         """Parse GLB/glTF content."""
+        if self._effective_import_backend() == "cgltf":
+            from termin.glb.native import NativeGLBDocument, NativeGLBSceneData
+
+            if self._source_path is None:
+                raise RuntimeError("cgltf GLB import requires a source path")
+            if self._source_path.suffix.lower() != ".glb":
+                raise RuntimeError(
+                    f"cgltf import currently supports binary .glb only: {self._source_path}"
+                )
+            document = NativeGLBDocument(self._source_path)
+            return NativeGLBSceneData(
+                document,
+                normalize_scale=self._normalize_scale,
+                convert_to_z_up=self._convert_to_z_up,
+                blender_z_up_fix=self._blender_z_up_fix,
+            )
+
         from termin.glb.loader import load_glb_file_from_buffer, load_glb_file_normalized
 
         if self._source_path is not None:
@@ -306,8 +348,9 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         ):
             # Create mesh assets for any meshes not in spec
             for glb_mesh in self._data.meshes:
-                if glb_mesh.name not in self._mesh_assets:
-                    self._create_new_mesh_asset(glb_mesh.name)
+                mesh_key = getattr(glb_mesh, "resource_key", glb_mesh.name)
+                if mesh_key not in self._mesh_assets:
+                    self._create_new_mesh_asset(mesh_key, glb_mesh.name)
                     spec_changed = True
 
             # Create skeleton assets for any skins not in spec
@@ -319,8 +362,9 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
             # Create animation assets for any animations not in spec
             for glb_anim in self._data.animations:
-                if glb_anim.name not in self._animation_assets:
-                    self._create_new_animation_asset(glb_anim.name)
+                animation_key = getattr(glb_anim, "resource_key", glb_anim.name)
+                if animation_key not in self._animation_assets:
+                    self._create_new_animation_asset(animation_key, glb_anim.name)
                     spec_changed = True
 
         # Populate all child assets with data
@@ -334,6 +378,12 @@ class GLBAsset(DataAsset["GLBSceneData"]):
 
     def _populate_child_assets(self) -> None:
         """Fill all child assets with extracted data from loaded GLB."""
+        from termin.glb.native import NativeGLBSceneData
+
+        if isinstance(self._data, NativeGLBSceneData):
+            self._populate_native_child_assets(self._data)
+            return
+
         from termin.glb.instantiator import (
             _glb_mesh_to_tc_mesh,
             _populate_tc_mesh_from_glb,
@@ -404,14 +454,71 @@ class GLBAsset(DataAsset["GLBSceneData"]):
                     asset.set_runtime_data(clip, loaded=True)
                     break
 
-    def _create_new_mesh_asset(self, mesh_name: str) -> "MeshAsset":
+    def _populate_native_child_assets(self, scene_data) -> None:
+        """Publish compact cgltf data directly into declared child resources."""
+        document = scene_data.native_document
+
+        for mesh in scene_data.meshes:
+            asset = self._mesh_assets.get(mesh.resource_key)
+            if asset is None:
+                raise RuntimeError(
+                    f"Native mesh child '{mesh.resource_key}' was not registered"
+                )
+            with self._load_stage("publish-mesh", child=mesh.resource_key):
+                tc_mesh = document.build_mesh(
+                    mesh.native_index,
+                    asset.uuid,
+                    name=mesh.name,
+                    convert_to_z_up=self._convert_to_z_up,
+                )
+                asset.set_runtime_data(tc_mesh, loaded=True)
+
+        for skin_index, skin in enumerate(scene_data.skins):
+            skeleton_key = "skeleton" if skin_index == 0 else f"skeleton_{skin_index}"
+            asset = self._skeleton_assets.get(skeleton_key)
+            if asset is None:
+                raise RuntimeError(
+                    f"Native skeleton child '{skeleton_key}' was not registered"
+                )
+            with self._load_stage("publish-skeleton", child=skeleton_key):
+                skeleton = document.build_skeleton(
+                    skin_index,
+                    asset.uuid,
+                    name=skin.name,
+                    normalize_scale=self._normalize_scale,
+                    convert_to_z_up=self._convert_to_z_up,
+                    blender_z_up_fix=self._blender_z_up_fix,
+                )
+                asset.set_runtime_data(skeleton, loaded=True)
+
+        for animation in scene_data.animations:
+            asset = self._animation_assets.get(animation.resource_key)
+            if asset is None:
+                raise RuntimeError(
+                    f"Native animation child '{animation.resource_key}' was not registered"
+                )
+            with self._load_stage("publish-animation", child=animation.resource_key):
+                clip = document.build_animation_clip(
+                    animation.native_index,
+                    asset.uuid,
+                    name=animation.name,
+                    normalize_scale=self._normalize_scale,
+                    convert_to_z_up=self._convert_to_z_up,
+                    blender_z_up_fix=self._blender_z_up_fix,
+                )
+                asset.set_runtime_data(clip, loaded=True)
+
+    def _create_new_mesh_asset(
+        self, mesh_key: str, mesh_name: str | None = None
+    ) -> "MeshAsset":
         """Get or create a MeshAsset for a mesh discovered during load via ResourceManager."""
+        mesh_name = mesh_name or mesh_key
         full_name = f"{self._name}_{mesh_name}"
         asset = cast(
             "MeshAsset",
-            self._get_or_create_child_asset("mesh", full_name, mesh_name, None),
+            self._get_or_create_child_asset("mesh", full_name, mesh_key, None),
         )
-        self._mesh_assets[mesh_name] = asset
+        self._mesh_assets[mesh_key] = asset
         return asset
 
     def _create_new_skeleton_asset(self, skeleton_key: str, index: int) -> "SkeletonAsset":
@@ -424,14 +531,19 @@ class GLBAsset(DataAsset["GLBSceneData"]):
         self._skeleton_assets[skeleton_key] = asset
         return asset
 
-    def _create_new_animation_asset(self, anim_name: str) -> "AnimationClipAsset":
+    def _create_new_animation_asset(
+        self, animation_key: str, anim_name: str | None = None
+    ) -> "AnimationClipAsset":
         """Get or create an AnimationClipAsset for an animation discovered during load via ResourceManager."""
+        anim_name = anim_name or animation_key
         asset_name = self._animation_asset_name(anim_name)
         asset = cast(
             "AnimationClipAsset",
-            self._get_or_create_child_asset("animation_clip", asset_name, anim_name, None),
+            self._get_or_create_child_asset(
+                "animation_clip", asset_name, animation_key, None
+            ),
         )
-        self._animation_assets[anim_name] = asset
+        self._animation_assets[animation_key] = asset
         return asset
 
     # --- Child asset access ---

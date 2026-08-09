@@ -715,6 +715,80 @@ bool termin_glb_document_mesh_info(const termin_glb_document* document,
     return true;
 }
 
+bool termin_glb_document_primitive_info(const termin_glb_document* document,
+                                        size_t mesh_index,
+                                        size_t primitive_index,
+                                        termin_glb_primitive_info* info,
+                                        termin_glb_error* error) {
+    termin_glb_error_clear(error);
+    if (!document || !document->data || !info) {
+        set_error(error, TERMIN_GLB_ERROR_INTERNAL, "primitive discovery requires a document and output pointer");
+        return false;
+    }
+    if (mesh_index >= document->data->meshes_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: mesh index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  mesh_index,
+                  static_cast<size_t>(document->data->meshes_count));
+        return false;
+    }
+    const cgltf_mesh& mesh = document->data->meshes[mesh_index];
+    if (primitive_index >= mesh.primitives_count) {
+        set_error(error,
+                  TERMIN_GLB_ERROR_INVALID_FORMAT,
+                  "%s: mesh[%zu] primitive index %zu is out of range (count=%zu)",
+                  document->path.c_str(),
+                  mesh_index,
+                  primitive_index,
+                  static_cast<size_t>(mesh.primitives_count));
+        return false;
+    }
+
+    size_t first_index = 0;
+    std::unordered_map<const cgltf_material*, uint32_t> material_slots;
+    for (size_t index = 0; index <= primitive_index; ++index) {
+        const cgltf_primitive& primitive = mesh.primitives[index];
+        size_t vertex_count = 0;
+        size_t index_count = 0;
+        if (!primitive_counts(primitive, &vertex_count, &index_count)) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: mesh[%zu] primitive[%zu] has no POSITION accessor",
+                      document->path.c_str(),
+                      mesh_index,
+                      index);
+            return false;
+        }
+        const auto [slot, inserted] = material_slots.emplace(
+            primitive.material, static_cast<uint32_t>(material_slots.size()));
+        if (index == primitive_index) {
+            *info = {};
+            info->first_index = first_index;
+            info->index_count = index_count;
+            info->has_material = pointer_index(
+                primitive.material,
+                document->data->materials,
+                document->data->materials_count,
+                &info->material_index);
+            info->material_slot = slot->second;
+            return true;
+        }
+        if (!checked_add(first_index, index_count, &first_index)) {
+            set_error(error,
+                      TERMIN_GLB_ERROR_INVALID_FORMAT,
+                      "%s: mesh[%zu] primitive index range overflows size_t",
+                      document->path.c_str(),
+                      mesh_index);
+            return false;
+        }
+        (void)inserted;
+    }
+    set_error(error, TERMIN_GLB_ERROR_INTERNAL, "%s: primitive discovery failed", document->path.c_str());
+    return false;
+}
+
 size_t termin_glb_document_image_count(const termin_glb_document* document) {
     return document && document->data ? document->data->images_count : 0;
 }

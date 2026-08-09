@@ -79,6 +79,24 @@ namespace {
             return result;
         }
 
+        nb::dict primitive_info(size_t mesh_index, size_t primitive_index) const {
+            termin_glb_primitive_info info = {};
+            termin_glb_error error = {};
+            if (!termin_glb_document_primitive_info(
+                    document_, mesh_index, primitive_index, &info, &error))
+                throw native_error(error);
+            nb::dict result;
+            result["first_index"] = info.first_index;
+            result["index_count"] = info.index_count;
+            result["has_material"] = info.has_material;
+            if (info.has_material)
+                result["material_index"] = info.material_index;
+            else
+                result["material_index"] = nb::none();
+            result["material_slot"] = info.material_slot;
+            return result;
+        }
+
         nb::dict image_info(size_t image_index) const {
             termin_glb_image_info info = {};
             termin_glb_error error = {};
@@ -388,6 +406,10 @@ NB_MODULE(_glb_native, module) {
         .def_prop_ro("mesh_count", &NativeDocument::mesh_count)
         .def_prop_ro("meshes", &NativeDocument::meshes)
         .def("mesh_info", &NativeDocument::mesh_info, nb::arg("mesh_index"))
+        .def("primitive_info",
+             &NativeDocument::primitive_info,
+             nb::arg("mesh_index"),
+             nb::arg("primitive_index"))
         .def_prop_ro("images", &NativeDocument::images)
         .def("image_info", &NativeDocument::image_info, nb::arg("image_index"))
         .def("image_payload", &NativeDocument::image_payload, nb::arg("image_index"))
