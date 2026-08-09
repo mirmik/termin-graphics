@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#include <stdint.h>
 
 #include <tcbase/tc_log.h>
 #include <tcbase/tc_pool.h>
@@ -312,6 +314,121 @@ tc_bone* tc_skeleton_alloc_bones(tc_skeleton* skeleton, size_t count) {
     skeleton->header.is_loaded = 1;
     skeleton->header.version++;
     return skeleton->bones;
+}
+
+static bool skeleton_desc_values_finite(const tc_skeleton_bone_desc* bone, size_t index) {
+    if (!bone->inverse_bind_matrix || !bone->bind_translation || !bone->bind_rotation || !bone->bind_scale) {
+        tc_log_error("tc_skeleton_replace_bones: bone[%zu] has incomplete transform storage", index);
+        return false;
+    }
+    for (size_t i = 0; i < 16; ++i) {
+        if (!isfinite(bone->inverse_bind_matrix[i])) {
+            tc_log_error("tc_skeleton_replace_bones: bone[%zu] inverse bind matrix is not finite", index);
+            return false;
+        }
+    }
+    double rotation_norm = 0.0;
+    for (size_t i = 0; i < 4; ++i) {
+        if (!isfinite(bone->bind_rotation[i])) {
+            tc_log_error("tc_skeleton_replace_bones: bone[%zu] rotation is not finite", index);
+            return false;
+        }
+        rotation_norm += bone->bind_rotation[i] * bone->bind_rotation[i];
+    }
+    if (rotation_norm <= 1.0e-16) {
+        tc_log_error("tc_skeleton_replace_bones: bone[%zu] rotation has zero length", index);
+        return false;
+    }
+    if (fabs(rotation_norm - 1.0) > 1.0e-3) {
+        tc_log_error("tc_skeleton_replace_bones: bone[%zu] rotation must be normalized", index);
+        return false;
+    }
+    for (size_t i = 0; i < 3; ++i) {
+        if (!isfinite(bone->bind_translation[i]) || !isfinite(bone->bind_scale[i])) {
+            tc_log_error("tc_skeleton_replace_bones: bone[%zu] TRS is not finite", index);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool tc_skeleton_replace_bones(tc_skeleton* skeleton,
+                               const tc_skeleton_bone_desc* bones,
+                               size_t count) {
+    if (!skeleton || (count > 0 && !bones)) {
+        tc_log_error("tc_skeleton_replace_bones: skeleton and descriptors are required");
+        return false;
+    }
+    if (count > INT32_MAX || count > SIZE_MAX / sizeof(tc_bone)) {
+        tc_log_error("tc_skeleton_replace_bones: bone count is out of range");
+        return false;
+    }
+    size_t root_count = 0;
+    for (size_t i = 0; i < count; ++i) {
+        const int32_t parent = bones[i].parent_index;
+        if (parent < -1 || (parent >= 0 && (size_t)parent >= count) || parent == (int32_t)i) {
+            tc_log_error("tc_skeleton_replace_bones: bone[%zu] has invalid parent=%d", i, parent);
+            return false;
+        }
+        if (!skeleton_desc_values_finite(&bones[i], i))
+            return false;
+        if (parent < 0)
+            ++root_count;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        int32_t ancestor = bones[i].parent_index;
+        size_t depth = 0;
+        while (ancestor >= 0) {
+            if (++depth > count) {
+                tc_log_error("tc_skeleton_replace_bones: bone hierarchy contains a cycle at bone[%zu]", i);
+                return false;
+            }
+            ancestor = bones[(size_t)ancestor].parent_index;
+        }
+    }
+
+    tc_bone* replacement = count > 0 ? (tc_bone*)calloc(count, sizeof(tc_bone)) : NULL;
+    int32_t* roots = root_count > 0 ? (int32_t*)malloc(root_count * sizeof(int32_t)) : NULL;
+    if ((count > 0 && !replacement) || (root_count > 0 && !roots)) {
+        tc_log_error("tc_skeleton_replace_bones: payload allocation failed");
+        free(replacement);
+        free(roots);
+        return false;
+    }
+
+    size_t root_index = 0;
+    for (size_t i = 0; i < count; ++i) {
+        tc_bone* destination = &replacement[i];
+        const tc_skeleton_bone_desc* source = &bones[i];
+        tc_bone_init(destination);
+        destination->index = (int32_t)i;
+        destination->parent_index = source->parent_index;
+        if (source->name) {
+            if (strlen(source->name) >= TC_BONE_NAME_MAX) {
+                tc_log_warn("tc_skeleton_replace_bones: bone[%zu] name is truncated to %d bytes",
+                            i,
+                            TC_BONE_NAME_MAX - 1);
+            }
+            strncpy(destination->name, source->name, TC_BONE_NAME_MAX - 1);
+            destination->name[TC_BONE_NAME_MAX - 1] = '\0';
+        }
+        memcpy(destination->inverse_bind_matrix, source->inverse_bind_matrix, 16 * sizeof(double));
+        memcpy(destination->bind_translation, source->bind_translation, 3 * sizeof(double));
+        memcpy(destination->bind_rotation, source->bind_rotation, 4 * sizeof(double));
+        memcpy(destination->bind_scale, source->bind_scale, 3 * sizeof(double));
+        if (source->parent_index < 0)
+            roots[root_index++] = (int32_t)i;
+    }
+
+    free(skeleton->bones);
+    free(skeleton->root_indices);
+    skeleton->bones = replacement;
+    skeleton->bone_count = count;
+    skeleton->root_indices = roots;
+    skeleton->root_count = root_count;
+    skeleton->header.is_loaded = 1;
+    skeleton->header.version++;
+    return true;
 }
 
 tc_bone* tc_skeleton_get_bone(tc_skeleton* skeleton, size_t index) {

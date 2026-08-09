@@ -7,7 +7,7 @@ import pytest
 from termin.glb import loader as glb_loader_module
 from termin.default_assets.resource_manager import DefaultResourceManager
 from termin.glb.asset import GLBAsset
-from termin.glb.instantiator import _glb_mesh_to_tc_mesh
+from termin.glb.instantiator import _glb_mesh_to_tc_mesh, _populate_tc_skeleton_from_glb
 from termin.glb.loader import (
     GLBAnimationChannel,
     GLBAnimationClip,
@@ -281,6 +281,32 @@ def test_root_node_animation_tracks_follow_pose_corrections():
     np.testing.assert_allclose(root_channel.scale_keys[0][1], root_node.scale, atol=1e-6)
     np.testing.assert_allclose(root_channel.pos_keys[0][1], [0.0, -1.7, -0.4], atol=1e-6)
     np.testing.assert_allclose(scene_data.animations[0].channels[1].pos_keys[0][1], [0.0, 0.0, 0.1], atol=1e-6)
+
+
+def test_legacy_skeleton_publisher_uses_column_major_inverse_bind_storage():
+    from termin.skeleton import TcSkeleton
+
+    node = GLBNodeData(
+        name="Joint",
+        children=[],
+        mesh_index=None,
+        translation=np.zeros(3, dtype=np.float32),
+        rotation=np.asarray([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+        scale=np.ones(3, dtype=np.float32),
+    )
+    inverse_bind = np.eye(4, dtype=np.float32)
+    inverse_bind[:3, 3] = (-2.0, -3.0, -4.0)
+    skin = GLBSkinData(
+        name="Skin",
+        joint_node_indices=[0],
+        inverse_bind_matrices=inverse_bind.reshape(1, 4, 4),
+    )
+    skeleton = TcSkeleton.create("LegacyColumnMajor")
+
+    assert _populate_tc_skeleton_from_glb(skeleton, skin, [node])
+    assert skeleton.bones[0]["inverse_bind_matrix"][12:15] == pytest.approx(
+        (-2.0, -3.0, -4.0)
+    )
 
 
 def test_load_gltf_multi_primitive_mesh_as_submeshes(tmp_path):

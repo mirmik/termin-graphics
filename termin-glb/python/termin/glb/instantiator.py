@@ -372,10 +372,6 @@ def _populate_tc_skeleton_from_glb(tc_skel: "TcSkeleton", skin, nodes) -> bool:
     if not tc_skel.is_valid:
         return False
 
-    tc_skeleton_ptr = tc_skel.get()
-    if tc_skeleton_ptr is None:
-        return False
-
     joint_indices = skin.joint_node_indices
     inverse_bind_matrices = skin.inverse_bind_matrices
     num_joints = len(joint_indices)
@@ -383,51 +379,35 @@ def _populate_tc_skeleton_from_glb(tc_skel: "TcSkeleton", skin, nodes) -> bool:
     if num_joints == 0:
         return True
 
-    # Allocate bones
-    bones = tc_skel.alloc_bones(num_joints)
-    if bones is None:
-        return False
+    node_parents: Dict[int, int] = {}
+    for parent_index, parent in enumerate(nodes):
+        for child_index in parent.children:
+            node_parents[child_index] = parent_index
+    joint_to_bone = {
+        node_index: bone_index for bone_index, node_index in enumerate(joint_indices)
+    }
+    bones = []
+    for bone_index, node_index in enumerate(joint_indices):
+        node = nodes[node_index]
+        ancestor = node_parents.get(node_index)
+        while ancestor is not None and ancestor not in joint_to_bone:
+            ancestor = node_parents.get(ancestor)
+        bones.append(
+            {
+                "name": node.name,
+                "parent_index": -1 if ancestor is None else joint_to_bone[ancestor],
+                # GLBSceneData uses ordinary matrix indexing; TcBone stores the
+                # corresponding flat array in project-wide column-major order.
+                "inverse_bind_matrix": inverse_bind_matrices[bone_index].T.reshape(-1),
+                "bind_translation": node.translation,
+                "bind_rotation": node.rotation,
+                "bind_scale": node.scale,
+            }
+        )
 
-    # Populate each bone
-    for bone_idx in range(num_joints):
-        node_idx = joint_indices[bone_idx]
-        node = nodes[node_idx]
-
-        # Find parent bone index by checking which other bone's node has this node as a child
-        parent_bone_idx = -1
-        for other_bone_idx in range(num_joints):
-            other_node_idx = joint_indices[other_bone_idx]
-            other_node = nodes[other_node_idx]
-            if node_idx in other_node.children:
-                parent_bone_idx = other_bone_idx
-                break
-
-        # Get tc_bone pointer and populate
-        bone = tc_skel.get_bone(bone_idx)
-        if bone is None:
-            continue
-
-        # Set bone data via C API
-        bone.name = node.name[:63]  # TC_BONE_NAME_MAX = 64
-        bone.index = bone_idx
-        bone.parent_index = parent_bone_idx
-
-        # Inverse bind matrix (row-major 4x4) - must assign entire list at once
-        ibm = inverse_bind_matrices[bone_idx]
-        bone.inverse_bind_matrix = [float(x) for x in ibm.flat]
-
-        # Bind pose
-        bone.bind_translation = (float(node.translation[0]), float(node.translation[1]), float(node.translation[2]))
-        bone.bind_rotation = (float(node.rotation[0]), float(node.rotation[1]), float(node.rotation[2]), float(node.rotation[3]))
-        bone.bind_scale = (float(node.scale[0]), float(node.scale[1]), float(node.scale[2]))
-
-    # Rebuild root indices
-    tc_skel.rebuild_roots()
-
-    # Mark as loaded
-    tc_skeleton_ptr.is_loaded = True
-    tc_skel.bump_version()
-
+    # The native call validates and allocates the complete payload before
+    # replacing the existing skeleton, so reload failure cannot corrupt it.
+    tc_skel.set_bones(bones)
     return True
 
 

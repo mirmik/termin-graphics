@@ -131,6 +131,7 @@ class NativeGLBDocument:
             self._material_info(entry) for entry in self._document.materials
         )
         self._rig_snapshot: dict | None = None
+        self._prepared_rigs: dict[tuple[bool, bool], dict] = {}
 
     @property
     def path(self) -> Path:
@@ -175,6 +176,7 @@ class NativeGLBDocument:
         *,
         name: str = "",
         convert_to_z_up: bool = False,
+        blender_z_up_fix: bool = False,
     ):
         """Publish one animation as exact bulk tracks.
 
@@ -267,6 +269,33 @@ class NativeGLBDocument:
                     vectors[:, 1] = vectors[:, 2]
                     vectors[:, 2] = old_y
 
+            if blender_z_up_fix and path != "weights":
+                vectors = track_values.reshape(-1, components)
+                roots = {
+                    index
+                    for index, node in enumerate(rig["nodes"])
+                    if node["default_scene_root"]
+                }
+                root_joint = None
+                if rig["skins"] and rig["skins"][0]["joints"]:
+                    root_joint = rig["skins"][0]["joints"][0]
+                if target_node_index in roots and path == "rotation":
+                    vectors[:] = self._quaternion_left_multiply(
+                        (-0.70710678, 0.0, 0.0, 0.70710678), vectors
+                    )
+                if target_node_index == root_joint:
+                    if path == "translation":
+                        old_y = vectors[:, 1].copy()
+                        vectors[:, 1] = -vectors[:, 2]
+                        vectors[:, 2] = old_y
+                    elif path == "scale":
+                        old_y = vectors[:, 1].copy()
+                        vectors[:, 1] = vectors[:, 2]
+                        vectors[:, 2] = old_y
+                    elif path == "rotation":
+                        vectors[:] = self._quaternion_left_multiply(
+                            (0.70710678, 0.0, 0.0, 0.70710678), vectors
+                        )
             tracks.append(
                 {
                     "target_node_index": target_node_index,
@@ -284,6 +313,170 @@ class NativeGLBDocument:
         clip.set_loop(True)
         clip.set_tracks(tracks)
         return clip
+
+    def prepared_rig_data(
+        self,
+        *,
+        convert_to_z_up: bool = True,
+        blender_z_up_fix: bool = False,
+    ) -> dict:
+        """Return a cached, consistently converted node/skin snapshot."""
+        import numpy as np
+
+        from termin.glb.loader import _decompose_node_matrix
+
+        key = (convert_to_z_up, blender_z_up_fix)
+        cached = self._prepared_rigs.get(key)
+        if cached is not None:
+            return cached
+
+        rig = self.rig_data()
+        matrix_targets = {
+            channel["target_node_index"]
+            for animation in rig["animations"]
+            for channel in animation["channels"]
+            if channel["target_node_index"] is not None
+        }
+        nodes = []
+        for node_index, source in enumerate(rig["nodes"]):
+            if source["has_matrix"]:
+                if node_index in matrix_targets:
+                    raise RuntimeError(
+                        f"{self._path}: matrix-authored node {node_index} "
+                        "must not be an animation target"
+                    )
+                translation, rotation, scale = _decompose_node_matrix(
+                    source["matrix"], node_index
+                )
+            else:
+                translation = np.asarray(source["translation"], dtype=np.float64)
+                rotation = np.asarray(source["rotation"], dtype=np.float64)
+                scale = np.asarray(source["scale"], dtype=np.float64)
+            nodes.append(
+                {
+                    **source,
+                    "translation": np.asarray(translation, dtype=np.float64),
+                    "rotation": np.asarray(rotation, dtype=np.float64),
+                    "scale": np.asarray(scale, dtype=np.float64),
+                    "children": [],
+                }
+            )
+        for node_index, node in enumerate(nodes):
+            parent_index = node["parent_index"]
+            if parent_index is not None:
+                nodes[parent_index]["children"].append(node_index)
+
+        skins = []
+        for source in rig["skins"]:
+            matrices = np.frombuffer(
+                source["inverse_bind_matrices"], dtype=np.float32
+            ).reshape(-1, 4, 4).transpose(0, 2, 1).astype(np.float64)
+            skins.append({**source, "inverse_bind_matrices": matrices})
+
+        if convert_to_z_up:
+            conversion = np.asarray(
+                [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
+                dtype=np.float64,
+            )
+            for node in nodes:
+                x, y, z = node["translation"]
+                node["translation"] = np.asarray((x, -z, y), dtype=np.float64)
+                x, y, z, w = node["rotation"]
+                node["rotation"] = np.asarray((x, -z, y, w), dtype=np.float64)
+                x, y, z = node["scale"]
+                node["scale"] = np.asarray((x, z, y), dtype=np.float64)
+            for skin in skins:
+                matrices = skin["inverse_bind_matrices"]
+                skin["inverse_bind_matrices"] = conversion @ matrices @ conversion.T
+
+        if blender_z_up_fix:
+            negative_x = (-0.70710678, 0.0, 0.0, 0.70710678)
+            positive_x = (0.70710678, 0.0, 0.0, 0.70710678)
+            for node in nodes:
+                if node["default_scene_root"]:
+                    node["rotation"] = self._quaternion_left_multiply(
+                        negative_x, node["rotation"].reshape(1, 4)
+                    )[0]
+            if skins and skins[0]["joints"]:
+                root_joint = nodes[skins[0]["joints"][0]]
+                x, y, z = root_joint["translation"]
+                root_joint["translation"] = np.asarray((x, -z, y), dtype=np.float64)
+                x, y, z = root_joint["scale"]
+                root_joint["scale"] = np.asarray((x, z, y), dtype=np.float64)
+                root_joint["rotation"] = self._quaternion_left_multiply(
+                    positive_x, root_joint["rotation"].reshape(1, 4)
+                )[0]
+
+        prepared = {
+            "nodes": nodes,
+            "skins": skins,
+            "root_nodes": tuple(
+                index for index, node in enumerate(nodes) if node["default_scene_root"]
+            ),
+        }
+        self._prepared_rigs[key] = prepared
+        return prepared
+
+    def build_skeleton(
+        self,
+        skin_index: int,
+        skeleton_uuid: str,
+        *,
+        name: str = "",
+        convert_to_z_up: bool = True,
+        blender_z_up_fix: bool = False,
+    ):
+        """Publish one prepared skin through the transactional bulk API."""
+        from termin.skeleton import TcSkeleton
+
+        prepared = self.prepared_rig_data(
+            convert_to_z_up=convert_to_z_up,
+            blender_z_up_fix=blender_z_up_fix,
+        )
+        if skin_index < 0 or skin_index >= len(prepared["skins"]):
+            raise IndexError(
+                f"skin index {skin_index} is out of range for {self._path}"
+            )
+        skin = prepared["skins"][skin_index]
+        joint_to_bone = {node_index: index for index, node_index in enumerate(skin["joints"])}
+        bones = []
+        for bone_index, node_index in enumerate(skin["joints"]):
+            node = prepared["nodes"][node_index]
+            ancestor = node["parent_index"]
+            while ancestor is not None and ancestor not in joint_to_bone:
+                ancestor = prepared["nodes"][ancestor]["parent_index"]
+            bones.append(
+                {
+                    "name": node["name"],
+                    "parent_index": -1 if ancestor is None else joint_to_bone[ancestor],
+                    "inverse_bind_matrix": skin["inverse_bind_matrices"][bone_index].T.reshape(-1),
+                    "bind_translation": node["translation"],
+                    "bind_rotation": node["rotation"],
+                    "bind_scale": node["scale"],
+                }
+            )
+
+        skeleton = TcSkeleton.from_uuid(skeleton_uuid)
+        if not skeleton.is_valid:
+            skeleton = TcSkeleton.create(name or skin["name"], skeleton_uuid)
+        skeleton.set_bones(bones)
+        return skeleton
+
+    @staticmethod
+    def _quaternion_left_multiply(left, right):
+        import numpy as np
+
+        x1, y1, z1, w1 = left
+        values = np.asarray(right, dtype=np.float64)
+        x2, y2, z2, w2 = values.T
+        return np.column_stack(
+            (
+                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            )
+        )
 
     def build_material_texture_data(self):
         """Bridge native metadata to the existing Python resource-layer records."""

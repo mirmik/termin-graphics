@@ -1037,9 +1037,7 @@ bool termin_glb_document_skin_inverse_bind_matrices(const termin_glb_document* d
             destination[0] = destination[5] = destination[10] = destination[15] = 1.0f;
             continue;
         }
-        for (size_t row = 0; row < 4; ++row)
-            for (size_t column = 0; column < 4; ++column)
-                destination[row * 4 + column] = source[column * 4 + row];
+        std::memcpy(destination, source, sizeof(source));
     }
     return true;
 }

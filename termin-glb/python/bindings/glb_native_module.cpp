@@ -223,13 +223,7 @@ namespace {
                 const size_t component_count = 16;
                 rig_hash = fnv1a(&info.joint_count, sizeof(info.joint_count), rig_hash);
                 rig_hash = fnv1a(&component_count, sizeof(component_count), rig_hash);
-                std::vector<float> column_major(matrices.size());
-                for (size_t matrix_index = 0; matrix_index < info.joint_count; ++matrix_index)
-                    for (size_t row = 0; row < 4; ++row)
-                        for (size_t column = 0; column < 4; ++column)
-                            column_major[matrix_index * 16 + column * 4 + row] =
-                                matrices[matrix_index * 16 + row * 4 + column];
-                rig_hash = fnv1a(column_major.data(), column_major.size() * sizeof(float), rig_hash);
+                rig_hash = fnv1a(matrices.data(), matrices.size() * sizeof(float), rig_hash);
                 nb::dict skin;
                 skin["name"] = info.name;
                 skin["skeleton_node_index"] =

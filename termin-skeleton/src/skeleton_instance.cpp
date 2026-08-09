@@ -116,18 +116,6 @@ namespace termin {
         if (_bone_entities.empty() || !_skeleton || !_skeleton->bones)
             return;
 
-        // Helper to convert row-major array to column-major Mat44
-        // (inverse_bind_matrix is stored as row-major in tc_bone)
-        auto row_major_to_mat44 = [](const double* src) -> Mat44 {
-            Mat44 m;
-            for (int row = 0; row < 4; ++row) {
-                for (int col = 0; col < 4; ++col) {
-                    m(col, row) = src[row * 4 + col];
-                }
-            }
-            return m;
-        };
-
         // Helper to copy column-major array to Mat44
         auto col_major_to_mat44 = [](const double* src) -> Mat44 {
             Mat44 m;
@@ -163,8 +151,8 @@ namespace termin {
             ent.transform().world_matrix(bone_world_d);
             Mat44 bone_world = col_major_to_mat44(bone_world_d);
 
-            // Get inverse bind matrix (stored as row-major in tc_bone)
-            Mat44 inv_bind = row_major_to_mat44(bone.inverse_bind_matrix);
+            // tc_bone follows the project-wide column-major matrix convention.
+            Mat44 inv_bind = col_major_to_mat44(bone.inverse_bind_matrix);
 
             // bone_matrix = skeleton_world_inv * bone_world * inv_bind
             _bone_matrices[bone.index] = skeleton_world_inv * bone_world * inv_bind;

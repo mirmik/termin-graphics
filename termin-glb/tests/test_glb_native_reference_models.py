@@ -281,3 +281,105 @@ def test_native_arthur_skinned_geometry_and_bulk_rig_reference():
     assert published_track_count == 12_702
     assert found_step_boundary
     assert found_nonuniform_scale
+
+    raw_prepared = document.prepared_rig_data(convert_to_z_up=False)
+    converted = document.prepared_rig_data(convert_to_z_up=True)
+    conversion = np.asarray(
+        [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
+        dtype=np.float64,
+    )
+    assert converted["root_nodes"] == (100,)
+    assert np.allclose(
+        converted["skins"][0]["inverse_bind_matrices"],
+        conversion
+        @ raw_prepared["skins"][0]["inverse_bind_matrices"]
+        @ conversion.T,
+    )
+
+    skeleton = document.build_skeleton(
+        0,
+        "reference-arthur-skeleton",
+        convert_to_z_up=True,
+    )
+    assert skeleton.bone_count == 80
+    assert skeleton.root_count >= 1
+    assert len(skeleton.bones) == 80
+    joints = converted["skins"][0]["joints"]
+    joint_to_bone = {node_index: index for index, node_index in enumerate(joints)}
+    for bone_index, node_index in enumerate(joints):
+        ancestor = converted["nodes"][node_index]["parent_index"]
+        while ancestor is not None and ancestor not in joint_to_bone:
+            ancestor = converted["nodes"][ancestor]["parent_index"]
+        expected_parent = -1 if ancestor is None else joint_to_bone[ancestor]
+        assert skeleton.bones[bone_index]["parent_index"] == expected_parent
+        assert skeleton.bones[bone_index]["bind_scale"] == pytest.approx(
+            converted["nodes"][node_index]["scale"]
+        )
+
+    blender_prepared = document.prepared_rig_data(
+        convert_to_z_up=True,
+        blender_z_up_fix=True,
+    )
+    assert np.allclose(
+        blender_prepared["skins"][0]["inverse_bind_matrices"],
+        converted["skins"][0]["inverse_bind_matrices"],
+    )
+    root_joint = joints[0]
+    converted_joint = converted["nodes"][root_joint]
+    blender_joint = blender_prepared["nodes"][root_joint]
+    assert blender_joint["translation"] == pytest.approx(
+        (
+            converted_joint["translation"][0],
+            -converted_joint["translation"][2],
+            converted_joint["translation"][1],
+        )
+    )
+
+    root_joint_animation = next(
+        index
+        for index, animation in enumerate(rig["animations"])
+        if any(
+            channel["target_node_index"] == root_joint
+            for channel in animation["channels"]
+        )
+    )
+    ordinary_clip = document.build_animation_clip(
+        root_joint_animation,
+        "reference-arthur-root-joint-ordinary",
+        convert_to_z_up=True,
+    )
+    blender_clip = document.build_animation_clip(
+        root_joint_animation,
+        "reference-arthur-root-joint-blender",
+        convert_to_z_up=True,
+        blender_z_up_fix=True,
+    )
+    track_index = next(
+        index
+        for index, track in enumerate(ordinary_clip.tracks)
+        if track["target_node_index"] == root_joint
+    )
+    ordinary_track = ordinary_clip.tracks[track_index]
+    blender_track = blender_clip.tracks[track_index]
+    ordinary_values = np.asarray(ordinary_track["values"], dtype=np.float64).reshape(
+        -1, ordinary_track["components"]
+    )
+    expected_values = ordinary_values.copy()
+    if ordinary_track["path"] == "translation":
+        expected_values[:, 1] = -ordinary_values[:, 2]
+        expected_values[:, 2] = ordinary_values[:, 1]
+    elif ordinary_track["path"] == "scale":
+        expected_values[:, 1] = ordinary_values[:, 2]
+        expected_values[:, 2] = ordinary_values[:, 1]
+    else:
+        x2, y2, z2, w2 = ordinary_values.T
+        half = 0.70710678
+        expected_values = np.column_stack(
+            (
+                half * x2 + half * w2,
+                half * y2 - half * z2,
+                half * z2 + half * y2,
+                half * w2 - half * x2,
+            )
+        )
+    assert blender_track["values"] == pytest.approx(expected_values.reshape(-1))

@@ -111,8 +111,8 @@ texture hashes remain independently pinned by the reference test.
 The document exposes node, skin, animation sampler, and channel discovery as
 one bulk Python crossing. Animation input/output tensors are flattened float32
 pools with explicit component count, interpolation, target node index, and
-target path; inverse-bind matrices cross the ABI in Termin's row-major storage
-order. This preserves `STEP`, non-uniform vec3 scale, morph-weight cardinality,
+target path; inverse-bind matrices cross the ABI in the project-wide
+column-major storage order. This preserves `STEP`, non-uniform vec3 scale, morph-weight cardinality,
 and cubic-spline tensor shape instead of lowering them prematurely to the
 legacy animation-channel model.
 
@@ -134,6 +134,11 @@ the sampling boundary until their runtime lowering is implemented.
 
 The current bridge can optionally apply the shared Y-up to Z-up basis mapping
 to translation, rotation, scale, and cubic tangent tuples. Native node/skin
-publication and the explicit Blender compatibility policy remain the next rig
-migration stage; callers must not combine converted tracks with unconverted
-rest data.
+preparation applies the same policy to node TRS and inverse-bind matrices.
+`build_skeleton()` derives each bone parent from the nearest joint ancestor and
+publishes all bones and roots transactionally; failed validation or allocation
+leaves the prior resource/version intact. The optional Blender compatibility
+policy is explicit and is applied after basis conversion to both affected rest
+TRS and animation tuples, while intentionally leaving IBM unchanged to retain
+the established importer contract. Callers must still select the same options
+for prepared rest data, skeletons, meshes, and clips.

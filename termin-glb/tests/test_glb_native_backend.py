@@ -75,6 +75,31 @@ def _write_bulk_animation_glb(path: Path) -> Path:
     )
 
 
+def _write_column_major_skin_glb(path: Path) -> Path:
+    inverse_bind = struct.pack(
+        "<16f",
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        -2.0, -3.0, -4.0, 1.0,
+    )
+    return _write_glb(
+        path,
+        {
+            "asset": {"version": "2.0"},
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(inverse_bind)},
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 1, "type": "MAT4"},
+            ],
+            "nodes": [{"name": "Joint"}],
+            "skins": [{"name": "Skin", "joints": [0], "inverseBindMatrices": 0}],
+        },
+        inverse_bind,
+    )
+
+
 def _write_indexed_triangle_glb(path: Path, component_type: int | None, indices=(0, 1, 2)) -> Path:
     positions = b"".join(
         struct.pack("<4f", *position, 99.0)
@@ -589,3 +614,23 @@ def test_native_animation_bridge_preserves_step_vec3_scale_and_node_index(tmp_pa
     assert clip.tracks[0]["interpolation"] == "step"
     assert clip.sample_track(0, 0.5) == pytest.approx([1.0, -3.0, 2.0])
     assert clip.sample_track(1, 0.5) == pytest.approx([2.0, 6.0, 4.0])
+
+
+def test_native_skin_keeps_column_major_inverse_bind_storage(tmp_path):
+    path = _write_column_major_skin_glb(tmp_path / "column-major-skin.glb")
+    document = NativeStaticMeshDocument(path)
+
+    rig = document.rig_data()
+    raw_matrix = np.frombuffer(
+        rig["skins"][0]["inverse_bind_matrices"], dtype=np.float32
+    )
+    assert raw_matrix[12:15] == pytest.approx((-2.0, -3.0, -4.0))
+
+    skeleton = document.build_skeleton(
+        0,
+        "pytest-native-column-major-skeleton",
+        convert_to_z_up=False,
+    )
+    assert skeleton.bones[0]["inverse_bind_matrix"][12:15] == pytest.approx(
+        (-2.0, -3.0, -4.0)
+    )
