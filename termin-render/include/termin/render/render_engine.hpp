@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "termin/render/render_camera.hpp"
+#include "termin/render/color_output.hpp"
 #include "termin/render/render_execution_capabilities.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/render_item_snapshot.hpp"
@@ -57,9 +58,8 @@ namespace termin {
         // by the caller (typically a render target or legacy viewport state). Passes in the
         // pipeline receive these through ExecuteContext::tex2_writes under
         // the OUTPUT/DISPLAY alias.
-        tgfx::TextureHandle output_color_tex;
+        ColorTarget output_color;
         tgfx::TextureHandle output_depth_tex;
-        tgfx::PixelFormat output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
         tgfx::PixelFormat output_depth_format = tgfx::PixelFormat::D24_UNorm;
         bool clear_color_enabled = false;
         LinearColor clear_linear_color{0.0f, 0.0f, 0.0f, 1.0f};

@@ -46,6 +46,39 @@ GUARD_C_TEST(test_render_target_rejects_invalid_dimensions_without_mutation) {
     return 0;
 }
 
+GUARD_C_TEST(test_render_target_color_encoding_owns_texture_contract) {
+    tc_render_target_handle target = tc_render_target_new("encoding-contract");
+    GUARD_C_REQUIRE(tc_render_target_alive(target));
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_LINEAR, tc_render_target_get_color_encoding(target));
+
+    // Float render targets cannot carry sRGB transfer encoding.
+    tc_render_target_set_color_encoding(target, TC_TEXTURE_ENCODING_SRGB);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_LINEAR, tc_render_target_get_color_encoding(target));
+
+    tc_render_target_set_color_format(target, TC_TEXTURE_RGBA8);
+    tc_render_target_set_color_encoding(target, TC_TEXTURE_ENCODING_SRGB);
+    tc_render_target_ensure_textures(target);
+    tc_texture* color = tc_texture_get(tc_render_target_get_color_texture(target));
+    GUARD_C_REQUIRE(color != NULL);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_RGBA8, color->format);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_SRGB, color->encoding);
+
+    // An invalid format change must leave both sides of the contract intact.
+    tc_render_target_set_color_format(target, TC_TEXTURE_RGBA16F);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_RGBA8, tc_render_target_get_color_format(target));
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_SRGB, tc_render_target_get_color_encoding(target));
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_RGBA8, color->format);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_SRGB, color->encoding);
+
+    tc_render_target_set_color_encoding(target, TC_TEXTURE_ENCODING_LINEAR);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_ENCODING_LINEAR, color->encoding);
+    tc_render_target_set_color_format(target, TC_TEXTURE_RGBA16F);
+    GUARD_C_CHECK_EQ_INT(TC_TEXTURE_RGBA16F, tc_render_target_get_color_format(target));
+
+    tc_render_target_free(target);
+    return 0;
+}
+
 GUARD_C_TEST(test_render_target_pool_grows_and_rejects_stale_handle) {
     tc_render_target_handle targets[9];
     for (size_t i = 0; i < 9; ++i) {

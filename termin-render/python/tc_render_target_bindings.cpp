@@ -80,6 +80,19 @@ void bind_tc_render_target(nb::module_& m) {
                 tc_render_target_set_color_format(h, fmt);
             })
         .def_prop_rw(
+            "color_encoding",
+            [](const tc_render_target_handle& h) -> std::string {
+                return tc_render_target_color_encoding_to_string(tc_render_target_get_color_encoding(h));
+            },
+            [](tc_render_target_handle& h, const std::string& value) {
+                tc_texture_encoding encoding;
+                if (!tc_render_target_color_encoding_from_string(value.c_str(), &encoding)) {
+                    tc::Log::error("[tc_render_target] unknown color_encoding: %s", value.c_str());
+                    return;
+                }
+                tc_render_target_set_color_encoding(h, encoding);
+            })
+        .def_prop_rw(
             "depth_format",
             [](const tc_render_target_handle& h) -> std::string {
                 return tc_render_target_format_to_string(tc_render_target_get_depth_format(h));

@@ -21,6 +21,7 @@ typedef struct tc_render_target_config {
     int height;                 // Render height in pixels
     bool dynamic_resolution;    // Resize from attached viewport without serializing runtime size
     const char* color_format;   // Color attachment format (interned, nullable)
+    const char* color_encoding; // Color transfer encoding: linear or srgb (interned, nullable)
     const char* depth_format;   // Depth attachment format (interned, nullable)
     bool clear_color;           // Clear color attachment before rendering
     tc_linear_color clear_linear_color; // Linear RGBA clear value

@@ -7,6 +7,7 @@
 #include <tcbase/tc_binding_types.h>
 #include <tcbase/tc_resource.h>
 #include <tcbase/types/api.h>
+#include <render/tc_color_output.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +15,8 @@ extern "C" {
 
 TC_DEFINE_HANDLE(tc_pipeline_template_handle)
 
-#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 3u
-#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 3u
+#define TC_PIPELINE_TEMPLATE_DESCRIPTOR_VERSION 4u
+#define TC_PIPELINE_TEMPLATE_BINARY_VERSION 4u
 
 typedef enum tc_pipeline_execution_model {
     TC_PIPELINE_EXECUTION_SINGLE_VIEW = 1,
@@ -57,6 +58,7 @@ typedef struct tc_pipeline_template_dependency_desc {
 typedef struct tc_pipeline_template_target_desc {
     const char* viewport_name;
     const char* export_name;
+    tc_color_content color_content;
     int32_t width;
     int32_t height;
 } tc_pipeline_template_target_desc;

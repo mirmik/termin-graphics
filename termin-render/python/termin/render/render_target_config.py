@@ -30,6 +30,8 @@ def serialize_render_target_config(config: RenderTargetConfig) -> dict:
         result["height"] = config.height
     if config.color_format:
         result["color_format"] = config.color_format
+    if config.color_encoding:
+        result["color_encoding"] = config.color_encoding
     if config.depth_format:
         result["depth_format"] = config.depth_format
     if config.clear_color:
@@ -63,6 +65,7 @@ def deserialize_render_target_config(data: dict) -> RenderTargetConfig:
     config.height = data.get("height", 512)
     config.dynamic_resolution = data.get("dynamic_resolution", False)
     config.color_format = data.get("color_format", "rgba16f")
+    config.color_encoding = data.get("color_encoding", "linear")
     config.depth_format = data.get("depth_format", "depth32f")
     clear_color = data.get("clear_color", None)
     if isinstance(clear_color, (list, tuple)) and len(clear_color) >= 4:

@@ -31,7 +31,7 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
         {1, "scene-color", TC_PIPELINE_RESOURCE_WRITE},
     };
     const tc_pipeline_template_target_desc targets[] = {
-        {"main", "final-color", 1920, 1080},
+        {"main", "final-color", TC_COLOR_CONTENT_DISPLAY_LINEAR, 1920, 1080},
     };
     const tc_pipeline_template_resource_view_desc resource_views[] = {
         {"scene-color.view", "scene-color", TC_PIPELINE_ATTACHMENT_COLOR},
@@ -107,6 +107,7 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     CHECK(decoded->dependencies[1].access == TC_PIPELINE_RESOURCE_READ);
     REQUIRE(decoded->target_count == 1);
     CHECK(std::strcmp(decoded->targets[0].export_name, "final-color") == 0);
+    CHECK(decoded->targets[0].color_content == TC_COLOR_CONTENT_DISPLAY_LINEAR);
     REQUIRE(decoded->resource_view_count == 2);
     CHECK(std::strcmp(decoded->resource_views[0].parent, "scene-color") == 0);
     CHECK(decoded->resource_views[1].attachment == TC_PIPELINE_ATTACHMENT_DEPTH);

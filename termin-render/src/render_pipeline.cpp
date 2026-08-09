@@ -107,6 +107,16 @@ namespace termin {
             }
 
             PipelineRenderCache& render_cache = cache();
+            for (uint32_t i = 0; i < definition->target_count; ++i) {
+                const tc_pipeline_template_target_desc& desc = definition->targets[i];
+                if (!desc.export_name || !desc.export_name[0])
+                    continue;
+                render_cache.color_exports.push_back(PipelineColorExport{
+                    desc.export_name,
+                    desc.viewport_name ? desc.viewport_name : "",
+                    static_cast<ColorContent>(desc.color_content),
+                });
+            }
             for (uint32_t i = 0; i < definition->resource_view_count; ++i) {
                 const tc_pipeline_template_resource_view_desc& desc = definition->resource_views[i];
                 render_cache.resource_views.emplace(
@@ -226,6 +236,36 @@ namespace termin {
         static const std::vector<ResourceSpec> empty;
         void* c = tc_pipeline_get_render_cache(handle_);
         return c ? static_cast<PipelineRenderCache*>(c)->specs : empty;
+    }
+
+    void RenderPipeline::set_color_export(const std::string& resource,
+                                          ColorContent content,
+                                          const std::string& viewport_name) {
+        if (resource.empty()) {
+            throw std::invalid_argument("pipeline color export resource must not be empty");
+        }
+        auto& exports = cache().color_exports;
+        for (PipelineColorExport& value : exports) {
+            if (value.viewport_name == viewport_name) {
+                value.resource = resource;
+                value.content = content;
+                mark_dirty();
+                return;
+            }
+        }
+        exports.push_back(PipelineColorExport{resource, viewport_name, content});
+        mark_dirty();
+    }
+
+    void RenderPipeline::clear_color_exports() {
+        cache().color_exports.clear();
+        mark_dirty();
+    }
+
+    const std::vector<PipelineColorExport>& RenderPipeline::color_exports() const {
+        static const std::vector<PipelineColorExport> empty;
+        void* c = tc_pipeline_get_render_cache(handle_);
+        return c ? static_cast<PipelineRenderCache*>(c)->color_exports : empty;
     }
 
     // -- Dirty --

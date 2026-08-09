@@ -17,6 +17,7 @@ namespace termin {
         c.height = height;
         c.dynamic_resolution = dynamic_resolution;
         c.color_format = color_format.empty() ? nullptr : tc_intern_string(color_format.c_str());
+        c.color_encoding = color_encoding.empty() ? tc_intern_string("linear") : tc_intern_string(color_encoding.c_str());
         c.depth_format = depth_format.empty() ? nullptr : tc_intern_string(depth_format.c_str());
         c.clear_color = clear_color;
         c.clear_linear_color = {clear_linear_color.r, clear_linear_color.g, clear_linear_color.b, clear_linear_color.a};
@@ -51,6 +52,7 @@ namespace termin {
         cfg.height = c->height;
         cfg.dynamic_resolution = c->dynamic_resolution;
         cfg.color_format = c->color_format ? c->color_format : "rgba16f";
+        cfg.color_encoding = c->color_encoding ? c->color_encoding : "linear";
         cfg.depth_format = c->depth_format ? c->depth_format : "depth32f";
         cfg.clear_color = c->clear_color;
         cfg.clear_linear_color = {c->clear_linear_color.r, c->clear_linear_color.g, c->clear_linear_color.b, c->clear_linear_color.a};

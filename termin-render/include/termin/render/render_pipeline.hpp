@@ -12,6 +12,7 @@
 #include <tgfx2/texture_pool.hpp>
 
 #include "termin/render/fbo_pool.hpp"
+#include "termin/render/color_output.hpp"
 #include "termin/render/resource_aliases.hpp"
 #include "termin/render/resource_spec.hpp"
 #include "termin/render/tc_pipeline_template.hpp"
@@ -44,6 +45,7 @@ namespace termin {
         std::unordered_map<std::string, ResourceView> resource_views;
         std::unordered_map<std::string, FboComposition> fbo_compositions;
         std::unordered_map<std::string, std::string> texture_alias_to_canonical;
+        std::vector<PipelineColorExport> color_exports;
     };
 
     // Mutable execution instance. It owns live passes and device-local caches while
@@ -97,6 +99,12 @@ namespace termin {
         size_t spec_count() const;
         const ResourceSpec* get_spec_at(size_t index) const;
         const std::vector<ResourceSpec>& specs() const;
+
+        void set_color_export(const std::string& resource,
+                              ColorContent content,
+                              const std::string& viewport_name = "");
+        void clear_color_exports();
+        const std::vector<PipelineColorExport>& color_exports() const;
 
         bool is_dirty() const;
         void mark_dirty();

@@ -89,7 +89,7 @@ namespace tc {
     }
 
     static bool is_external_resource_name(const std::string& name) {
-        return name == "RT_COLOR" || name == "RT_DEPTH" || name == "OUTPUT" || name == "DISPLAY";
+        return name == "RT_COLOR" || name == "RT_DEPTH" || name == "DISPLAY";
     }
 
     static bool is_attachment_texture_type(const std::string& type) {
@@ -104,8 +104,7 @@ namespace tc {
     static bool is_graph_alias_node(const NodeData& node) {
         return node.node_type == "render_target_input" || node.node_type == "fbo_split" ||
                node.node_type == "fbo_join" || node.node_type == "multiview_fbo_split" ||
-               node.node_type == "multiview_fbo_join" || node.node_type == "external_xr_multiview_fbo" ||
-               node.node_type == "pipeline_output";
+               node.node_type == "multiview_fbo_join" || node.node_type == "external_xr_multiview_fbo";
     }
 
     static bool graph_compiler_is_target_socket_name(const std::string& name) {
@@ -452,10 +451,6 @@ namespace tc {
                     }
                 }
             }
-            if (node.node_type == "pipeline_output") {
-                result.resource_types["OUTPUT"] = "external_color";
-                result.external_resources["OUTPUT"] = "render_target_color";
-            }
         }
 
         // Pass 2: Assign names to output sockets of pass nodes
@@ -680,13 +675,6 @@ namespace tc {
                 if (parent.has_value()) {
                     push_alias_pair(aliases, *parent, fbo_it->second);
                 }
-            }
-        } else if (node.node_type == "pipeline_output") {
-            push_resource_if_present(reads, sockets, "color");
-            writes.push_back("OUTPUT");
-            auto color_it = sockets.find("color");
-            if (color_it != sockets.end()) {
-                push_alias_pair(aliases, color_it->second, "OUTPUT");
             }
         } else {
             return;
@@ -1114,6 +1102,7 @@ namespace tc {
             target_descs.push_back({
                 stored.viewport_name.c_str(),
                 stored.export_name.empty() ? nullptr : stored.export_name.c_str(),
+                static_cast<tc_color_content>(stored.color_content),
                 stored.width,
                 stored.height,
             });
@@ -1201,6 +1190,54 @@ namespace tc {
         // 3. Build viewport map
         auto viewport_map = build_node_viewport_map(graph.nodes, graph.viewport_frames);
 
+        // PipelineOutput is declarative metadata. It publishes an existing
+        // resource and never materializes an OUTPUT resource or executable pass.
+        std::vector<PipelineTemplateTarget> color_exports;
+        std::unordered_set<std::string> export_viewports;
+        for (const NodeData& node : graph.nodes) {
+            if (node.node_type != "pipeline_output")
+                continue;
+            size_t incoming_count = 0;
+            for (const ConnectionData& connection : graph.connections) {
+                if (connection.to_node_id == node.id && connection.to_socket == "color")
+                    ++incoming_count;
+            }
+            if (incoming_count != 1) {
+                throw GraphCompileError("PipelineOutput '" + node.id +
+                                        "' must have exactly one connected color input");
+            }
+            const auto node_sockets = naming.socket_names.find(node.id);
+            if (node_sockets == naming.socket_names.end()) {
+                throw GraphCompileError("PipelineOutput '" + node.id + "' has no resolved sockets");
+            }
+            const auto color = node_sockets->second.find("color");
+            if (color == node_sockets->second.end() || color->second.empty()) {
+                throw GraphCompileError("PipelineOutput '" + node.id + "' has no resolved color resource");
+            }
+            const std::string viewport_name = viewport_map[node.id];
+            if (!export_viewports.insert(viewport_name).second) {
+                throw GraphCompileError("multiple PipelineOutput nodes publish color for viewport '" +
+                                        viewport_name + "'");
+            }
+            termin::ColorContent content = termin::ColorContent::DisplayLinear;
+            if (node.params.contains("color_content") && node.params["color_content"].is_string()) {
+                const std::string semantic = node.params["color_content"].as_string();
+                if (semantic == "scene_linear")
+                    content = termin::ColorContent::SceneLinear;
+                else if (semantic == "display_linear")
+                    content = termin::ColorContent::DisplayLinear;
+                else if (semantic == "display_srgb")
+                    content = termin::ColorContent::DisplaySRGB;
+                else
+                    throw GraphCompileError("PipelineOutput '" + node.id +
+                                            "' has unsupported color_content '" + semantic + "'");
+            }
+            color_exports.push_back({viewport_name, color->second, content, 0, 0});
+        }
+        if (pipeline_template && color_exports.empty()) {
+            tc::Log::warn("compile_graph: canonical pipeline publishes no PipelineOutput color export");
+        }
+
         // 4. Collect explicit resource nodes for ResourceSpec inference
         auto resource_nodes = collect_resource_nodes(graph);
 
@@ -1213,6 +1250,9 @@ namespace tc {
             pipeline->set_name(pipeline_template->name());
         pipeline->cache().resource_views = naming.resource_views;
         pipeline->cache().fbo_compositions = naming.fbo_compositions;
+        for (const PipelineTemplateTarget& value : color_exports) {
+            pipeline->set_color_export(value.export_name, value.color_content, value.viewport_name);
+        }
 
         // 6. Add passes
         bool had_pass_nodes = false;
@@ -1367,15 +1407,11 @@ namespace tc {
                 }
                 pass_parameters.push_back(std::move(parameters));
             }
-            std::vector<PipelineTemplateTarget> targets;
-            targets.reserve(graph.viewport_frames.size());
-            for (const ViewportFrameData& frame : graph.viewport_frames) {
-                targets.push_back({frame.viewport_name, "", 0, 0});
-            }
             const tc_pipeline_execution_model execution_model = graph.execution_model == "xr_multiview"
                                                                     ? TC_PIPELINE_EXECUTION_XR_MULTIVIEW
                                                                     : TC_PIPELINE_EXECUTION_SINGLE_VIEW;
-            if (!publish_pipeline_template(*pipeline, *pipeline_template, pass_parameters, targets, execution_model)) {
+            if (!publish_pipeline_template(
+                    *pipeline, *pipeline_template, pass_parameters, color_exports, execution_model)) {
                 pipeline->destroy();
                 delete pipeline;
                 throw GraphCompileError("failed to publish canonical pipeline template");

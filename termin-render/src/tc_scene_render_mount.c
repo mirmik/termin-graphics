@@ -254,6 +254,8 @@ static tc_value serialize_render_target_config(const tc_render_target_config* rt
     }
     if (rtc->color_format && rtc->color_format[0])
         tc_value_dict_set(&v, "color_format", tc_value_string(rtc->color_format));
+    if (rtc->color_encoding && rtc->color_encoding[0])
+        tc_value_dict_set(&v, "color_encoding", tc_value_string(rtc->color_encoding));
     if (rtc->depth_format && rtc->depth_format[0])
         tc_value_dict_set(&v, "depth_format", tc_value_string(rtc->depth_format));
     if (rtc->clear_color) {
@@ -321,6 +323,10 @@ static bool deserialize_render_target_config(const tc_value* data, tc_render_tar
     tc_value* color_format = tc_value_dict_get((tc_value*)data, "color_format");
     if (color_format && color_format->type == TC_VALUE_STRING)
         out->color_format = color_format->data.s;
+
+    tc_value* color_encoding = tc_value_dict_get((tc_value*)data, "color_encoding");
+    if (color_encoding && color_encoding->type == TC_VALUE_STRING)
+        out->color_encoding = color_encoding->data.s;
 
     tc_value* depth_format = tc_value_dict_get((tc_value*)data, "depth_format");
     if (depth_format && depth_format->type == TC_VALUE_STRING)

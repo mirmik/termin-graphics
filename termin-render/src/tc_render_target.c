@@ -21,6 +21,7 @@ typedef struct {
     int height;
     bool dynamic_resolution;
     tc_texture_format color_format;
+    tc_texture_encoding color_encoding;
     tc_texture_format depth_format;
     bool clear_color_enabled;
     tc_linear_color clear_linear_color;
@@ -98,6 +99,7 @@ static void rt_slot_set_defaults(RenderTargetSlot* slot) {
     slot->width = 512;
     slot->height = 512;
     slot->color_format = RT_DEFAULT_COLOR_FORMAT;
+    slot->color_encoding = TC_TEXTURE_ENCODING_LINEAR;
     slot->depth_format = RT_DEFAULT_DEPTH_FORMAT;
     slot->clear_linear_color.a = 1.0f;
     slot->clear_depth_value = 1.0f;
@@ -178,6 +180,14 @@ static inline bool render_target_handle_alive(tc_render_target_handle h) {
 
 static bool rt_format_is_depth(tc_texture_format format) {
     return format == TC_TEXTURE_DEPTH24 || format == TC_TEXTURE_DEPTH32F;
+}
+
+static bool rt_color_contract_valid(tc_texture_format format, tc_texture_encoding encoding) {
+    if (encoding == TC_TEXTURE_ENCODING_LINEAR)
+        return !rt_format_is_depth(format);
+    if (encoding == TC_TEXTURE_ENCODING_SRGB)
+        return format == TC_TEXTURE_RGBA8;
+    return false;
 }
 
 bool tc_render_target_format_from_string(const char* name, tc_texture_format* out_format) {
@@ -478,11 +488,68 @@ void tc_render_target_set_color_format(tc_render_target_handle h, tc_texture_for
                      tc_render_target_format_to_string(format));
         return;
     }
+    if (!rt_color_contract_valid(format, RT_SLOTS[h.index].color_encoding)) {
+        tc_log_error("[tc_render_target] rejected color format '%s' for %s encoding",
+                     tc_render_target_format_to_string(format),
+                     RT_SLOTS[h.index].color_encoding == TC_TEXTURE_ENCODING_SRGB ? "sRGB" : "unknown");
+        return;
+    }
     if (RT_SLOTS[h.index].color_format == format)
         return;
     RT_SLOTS[h.index].color_format = format;
     rt_reformat_owned_texture(
         RT_SLOTS[h.index].color_texture, (uint32_t)RT_SLOTS[h.index].width, (uint32_t)RT_SLOTS[h.index].height, format);
+}
+
+void tc_render_target_set_color_encoding(tc_render_target_handle h, tc_texture_encoding encoding) {
+    if (!render_target_handle_alive(h))
+        return;
+    RenderTargetSlot* slot = &RT_SLOTS[h.index];
+    if (!rt_color_contract_valid(slot->color_format, encoding)) {
+        tc_log_error("[tc_render_target] rejected color encoding %d for format '%s'",
+                     (int)encoding,
+                     tc_render_target_format_to_string(slot->color_format));
+        return;
+    }
+    if (slot->color_encoding == encoding)
+        return;
+    slot->color_encoding = encoding;
+    if (!tc_texture_handle_is_invalid(slot->color_texture)) {
+        tc_texture* texture = tc_texture_get(slot->color_texture);
+        if (texture && !tc_texture_set_encoding(texture, encoding)) {
+            tc_log_error("[tc_render_target] failed to apply color encoding to owned texture");
+        }
+    }
+}
+
+tc_texture_encoding tc_render_target_get_color_encoding(tc_render_target_handle h) {
+    if (!render_target_handle_alive(h))
+        return TC_TEXTURE_ENCODING_LINEAR;
+    return RT_SLOTS[h.index].color_encoding;
+}
+
+bool tc_render_target_color_encoding_from_string(const char* name, tc_texture_encoding* out_encoding) {
+    if (!name || !out_encoding)
+        return false;
+    if (strcmp(name, "linear") == 0) {
+        *out_encoding = TC_TEXTURE_ENCODING_LINEAR;
+        return true;
+    }
+    if (strcmp(name, "srgb") == 0) {
+        *out_encoding = TC_TEXTURE_ENCODING_SRGB;
+        return true;
+    }
+    return false;
+}
+
+const char* tc_render_target_color_encoding_to_string(tc_texture_encoding encoding) {
+    switch (encoding) {
+    case TC_TEXTURE_ENCODING_LINEAR:
+        return "linear";
+    case TC_TEXTURE_ENCODING_SRGB:
+        return "srgb";
+    }
+    return "unknown";
 }
 
 tc_texture_format tc_render_target_get_color_format(tc_render_target_handle h) {
@@ -582,6 +649,7 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
     const uint32_t w = (uint32_t)RT_SLOTS[idx].width;
     const uint32_t height_ = (uint32_t)RT_SLOTS[idx].height;
     const tc_texture_format color_format = RT_SLOTS[idx].color_format;
+    const tc_texture_encoding color_encoding = RT_SLOTS[idx].color_encoding;
     const tc_texture_format depth_format = RT_SLOTS[idx].depth_format;
 
     // Owned through tc_texture_destroy on pool_free — no add_ref dance,
@@ -593,6 +661,9 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         if (tex) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
+            if (!tc_texture_set_encoding(tex, color_encoding)) {
+                tc_log_error("[tc_render_target] failed to initialize color texture encoding");
+            }
             tc_texture_set_size_format(tex, w, height_, color_format);
             RT_SLOTS[idx].color_texture = ch;
         } else {
@@ -600,9 +671,13 @@ void tc_render_target_ensure_textures(tc_render_target_handle h) {
         }
     } else {
         tc_texture* tex = tc_texture_get(RT_SLOTS[idx].color_texture);
-        if (tex && (tex->width != w || tex->height != height_ || tex->format != color_format)) {
+        if (tex && (tex->width != w || tex->height != height_ || tex->format != color_format ||
+                    tex->encoding != color_encoding)) {
             tc_texture_set_storage_kind(tex, TC_TEXTURE_STORAGE_GPU_FIRST);
             tc_texture_set_usage(tex, RT_DEFAULT_COLOR_USAGE);
+            if (!tc_texture_set_encoding(tex, color_encoding)) {
+                tc_log_error("[tc_render_target] failed to synchronize color texture encoding");
+            }
             tc_texture_set_size_format(tex, w, height_, color_format);
         }
     }

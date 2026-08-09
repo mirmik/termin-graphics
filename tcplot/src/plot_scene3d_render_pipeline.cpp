@@ -369,9 +369,8 @@ namespace tcplot {
             termin::RenderTargetContext target;
             target.name = "RetainedChart3DTarget";
             target.render_rect = {0, 0, width, height};
-            target.output_color_tex = color;
+            target.output_color.texture = color;
             target.output_depth_tex = depth;
-            target.output_color_format = tgfx::PixelFormat::RGBA8_UNorm;
             target.output_depth_format = tgfx::PixelFormat::D24_UNorm;
             target.clear_color_enabled = true;
             target.clear_linear_color = termin::LinearColor{0.08f, 0.09f, 0.11f, 1.0f};

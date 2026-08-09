@@ -775,7 +775,7 @@ TEST_CASE("inplace aliases preserve caller-owned external outputs") {
     termin::RenderTargetContext target;
     target.name = "ExternalAliasTarget";
     target.render_rect = {0, 0, 1, 1};
-    target.output_color_tex = tgfx::TextureHandle{777};
+    target.output_color.texture = tgfx::TextureHandle{777};
 
     termin::RenderExecution execution;
     execution.pipeline = &pipeline;
@@ -1052,8 +1052,7 @@ TEST_CASE("first-access resolve suppresses an external target preclear") {
     termin::RenderTargetContext target;
     target.name = "ExternalResolveClearElisionTarget";
     target.render_rect = {0, 0, 16, 16};
-    target.output_color_tex = output;
-    target.output_color_format = tgfx::PixelFormat::RGBA16F;
+    target.output_color.texture = output;
     target.clear_color_enabled = true;
     target.clear_linear_color = {0.8f, 0.2f, 0.1f, 1.0f};
     termin::RenderExecution execution;

@@ -260,18 +260,15 @@ namespace termin {
                                                       const RenderTargetContext& default_rt_ctx,
                                                       const tgfx::IRenderDevice& device) {
         if (format == RESOURCE_FORMAT_RENDER_TARGET) {
-            if (default_rt_ctx.output_color_format != tgfx::PixelFormat::Undefined) {
-                return default_rt_ctx.output_color_format;
-            }
-            if (!default_rt_ctx.output_color_tex) {
-                tc::Log::warn("RenderEngine::execute_pipeline: FBO format '%s' requested but output_color_tex is "
+            if (!default_rt_ctx.output_color.texture) {
+                tc::Log::warn("RenderEngine::execute_pipeline: FBO format '%s' requested but output color target is "
                               "invalid; using rgba8",
                               RESOURCE_FORMAT_RENDER_TARGET);
                 return tgfx::PixelFormat::RGBA8_UNorm;
             }
-            tgfx::TextureDesc output_desc = device.texture_desc(default_rt_ctx.output_color_tex);
+            tgfx::TextureDesc output_desc = device.texture_desc(default_rt_ctx.output_color.texture);
             if (output_desc.format == tgfx::PixelFormat::Undefined) {
-                tc::Log::warn("RenderEngine::execute_pipeline: output_color_tex has undefined format; using rgba8");
+                tc::Log::warn("RenderEngine::execute_pipeline: output color target has undefined format; using rgba8");
                 return tgfx::PixelFormat::RGBA8_UNorm;
             }
             return output_desc.format;
@@ -847,7 +844,7 @@ namespace termin {
             std::function<tgfx::TextureHandle(const std::string&)> resolve_color;
             resolve_color = [&](const std::string& name) -> tgfx::TextureHandle {
                 if (find_external_alias(fg, name.c_str(), is_external_color_output)) {
-                    return rt_ctx.output_color_tex;
+                    return rt_ctx.output_color.texture;
                 }
                 const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
                 const std::string canonical = canonical_c ? canonical_c : name;
@@ -857,7 +854,7 @@ namespace termin {
                         return canonical_handle;
                 }
                 if (is_external_color_output(name.c_str()))
-                    return rt_ctx.output_color_tex;
+                    return rt_ctx.output_color.texture;
                 auto external = rt_ctx.external_textures.find(name);
                 if (external != rt_ctx.external_textures.end())
                     return external->second;
@@ -1009,7 +1006,7 @@ namespace termin {
 
             resolve_color_resource = [&](const std::string& name) -> tgfx::TextureHandle {
                 if (find_external_alias(fg, name.c_str(), is_external_color_output)) {
-                    return rt_ctx.output_color_tex;
+                    return rt_ctx.output_color.texture;
                 }
                 const char* canonical_c = tc_frame_graph_canonical_resource(fg, name.c_str());
                 std::string canonical = canonical_c ? canonical_c : name;
@@ -1020,7 +1017,7 @@ namespace termin {
                     }
                 }
                 if (is_external_color_output(name.c_str())) {
-                    return rt_ctx.output_color_tex;
+                    return rt_ctx.output_color.texture;
                 }
                 auto ext_it = rt_ctx.external_textures.find(name);
                 if (ext_it != rt_ctx.external_textures.end()) {
@@ -1091,8 +1088,8 @@ namespace termin {
 
             for (const char* read_name : reads) {
                 if (is_external_color_output(read_name)) {
-                    if (rt_ctx.output_color_tex)
-                        pass_tex2_reads[read_name] = rt_ctx.output_color_tex;
+                    if (rt_ctx.output_color.texture)
+                        pass_tex2_reads[read_name] = rt_ctx.output_color.texture;
                     if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_reads[read_name] = rt_ctx.output_depth_tex;
                     continue;
@@ -1116,8 +1113,8 @@ namespace termin {
 
             for (const char* write_name : writes) {
                 if (is_external_color_output(write_name)) {
-                    if (rt_ctx.output_color_tex)
-                        pass_tex2_writes[write_name] = rt_ctx.output_color_tex;
+                    if (rt_ctx.output_color.texture)
+                        pass_tex2_writes[write_name] = rt_ctx.output_color.texture;
                     if (rt_ctx.output_depth_tex)
                         pass_tex2_depth_writes[write_name] = rt_ctx.output_depth_tex;
                 } else if (is_external_depth_output(write_name)) {
@@ -1317,7 +1314,7 @@ namespace termin {
             for (const auto& [render_target_name, rt_ctx] : render_target_contexts) {
                 if (!rt_ctx.clear_color_enabled && !rt_ctx.clear_depth_enabled)
                     continue;
-                if (rt_ctx.clear_color_enabled && !rt_ctx.output_color_tex) {
+                if (rt_ctx.clear_color_enabled && !rt_ctx.output_color.texture) {
                     tc::Log::error("RenderEngine::execute_pipeline: render target context '%s' requested a color "
                                    "clear but its output color texture is missing",
                                    render_target_name.c_str());
@@ -1327,15 +1324,15 @@ namespace termin {
                                    "clear but its output depth texture is missing",
                                    render_target_name.c_str());
                 }
-                const bool clear_color = rt_ctx.clear_color_enabled && rt_ctx.output_color_tex &&
-                                         !fully_overwritten_external_colors.contains(rt_ctx.output_color_tex.id);
+                const bool clear_color = rt_ctx.clear_color_enabled && rt_ctx.output_color.texture &&
+                                         !fully_overwritten_external_colors.contains(rt_ctx.output_color.texture.id);
                 const bool clear_depth = rt_ctx.clear_depth_enabled && rt_ctx.output_depth_tex;
                 if (!clear_color && !clear_depth)
                     continue;
 
                 if (!begin_clear_texture_pass(*ctx2,
                                               *device,
-                                              clear_color ? rt_ctx.output_color_tex : tgfx::TextureHandle{},
+                                              clear_color ? rt_ctx.output_color.texture : tgfx::TextureHandle{},
                                               clear_depth ? rt_ctx.output_depth_tex : tgfx::TextureHandle{},
                                               clear_color ? &rt_ctx.clear_linear_color : nullptr,
                                               rt_ctx.clear_depth,

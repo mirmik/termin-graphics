@@ -256,6 +256,15 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
             }
         }
     }
+    for (uint32_t i = 0; i < desc->target_count; ++i) {
+        if (desc->targets[i].color_content < TC_COLOR_CONTENT_SCENE_LINEAR ||
+            desc->targets[i].color_content > TC_COLOR_CONTENT_DISPLAY_SRGB) {
+            tc_log_error("tc_pipeline_template_set_payload: target %u has invalid color content %d",
+                         i,
+                         (int)desc->targets[i].color_content);
+            return false;
+        }
+    }
     for (uint32_t i = 0; i < desc->resource_view_count; ++i) {
         const tc_pipeline_template_resource_view_desc* view = &desc->resource_views[i];
         if (!view->name || !view->name[0] || !view->parent || !view->parent[0] ||
@@ -575,6 +584,7 @@ size_t tc_pipeline_template_serialize(const tc_pipeline_template* pipeline_templ
     for (uint32_t i = 0; i < pipeline_template->target_count; ++i) {
         write_string(&writer, pipeline_template->targets[i].viewport_name);
         write_string(&writer, pipeline_template->targets[i].export_name);
+        write_u32(&writer, (uint32_t)pipeline_template->targets[i].color_content);
         write_i32(&writer, pipeline_template->targets[i].width);
         write_i32(&writer, pipeline_template->targets[i].height);
     }
@@ -757,6 +767,7 @@ tc_pipeline_template_handle tc_pipeline_template_deserialize(const char* uuid, c
         tc_pipeline_template_target_desc* value = (tc_pipeline_template_target_desc*)&desc.targets[i];
         value->viewport_name = read_string(&reader);
         value->export_name = read_string(&reader);
+        value->color_content = (tc_color_content)read_u32(&reader);
         value->width = read_i32(&reader);
         value->height = read_i32(&reader);
     }

@@ -37,6 +37,7 @@ namespace termin {
             .def_rw("height", &RenderTargetConfig::height)
             .def_rw("dynamic_resolution", &RenderTargetConfig::dynamic_resolution)
             .def_rw("color_format", &RenderTargetConfig::color_format)
+            .def_rw("color_encoding", &RenderTargetConfig::color_encoding)
             .def_rw("depth_format", &RenderTargetConfig::depth_format)
             .def_rw("clear_color", &RenderTargetConfig::clear_color)
             .def_prop_rw(

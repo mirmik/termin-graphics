@@ -75,7 +75,10 @@ namespace termin {
             .def_rw("render_rect", &RenderTargetContext::render_rect)
             .def_rw("layer_mask", &RenderTargetContext::layer_mask)
             .def_rw("render_category_mask", &RenderTargetContext::render_category_mask)
-            .def_rw("output_color_tex", &RenderTargetContext::output_color_tex)
+            .def_prop_rw(
+                "output_color_tex",
+                [](const RenderTargetContext& context) { return context.output_color.texture; },
+                [](RenderTargetContext& context, tgfx::TextureHandle texture) { context.output_color.texture = texture; })
             .def_rw("output_depth_tex", &RenderTargetContext::output_depth_tex)
             .def_rw("clear_color_enabled", &RenderTargetContext::clear_color_enabled)
             .def_rw("clear_depth_enabled", &RenderTargetContext::clear_depth_enabled)

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "termin/render/graph_data.hpp"
+#include "termin/render/color_output.hpp"
 #include "termin/render/render_export.hpp"
 #include "termin/render/render_pipeline.hpp"
 #include "termin/render/resource_aliases.hpp"
@@ -29,6 +30,7 @@ namespace tc {
     struct PipelineTemplateTarget {
         std::string viewport_name;
         std::string export_name;
+        termin::ColorContent color_content = termin::ColorContent::DisplayLinear;
         int32_t width = 0;
         int32_t height = 0;
     };

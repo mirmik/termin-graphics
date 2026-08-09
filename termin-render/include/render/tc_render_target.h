@@ -52,6 +52,13 @@ TC_API const char* tc_render_target_format_to_string(tc_texture_format format);
 TC_API void tc_render_target_set_color_format(tc_render_target_handle h, tc_texture_format format);
 TC_API tc_texture_format tc_render_target_get_color_format(tc_render_target_handle h);
 
+// Transfer encoding of the owned color texture. sRGB is currently valid only
+// for RGBA8; unsupported format/encoding combinations are rejected.
+TC_API void tc_render_target_set_color_encoding(tc_render_target_handle h, tc_texture_encoding encoding);
+TC_API tc_texture_encoding tc_render_target_get_color_encoding(tc_render_target_handle h);
+TC_API bool tc_render_target_color_encoding_from_string(const char* name, tc_texture_encoding* out_encoding);
+TC_API const char* tc_render_target_color_encoding_to_string(tc_texture_encoding encoding);
+
 TC_API void tc_render_target_set_depth_format(tc_render_target_handle h, tc_texture_format format);
 TC_API tc_texture_format tc_render_target_get_depth_format(tc_render_target_handle h);
 

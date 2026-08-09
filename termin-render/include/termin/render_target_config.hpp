@@ -22,6 +22,7 @@ namespace termin {
         int height = 512;
         bool dynamic_resolution = false;
         std::string color_format = "rgba16f";
+        std::string color_encoding = "linear";
         std::string depth_format = "depth32f";
         bool clear_color = false;
         LinearColor clear_linear_color{0.0f, 0.0f, 0.0f, 1.0f};

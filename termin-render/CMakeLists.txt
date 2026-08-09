@@ -133,6 +133,7 @@ set(TERMIN_RENDER_HEADERS
     include/render/tc_pipeline_pool.h
     include/render/tc_render_target_pool.h
     include/render/tc_render_target.h
+    include/render/tc_color_output.h
     include/render/tc_pass.h
     include/render/tc_pipeline_template.h
     include/render/tc_pipeline_template_registry.h
@@ -142,6 +143,7 @@ set(TERMIN_RENDER_HEADERS
     include/inspect/tc_inspect_pass_adapter.h
     include/termin/render/tc_scene_render_accessors.hpp
     include/termin/render/render_export.hpp
+    include/termin/render/color_output.hpp
     include/termin/render/resource_spec.hpp
     include/termin/render/fbo_pool.hpp
     include/termin/render/render_context.hpp

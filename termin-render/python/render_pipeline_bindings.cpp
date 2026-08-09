@@ -301,6 +301,17 @@ namespace termin {
                                  item["export_name"] = pipeline->targets[i].export_name
                                                            ? nb::cast(pipeline->targets[i].export_name)
                                                            : nb::none();
+                                 switch (pipeline->targets[i].color_content) {
+                                 case TC_COLOR_CONTENT_SCENE_LINEAR:
+                                     item["color_content"] = "scene_linear";
+                                     break;
+                                 case TC_COLOR_CONTENT_DISPLAY_SRGB:
+                                     item["color_content"] = "display_srgb";
+                                     break;
+                                 default:
+                                     item["color_content"] = "display_linear";
+                                     break;
+                                 }
                                  item["width"] = pipeline->targets[i].width;
                                  item["height"] = pipeline->targets[i].height;
                                  result.append(std::move(item));
@@ -487,6 +498,49 @@ namespace termin {
                      return nb::cast(*spec);
                  })
             .def_prop_ro("pipeline_specs", [](RenderPipeline& self) { return self.specs(); })
+            .def(
+                "set_color_export",
+                [](RenderPipeline& self,
+                   const std::string& resource,
+                   const std::string& color_content,
+                   const std::string& viewport_name) {
+                    termin::ColorContent content;
+                    if (color_content == "scene_linear")
+                        content = termin::ColorContent::SceneLinear;
+                    else if (color_content == "display_linear")
+                        content = termin::ColorContent::DisplayLinear;
+                    else if (color_content == "display_srgb")
+                        content = termin::ColorContent::DisplaySRGB;
+                    else
+                        throw std::invalid_argument("unsupported color content '" + color_content + "'");
+                    self.set_color_export(resource, content, viewport_name);
+                },
+                nb::arg("resource"),
+                nb::arg("color_content") = "display_linear",
+                nb::arg("viewport_name") = "")
+            .def("clear_color_exports", &RenderPipeline::clear_color_exports)
+            .def_prop_ro("color_exports",
+                         [](const RenderPipeline& self) {
+                             nb::list result;
+                             for (const termin::PipelineColorExport& value : self.color_exports()) {
+                                 nb::dict item;
+                                 item["resource"] = value.resource;
+                                 item["viewport_name"] = value.viewport_name;
+                                 switch (value.content) {
+                                 case termin::ColorContent::SceneLinear:
+                                     item["color_content"] = "scene_linear";
+                                     break;
+                                 case termin::ColorContent::DisplaySRGB:
+                                     item["color_content"] = "display_srgb";
+                                     break;
+                                 default:
+                                     item["color_content"] = "display_linear";
+                                     break;
+                                 }
+                                 result.append(std::move(item));
+                             }
+                             return result;
+                         })
 
             .def("destroy", &RenderPipeline::destroy)
 
@@ -799,6 +853,17 @@ namespace termin {
                     }
                     if (item.contains("export_name")) {
                         target.export_name = nb::cast<std::string>(item["export_name"]);
+                    }
+                    if (item.contains("color_content")) {
+                        const std::string content = nb::cast<std::string>(item["color_content"]);
+                        if (content == "scene_linear")
+                            target.color_content = termin::ColorContent::SceneLinear;
+                        else if (content == "display_linear")
+                            target.color_content = termin::ColorContent::DisplayLinear;
+                        else if (content == "display_srgb")
+                            target.color_content = termin::ColorContent::DisplaySRGB;
+                        else
+                            throw std::invalid_argument("unsupported color content '" + content + "'");
                     }
                     if (item.contains("width"))
                         target.width = nb::cast<int32_t>(item["width"]);

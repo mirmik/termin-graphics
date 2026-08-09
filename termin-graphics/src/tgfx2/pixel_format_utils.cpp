@@ -16,6 +16,10 @@ namespace tgfx {
                format == PixelFormat::RGBA8_sRGB || format == PixelFormat::BGRA8_sRGB;
     }
 
+    TextureEncoding texture_encoding_for_format(PixelFormat format) {
+        return is_srgb_format(format) ? TextureEncoding::SRGB : TextureEncoding::Linear;
+    }
+
     uint32_t pixel_format_byte_size(PixelFormat format) {
         switch (format) {
         case PixelFormat::R8_UNorm:
