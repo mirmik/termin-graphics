@@ -15,6 +15,7 @@
 
 #include <tgfx2/opengl/opengl_render_device.hpp>
 #include <tgfx2/pipeline_cache.hpp>
+#include <tgfx2/point_cloud_renderer.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 #include <tgfx2/world_space_line_renderer.hpp>
@@ -650,6 +651,81 @@ static void test_world_space_lines_depth(tgfx::IRenderDevice& device, tgfx::Pipe
     device.destroy(depth);
 }
 
+static void test_point_cloud_depth_and_circle(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
+    printf("\n--- PointCloudRenderer depth and circle shape ---\n");
+
+    GLint major = 0;
+    GLint minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    if (major < 4 || (major == 4 && minor < 5)) {
+        printf("  SKIP: PointCloudRenderer shaders require OpenGL 4.5\n");
+        return;
+    }
+
+    constexpr uint32_t W = 64;
+    constexpr uint32_t H = 64;
+
+    tgfx::TextureDesc color_desc;
+    color_desc.width = W;
+    color_desc.height = H;
+    color_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    color_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopySrc;
+    const auto color = device.create_texture(color_desc);
+    CHECK(bool(color), "point-cloud color target created");
+
+    tgfx::TextureDesc depth_desc;
+    depth_desc.width = W;
+    depth_desc.height = H;
+    depth_desc.format = tgfx::PixelFormat::D32F;
+    depth_desc.usage = tgfx::TextureUsage::DepthStencilAttachment | tgfx::TextureUsage::CopySrc;
+    const auto depth = device.create_texture(depth_desc);
+    CHECK(bool(depth), "point-cloud depth target created");
+
+    tgfx::RenderContext2 ctx(device, cache);
+    tgfx::PointCloud cloud;
+    const tgfx::PointCloudPoint points[] = {
+        {{0.0f, 0.0f, 0.25f}, 1.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
+        {{0.0f, 0.0f, 0.75f}, 1.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
+    };
+    CHECK(cloud.upload(ctx, points), "point-cloud instances uploaded");
+    CHECK(cloud.point_count() == 2, "point-cloud count retained");
+    CHECK(cloud.has_bounds(), "point-cloud bounds calculated");
+    CHECK(std::abs(cloud.bounds_min().z - 0.25f) < 1.0e-6f &&
+              std::abs(cloud.bounds_max().z - 0.75f) < 1.0e-6f,
+          "point-cloud bounds cover all points");
+
+    tgfx::PointCloudRenderer renderer;
+    tgfx::PointCloudStyle style;
+    style.size_px = 20.0f;
+    style.shape = tgfx::PointCloudShape::Circle;
+    tgfx::PointCloudDrawParams params;
+
+    ctx.begin_frame();
+    const termin::LinearColor clear{0.0f, 0.0f, 0.0f, 1.0f};
+    ctx.begin_pass(color, depth, &clear, 1.0f, true);
+    ctx.set_viewport(0, 0, W, H);
+    renderer.draw(ctx, cloud, style, params);
+    ctx.end_pass();
+    ctx.end_frame();
+
+    float center[4]{};
+    CHECK(device.read_pixel_rgba8(color, W / 2, H / 2, center), "point-cloud center pixel readback works");
+    CHECK(center[0] > 0.75f && center[1] < 0.20f && center[2] < 0.20f,
+          "near point wins the depth test");
+
+    float circle_corner[4]{};
+    CHECK(device.read_pixel_rgba8(color, W / 2 + 8, H / 2 + 8, circle_corner),
+          "point-cloud corner pixel readback works");
+    CHECK(circle_corner[0] < 0.10f && circle_corner[1] < 0.10f && circle_corner[2] < 0.10f,
+          "circle fragments outside the point radius are discarded");
+
+    renderer.release(ctx);
+    cloud.release(ctx);
+    device.destroy(color);
+    device.destroy(depth);
+}
+
 static void test_clear_scissor_uses_current_render_extent(tgfx::IRenderDevice& device, tgfx::PipelineCache& cache) {
     printf("\n--- Clear scissor render extent ---\n");
 
@@ -763,6 +839,11 @@ int main() {
         tgfx::OpenGLRenderDevice device;
         tgfx::PipelineCache cache(device);
         test_world_space_lines_depth(device, cache);
+    }
+    {
+        tgfx::OpenGLRenderDevice device;
+        tgfx::PipelineCache cache(device);
+        test_point_cloud_depth_and_circle(device, cache);
     }
     {
         tgfx::OpenGLRenderDevice device;

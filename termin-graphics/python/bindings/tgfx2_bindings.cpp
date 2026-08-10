@@ -17,6 +17,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -33,6 +34,7 @@
 #include <tgfx2/line_mesh_builder.hpp>
 #include <tgfx2/pipeline_cache.hpp>
 #include <tgfx2/pixel_format_utils.hpp>
+#include <tgfx2/point_cloud_renderer.hpp>
 #include <tgfx2/render_context.hpp>
 #include <tgfx2/screen_space_line_renderer.hpp>
 #include <tgfx2/tc_mesh_bridge.hpp>
@@ -248,6 +250,180 @@ namespace tgfx_bindings {
                 nb::arg("style"),
                 nb::arg("params"))
             .def("release", &tgfx::WorldSpaceLineRenderer::release, nb::arg("ctx"));
+
+        nb::enum_<tgfx::PointCloudShape>(m, "PointCloudShape")
+            .value("Square", tgfx::PointCloudShape::Square)
+            .value("Circle", tgfx::PointCloudShape::Circle);
+
+        nb::class_<tgfx::PointCloudStyle>(m, "PointCloudStyle")
+            .def(nb::init<>())
+            .def_rw("size_px", &tgfx::PointCloudStyle::size_px)
+            .def_rw("tint", &tgfx::PointCloudStyle::tint)
+            .def_rw("shape", &tgfx::PointCloudStyle::shape)
+            .def_rw("depth_test", &tgfx::PointCloudStyle::depth_test)
+            .def_rw("depth_write", &tgfx::PointCloudStyle::depth_write);
+
+        nb::class_<tgfx::PointCloudDrawParams>(m, "PointCloudDrawParams")
+            .def(nb::init<>())
+            .def_rw("view_projection", &tgfx::PointCloudDrawParams::view_projection);
+
+        auto build_point_cloud_points = [](nb::ndarray<float,
+                                                        nb::shape<-1, 3>,
+                                                        nb::c_contig,
+                                                        nb::device::cpu> positions,
+                                           const float* colors,
+                                           size_t color_width,
+                                           const float* sizes,
+                                           bool colors_are_srgb,
+                                           termin::SrgbColor uniform_srgb,
+                                           float uniform_size) {
+            const size_t count = positions.shape(0);
+            if (count > std::numeric_limits<uint32_t>::max()) {
+                throw std::invalid_argument("PointCloud.upload: point count exceeds the 32-bit draw limit");
+            }
+            if (!std::isfinite(uniform_size) || uniform_size < 0.0f) {
+                throw std::invalid_argument("PointCloud.upload: size_scale must be finite and non-negative");
+            }
+
+            std::vector<tgfx::PointCloudPoint> points(count);
+            const termin::LinearColor uniform_linear = termin::srgb_to_linear(uniform_srgb);
+            for (size_t i = 0; i < count; ++i) {
+                tgfx::PointCloudPoint& point = points[i];
+                point.position = {
+                    positions.data()[i * 3 + 0],
+                    positions.data()[i * 3 + 1],
+                    positions.data()[i * 3 + 2],
+                };
+                point.size_scale = sizes ? sizes[i] : uniform_size;
+                if (colors) {
+                    const float alpha = color_width == 4 ? colors[i * color_width + 3] : 1.0f;
+                    if (colors_are_srgb) {
+                        point.color = termin::srgb_to_linear({
+                            colors[i * color_width + 0],
+                            colors[i * color_width + 1],
+                            colors[i * color_width + 2],
+                            alpha,
+                        });
+                    } else {
+                        point.color = {
+                            colors[i * color_width + 0],
+                            colors[i * color_width + 1],
+                            colors[i * color_width + 2],
+                            alpha,
+                        };
+                    }
+                } else {
+                    point.color = uniform_linear;
+                }
+            }
+            return points;
+        };
+
+        auto optional_sizes = [](nb::object sizes_object, size_t expected_count) {
+            std::optional<nb::ndarray<float, nb::shape<-1>, nb::c_contig, nb::device::cpu>> sizes;
+            if (!sizes_object.is_none()) {
+                sizes = nb::cast<nb::ndarray<float, nb::shape<-1>, nb::c_contig, nb::device::cpu>>(sizes_object);
+                if (sizes->shape(0) != expected_count) {
+                    throw std::invalid_argument("PointCloud.upload: sizes must contain one value per position");
+                }
+            }
+            return sizes;
+        };
+
+        nb::class_<tgfx::PointCloud>(m, "PointCloud")
+            .def(nb::init<>())
+            .def(
+                "upload",
+                [build_point_cloud_points](tgfx::PointCloud& self,
+                                           tgfx::RenderContext2& ctx,
+                                           nb::ndarray<float,
+                                                       nb::shape<-1, 3>,
+                                                       nb::c_contig,
+                                                       nb::device::cpu> positions,
+                                           termin::SrgbColor color,
+                                           float size_scale) {
+                    std::vector<tgfx::PointCloudPoint> points = build_point_cloud_points(
+                        positions, nullptr, 0, nullptr, true, color, size_scale);
+                    return self.upload(ctx, points);
+                },
+                nb::arg("ctx"),
+                nb::arg("positions"),
+                nb::arg("color") = termin::SrgbColor::white(),
+                nb::arg("size_scale") = 1.0f,
+                "Upload persistent Nx3 float32 positions with one authored sRGB color")
+            .def(
+                "upload_srgb",
+                [build_point_cloud_points, optional_sizes](
+                    tgfx::PointCloud& self,
+                    tgfx::RenderContext2& ctx,
+                    nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> positions,
+                    nb::ndarray<float, nb::c_contig, nb::device::cpu> colors,
+                    nb::object sizes_object) {
+                    if (colors.ndim() != 2 || (colors.shape(1) != 3 && colors.shape(1) != 4) ||
+                        colors.shape(0) != positions.shape(0)) {
+                        throw std::invalid_argument("PointCloud.upload_srgb: colors must be Nx3 or Nx4 float32");
+                    }
+                    auto sizes = optional_sizes(sizes_object, positions.shape(0));
+                    std::vector<tgfx::PointCloudPoint> points = build_point_cloud_points(
+                        positions,
+                        colors.data(),
+                        colors.shape(1),
+                        sizes ? sizes->data() : nullptr,
+                        true,
+                        termin::SrgbColor::white(),
+                        1.0f);
+                    return self.upload(ctx, points);
+                },
+                nb::arg("ctx"),
+                nb::arg("positions"),
+                nb::arg("colors"),
+                nb::arg("sizes").none() = nb::none(),
+                "Upload persistent positions and authored sRGB per-point colors")
+            .def(
+                "upload_linear",
+                [build_point_cloud_points, optional_sizes](
+                    tgfx::PointCloud& self,
+                    tgfx::RenderContext2& ctx,
+                    nb::ndarray<float, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu> positions,
+                    nb::ndarray<float, nb::c_contig, nb::device::cpu> colors,
+                    nb::object sizes_object) {
+                    if (colors.ndim() != 2 || (colors.shape(1) != 3 && colors.shape(1) != 4) ||
+                        colors.shape(0) != positions.shape(0)) {
+                        throw std::invalid_argument("PointCloud.upload_linear: colors must be Nx3 or Nx4 float32");
+                    }
+                    auto sizes = optional_sizes(sizes_object, positions.shape(0));
+                    std::vector<tgfx::PointCloudPoint> points = build_point_cloud_points(
+                        positions,
+                        colors.data(),
+                        colors.shape(1),
+                        sizes ? sizes->data() : nullptr,
+                        false,
+                        termin::SrgbColor::white(),
+                        1.0f);
+                    return self.upload(ctx, points);
+                },
+                nb::arg("ctx"),
+                nb::arg("positions"),
+                nb::arg("colors"),
+                nb::arg("sizes").none() = nb::none(),
+                "Upload persistent positions and renderer-linear per-point colors")
+            .def("clear", &tgfx::PointCloud::clear)
+            .def("release", &tgfx::PointCloud::release, nb::arg("ctx"))
+            .def_prop_ro("point_count", &tgfx::PointCloud::point_count)
+            .def_prop_ro("empty", &tgfx::PointCloud::empty)
+            .def_prop_ro("has_bounds", &tgfx::PointCloud::has_bounds)
+            .def_prop_ro("bounds_min", &tgfx::PointCloud::bounds_min)
+            .def_prop_ro("bounds_max", &tgfx::PointCloud::bounds_max);
+
+        nb::class_<tgfx::PointCloudRenderer>(m, "PointCloudRenderer")
+            .def(nb::init<>())
+            .def("draw",
+                 &tgfx::PointCloudRenderer::draw,
+                 nb::arg("ctx"),
+                 nb::arg("cloud"),
+                 nb::arg("style"),
+                 nb::arg("params"))
+            .def("release", &tgfx::PointCloudRenderer::release, nb::arg("ctx"));
 
         // IRenderDevice — opaque handle exposed so other native modules
         // (render_framework) can accept a pointer to it from Python.

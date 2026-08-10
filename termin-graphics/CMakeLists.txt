@@ -137,6 +137,7 @@ set(TGFX2_SOURCES
     src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/output_transform.cpp
     src/tgfx2/path2d.cpp
+    src/tgfx2/point_cloud_renderer.cpp
     src/tgfx2/screen_space_line_renderer.cpp
     src/tgfx2/standalone_shader_runtime.cpp
     src/tgfx2/world_space_line_renderer.cpp
@@ -163,6 +164,7 @@ if(EMSCRIPTEN)
         src/tgfx2/builtin_shader_sources.cpp
         src/tgfx2/device_factory.cpp
         src/tgfx2/output_transform.cpp
+        src/tgfx2/point_cloud_renderer.cpp
         src/tgfx2/pixel_format_utils.cpp
         src/tgfx2/pipeline_cache.cpp
         src/tgfx2/render_context.cpp
@@ -709,6 +711,7 @@ if(BUILD_TGFX2_TESTS)
         tests/test_tgfx2_device_factory.cpp
         tests/test_tgfx2_interop_ownership.cpp
         tests/test_tgfx2_line_mesh_builder.cpp
+        tests/test_tgfx2_point_cloud_contract.cpp
         tests/test_tgfx2_pipeline_cache_stats.cpp
         tests/test_tgfx2_texture_encoding.cpp
         tests/test_tgfx2_tc_mesh_bridge.cpp

@@ -91,6 +91,21 @@
       }
     },
     {
+      "uuid": "termin-engine-point-cloud",
+      "name": "PointCloudVSFS",
+      "language": "slang",
+      "stages": {
+        "vertex": {
+          "path": "termin-engine-point-cloud.slang",
+          "entry": "vs_main"
+        },
+        "fragment": {
+          "path": "termin-engine-point-cloud.slang",
+          "entry": "fs_main"
+        }
+      }
+    },
+    {
       "uuid": "termin-engine-tcplot-3d",
       "name": "Tcplot3DVSFS",
       "language": "slang",

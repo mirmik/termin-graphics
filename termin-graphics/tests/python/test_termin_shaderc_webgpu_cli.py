@@ -238,4 +238,4 @@ def test_builtin_catalog_compiles_to_validated_webgpu_artifacts(tmp_path: Path) 
                 assert previous == placement, resource["name"]
             compiled += 1
 
-    assert compiled == 93
+    assert compiled == 95
