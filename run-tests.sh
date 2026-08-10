@@ -6,6 +6,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FULL=0
 NO_EDITOR_SMOKE=0
+PYTHON_WINDOW_CAPABILITY=1
 CPP_ARGS=()
 
 for arg in "$@"; do
@@ -34,6 +35,11 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
+            if [[ "$arg" == "--no-sdl" ]]; then
+                PYTHON_WINDOW_CAPABILITY=0
+            elif [[ "$arg" == "--sdl" ]]; then
+                PYTHON_WINDOW_CAPABILITY=1
+            fi
             CPP_ARGS+=("$arg")
             ;;
     esac
@@ -76,6 +82,13 @@ elif ! TEST_SHADERC="$(
 elif ! bash "$SCRIPT_DIR/setup-sdk-python-env.sh"; then
     failures+=("Python environment")
 elif ! TERMIN_SHADERC="$TEST_SHADERC" \
+    TERMIN_TEST_CAPABILITIES="$(
+        if [[ "$PYTHON_WINDOW_CAPABILITY" -eq 1 ]]; then
+            printf 'host,window'
+        else
+            printf 'host'
+        fi
+    )" \
     bash "$SCRIPT_DIR/run-tests-python.sh" "${PYTHON_ARGS[@]}"; then
     failures+=("Python")
 fi

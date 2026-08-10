@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,8 @@ def platform_key() -> str:
     machine = platform.machine().lower()
     if system == "linux" and machine in {"x86_64", "amd64"}:
         return "linux-x86_64"
+    if system == "windows" and machine in {"x86_64", "amd64"}:
+        return "windows-x86_64"
     raise RuntimeError(
         f"unsupported Slang installer platform: {platform.system()} {platform.machine()}"
     )
@@ -83,6 +86,29 @@ def verify_version(executable: Path, expected: str) -> None:
         )
 
 
+def extract_archive(archive: Path, destination: Path) -> None:
+    if archive.name.endswith(".tar.gz"):
+        with tarfile.open(archive, "r:gz") as bundle:
+            bundle.extractall(destination, filter="data")
+        return
+    if archive.suffix.lower() == ".zip":
+        destination_root = destination.resolve()
+        with zipfile.ZipFile(archive) as bundle:
+            for member in bundle.infolist():
+                member_path = (destination / member.filename).resolve()
+                if (
+                    destination_root not in member_path.parents
+                    and member_path != destination_root
+                ):
+                    raise RuntimeError(
+                        "Slang archive contains a path outside its root: "
+                        f"{member.filename}"
+                    )
+            bundle.extractall(destination)
+        return
+    raise RuntimeError(f"unsupported Slang archive format: {archive.name}")
+
+
 def install(lock_path: Path, root: Path, *, require_installed: bool) -> tuple[Path, str]:
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     version = str(lock["version"])
@@ -115,8 +141,7 @@ def install(lock_path: Path, root: Path, *, require_installed: bool) -> tuple[Pa
     root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".slang-{version}.", dir=root))
     try:
-        with tarfile.open(archive, "r:gz") as bundle:
-            bundle.extractall(staging, filter="data")
+        extract_archive(archive, staging)
         staged_executable = staging / descriptor["executable"]
         if not staged_executable.is_file():
             raise RuntimeError(

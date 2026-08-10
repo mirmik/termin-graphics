@@ -163,10 +163,19 @@ else
     if [[ -n "${TERMIN_TEST_EXECUTION_MANIFEST:-}" ]]; then
         PLANNER_PLAN_ARGS+=(--report-output "${TERMIN_TEST_EXECUTION_MANIFEST}")
     fi
+    TEST_CAPABILITY_ARGS=()
+    TEST_CAPABILITIES="${TERMIN_TEST_CAPABILITIES:-host,window}"
+    IFS=',; ' read -r -a TEST_CAPABILITY_VALUES <<< "$TEST_CAPABILITIES"
+    for capability in "${TEST_CAPABILITY_VALUES[@]}"; do
+        if [[ -n "$capability" ]]; then
+            TEST_CAPABILITY_ARGS+=(--capability "$capability")
+        fi
+    done
     if ! "${PYTHON_COMMAND[@]}" -m termin_build.repository_control \
         --repo-root "$SCRIPT_DIR" run "$TEST_PROFILE" \
         --platform linux --executor pytest --python "$PYTHON_BIN" \
         --pytest-jobs "$PYTEST_JOBS" \
+        "${TEST_CAPABILITY_ARGS[@]}" \
         --python-arg=--termin-overlay --python-arg="$OVERLAY_MANIFEST" \
         "${PLANNER_PLAN_ARGS[@]}"; then
         failures+=("manifest Python suites")

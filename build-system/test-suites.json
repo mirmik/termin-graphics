@@ -446,7 +446,15 @@
       "id": "tcplot-tests-python",
       "module": "tcplot",
       "executor": "pytest",
-      "roots": ["tcplot/tests/python"]
+      "roots": ["tcplot/tests/python"],
+      "excluded_roots": ["tcplot/tests/python/test_examples_color_contract.py"]
+    },
+    {
+      "id": "tcplot-window-tests-python",
+      "module": "tcplot",
+      "executor": "pytest",
+      "roots": ["tcplot/tests/python/test_examples_color_contract.py"],
+      "required_capabilities": ["window"]
     },
     {
       "id": "termin-animation-tests",
@@ -464,7 +472,29 @@
       "id": "termin-app-tests",
       "module": "termin-app",
       "executor": "pytest",
-      "roots": ["termin-app/tests"]
+      "roots": ["termin-app/tests"],
+      "excluded_roots": [
+        "termin-app/tests/test_native_build_profiles_window.py",
+        "termin-app/tests/test_native_entity_inspector.py",
+        "termin-app/tests/test_native_inspector_fields.py",
+        "termin-app/tests/test_native_project_browser.py",
+        "termin-app/tests/test_native_registry_viewer.py",
+        "termin-app/tests/test_native_ui_host.py"
+      ]
+    },
+    {
+      "id": "termin-app-window-tests",
+      "module": "termin-app",
+      "executor": "pytest",
+      "roots": [
+        "termin-app/tests/test_native_build_profiles_window.py",
+        "termin-app/tests/test_native_entity_inspector.py",
+        "termin-app/tests/test_native_inspector_fields.py",
+        "termin-app/tests/test_native_project_browser.py",
+        "termin-app/tests/test_native_registry_viewer.py",
+        "termin-app/tests/test_native_ui_host.py"
+      ],
+      "required_capabilities": ["window"]
     },
     {
       "id": "termin-assets-tests",
@@ -512,7 +542,8 @@
       "id": "termin-display-tests-python",
       "module": "termin-display",
       "executor": "pytest",
-      "roots": ["termin-display/tests/python"]
+      "roots": ["termin-display/tests/python"],
+      "required_capabilities": ["window"]
     },
     {
       "id": "termin-components-collision-tests",
@@ -680,7 +711,15 @@
       "id": "termin-player-tests",
       "module": "termin-player",
       "executor": "pytest",
-      "roots": ["termin-player/tests"]
+      "roots": ["termin-player/tests"],
+      "excluded_roots": ["termin-player/tests/test_player_window.py"]
+    },
+    {
+      "id": "termin-player-window-tests",
+      "module": "termin-player",
+      "executor": "pytest",
+      "roots": ["termin-player/tests/test_player_window.py"],
+      "required_capabilities": ["window"]
     },
     {
       "id": "termin-prefab-tests",

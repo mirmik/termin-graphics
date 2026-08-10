@@ -7,6 +7,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Full = $false
 $ProcessSmokeOnly = $false
 $ProcessSmokeDisabled = $false
+$PythonWindowCapability = $true
 $ProcessSmokeProfile = if ($env:TERMIN_PROCESS_SMOKE_PROFILE) { $env:TERMIN_PROCESS_SMOKE_PROFILE } else { "" }
 $CppArgs = New-Object System.Collections.Generic.List[string]
 
@@ -51,6 +52,11 @@ foreach ($arg in $args) {
             if ($arg.StartsWith("--process-smoke-profile=")) {
                 $ProcessSmokeProfile = $arg.Substring("--process-smoke-profile=".Length)
             } else {
+                if ($arg -eq "--no-sdl") {
+                    $PythonWindowCapability = $false
+                } elseif ($arg -eq "--sdl") {
+                    $PythonWindowCapability = $true
+                }
                 $CppArgs.Add($arg)
             }
         }
@@ -129,9 +135,23 @@ if (-not $ProcessSmokeOnly) {
             throw "Python test environment refresh failed."
         }
 
-        & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
-        if ($LASTEXITCODE -ne 0) {
-            $Failures.Add("Python")
+        $OldTestCapabilities = $env:TERMIN_TEST_CAPABILITIES
+        $TestCapabilities = @("host")
+        if ($PythonWindowCapability) {
+            $TestCapabilities += "window"
+        }
+        $env:TERMIN_TEST_CAPABILITIES = $TestCapabilities -join ","
+        try {
+            & (Join-Path $ScriptDir "run-tests-python.ps1") @PythonArgs
+            if ($LASTEXITCODE -ne 0) {
+                $Failures.Add("Python")
+            }
+        } finally {
+            if ($null -eq $OldTestCapabilities) {
+                Remove-Item Env:TERMIN_TEST_CAPABILITIES -ErrorAction SilentlyContinue
+            } else {
+                $env:TERMIN_TEST_CAPABILITIES = $OldTestCapabilities
+            }
         }
     } catch {
         Write-Warning "[run-tests] Python test runner failed: $_"

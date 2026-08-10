@@ -201,10 +201,20 @@ try {
         Invoke-TestSuite "selected python" (@("-m", "pytest") + $PytestMarkerArgs + $PytestTargets.ToArray() + (New-PytestSuiteArgs "selected-python") + @("-v"))
     } else {
         $TestProfile = if ($Full) { "windows-d3d11" } else { "pr" }
+        $CapabilityArgs = @()
+        $TestCapabilities = if ($env:TERMIN_TEST_CAPABILITIES) {
+            $env:TERMIN_TEST_CAPABILITIES -split "[,;\s]+" | Where-Object { $_ }
+        } else {
+            @("host", "window")
+        }
+        foreach ($capability in $TestCapabilities) {
+            $CapabilityArgs += @("--capability", $capability)
+        }
         & $PythonBin @PythonPrefixArgs -m termin_build.repository_control `
             --repo-root $ScriptDir run $TestProfile `
             --platform windows --executor pytest --python $PythonBin `
             --pytest-jobs $parsedPytestJobs `
+            @CapabilityArgs `
             --python-arg=--termin-overlay --python-arg=$OverlayManifest
         if ($LASTEXITCODE -ne 0) {
             $Failures.Add("manifest Python suites")

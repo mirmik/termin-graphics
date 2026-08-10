@@ -7,6 +7,12 @@
       "url": "https://github.com/shader-slang/slang/releases/download/v2026.5.2/slang-2026.5.2-linux-x86_64-glibc-2.27.tar.gz",
       "sha256": "15583850c9d12e9ef8664449dfaedd55b3d4abff210bc89c4e666e89e436eaa9",
       "executable": "bin/slangc"
+    },
+    "windows-x86_64": {
+      "archive": "slang-2026.5.2-windows-x86_64.zip",
+      "url": "https://github.com/shader-slang/slang/releases/download/v2026.5.2/slang-2026.5.2-windows-x86_64.zip",
+      "sha256": "8751a5c897dacc3d05bb5bb063abf4200b2bd91052e893abd48cd941219a1549",
+      "executable": "bin/slangc.exe"
     }
   }
 }
