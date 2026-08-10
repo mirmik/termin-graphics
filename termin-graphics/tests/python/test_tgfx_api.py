@@ -398,6 +398,28 @@ def test_screen_space_line_binding_smoke():
     assert params.viewport_height == 480.0
 
 
+def test_point_cloud_binding_smoke():
+    cloud = tgfx.PointCloud()
+    assert cloud.empty is True
+    assert cloud.point_count == 0
+    assert cloud.has_bounds is False
+
+    style = tgfx.PointCloudStyle()
+    assert style.size_px == pytest.approx(3.0)
+    assert style.shape == tgfx.PointCloudShape.Circle
+    assert style.depth_test is True
+    assert style.depth_write is True
+
+    params = tgfx.PointCloudDrawParams()
+    assert params.view_projection == pytest.approx(
+        (1.0, 0.0, 0.0, 0.0,
+         0.0, 1.0, 0.0, 0.0,
+         0.0, 0.0, 1.0, 0.0,
+         0.0, 0.0, 0.0, 1.0))
+
+    assert isinstance(tgfx.PointCloudRenderer(), tgfx.PointCloudRenderer)
+
+
 def test_world_space_line_binding_smoke():
     style = tgfx.WorldSpaceLineStyle()
     style.width = 0.125
