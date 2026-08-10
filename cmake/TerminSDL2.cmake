@@ -46,6 +46,9 @@ macro(termin_configure_sdl2)
 
             set(SDL2_FOUND TRUE)
             set(SDL2_LIBRARIES SDL2::SDL2)
+            set(SDL2_INCLUDE_DIRS
+                "$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/termin-thirdparty/sdl2/include>"
+            )
             set(TERMIN_SDL2_BUNDLED ON)
             message(STATUS "SDL2: using bundled submodule at ${_termin_sdl2_source_dir}")
         elseif(WIN32)

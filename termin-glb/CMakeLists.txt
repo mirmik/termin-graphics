@@ -26,6 +26,9 @@ add_library(termin_glb SHARED
 add_library(termin_glb::termin_glb ALIAS termin_glb)
 
 target_compile_definitions(termin_glb PRIVATE TERMIN_GLB_EXPORTS)
+if(WIN32)
+    target_compile_definitions(termin_glb PRIVATE NOMINMAX)
+endif()
 target_include_directories(termin_glb
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
