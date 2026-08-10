@@ -156,7 +156,7 @@ if ($oldPythonPath) {
 }
 
 $DoctorProfile = if ($Profile -eq "graphics") { "sdk-bindings-graphics" } else { "sdk-bindings" }
-& $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile $DoctorProfile --vulkan $TerminEnableVulkan --init-submodules
+& $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile $DoctorProfile --vulkan $TerminEnableVulkan --sdl $TerminEnableSdl --init-submodules
 if ($LASTEXITCODE -ne 0) { throw "SDK bindings preflight failed" }
 
 Write-Host ""
