@@ -1433,8 +1433,8 @@ int main() {
             std::fprintf(stderr, "D3D11 smoke: push constants draw readback failed\n");
             return 1;
         }
-        if (!close_enough(rgba[0], push_color[0]) || !close_enough(rgba[1], push_color[1]) ||
-            !close_enough(rgba[2], push_color[2]) || !close_enough(rgba[3], push_color[3])) {
+        if (!close_enough(rgba[0], push_color.r) || !close_enough(rgba[1], push_color.g) ||
+            !close_enough(rgba[2], push_color.b) || !close_enough(rgba[3], push_color.a)) {
             std::fprintf(stderr,
                          "D3D11 smoke: unexpected push constants pixel %.3f %.3f %.3f %.3f\n",
                          rgba[0],

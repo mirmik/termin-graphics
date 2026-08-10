@@ -15,7 +15,7 @@ $BuildType = "Release"
 $BuildJobs = if ($env:BUILD_JOBS) { [int]$env:BUILD_JOBS } else { [Environment]::ProcessorCount }
 $BuildDir = if ($env:BUILD_DIR) { $env:BUILD_DIR } else { "" }
 $Full = $false
-$VulkanMode = "on"
+$VulkanMode = "auto"
 $OpenGlMode = "on"
 $SdlMode = "on"
 $WindowTestsMode = "off"
@@ -39,6 +39,15 @@ function Test-CMakeCacheBoolean {
     } | Select-Object -First 1)
 }
 
+function Test-VulkanSdkAvailable {
+    if (-not $env:VULKAN_SDK) {
+        return $false
+    }
+
+    return (Test-Path (Join-Path $env:VULKAN_SDK "Include\vulkan\vulkan.h")) -and
+        (Test-Path (Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"))
+}
+
 function Show-Help {
     Write-Host "Usage: .\run-tests-cpp.ps1 [OPTIONS]"
     Write-Host ""
@@ -49,7 +58,7 @@ function Show-Help {
     Write-Host "  --debug, -d       Debug build"
     Write-Host "  --full            Include window/full C++ tests"
     Write-Host "  --no-vulkan       Disable Vulkan support"
-    Write-Host "  --vulkan          Enable Vulkan support (default)"
+    Write-Host "  --vulkan          Require Vulkan support (default: auto-detect SDK)"
     Write-Host "  --no-opengl       Disable desktop OpenGL support"
     Write-Host "  --opengl          Enable desktop OpenGL support (default)"
     Write-Host "  --no-sdl          Disable SDL2 support"
@@ -103,7 +112,25 @@ if (-not $BuildDir) {
     $BuildDir = Join-Path (Join-Path $ScriptDir "build") $BuildType
 }
 
-$TerminEnableVulkan = if ($VulkanMode -eq "on") { "ON" } else { "OFF" }
+switch ($VulkanMode) {
+    "on" {
+        $TerminEnableVulkan = "ON"
+        $VulkanModeLabel = "ON"
+    }
+    "off" {
+        $TerminEnableVulkan = "OFF"
+        $VulkanModeLabel = "OFF"
+    }
+    default {
+        if (Test-VulkanSdkAvailable) {
+            $TerminEnableVulkan = "ON"
+            $VulkanModeLabel = "ON (auto)"
+        } else {
+            $TerminEnableVulkan = "OFF"
+            $VulkanModeLabel = "OFF (auto; Vulkan SDK not found)"
+        }
+    }
+}
 $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
 $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
@@ -167,7 +194,7 @@ Write-Host ""
 Write-Host "Source dir:  $ScriptDir"
 Write-Host "Build dir:   $BuildDir"
 Write-Host "SDK prefix:  $SdkPrefix"
-Write-Host "Vulkan:      $TerminEnableVulkan"
+Write-Host "Vulkan:      $VulkanModeLabel"
 Write-Host "OpenGL:      $TerminEnableOpenGl"
 Write-Host "SDL2:        $TerminEnableSdl"
 Write-Host "Window tests:$TerminBuildWindowTests ($WindowTestsMode)"

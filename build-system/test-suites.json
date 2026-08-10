@@ -108,13 +108,31 @@
         "reason": "Built only with the Vulkan backend."
       },
       {
+        "path": "termin-graphics/tests/test_output_transform_pixel_smoke.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
         "path": "termin-graphics/tests/test_per_pipeline_layout.cpp",
         "profiles": ["pr", "linux-full"],
         "capabilities": ["vulkan"],
         "reason": "Built only with the Vulkan backend."
       },
       {
+        "path": "termin-graphics/tests/test_text2d_coverage_pixel_smoke.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_dirty_range.cpp",
+        "profiles": ["pr", "linux-full"],
+        "capabilities": ["vulkan"],
+        "reason": "Built only with the Vulkan backend."
+      },
+      {
+        "path": "termin-graphics/tests/test_tgfx2_vulkan_gpu_timestamp_math.cpp",
         "profiles": ["pr", "linux-full"],
         "capabilities": ["vulkan"],
         "reason": "Built only with the Vulkan backend."
