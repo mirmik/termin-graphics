@@ -63,7 +63,9 @@ with either profile and does not need a window backend:
 The example contains a typed render-style graph, a visual group, existing
 connections and bool/enum/int/float/text parameter editors. Drag nodes and the
 group with the left mouse button, drag between compatible sockets to reconnect,
-select an item and press Delete to remove it, and close the window to exit.
+or click a connection to highlight it and press Delete to remove it. Connection
+hit targets stay comfortably wide in screen pixels at every zoom level. Click
+the empty canvas to clear selection, and close the window to exit.
 
 For an automated window smoke, bound its lifetime by frames or seconds:
 

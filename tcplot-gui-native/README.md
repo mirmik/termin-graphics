@@ -45,6 +45,19 @@ The caller owns telemetry retention policy. `append_line_data()` does not
 discard old samples automatically; applications that expose a fixed history
 window should trim their buffers or periodically replace the series data.
 
+Python applications use the matching typed adapter. Its widget can be placed
+directly in a document or transferred into a `termin-nodegraph` node body:
+
+```python
+import numpy as np
+from tcplot_gui_native import Plot2D
+
+plot = Plot2D(document)
+x = np.linspace(0.0, 2.0 * np.pi, 240)
+plot.plot(x, np.sin(x), thickness=2.0)
+plot.set_axis_labels("time", "value")
+```
+
 ## Interactive Plot3D widget
 
 `termin.gui.Plot3D` owns a detached `RetainedChart3D`. Before the native UI

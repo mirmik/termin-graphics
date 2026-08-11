@@ -76,3 +76,23 @@ def test_plot3d_widget_renders_inside_native_nodegraph_body():
     view.close()
     assert not document.is_alive(widget_handle)
     application.close()
+
+
+def test_plot3d_surface_accepts_read_only_numpy_data():
+    application = OffscreenGuiComposition(
+        width=480,
+        height=360,
+        continuous_rendering=False,
+    )
+    plot = Plot3D(application.document)
+    coordinates = np.linspace(-2.0, 2.0, 24)
+    x, y = np.meshgrid(coordinates, coordinates)
+    z = np.sin(x) * np.cos(y)
+    z.setflags(write=False)
+    try:
+        item = plot.surface(x, y, z)
+        assert item.scene_id == plot.scene_id
+        assert plot.item_count >= 1
+    finally:
+        application.document.destroy_widget_recursive(plot.handle)
+        application.close()

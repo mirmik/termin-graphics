@@ -2,6 +2,40 @@
 
 using namespace termin::gui_native::python_bindings;
 
+namespace {
+
+    tc_ui_key_code python_key_code(int32_t raw_key) {
+        switch (raw_key) {
+        case TC_UI_KEY_UNKNOWN:
+        case TC_UI_KEY_TAB:
+        case TC_UI_KEY_ENTER:
+        case TC_UI_KEY_SPACE:
+        case TC_UI_KEY_ESCAPE:
+        case TC_UI_KEY_BACKSPACE:
+        case TC_UI_KEY_INSERT:
+        case TC_UI_KEY_DELETE:
+        case TC_UI_KEY_RIGHT:
+        case TC_UI_KEY_LEFT:
+        case TC_UI_KEY_DOWN_ARROW:
+        case TC_UI_KEY_UP_ARROW:
+        case TC_UI_KEY_PAGE_UP:
+        case TC_UI_KEY_PAGE_DOWN:
+        case TC_UI_KEY_HOME:
+        case TC_UI_KEY_END:
+            return static_cast<tc_ui_key_code>(raw_key);
+        default:
+            break;
+        }
+        if ((raw_key >= TC_UI_KEY_0 && raw_key <= TC_UI_KEY_9) ||
+            (raw_key >= TC_UI_KEY_A && raw_key <= TC_UI_KEY_Z) ||
+            (raw_key >= TC_UI_KEY_F1 && raw_key <= TC_UI_KEY_F12)) {
+            return static_cast<tc_ui_key_code>(raw_key);
+        }
+        return TC_UI_KEY_UNKNOWN;
+    }
+
+} // namespace
+
 void bind_gui_native_core(nb::module_& m) {
     if (!tc_widget_registry_initialize()) {
         throw std::runtime_error("failed to initialize native widget runtime types");
@@ -505,8 +539,9 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("type", &tc_ui_key_event::type)
         .def_prop_rw(
             "key",
-            [](const tc_ui_key_event& event) { return static_cast<tc_ui_key_code>(event.key); },
+            [](const tc_ui_key_event& event) { return python_key_code(event.key); },
             [](tc_ui_key_event& event, tc_ui_key_code key) { event.key = static_cast<int32_t>(key); })
+        .def_rw("raw_key", &tc_ui_key_event::key)
         .def_rw("scancode", &tc_ui_key_event::scancode)
         .def_rw("modifiers", &tc_ui_key_event::modifiers)
         .def_rw("repeat", &tc_ui_key_event::repeat);

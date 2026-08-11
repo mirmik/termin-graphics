@@ -252,7 +252,6 @@ namespace tgfx {
         D3D11HandlePool<D3D11Pipeline> pipelines_;
         D3D11HandlePool<D3D11ResourceSet> resource_sets_;
 
-        static constexpr uint32_t kTransientVertexBufferSize = 2 * 1024 * 1024;
         BufferHandle transient_vertex_buffer_{};
         uint32_t transient_vertex_offset_ = 0;
         bool transient_vertex_discard_ = true;

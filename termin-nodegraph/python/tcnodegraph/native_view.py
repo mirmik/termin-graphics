@@ -46,6 +46,10 @@ _PARAM_CHECKBOX_SIZE = 18.0
 _PARAM_LABEL_FRACTION = 0.44
 _PARAM_EDITOR_X_FRACTION = 0.47
 _NODE_BOTTOM_PADDING = 10.0
+_EDGE_WIDTH = 2.6
+_SELECTED_EDGE_WIDTH = 5.0
+_EDGE_HIT_RADIUS_PX = 8.0
+_SELECTED_EDGE_COLOR = SrgbColor(1.0, 0.82, 0.30, 1.0)
 _log = logging.getLogger(__name__)
 _SOCKET_COLORS = {
     "fbo": SrgbColor(0.39, 0.70, 0.39, 1.0),
@@ -301,12 +305,13 @@ class NativeNodeGraphView:
 
     def _append_edge(self, edge: Edge) -> None:
         points = self._edge_points(edge)
+        color, width = self._edge_style(edge)
         item = self.scene.create_polyline(
             _points(points),
-            _color(self._edge_color(edge)),
-            2.6,
+            _color(color),
+            width,
         )
-        item.z_order = -10
+        item.z_order = -8 if self._edge_is_selected(edge.id) else -10
         self.edge_items[edge.id] = item
         self._register_semantic(item, f"edge:{edge.id}")
 
@@ -644,12 +649,16 @@ class NativeNodeGraphView:
                 self.request_render()
                 return True
             semantic = self._semantic_item(self.scene.hit_test(world.x, world.y))
-            self._selected_ids.clear()
             if semantic is None:
+                semantic = self._hit_edge(world)
+            if semantic is None:
+                selection_changed = self._set_selected_id(None)
                 self._cancel_drag()
+                if selection_changed:
+                    self.request_render()
                 return False
             stable_id, item = semantic
-            self._selected_ids.add(stable_id)
+            self._set_selected_id(stable_id)
             if stable_id.startswith(("node:", "group:")):
                 self._drag_id = stable_id
                 self._drag_item = item
@@ -745,6 +754,35 @@ class NativeNodeGraphView:
                         return node.id, socket.name, output
         return None
 
+    def _hit_edge(self, world: Point) -> tuple[str, GraphicItemRef2D] | None:
+        tolerance = _EDGE_HIT_RADIUS_PX / max(self.view.zoom, 0.000001)
+        tolerance_sq = tolerance * tolerance
+        for edge in reversed(tuple(self.graph.edges.values())):
+            points = self._edge_points(edge)
+            if any(
+                self._point_segment_distance_sq(world, start, end) <= tolerance_sq
+                for start, end in zip(points, points[1:], strict=False)
+            ):
+                item = self.edge_items.get(edge.id)
+                if item is not None:
+                    return f"edge:{edge.id}", item
+        return None
+
+    @staticmethod
+    def _point_segment_distance_sq(point: Point, start: Point, end: Point) -> float:
+        delta_x = end.x - start.x
+        delta_y = end.y - start.y
+        length_sq = delta_x * delta_x + delta_y * delta_y
+        if length_sq <= 0.000001:
+            return (point.x - start.x) ** 2 + (point.y - start.y) ** 2
+        projection = (
+            (point.x - start.x) * delta_x + (point.y - start.y) * delta_y
+        ) / length_sq
+        projection = min(1.0, max(0.0, projection))
+        closest_x = start.x + projection * delta_x
+        closest_y = start.y + projection * delta_y
+        return (point.x - closest_x) ** 2 + (point.y - closest_y) ** 2
+
     def _install_pending_item(self) -> None:
         if self._pending_item is not None:
             self.scene.destroy(self._pending_item)
@@ -800,12 +838,44 @@ class NativeNodeGraphView:
         for edge_id, item in self.edge_items.items():
             edge = self.graph.edges.get(edge_id)
             if edge is not None:
+                color, width = self._edge_style(edge)
                 item.set(
                     _points(self._edge_points(edge)),
-                    _color(self._edge_color(edge)),
-                    2.6,
+                    _color(color),
+                    width,
                 )
+                item.z_order = -8 if self._edge_is_selected(edge_id) else -10
         self.view.invalidate_scene()
+
+    def _set_selected_id(self, stable_id: str | None) -> bool:
+        next_ids = set() if stable_id is None else {stable_id}
+        if next_ids == self._selected_ids:
+            return False
+        affected_edges = {
+            value[5:]
+            for value in self._selected_ids | next_ids
+            if value.startswith("edge:")
+        }
+        self._selected_ids = next_ids
+        edges = self.graph.edges
+        for edge_id in affected_edges:
+            edge = edges.get(edge_id)
+            item = self.edge_items.get(edge_id)
+            if edge is None or item is None:
+                continue
+            color, width = self._edge_style(edge)
+            item.set(_points(self._edge_points(edge)), _color(color), width)
+            item.z_order = -8 if self._edge_is_selected(edge_id) else -10
+        self.view.invalidate_scene()
+        return True
+
+    def _edge_is_selected(self, edge_id: str) -> bool:
+        return f"edge:{edge_id}" in self._selected_ids
+
+    def _edge_style(self, edge: Edge) -> tuple[SrgbColor, float]:
+        if self._edge_is_selected(edge.id):
+            return _SELECTED_EDGE_COLOR, _SELECTED_EDGE_WIDTH
+        return self._edge_color(edge), _EDGE_WIDTH
 
     @staticmethod
     def _handle_key(item: GraphicItemRef2D) -> tuple[int, int, int]:

@@ -66,6 +66,16 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     checkbox.checked = False
     assert graph.nodes[target.id].params["enabled"] is False
 
+    unregistered_key = KeyEvent()
+    unregistered_key.type = KeyEventType.Down
+    unregistered_key.raw_key = 61
+    assert document.dispatch_key_event(unregistered_key) == EventResult.Ignored
+
+    assert document.dispatch_pointer_event(_pointer(PointerEventType.Down, 690.0, 356.0)) == EventResult.Handled
+    document.dispatch_pointer_event(_pointer(PointerEventType.Move, 850.0, 356.0))
+    document.dispatch_pointer_event(_pointer(PointerEventType.Up, 850.0, 356.0))
+    assert len(graph.edges) == 1
+
     assert document.dispatch_pointer_event(_pointer(PointerEventType.Down, 690.0, 356.0)) == EventResult.Handled
     document.dispatch_pointer_event(_pointer(PointerEventType.Move, 850.0, 356.0))
     document.dispatch_pointer_event(_pointer(PointerEventType.Up, 850.0, 356.0))
@@ -91,6 +101,55 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     del native
     gc.collect()
     assert native_ref() is None
+
+
+def test_native_node_graph_selects_connection_with_tolerance_and_deletes_it():
+    graph = Graph()
+    controller = GraphController(graph)
+    source = controller.create_node("source", title="Source", x=0.0, y=0.0)
+    controller.add_output_socket(source.id, "value", "float")
+    target = controller.create_node("target", title="Target", x=350.0, y=0.0)
+    controller.add_input_socket(target.id, "value", "float")
+    connection = controller.connect(source.id, "value", target.id, "value")
+    assert connection.ok
+
+    document = tc_ui_document_create()
+    native = build_native_node_graph_view(
+        document,
+        graph,
+        request_render=lambda: None,
+        controller=controller,
+    )
+    assert document.add_root(native.root.handle)
+    document.layout_roots(Rect(0.0, 0.0, 1000.0, 700.0))
+    edge_item = native.edge_items[connection.edge_id]
+    normal_bounds = edge_item.local_bounds
+
+    # Six screen pixels from the visible stroke is still an intentional hit.
+    assert document.dispatch_pointer_event(
+        _pointer(PointerEventType.Down, 770.0, 362.0)
+    ) == EventResult.Handled
+    selected_bounds = edge_item.local_bounds
+    assert selected_bounds[3] - selected_bounds[1] == pytest.approx(5.0)
+    assert selected_bounds[3] - selected_bounds[1] > normal_bounds[3] - normal_bounds[1]
+
+    document.dispatch_pointer_event(_pointer(PointerEventType.Down, 750.0, 450.0))
+    document.dispatch_pointer_event(_pointer(PointerEventType.Up, 750.0, 450.0))
+    cleared_bounds = edge_item.local_bounds
+    assert cleared_bounds[3] - cleared_bounds[1] == pytest.approx(2.6)
+
+    assert document.dispatch_pointer_event(
+        _pointer(PointerEventType.Down, 770.0, 362.0)
+    ) == EventResult.Handled
+    key = KeyEvent()
+    key.type = KeyEventType.Down
+    key.key = KeyCode.Delete
+    assert document.dispatch_key_event(key) == EventResult.Handled
+    assert not graph.edges
+    assert set(graph.nodes) == {source.id, target.id}
+
+    native.close()
+    tc_ui_document_destroy(document)
 
 
 def test_native_node_graph_replacement_preserves_supplied_controller_policy():

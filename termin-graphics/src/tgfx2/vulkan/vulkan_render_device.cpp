@@ -922,7 +922,7 @@ namespace tgfx {
     // --- Transient vertex ring ---
 
     void VulkanRenderDevice::create_transient_vertex_ring() {
-        transient_vb_size_ = static_cast<uint64_t>(kFrameSlotCount) * 2 * 1024 * 1024;
+        transient_vb_size_ = static_cast<uint64_t>(kFrameSlotCount) * kTransientVertexBufferSize;
         transient_vb_slot_size_ = transient_vb_size_ / kFrameSlotCount;
 
         VkBufferCreateInfo bi{};
@@ -974,7 +974,7 @@ namespace tgfx {
 
         if (offset_in_slot + padded > transient_vb_slot_size_) {
             if (!transient_vb_overflow_warned_) {
-                tc_log(TC_LOG_ERROR,
+                tc_log(TC_LOG_WARN,
                        "[TransientVB] slot %u overflow: head=%llu size=%u slot_cap=%llu",
                        slot,
                        (unsigned long long)offset_in_slot,

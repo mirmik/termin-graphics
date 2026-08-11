@@ -944,6 +944,18 @@ def test_python_focus_events_and_tab_traversal():
     ]
 
 
+def test_python_key_event_normalizes_unregistered_platform_key_code():
+    event = KeyEvent()
+    event.raw_key = 61  # GLFW_KEY_EQUAL; valid platform key, absent from KeyCode.
+
+    assert event.key == KeyCode.Unknown
+    assert event.raw_key == 61
+
+    event.key = KeyCode.Delete
+    assert event.key == KeyCode.Delete
+    assert event.raw_key == KeyCode.Delete.value
+
+
 def test_python_overlay_order_dismissal_and_tooltip_placement():
     paint_order = []
     dismissals = []

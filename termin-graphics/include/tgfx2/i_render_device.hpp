@@ -28,6 +28,11 @@ struct tc_shader;
 
 namespace tgfx {
 
+    // Per-frame budget for renderer-owned immediate vertex streams. Surface
+    // previews can legitimately emit several megabytes in one frame; keeping
+    // this shared avoids backend-specific quality cliffs.
+    inline constexpr uint32_t kTransientVertexBufferSize = 8 * 1024 * 1024;
+
     struct GpuFrameTiming {
         std::int64_t frame_number = -1;
         double duration_ms = 0.0;

@@ -164,7 +164,7 @@ namespace tgfx {
         // Transient vertex ring state (see transient_vertex_write).
         BufferHandle transient_vb_handle_;
         GLuint transient_vb_gl_ = 0;
-        GLsizeiptr transient_vb_size_ = 2 << 20; // 2 MB
+        GLsizeiptr transient_vb_size_ = static_cast<GLsizeiptr>(kTransientVertexBufferSize);
         GLintptr transient_vb_offset_ = 0;
         bool transient_vb_initialized_ = false;
 

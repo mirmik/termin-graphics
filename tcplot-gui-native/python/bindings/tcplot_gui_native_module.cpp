@@ -4,6 +4,7 @@
 
 #include <stdexcept>
 
+#include <tcplot/gui_native/plot2d.hpp>
 #include <tcplot/gui_native/plot3d.hpp>
 #include <tcplot/gui_native/widget_registration.hpp>
 #include <termin/gui_native/tc_document.hpp>
@@ -13,7 +14,52 @@ namespace nb = nanobind;
 
 namespace {
 
-    using Array = nb::ndarray<double, nb::c_contig, nb::device::cpu>;
+    using Array = nb::ndarray<const double, nb::c_contig, nb::device::cpu>;
+
+    class Plot2DAccess {
+    public:
+        Plot2DAccess(termin::gui_native::TcDocument document, uint32_t index, uint32_t generation)
+            : document_(document),
+              handle_{index, generation} {
+            (void)get();
+        }
+
+        tcplot::gui_native::Plot2D& get() const {
+            tc_widget* widget = tc_ui_document_resolve_widget(document_.handle(), handle_);
+            if (!widget || widget->native_language != TC_LANGUAGE_CXX || !widget->body) {
+                throw std::runtime_error("tcplot Plot2D access refers to a stale or incompatible widget");
+            }
+            auto* base = static_cast<termin::gui_native::Widget*>(widget->body);
+            auto* plot = dynamic_cast<tcplot::gui_native::Plot2D*>(base);
+            if (!plot) {
+                throw std::runtime_error("native widget is not termin.gui.Plot2D");
+            }
+            return *plot;
+        }
+
+        std::size_t add_line(float r, float g, float b, float a, float thickness) const {
+            tcplot::PlotLineSeriesStyle2D style;
+            style.color = {r, g, b, a};
+            style.thickness_px = thickness;
+            return get().add_line(style);
+        }
+
+        bool set_line_data(std::size_t index, Array x, Array y) const {
+            return get().set_line_data(index, array_span(x), array_span(y));
+        }
+
+        bool append_line_data(std::size_t index, Array x, Array y) const {
+            return get().append_line_data(index, array_span(x), array_span(y));
+        }
+
+    private:
+        static std::span<const double> array_span(const Array& value) {
+            return {value.data(), value.size()};
+        }
+
+        termin::gui_native::TcDocument document_;
+        tc_widget_handle handle_{};
+    };
 
     class Plot3DAccess {
     public:
@@ -113,6 +159,24 @@ NB_MODULE(_tcplot_gui_native, module) {
     if (!tcplot::gui_native::register_plot_widget_types()) {
         throw std::runtime_error("failed to register tcplot native widget types");
     }
+
+    nb::class_<Plot2DAccess>(module, "Plot2DAccess")
+        .def(nb::init<termin::gui_native::TcDocument, uint32_t, uint32_t>())
+        .def("add_line", &Plot2DAccess::add_line)
+        .def("set_line_data", &Plot2DAccess::set_line_data)
+        .def("append_line_data", &Plot2DAccess::append_line_data)
+        .def("clear_lines", [](const Plot2DAccess& self) { self.get().clear_lines(); })
+        .def("set_title", [](const Plot2DAccess& self, const std::string& title) { self.get().set_title(title); })
+        .def("set_axis_labels",
+             [](const Plot2DAccess& self, const std::string& x, const std::string& y) {
+                 self.get().set_x_label(x);
+                 self.get().set_y_label(y);
+             })
+        .def("set_auto_fit", [](const Plot2DAccess& self, bool enabled) { self.get().set_auto_fit(enabled); })
+        .def("set_view", [](const Plot2DAccess& self, double x_min, double x_max, double y_min, double y_max) {
+            self.get().set_view(x_min, x_max, y_min, y_max);
+        })
+        .def_prop_ro("line_count", [](const Plot2DAccess& self) { return self.get().line_count(); });
 
     nb::class_<Plot3DAccess>(module, "Plot3DAccess")
         .def(nb::init<termin::gui_native::TcDocument, uint32_t, uint32_t>())

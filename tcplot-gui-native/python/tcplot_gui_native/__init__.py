@@ -7,7 +7,77 @@ from dataclasses import dataclass
 import numpy as np
 
 from tcplot import SrgbColor, SurfaceColorMap, default_colors
-from tcplot_gui_native._tcplot_gui_native import Plot3DAccess
+from tcplot_gui_native._tcplot_gui_native import Plot2DAccess, Plot3DAccess
+
+
+class Plot2D:
+    """Retained line chart widget for ``termin-gui-native`` documents."""
+
+    def __init__(self, document):
+        self.widget = document.create_registered_widget("termin.gui.Plot2D")
+        handle = self.widget.handle
+        self._native = Plot2DAccess(document, handle.index, handle.generation)
+        self._palette = list(default_colors())
+        self._next_color = 0
+
+    @property
+    def handle(self):
+        return self.widget.handle
+
+    @property
+    def line_count(self) -> int:
+        return self._native.line_count
+
+    def _color(self, color: SrgbColor | None) -> SrgbColor:
+        if color is not None:
+            return color
+        result = self._palette[self._next_color % len(self._palette)]
+        self._next_color += 1
+        return result
+
+    @staticmethod
+    def _xy(x, y):
+        xa = np.ascontiguousarray(x, dtype=np.float64).reshape(-1)
+        ya = np.ascontiguousarray(y, dtype=np.float64).reshape(-1)
+        if xa.size != ya.size:
+            raise ValueError("x and y arrays must have equal size")
+        return xa, ya
+
+    def plot(self, x, y, *, color: SrgbColor | None = None, thickness: float = 1.5) -> int:
+        xa, ya = self._xy(x, y)
+        resolved = self._color(color)
+        index = self._native.add_line(
+            resolved.r, resolved.g, resolved.b, resolved.a, thickness
+        )
+        if not self._native.set_line_data(index, xa, ya):
+            raise RuntimeError("tcplot Plot2D rejected line data")
+        return index
+
+    def set_line_data(self, index: int, x, y) -> None:
+        xa, ya = self._xy(x, y)
+        if not self._native.set_line_data(index, xa, ya):
+            raise RuntimeError("tcplot Plot2D rejected line data")
+
+    def append_line_data(self, index: int, x, y) -> None:
+        xa, ya = self._xy(x, y)
+        if not self._native.append_line_data(index, xa, ya):
+            raise RuntimeError("tcplot Plot2D rejected appended line data")
+
+    def clear(self) -> None:
+        self._native.clear_lines()
+        self._next_color = 0
+
+    def set_title(self, title: str) -> None:
+        self._native.set_title(title)
+
+    def set_axis_labels(self, x: str, y: str) -> None:
+        self._native.set_axis_labels(x, y)
+
+    def set_auto_fit(self, enabled: bool) -> None:
+        self._native.set_auto_fit(enabled)
+
+    def set_view(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        self._native.set_view(x_min, x_max, y_min, y_max)
 
 
 @dataclass(frozen=True)
@@ -140,4 +210,4 @@ class Plot3D:
         self._native.reset_camera()
 
 
-__all__ = ["Plot3D", "Plot3DItem"]
+__all__ = ["Plot2D", "Plot3D", "Plot3DItem"]
