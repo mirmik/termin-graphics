@@ -40,7 +40,7 @@ graph2 = load_graph_json("graph.json")
 After building the SDK, launch the current native projection directly:
 
 ```bash
-./sdk/bin/termin_python -m tcnodegraph.example
+./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py
 ```
 
 The example contains a typed render-style graph, a visual group, existing
@@ -51,8 +51,8 @@ select an item and press Delete to remove it, and close the window to exit.
 For an automated window smoke, bound its lifetime by frames or seconds:
 
 ```bash
-./sdk/bin/termin_python -m tcnodegraph.example --frames 3
-./sdk/bin/termin_python -m tcnodegraph.example --seconds 5
+./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py --frames 3
+./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py --seconds 5
 ```
 
 The example uses `GuiWindowAdapter` and `NativeNodeGraphView`; it does not import

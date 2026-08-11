@@ -1,4 +1,19 @@
-from tcnodegraph.example import make_demo_graph
+import importlib.util
+from pathlib import Path
+
+
+_EXAMPLE_PATH = (
+    Path(__file__).resolve().parents[1] / "examples" / "native_nodegraph_demo.py"
+)
+_EXAMPLE_SPEC = importlib.util.spec_from_file_location(
+    "tcnodegraph_native_nodegraph_demo",
+    _EXAMPLE_PATH,
+)
+assert _EXAMPLE_SPEC is not None
+assert _EXAMPLE_SPEC.loader is not None
+_EXAMPLE_MODULE = importlib.util.module_from_spec(_EXAMPLE_SPEC)
+_EXAMPLE_SPEC.loader.exec_module(_EXAMPLE_MODULE)
+make_demo_graph = _EXAMPLE_MODULE.make_demo_graph
 
 
 def test_demo_graph_exercises_native_projection_features():
