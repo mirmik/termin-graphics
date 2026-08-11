@@ -284,6 +284,9 @@ namespace termin::gui_native::examples {
         tc_ui_paint_context* context = nullptr;
         try {
             const TcDocument document(handle);
+            require(document.set_presentation_metrics(
+                        tc_ui_presentation_metrics_identity(tc_ui_size{800.0f, 600.0f})),
+                    "headless presentation metrics were rejected");
             document.set_text_measurer(&measure_headless_text, nullptr);
             auto refs = build_visual_scene_composition(document);
             document.layout_roots({0.0f, 0.0f, 800.0f, 600.0f});
@@ -333,8 +336,10 @@ namespace termin::gui_native::examples {
             require(portal_text < count, "portal widget was not painted after scene graphics");
 
             const tc_ui_rect portal_bounds = refs.portal_button->bounds();
-            const tc_ui_point portal_center{portal_bounds.x + portal_bounds.width * 0.5f,
-                                            portal_bounds.y + portal_bounds.height * 0.5f};
+            const tc_ui_point portal_center = tc_ui_uniform_transform_map_point(
+                refs.portal_button->subtree_transform(),
+                {portal_bounds.x + portal_bounds.width * 0.5f,
+                 portal_bounds.y + portal_bounds.height * 0.5f});
             require(same_widget(document.hit_test(portal_center.x, portal_center.y), refs.portal_button->handle()),
                     "portal widget did not win over its graphic hit region");
             const auto portal_position = position(*refs.portal);
@@ -368,8 +373,11 @@ namespace termin::gui_native::examples {
             document.layout_roots({0.0f, 0.0f, 1024.0f, 640.0f});
             require(refs.view->bounds().width > old_view.width, "SceneView did not resize with the document");
             const tc_ui_rect resized_portal = refs.portal_button->bounds();
+            const tc_ui_rect resized_portal_screen = tc_ui_uniform_transform_map_rect(
+                refs.portal_button->subtree_transform(), resized_portal);
             const tc_ui_point expected_portal = refs.view->world_to_screen(position(*refs.portal));
-            require(near(resized_portal.x, expected_portal.x) && near(resized_portal.y, expected_portal.y),
+            require(near(resized_portal_screen.x, expected_portal.x) &&
+                        near(resized_portal_screen.y, expected_portal.y),
                     "portal layout diverged from the scene transform after resize");
 
             click(document,
