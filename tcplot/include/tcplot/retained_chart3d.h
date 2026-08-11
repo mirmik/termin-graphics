@@ -119,6 +119,9 @@ TCPLOT_API int tc_retained_chart3d_item_snapshot(const tc_retained_chart3d* char
                                                  tc_plot_item3d_handle item,
                                                  tc_plot_item3d_snapshot* snapshot);
 TCPLOT_API int tc_retained_chart3d_destroy_item(tc_retained_chart3d* chart, tc_plot_item3d_handle item);
+// Destroy all data-bearing items while preserving the chart grid, camera,
+// labels and presentation settings.
+TCPLOT_API void tc_retained_chart3d_clear_data(tc_retained_chart3d* chart);
 
 TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_add_surface(tc_retained_chart3d* chart,
                                                                  const double* x,

@@ -160,6 +160,9 @@ void bind_gui_native_widgets(nb::module_& m) {
 
     nb::class_<WidgetRef>(m, "WidgetRef")
         .def_prop_ro("handle", [](const WidgetRef& self) { return WidgetHandle{self.handle}; })
+        .def_prop_ro("document", [](const WidgetRef& self) {
+            return termin::gui_native::TcDocument{self.state->document};
+        })
         .def_prop_ro("alive", &WidgetRef::alive)
         .def("__bool__", &WidgetRef::alive)
         .def_prop_rw(

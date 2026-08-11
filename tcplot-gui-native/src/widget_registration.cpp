@@ -7,6 +7,7 @@
 
 #include <tcbase/tc_log.h>
 #include <tcplot/gui_native/plot2d.hpp>
+#include <tcplot/gui_native/plot3d.hpp>
 #include <termin/gui_native/builtin_widget_registration.hpp>
 #include <termin/gui_native/tc_widget_registry.h>
 
@@ -17,7 +18,8 @@ extern "C" {
 namespace tcplot::gui_native {
     namespace {
 
-        constexpr const char* widget_type = "termin.gui.Plot2D";
+        constexpr const char* plot2d_widget_type = "termin.gui.Plot2D";
+        constexpr const char* plot3d_widget_type = "termin.gui.Plot3D";
         constexpr const char* module_owner = "tcplot-gui-native";
         constexpr const char* widget_parent = "termin.gui.Widget";
 
@@ -25,12 +27,12 @@ namespace tcplot::gui_native {
             termin::gui_native::Widget::delete_owned_widget(widget);
         }
 
-        bool create_widget(tc_ui_document_handle, void*, tc_widget_factory_result* result) {
+        template <typename Plot> bool create_widget(tc_ui_document_handle, void*, tc_widget_factory_result* result) {
             if (result == nullptr) {
                 return false;
             }
             try {
-                auto* widget = new Plot2D();
+                auto* widget = new Plot();
                 *result = tc_widget_factory_result{
                     widget->c_widget(),
                     &delete_widget,
@@ -38,10 +40,10 @@ namespace tcplot::gui_native {
                 };
                 return true;
             } catch (const std::exception& error) {
-                tc_log_error("[tcplot-gui-native] failed to create Plot2D: %s", error.what());
+                tc_log_error("[tcplot-gui-native] failed to create plot widget: %s", error.what());
                 return false;
             } catch (...) {
-                tc_log_error("[tcplot-gui-native] failed to create Plot2D with an "
+                tc_log_error("[tcplot-gui-native] failed to create plot widget with an "
                              "unknown exception");
                 return false;
             }
@@ -98,13 +100,13 @@ namespace tcplot::gui_native {
         }
 
         bool reject_persistence(const tc_widget*, void*, tc_value*) {
-            tc_log_error("[tcplot-gui-native] Plot2D is declarative-only and has no "
+            tc_log_error("[tcplot-gui-native] plot widgets are declarative-only and have no "
                          "durable widget state codec");
             return false;
         }
 
         bool reject_restore(tc_widget*, const tc_value*, void*) {
-            tc_log_error("[tcplot-gui-native] Plot2D cannot be restored through "
+            tc_log_error("[tcplot-gui-native] plot widgets cannot be restored through "
                          "document persistence");
             return false;
         }
@@ -135,13 +137,10 @@ namespace tcplot::gui_native {
             tc_log_error("[tcplot-gui-native] built-in widget registration failed");
             return false;
         }
-        if (tc_widget_registry_has(widget_type)) {
-            return true;
-        }
-        const tc_widget_factory_descriptor descriptor{
+        const tc_widget_factory_descriptor plot2d_descriptor{
             TC_WIDGET_FACTORY_ABI_VERSION,
             TC_LANGUAGE_CXX,
-            &create_widget,
+            &create_widget<Plot2D>,
             nullptr,
             nullptr,
             nullptr,
@@ -149,8 +148,25 @@ namespace tcplot::gui_native {
             &reject_restore,
             &uiscript_descriptor,
         };
-        if (!tc_widget_registry_register(widget_type, module_owner, widget_parent, &descriptor)) {
+        if (!tc_widget_registry_has(plot2d_widget_type) &&
+            !tc_widget_registry_register(plot2d_widget_type, module_owner, widget_parent, &plot2d_descriptor)) {
             tc_log_error("[tcplot-gui-native] failed to register termin.gui.Plot2D");
+            return false;
+        }
+        const tc_widget_factory_descriptor plot3d_descriptor{
+            TC_WIDGET_FACTORY_ABI_VERSION,
+            TC_LANGUAGE_CXX,
+            &create_widget<Plot3D>,
+            nullptr,
+            nullptr,
+            nullptr,
+            &reject_persistence,
+            &reject_restore,
+            nullptr,
+        };
+        if (!tc_widget_registry_has(plot3d_widget_type) &&
+            !tc_widget_registry_register(plot3d_widget_type, module_owner, widget_parent, &plot3d_descriptor)) {
+            tc_log_error("[tcplot-gui-native] failed to register termin.gui.Plot3D");
             return false;
         }
         return true;

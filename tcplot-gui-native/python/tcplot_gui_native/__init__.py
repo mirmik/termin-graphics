@@ -1,0 +1,143 @@
+"""Native UI widget adapters for :mod:`tcplot`."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from tcplot import SrgbColor, SurfaceColorMap, default_colors
+from tcplot_gui_native._tcplot_gui_native import Plot3DAccess
+
+
+@dataclass(frozen=True)
+class Plot3DItem:
+    scene_id: int
+    index: int
+    generation: int
+
+
+class Plot3D:
+    """Interactive ``termin-gui-native`` widget backed by ``RetainedChart3D``."""
+
+    def __init__(self, document):
+        self.widget = document.create_registered_widget("termin.gui.Plot3D")
+        handle = self.widget.handle
+        self._native = Plot3DAccess(document, handle.index, handle.generation)
+        self._palette = list(default_colors())
+        self._next_color = 0
+
+    @property
+    def handle(self):
+        return self.widget.handle
+
+    @property
+    def scene_id(self) -> int:
+        return self._native.scene_id
+
+    @property
+    def item_count(self) -> int:
+        return self._native.item_count
+
+    @property
+    def texture_id(self) -> int:
+        return self._native.texture_id
+
+    def _color(self, color: SrgbColor | None) -> SrgbColor:
+        if color is not None:
+            return color
+        result = self._palette[self._next_color % len(self._palette)]
+        self._next_color += 1
+        return result
+
+    @staticmethod
+    def _xyz(x, y, z):
+        xa = np.ascontiguousarray(x, dtype=np.float64).reshape(-1)
+        ya = np.ascontiguousarray(y, dtype=np.float64).reshape(-1)
+        za = np.ascontiguousarray(z, dtype=np.float64).reshape(-1)
+        if xa.size != ya.size or xa.size != za.size:
+            raise ValueError("x, y and z arrays must have equal size")
+        return xa, ya, za
+
+    @staticmethod
+    def _item(value) -> Plot3DItem:
+        return Plot3DItem(int(value[0]), int(value[1]), int(value[2]))
+
+    def plot(self, x, y, z, *, color: SrgbColor | None = None, thickness: float = 1.5):
+        xa, ya, za = self._xyz(x, y, z)
+        resolved = self._color(color)
+        return self._item(
+            self._native.add_line(
+                xa, ya, za, resolved.r, resolved.g, resolved.b, resolved.a, thickness
+            )
+        )
+
+    def scatter(self, x, y, z, *, color: SrgbColor | None = None, size: float = 4.0):
+        xa, ya, za = self._xyz(x, y, z)
+        resolved = self._color(color)
+        return self._item(
+            self._native.add_scatter(
+                xa, ya, za, resolved.r, resolved.g, resolved.b, resolved.a, size
+            )
+        )
+
+    def surface(
+        self,
+        x,
+        y,
+        z,
+        *,
+        color: SrgbColor | None = None,
+        colormap: SurfaceColorMap = SurfaceColorMap.Jet,
+        wireframe: bool = False,
+    ):
+        xa = np.ascontiguousarray(x, dtype=np.float64)
+        ya = np.ascontiguousarray(y, dtype=np.float64)
+        za = np.ascontiguousarray(z, dtype=np.float64)
+        if xa.ndim != 2 or ya.shape != xa.shape or za.shape != xa.shape:
+            raise ValueError("x, y and z must be equally shaped 2D arrays")
+        resolved = self._color(color)
+        rows, columns = xa.shape
+        return self._item(
+            self._native.add_surface(
+                xa.reshape(-1),
+                ya.reshape(-1),
+                za.reshape(-1),
+                rows,
+                columns,
+                resolved.r,
+                resolved.g,
+                resolved.b,
+                resolved.a,
+                int(colormap.value),
+                wireframe,
+            )
+        )
+
+    def destroy_item(self, item: Plot3DItem) -> bool:
+        return self._native.destroy_item(item.scene_id, item.index, item.generation)
+
+    def clear(self) -> None:
+        self._native.clear()
+        self._next_color = 0
+
+    def set_axis_labels(self, x: str, y: str, z: str) -> None:
+        self._native.set_axis_labels(x, y, z)
+
+    def set_axis_scale(self, x: float, y: float, z: float) -> None:
+        self._native.set_axis_scale(x, y, z)
+
+    def set_surface_shading(self, enabled: bool, strength: float = 0.35) -> None:
+        self._native.set_surface_shading(enabled, strength)
+
+    def set_light_direction(self, x: float, y: float, z: float) -> None:
+        self._native.set_light_direction(x, y, z)
+
+    def fit_camera(self) -> None:
+        self._native.fit_camera()
+
+    def reset_camera(self) -> None:
+        self._native.reset_camera()
+
+
+__all__ = ["Plot3D", "Plot3DItem"]

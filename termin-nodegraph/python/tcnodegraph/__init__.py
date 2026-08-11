@@ -14,13 +14,22 @@ from tcnodegraph.schema import (
 )
 
 try:
-    from tcnodegraph.native_view import NativeNodeGraphView, build_native_node_graph_view
+    from tcnodegraph.native_view import (
+        NativeNodeGraphView,
+        NodeBodyContent,
+        NodeBodyContentProvider,
+        NodeBodyLayout,
+        build_native_node_graph_view,
+    )
 except ImportError as e:
     logging.getLogger(__name__).debug(
         "Optional import tcnodegraph.native_view failed: %s — native GUI features unavailable",
         e,
     )
     NativeNodeGraphView = None
+    NodeBodyContent = None
+    NodeBodyContentProvider = None
+    NodeBodyLayout = None
     build_native_node_graph_view = None
 
 __all__ = [
@@ -41,5 +50,8 @@ __all__ = [
     "save_graph_json",
     "load_graph_json",
     "NativeNodeGraphView",
+    "NodeBodyContent",
+    "NodeBodyContentProvider",
+    "NodeBodyLayout",
     "build_native_node_graph_view",
 ]

@@ -75,6 +75,23 @@ For an automated window smoke, bound its lifetime by frames or seconds:
 The example uses `GuiWindowAdapter` and `NativeNodeGraphView`; it does not import
 the editor application or the retired tcgui frontend.
 
+Applications can place one owned native widget in each node body without a
+plotting dependency by passing `body_content_provider(document, node)` to
+`build_native_node_graph_view`. The provider returns `NodeBodyContent(widget,
+NodeBodyLayout(...))` or `None`. The layout describes the widget height, four
+insets, and the gap before the body. Ownership of a returned widget transfers to
+the view; rebuilds preserve that widget and its state while replacing its scene
+anchor, and the optional `NodeBodyContent.update(node)` callback can refresh it
+from the latest node snapshot. Removing a node, replacing the graph, or closing
+the view destroys the owned body widget. `NodeBodyContent.widget` is the common
+`WidgetRef`; for a typed native wrapper pass its `.widget` property. The widget
+must be alive, parentless,
+and created in the document passed to the provider; returning it transfers
+exclusive ownership. Body dimensions are graph-world units, so zoom changes
+the portal transform rather than the requested layout. Nodes marked with
+`data["explicit_size"] = True` reject body layouts that do not fit instead of
+allowing content to overflow the node.
+
 ## Core invariants and serialization
 
 Connections always run from an existing output socket to an existing input

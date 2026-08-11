@@ -94,7 +94,8 @@ static void set_widget_flag(tc_widget* widget, uint32_t flag, bool enabled) {
 }
 
 bool tc_ui_internal_handle_is_in_subtree(tc_ui_document* document, tc_widget_handle handle, const tc_widget* root) {
-    tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
+    const tc_widget_slot* slot = tc_ui_internal_resolve_slot_const(document, handle);
+    tc_widget* widget = slot ? slot->widget : NULL;
     while (widget) {
         if (widget == root) {
             return true;
@@ -136,13 +137,19 @@ bool tc_ui_internal_cancel_pointer_state(tc_ui_document* document,
     event.cancel_reason = reason;
     for (index = 0; index < target_count; ++index) {
         tc_widget* widget;
+        tc_widget_slot* slot;
         document = tc_ui_internal_resolve_document(document_handle);
         if (!document) {
             break;
         }
-        widget = tc_ui_document_resolve_widget(document_handle, targets[index]);
+        slot = tc_ui_internal_resolve_slot(document, targets[index]);
+        widget = slot ? slot->widget : NULL;
         if (widget && widget->vtable && widget->vtable->pointer_event) {
-            (void)tc_ui_internal_deliver_pointer_event(document, targets[index], &event, false);
+            if (slot->destroying) {
+                (void)widget->vtable->pointer_event(widget, document_handle, &event);
+            } else {
+                (void)tc_ui_internal_deliver_pointer_event(document, targets[index], &event, false);
+            }
             notified = true;
         }
     }
@@ -158,10 +165,14 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root, tc_ui_
     bool clear_capture;
     bool clear_pressed;
     bool clear_focus;
+    const tc_widget_slot* root_slot;
+    bool root_destroying;
     if (!root || !(document = tc_ui_internal_resolve_document(root->document))) {
         return;
     }
     document_handle = document->handle;
+    root_slot = tc_ui_internal_resolve_slot_const(document, root->handle);
+    root_destroying = root_slot && root_slot->destroying;
     old_hover = document->hovered_widget;
     old_focus = document->focused_widget;
     clear_hover = tc_ui_internal_handle_is_in_subtree(document, document->hovered_widget, root);
@@ -174,7 +185,10 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root, tc_ui_
         return;
     }
     if (clear_hover && tc_ui_internal_same_handle(document->hovered_widget, old_hover)) {
-        if (document->has_pointer_event) {
+        if (root_destroying && tc_ui_internal_same_handle(old_hover, root->handle)) {
+            document->hovered_widget = tc_widget_handle_invalid();
+            tc_ui_internal_refresh_cursor(document);
+        } else if (document->has_pointer_event) {
             tc_ui_internal_update_hover(document, tc_widget_handle_invalid(), &document->last_pointer_event);
         } else {
             document->hovered_widget = tc_widget_handle_invalid();
@@ -182,7 +196,14 @@ void tc_ui_internal_invalidate_subtree_interaction_state(tc_widget* root, tc_ui_
         }
     }
     if (clear_focus && tc_ui_internal_same_handle(document->focused_widget, old_focus)) {
-        tc_ui_internal_change_focus(document, tc_widget_handle_invalid());
+        if (root_destroying && tc_ui_internal_same_handle(old_focus, root->handle)) {
+            document->focused_widget = tc_widget_handle_invalid();
+            if (root->vtable && root->vtable->focus_event) {
+                root->vtable->focus_event(root, document_handle, false);
+            }
+        } else {
+            tc_ui_internal_change_focus(document, tc_widget_handle_invalid());
+        }
     }
 }
 

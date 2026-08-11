@@ -8,6 +8,9 @@
 #include <tcbase/tc_log.h>
 #include <termin/gui_native/color_picker.hpp>
 #include <termin/gui_native/draw_list_renderer.hpp>
+#include <termin/gui_native/render_prepared_widget.hpp>
+#include <termin/gui_native/widget.hpp>
+#include <tgfx2/font_atlas.hpp>
 #include <tgfx2/render_context.hpp>
 
 namespace termin::gui_native {
@@ -45,6 +48,11 @@ namespace termin::gui_native {
         std::unique_ptr<tc_ui_paint_context, PaintContextDeleter> paint_context{
             tc_ui_paint_context_create(draw_list.get())};
         std::vector<tc_ui_document_handle> measured_documents;
+        struct PreparedWidgetRef {
+            tc_ui_document_handle document{};
+            tc_widget_handle widget{};
+        };
+        std::vector<PreparedWidgetRef> prepared_widgets;
         bool closed = false;
 
         Impl() {
@@ -97,6 +105,21 @@ namespace termin::gui_native {
                 }
             }
             measured_documents.clear();
+            for (const PreparedWidgetRef& reference : prepared_widgets) {
+                if (!tc_ui_document_is_valid(reference.document) ||
+                    !tc_ui_document_is_alive(reference.document, reference.widget)) {
+                    continue;
+                }
+                tc_widget* widget = tc_ui_document_resolve_widget(reference.document, reference.widget);
+                auto* native = widget && widget->native_language == TC_LANGUAGE_CXX
+                                   ? static_cast<Widget*>(widget->body)
+                                   : nullptr;
+                auto* prepared = native ? dynamic_cast<RenderPreparedWidget*>(native) : nullptr;
+                if (prepared) {
+                    prepared->release_render_resources();
+                }
+            }
+            prepared_widgets.clear();
             renderer.release_gpu();
             closed = true;
         }
@@ -132,6 +155,95 @@ namespace termin::gui_native {
             return false;
         }
         return impl_->renderer.set_default_font_path(path, default_size_px);
+    }
+
+    std::size_t NativeDocumentPainter::prepare_documents(tgfx::RenderContext2& context,
+                                                         int width,
+                                                         int height,
+                                                         std::span<const UiDocumentSubmission> documents) {
+        impl_->require_open("prepare_documents");
+        if (width <= 0 || height <= 0) {
+            painter_error("cannot prepare invalid viewport " + std::to_string(width) + "x" +
+                          std::to_string(height));
+        }
+        tgfx::FontAtlas* font = impl_->renderer.default_font();
+
+        impl_->synchronize_text_measurers(documents);
+        std::vector<Impl::PreparedWidgetRef> next;
+        std::size_t prepared_count = 0;
+        const auto prepare_tree = [&](const auto& self,
+                                      tc_ui_document_handle document,
+                                      tc_widget* widget,
+                                      float density_scale) -> void {
+            if (!widget)
+                return;
+            auto* native = widget->native_language == TC_LANGUAGE_CXX ? static_cast<Widget*>(widget->body) : nullptr;
+            if (auto* prepared = native ? dynamic_cast<RenderPreparedWidget*>(native) : nullptr) {
+                if (!font) {
+                    painter_error("cannot prepare render widgets without a default font");
+                }
+                prepared->prepare_render(context, *font, density_scale);
+                next.push_back({document, widget->handle});
+                ++prepared_count;
+            }
+            for (size_t index = 0; index < widget->child_count; ++index) {
+                self(self, document, widget->children[index], density_scale);
+            }
+        };
+
+        for (const UiDocumentSubmission& submission : documents) {
+            if (!submission.document.valid() ||
+                !tc_ui_presentation_metrics_is_valid(&submission.presentation_metrics) ||
+                submission.presentation_metrics.physical_extent.width != static_cast<float>(width) ||
+                submission.presentation_metrics.physical_extent.height != static_cast<float>(height)) {
+                continue;
+            }
+            if (!submission.document.set_presentation_metrics(submission.presentation_metrics)) {
+                tc_log_error("[gui-native-document-painter] document rejected presentation metrics during "
+                             "render-widget preparation identity=%llu",
+                             static_cast<unsigned long long>(submission.stable_identity));
+                continue;
+            }
+            tc_ui_rect layout_rect{};
+            if (!submission.document.presentation_layout_rect(layout_rect)) {
+                tc_log_error("[gui-native-document-painter] document has no layout rect during "
+                             "render-widget preparation identity=%llu",
+                             static_cast<unsigned long long>(submission.stable_identity));
+                continue;
+            }
+            submission.document.layout_roots(layout_rect);
+            const tc_ui_document_handle document = submission.document.handle();
+            const size_t root_count = tc_ui_document_root_count(document);
+            for (size_t index = 0; index < root_count; ++index) {
+                prepare_tree(prepare_tree,
+                             document,
+                             tc_ui_document_resolve_widget(document, tc_ui_document_root_at(document, index)),
+                             submission.presentation_metrics.density_scale);
+            }
+        }
+        const auto still_prepared = [&next](const Impl::PreparedWidgetRef& previous) {
+            return std::any_of(next.begin(), next.end(), [&](const Impl::PreparedWidgetRef& current) {
+                return tc_ui_document_handle_eq(previous.document, current.document) &&
+                       tc_widget_handle_eq(previous.widget, current.widget);
+            });
+        };
+        for (const Impl::PreparedWidgetRef& previous : impl_->prepared_widgets) {
+            if (still_prepared(previous))
+                continue;
+            if (!tc_ui_document_is_valid(previous.document) ||
+                !tc_ui_document_is_alive(previous.document, previous.widget)) {
+                continue;
+            }
+            tc_widget* widget = tc_ui_document_resolve_widget(previous.document, previous.widget);
+            auto* native = widget && widget->native_language == TC_LANGUAGE_CXX
+                               ? static_cast<Widget*>(widget->body)
+                               : nullptr;
+            if (auto* prepared = native ? dynamic_cast<RenderPreparedWidget*>(native) : nullptr) {
+                prepared->release_render_resources();
+            }
+        }
+        impl_->prepared_widgets = std::move(next);
+        return prepared_count;
     }
 
     std::size_t NativeDocumentPainter::paint_documents(tgfx::RenderContext2& context,
@@ -234,6 +346,21 @@ namespace termin::gui_native {
 
     void NativeDocumentPainter::release_gpu() {
         impl_->require_open("release_gpu");
+        for (const Impl::PreparedWidgetRef& reference : impl_->prepared_widgets) {
+            if (!tc_ui_document_is_valid(reference.document) ||
+                !tc_ui_document_is_alive(reference.document, reference.widget)) {
+                continue;
+            }
+            tc_widget* widget = tc_ui_document_resolve_widget(reference.document, reference.widget);
+            auto* native = widget && widget->native_language == TC_LANGUAGE_CXX
+                               ? static_cast<Widget*>(widget->body)
+                               : nullptr;
+            auto* prepared = native ? dynamic_cast<RenderPreparedWidget*>(native) : nullptr;
+            if (prepared) {
+                prepared->release_render_resources();
+            }
+        }
+        impl_->prepared_widgets.clear();
         impl_->renderer.release_gpu();
     }
 

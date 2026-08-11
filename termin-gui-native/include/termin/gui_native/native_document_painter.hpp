@@ -44,6 +44,13 @@ namespace termin::gui_native {
 
         bool set_default_font_path(const std::string& path, int default_size_px = 14);
 
+        // Layout the submitted documents and prepare GPU-producing widgets
+        // before the caller opens the UI render pass.
+        std::size_t prepare_documents(tgfx::RenderContext2& context,
+                                      int width,
+                                      int height,
+                                      std::span<const UiDocumentSubmission> documents);
+
         // Appends all valid documents with explicit presentation metrics to one
         // draw list in ascending (priority, stable_identity) order and renders it
         // into the caller's already-open pass. A submission is rejected when its

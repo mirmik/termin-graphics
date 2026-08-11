@@ -420,6 +420,7 @@
     },
     {"id": "tcplot-tests-native", "module": "tcplot", "executor": "ctest", "roots": ["tcplot/tests"]},
     {"id": "tcplot-gui-native-tests", "module": "tcplot-gui-native", "executor": "ctest", "roots": ["tcplot-gui-native/tests"]},
+    {"id": "tcplot-gui-native-tests-python", "module": "tcplot-gui-native", "executor": "pytest", "roots": ["tcplot-gui-native/tests/python"]},
     {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
     {"id": "termin-image-tests-native", "module": "termin-image", "executor": "ctest", "roots": ["termin-image/tests"]},
     {"id": "termin-framegraph-remote-tests-native", "module": "termin-framegraph-remote", "executor": "ctest", "roots": ["termin-framegraph-remote/tests"]},

@@ -3,7 +3,13 @@ import weakref
 
 import pytest
 
-from tcnodegraph import Graph, GraphController, build_native_node_graph_view
+from tcnodegraph import (
+    Graph,
+    GraphController,
+    NodeBodyContent,
+    NodeBodyLayout,
+    build_native_node_graph_view,
+)
 from termin.gui_native import (
     DrawCommandType,
     DrawList,
@@ -168,4 +174,199 @@ def test_native_node_graph_rejects_mismatched_supplied_controller():
             request_render=lambda: None,
             controller=GraphController(Graph()),
         )
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_body_portal_retains_widget_and_replaces_anchor_on_rebuild():
+    graph = Graph()
+    controller = GraphController(graph)
+    node = controller.create_node("preview", title="Preview")
+    document = tc_ui_document_create()
+    updates = []
+    provider_calls = []
+
+    def provide(owner_document, snapshot):
+        provider_calls.append(snapshot.id)
+        widget = owner_document.create_button("Body state")
+        return NodeBodyContent(
+            widget.widget,
+            NodeBodyLayout(
+                height=48.0,
+                inset_left=11.0,
+                inset_right=13.0,
+                inset_top=3.0,
+                inset_bottom=5.0,
+                gap_before=9.0,
+            ),
+            update=lambda next_snapshot: updates.append(next_snapshot.title),
+        )
+
+    native = build_native_node_graph_view(
+        document,
+        graph,
+        request_render=lambda: None,
+        controller=controller,
+        body_content_provider=provide,
+    )
+    assert document.add_root(native.root.handle)
+    document.layout_roots(Rect(0.0, 0.0, 1000.0, 700.0))
+
+    widget = native.body_widgets[node.id]
+    widget_handle = widget.handle
+    first_anchor = native.body_items[node.id].handle
+    assert provider_calls == [node.id]
+    assert native.body_items[node.id].position == pytest.approx((11.0, 65.0))
+    assert native._node_height(graph.nodes[node.id]) == pytest.approx(128.0)
+
+    controller.update_node(node.id, title="Updated")
+    native.rebuild()
+    document.layout_roots(Rect(0.0, 0.0, 1000.0, 700.0))
+
+    assert provider_calls == [node.id]
+    assert updates == ["Updated"]
+    assert native.body_widgets[node.id] is widget
+    assert native.body_widgets[node.id].handle == widget_handle
+    assert native.body_items[node.id].handle != first_anchor
+    assert document.is_alive(widget_handle)
+
+    native.close()
+    native.close()
+    assert not document.is_alive(widget_handle)
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_body_portal_retires_removed_nodes_and_set_graph_contents():
+    graph = Graph()
+    controller = GraphController(graph)
+    first = controller.create_node("first")
+    second = controller.create_node("second")
+    document = tc_ui_document_create()
+
+    def provide(owner_document, snapshot):
+        return NodeBodyContent(
+            owner_document.create_label(snapshot.kind).widget,
+            NodeBodyLayout(height=30.0),
+        )
+
+    native = build_native_node_graph_view(
+        document,
+        graph,
+        request_render=lambda: None,
+        controller=controller,
+        body_content_provider=provide,
+    )
+    first_handle = native.body_widgets[first.id].handle
+    second_handle = native.body_widgets[second.id].handle
+
+    assert controller.remove_node(first.id)
+    native.rebuild()
+    assert not document.is_alive(first_handle)
+    assert document.is_alive(second_handle)
+
+    replacement = Graph()
+    replacement_controller = GraphController(replacement)
+    replacement_node = replacement_controller.create_node("replacement")
+    native.set_graph(replacement)
+    assert not document.is_alive(second_handle)
+    assert document.is_alive(native.body_widgets[replacement_node.id].handle)
+
+    native.close()
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_body_ignored_left_down_does_not_start_node_drag():
+    graph = Graph()
+    controller = GraphController(graph)
+    node = controller.create_node("body", x=0.0, y=0.0)
+    document = tc_ui_document_create()
+
+    native = build_native_node_graph_view(
+        document,
+        graph,
+        request_render=lambda: None,
+        controller=controller,
+        body_content_provider=lambda owner_document, _node: NodeBodyContent(
+            owner_document.create_label("non-interactive body").widget,
+            NodeBodyLayout(height=50.0),
+        ),
+    )
+    assert document.add_root(native.root.handle)
+    document.layout_roots(Rect(0.0, 0.0, 1000.0, 700.0))
+
+    assert document.dispatch_pointer_event(
+        _pointer(PointerEventType.Down, 520.0, 395.0)
+    ) == EventResult.Handled
+    document.dispatch_pointer_event(_pointer(PointerEventType.Move, 570.0, 435.0))
+    document.dispatch_pointer_event(_pointer(PointerEventType.Up, 570.0, 435.0))
+    assert graph.nodes[node.id].x == 0.0
+    assert graph.nodes[node.id].y == 0.0
+
+    native.close()
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_body_rejects_cross_document_and_parented_widgets():
+    graph = Graph()
+    controller = GraphController(graph)
+    controller.create_node("body")
+    document = tc_ui_document_create()
+    other_document = tc_ui_document_create()
+    foreign = other_document.create_label("foreign")
+
+    with pytest.raises(ValueError, match="another document"):
+        build_native_node_graph_view(
+            document,
+            graph,
+            request_render=lambda: None,
+            controller=controller,
+            body_content_provider=lambda _document, _node: NodeBodyContent(
+                foreign.widget,
+                NodeBodyLayout(height=30.0),
+            ),
+        )
+    assert foreign.alive
+
+    parent = document.create_hstack()
+    child = document.create_label("attached")
+    assert parent.widget.append_child(child.widget)
+    with pytest.raises(ValueError, match="parentless"):
+        build_native_node_graph_view(
+            document,
+            graph,
+            request_render=lambda: None,
+            controller=controller,
+            body_content_provider=lambda _document, _node: NodeBodyContent(
+                child.widget,
+                NodeBodyLayout(height=30.0),
+            ),
+        )
+    assert child.alive
+
+    tc_ui_document_destroy(other_document)
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_body_rejects_overflow_from_explicit_node_height():
+    graph = Graph()
+    controller = GraphController(graph)
+    node = controller.create_node("body")
+    controller.update_node(
+        node.id,
+        height=100.0,
+        data={"explicit_size": True},
+    )
+    document = tc_ui_document_create()
+
+    with pytest.raises(ValueError, match="does not fit explicit node height"):
+        build_native_node_graph_view(
+            document,
+            graph,
+            request_render=lambda: None,
+            controller=controller,
+            body_content_provider=lambda owner_document, _node: NodeBodyContent(
+                owner_document.create_label("too tall").widget,
+                NodeBodyLayout(height=80.0),
+            ),
+        )
+
     tc_ui_document_destroy(document)

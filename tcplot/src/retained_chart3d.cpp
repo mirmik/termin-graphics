@@ -479,6 +479,20 @@ namespace {
             return true;
         }
 
+        void clear_data() {
+            std::vector<tc_plot_item3d_handle> data_items;
+            data_items.reserve(slots_.size());
+            for (std::uint32_t index = 0; index < slots_.size(); ++index) {
+                const Slot& slot = slots_[index];
+                if (slot.alive && slot.kind != TC_PLOT_ITEM3D_GRID) {
+                    data_items.push_back({scene_id_, index, slot.generation});
+                }
+            }
+            for (const tc_plot_item3d_handle item : data_items) {
+                destroy(item);
+            }
+        }
+
         tc_plot_item3d_handle grid_part() const {
             return grid_part_;
         }
@@ -1104,6 +1118,11 @@ int tc_retained_chart3d_item_snapshot(const tc_retained_chart3d* chart,
 
 int tc_retained_chart3d_destroy_item(tc_retained_chart3d* chart, tc_plot_item3d_handle item) {
     return chart && chart->value.destroy(item) ? 1 : 0;
+}
+
+void tc_retained_chart3d_clear_data(tc_retained_chart3d* chart) {
+    if (chart)
+        chart->value.clear_data();
 }
 
 tc_plot_item3d_handle tc_retained_chart3d_add_surface(tc_retained_chart3d* chart,

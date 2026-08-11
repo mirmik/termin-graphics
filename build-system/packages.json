@@ -365,6 +365,13 @@
       "native_extensions": [
         {"extension": "tcplot._tcplot_native", "target": "_tcplot_native"}
       ]
+    },
+    {
+      "path": "tcplot-gui-native",
+      "distribution": "tcplot-gui-native",
+      "native_extensions": [
+        {"extension": "tcplot_gui_native._tcplot_gui_native", "target": "_tcplot_gui_native"}
+      ]
     }
   ]
 }

@@ -51,6 +51,7 @@ namespace termin::gui_native {
 
     public:
         bool set_default_font_path(const std::string& path, int default_size_px = 14);
+        tgfx::FontAtlas* default_font() const;
         void bind_text_measurer(tc_ui_document_handle document);
         // Upload generated picker surfaces to the active tgfx2 device and assign
         // their handles to the widget. Call before the document is painted.

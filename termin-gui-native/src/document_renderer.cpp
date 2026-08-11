@@ -399,6 +399,21 @@ namespace termin::gui_native {
             }
         }
         {
+            ProfilerSection profile("UI Render Widget Preparation");
+            tc_ui_presentation_metrics presentation_metrics{};
+            if (!impl_->document.presentation_metrics(presentation_metrics)) {
+                renderer_error("DocumentRenderer failed to read presentation metrics for render widgets");
+            }
+            const UiDocumentSubmission submission{
+                impl_->document,
+                0,
+                0,
+                presentation_metrics,
+            };
+            impl_->painter.prepare_documents(
+                *impl_->context, width, height, std::span<const UiDocumentSubmission>(&submission, 1));
+        }
+        {
             ProfilerSection profile("UI Document Paint");
             impl_->context->begin_pass(
                 impl_->color_target, tgfx::TextureHandle{}, &impl_->config.clear_linear_color, 1.0f, false);

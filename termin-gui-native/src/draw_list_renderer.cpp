@@ -199,6 +199,10 @@ namespace termin::gui_native {
         }
     }
 
+    tgfx::FontAtlas* UiDrawListRenderer::default_font() const {
+        return owned_font_.get();
+    }
+
     void UiDrawListRenderer::bind_text_measurer(tc_ui_document_handle document) {
         tc_ui_document_set_text_measurer(document, &UiDrawListRenderer::measure_text, this);
     }

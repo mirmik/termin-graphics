@@ -37,6 +37,12 @@ std::vector<float> rgba = composition.read_frame_rgba_float();
 borrowed documents by priority and stable identity, lays them out, builds one
 draw list and renders it into an already-open caller-owned pass. It has no
 framegraph, attachment, frame-lifecycle or presentation policy.
+Native C++ widgets that also implement `RenderPreparedWidget` are discovered
+after layout and prepared before that UI pass begins. This is the explicit hook
+for widgets that produce textures with the caller's active `RenderContext2`;
+their device resources are released when the widget leaves the submitted tree
+or when the painter shuts down. The hook also covers widgets attached through
+`SceneView` portals because portal reconciliation happens during layout.
 `DocumentRenderer` wraps that primitive for standalone composition roots.
 `OffscreenGuiComposition` owns an isolated `GraphicsHost`, a
 `tc_ui_document`, that renderer, a thread-safe normalized input queue, in-memory

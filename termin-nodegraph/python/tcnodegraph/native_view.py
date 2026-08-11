@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import logging
 import math
 import weakref
 
@@ -17,6 +18,7 @@ from termin.gui_native import (
     Rect,
     Size,
     TcDocument,
+    WidgetRef,
 )
 from termin.visual_scene import (
     GraphicItemRef2D,
@@ -44,6 +46,7 @@ _PARAM_CHECKBOX_SIZE = 18.0
 _PARAM_LABEL_FRACTION = 0.44
 _PARAM_EDITOR_X_FRACTION = 0.47
 _NODE_BOTTOM_PADDING = 10.0
+_log = logging.getLogger(__name__)
 _SOCKET_COLORS = {
     "fbo": SrgbColor(0.39, 0.70, 0.39, 1.0),
     "color_texture": SrgbColor(0.30, 0.62, 0.92, 1.0),
@@ -53,6 +56,30 @@ _SOCKET_COLORS = {
     "flow": SrgbColor(0.88, 0.88, 0.90, 1.0),
     "any": SrgbColor(0.68, 0.68, 0.70, 1.0),
 }
+
+
+@dataclass(frozen=True)
+class NodeBodyLayout:
+    """Layout requested for a node body widget, in graph world units."""
+
+    height: float
+    inset_left: float = 8.0
+    inset_right: float = 8.0
+    inset_top: float = 8.0
+    inset_bottom: float = 8.0
+    gap_before: float = 7.0
+
+
+@dataclass(frozen=True)
+class NodeBodyContent:
+    """A native widget whose lifetime is transferred to the graph view."""
+
+    widget: object
+    layout: NodeBodyLayout
+    update: Callable[[Node], None] | None = None
+
+
+NodeBodyContentProvider = Callable[[TcDocument, Node], NodeBodyContent | None]
 
 
 def _color(value: SrgbColor) -> SrgbColor:
@@ -143,10 +170,13 @@ class NativeNodeGraphView:
     scene: TcVisualScene
     view: object
     request_render: Callable[[], None]
+    body_content_provider: NodeBodyContentProvider | None = None
     node_items: dict[str, GraphicItemRef2D] = field(default_factory=dict)
     edge_items: dict[str, PolylineItemRef2D] = field(default_factory=dict)
     group_items: dict[str, GraphicItemRef2D] = field(default_factory=dict)
     param_widgets: dict[tuple[str, str], object] = field(default_factory=dict)
+    body_widgets: dict[str, object] = field(default_factory=dict)
+    body_items: dict[str, GraphicItemRef2D] = field(default_factory=dict)
     on_context_requested: Callable[[Point, str | None], None] | None = None
     on_graph_changed: Callable[[], None] | None = None
     on_param_changed: Callable[[Node, str, object], None] | None = None
@@ -154,12 +184,14 @@ class NativeNodeGraphView:
     _pending_world: Point | None = None
     _pending_item: PolylineItemRef2D | None = None
     _embedded_items: list[tuple[GraphicItemRef2D, object]] = field(default_factory=list)
+    _body_contents: dict[str, NodeBodyContent] = field(default_factory=dict)
     _semantic_ids: dict[tuple[int, int, int], str] = field(default_factory=dict)
     _selected_ids: set[str] = field(default_factory=set)
     _drag_item: GraphicItemRef2D | None = None
     _drag_id: str | None = None
     _drag_start_world: Point | None = None
     _drag_start_position: tuple[float, float] | None = None
+    _closed: bool = False
 
     @property
     def root(self):
@@ -170,16 +202,24 @@ class NativeNodeGraphView:
         return self.controller.graph
 
     def set_graph(self, graph: Graph) -> None:
+        self._ensure_open()
+        self._detach_body_portals()
+        self._retire_all_body_contents()
         self.controller.replace_graph(graph)
         self._clear_pending()
         self.rebuild()
 
     def rebuild(self) -> None:
+        self._ensure_open()
+        self._detach_body_portals()
         self._destroy_param_widgets()
+        self._retire_removed_body_contents()
+        self._prepare_body_contents()
         self.scene.clear()
         self.node_items.clear()
         self.edge_items.clear()
         self.group_items.clear()
+        self.body_items.clear()
         self._semantic_ids.clear()
         self._selected_ids.clear()
         self._cancel_drag()
@@ -234,6 +274,7 @@ class NativeNodeGraphView:
             self._append_socket_visuals(item, node)
             self._append_param_labels(item, node)
             self._append_param_widgets(item, node)
+            self._append_body_widget(item, node)
             self.node_items[node.id] = item
             self._register_semantic(item, f"node:{node.id}")
         for edge in self.graph.edges.values():
@@ -245,13 +286,18 @@ class NativeNodeGraphView:
         self.rebuild()
 
     def close(self) -> None:
+        if self._closed:
+            return
         self._clear_pending()
+        self._detach_body_portals()
         self._destroy_param_widgets()
+        self._retire_all_body_contents()
         self.view.set_pointer_handler(None)
         self.view.set_key_handler(None)
         self.scene.clear()
         self.view.invalidate_scene()
         tc_visual_scene_destroy(self.scene)
+        self._closed = True
 
     def _append_edge(self, edge: Edge) -> None:
         points = self._edge_points(edge)
@@ -336,6 +382,28 @@ class NativeNodeGraphView:
             self._embedded_items.append((item, widget))
             self.param_widgets[(node.id, name)] = widget
             row_y += _PARAM_ROW_HEIGHT
+
+    def _append_body_widget(self, parent: GraphicItemRef2D, node: Node) -> None:
+        content = self._body_contents.get(node.id)
+        if content is None:
+            return
+        layout = content.layout
+        width = max(0.0, node.width - layout.inset_left - layout.inset_right)
+        item = self.scene.create_hit_region_rect(
+            _rect(Rect(0.0, 0.0, width, layout.height)),
+            parent,
+        )
+        item.position = (
+            layout.inset_left,
+            self._body_section_y(node) + layout.gap_before + layout.inset_top,
+        )
+        if not self.view.set_widget_portal(item.handle, content.widget.handle):
+            self.scene.destroy(item)
+            self._retire_body_content(node.id)
+            _log.error("NodeGraph: failed to attach native node body '%s'", node.id)
+            raise RuntimeError(f"failed to attach native node body '{node.id}'")
+        self.body_items[node.id] = item
+        self._register_semantic(item, f"body:{node.id}")
 
     def _create_param_widget(self, node: Node, name: str, value: object):
         spec = self._param_spec(node, name, value)
@@ -428,6 +496,133 @@ class NativeNodeGraphView:
                 self.document.destroy_widget_recursive(handle)
         self._embedded_items.clear()
         self.param_widgets.clear()
+
+    def _prepare_body_contents(self) -> None:
+        if self.body_content_provider is None:
+            return
+        claimed_handles = {
+            (content.widget.handle.index, content.widget.handle.generation)
+            for content in self._body_contents.values()
+        }
+        for node in self.graph.nodes.values():
+            if node.id in self._body_contents:
+                content = self._body_contents[node.id]
+                if content.update is not None:
+                    try:
+                        content.update(node)
+                    except Exception:
+                        _log.exception("NodeGraph: body update failed for node '%s'", node.id)
+                        raise
+                continue
+            try:
+                content = self.body_content_provider(self.document, node)
+            except Exception:
+                _log.exception("NodeGraph: body content provider failed for node '%s'", node.id)
+                raise
+            if content is None:
+                continue
+            if not isinstance(content, NodeBodyContent):
+                _log.error(
+                    "NodeGraph: body content provider returned invalid value for node '%s'",
+                    node.id,
+                )
+                raise TypeError("body_content_provider must return NodeBodyContent or None")
+            try:
+                self._validate_body_content(node, content)
+            except Exception:
+                _log.exception("NodeGraph: rejected body content for node '%s'", node.id)
+                try:
+                    widget = content.widget
+                except AttributeError:
+                    pass
+                else:
+                    if (
+                        isinstance(widget, WidgetRef)
+                        and widget.alive
+                        and widget.document == self.document
+                        and widget.parent is None
+                        and self.document.is_alive(widget.handle)
+                    ):
+                        self.document.destroy_widget_recursive(widget.handle)
+                raise
+            handle_key = (content.widget.handle.index, content.widget.handle.generation)
+            if handle_key in claimed_handles:
+                _log.error(
+                    "NodeGraph: body content provider reused one widget for node '%s'",
+                    node.id,
+                )
+                raise ValueError("body_content_provider returned one widget for multiple nodes")
+            claimed_handles.add(handle_key)
+            self._body_contents[node.id] = content
+            self.body_widgets[node.id] = content.widget
+
+    def _validate_body_content(self, node: Node, content: NodeBodyContent) -> None:
+        layout = content.layout
+        values = (
+            layout.height,
+            layout.inset_left,
+            layout.inset_right,
+            layout.inset_top,
+            layout.inset_bottom,
+            layout.gap_before,
+        )
+        if (
+            not math.isfinite(layout.height)
+            or layout.height <= 0.0
+            or not all(math.isfinite(value) and value >= 0.0 for value in values[1:])
+        ):
+            raise ValueError(f"native node body '{node.id}' has invalid layout dimensions")
+        try:
+            handle = content.widget.handle
+        except AttributeError as error:
+            raise TypeError("NodeBodyContent.widget must be a native widget reference") from error
+        if not isinstance(content.widget, WidgetRef):
+            raise TypeError("NodeBodyContent.widget must be WidgetRef; use typed_widget.widget")
+        if content.widget.document != self.document:
+            raise ValueError(f"native node body '{node.id}' belongs to another document")
+        if not self.document.is_alive(handle):
+            raise ValueError(f"native node body '{node.id}' returned a stale widget")
+        if content.widget.parent is not None:
+            raise ValueError(f"native node body '{node.id}' widget must be parentless")
+        if layout.inset_left + layout.inset_right >= node.width:
+            raise ValueError(f"native node body '{node.id}' has no horizontal content space")
+        if bool(node.data.get("explicit_size", False)):
+            required_bottom = (
+                self._body_section_y(node)
+                + layout.gap_before
+                + layout.inset_top
+                + layout.height
+                + layout.inset_bottom
+                + _NODE_BOTTOM_PADDING
+            )
+            if required_bottom > node.height:
+                raise ValueError(
+                    f"native node body '{node.id}' does not fit explicit node height"
+                )
+
+    def _detach_body_portals(self) -> None:
+        for item in self.body_items.values():
+            self.view.clear_widget_portal(item.handle)
+        self.body_items.clear()
+
+    def _retire_removed_body_contents(self) -> None:
+        live_node_ids = set(self.graph.nodes)
+        for node_id in tuple(self._body_contents):
+            if node_id not in live_node_ids:
+                self._retire_body_content(node_id)
+
+    def _retire_all_body_contents(self) -> None:
+        for node_id in tuple(self._body_contents):
+            self._retire_body_content(node_id)
+
+    def _retire_body_content(self, node_id: str) -> None:
+        content = self._body_contents.pop(node_id, None)
+        self.body_widgets.pop(node_id, None)
+        if content is None:
+            return
+        handle = content.widget.handle
+        if self.document.is_alive(handle):
+            self.document.destroy_widget_recursive(handle)
 
     def _pointer(self, world: Point, event) -> bool:
         if event.type == PointerEventType.Down and event.button == MouseButton.RIGHT.value:
@@ -650,17 +845,27 @@ class NativeNodeGraphView:
                     return _SOCKET_COLORS.get(socket.socket_type, _SOCKET_COLORS["any"])
         return _SOCKET_COLORS["any"]
 
-    @staticmethod
-    def _node_height(node: Node) -> float:
+    def _node_height(self, node: Node) -> float:
         if bool(node.data.get("explicit_size", False)):
             return node.height
         socket_height = max(len(node.inputs), len(node.outputs), 1) * _SOCKET_ROW_HEIGHT
+        content = self._body_contents.get(node.id)
+        body_height = 0.0
+        if content is not None:
+            layout = content.layout
+            body_height = (
+                layout.gap_before
+                + layout.inset_top
+                + layout.height
+                + layout.inset_bottom
+            )
         return max(
             node.height,
             _TITLE_HEIGHT
             + socket_height
             + _PARAM_TOP_GAP
             + len(node.params) * _PARAM_ROW_HEIGHT
+            + body_height
             + _NODE_BOTTOM_PADDING,
         )
 
@@ -668,6 +873,14 @@ class NativeNodeGraphView:
     def _param_section_y(node: Node) -> float:
         socket_height = max(len(node.inputs), len(node.outputs), 1) * _SOCKET_ROW_HEIGHT
         return _TITLE_HEIGHT + socket_height + _PARAM_TOP_GAP
+
+    @classmethod
+    def _body_section_y(cls, node: Node) -> float:
+        return cls._param_section_y(node) + len(node.params) * _PARAM_ROW_HEIGHT
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("native node graph view is closed")
 
     def _notify_graph_changed(self) -> None:
         if self.on_graph_changed is not None:
@@ -680,6 +893,7 @@ def build_native_node_graph_view(
     *,
     request_render: Callable[[], None],
     controller: GraphController | None = None,
+    body_content_provider: NodeBodyContentProvider | None = None,
 ) -> NativeNodeGraphView:
     graph_controller = controller if controller is not None else GraphController(graph)
     if graph_controller.graph is not graph:
@@ -696,6 +910,7 @@ def build_native_node_graph_view(
         scene=scene,
         view=view,
         request_render=request_render,
+        body_content_provider=body_content_provider,
     )
     weak_result = weakref.ref(result)
 
@@ -709,8 +924,21 @@ def build_native_node_graph_view(
 
     view.set_pointer_handler(pointer)
     view.set_key_handler(key)
-    result.rebuild()
+    try:
+        result.rebuild()
+    except Exception:
+        _log.exception("NodeGraph: failed to build native graph view")
+        result.close()
+        if document.is_alive(view.widget.handle):
+            document.destroy_widget_recursive(view.widget.handle)
+        raise
     return result
 
 
-__all__ = ["NativeNodeGraphView", "build_native_node_graph_view"]
+__all__ = [
+    "NativeNodeGraphView",
+    "NodeBodyContent",
+    "NodeBodyContentProvider",
+    "NodeBodyLayout",
+    "build_native_node_graph_view",
+]

@@ -714,8 +714,19 @@ int main() {
         require(tc_retained_chart3d_destroy_item(chart, scatter) == 0,
                 "stale handle must not destroy replacement item");
 
+        const tc_plot_item3d_handle retained_grid = tc_retained_chart3d_grid_part(chart);
+        tc_retained_chart3d_clear_data(chart);
+        require(tc_retained_chart3d_item_count(chart) == 1 &&
+                    tc_retained_chart3d_item_is_valid(chart, retained_grid) != 0 &&
+                    tc_retained_chart3d_item_is_valid(chart, surface) == 0 &&
+                    tc_retained_chart3d_item_is_valid(chart, replacement) == 0,
+                "clear_data must preserve only the configured grid");
+
+        const tc_plot_item3d_handle reattached_surface =
+            tc_retained_chart3d_add_surface(chart, x, y, z, 2, 2, &surface_style);
+
         tc_retained_chart3d_detach_gpu_host(chart);
-        require(snapshot(chart, surface).gpu_revision == 0 && snapshot(chart, replacement).gpu_revision == 0,
+        require(snapshot(chart, reattached_surface).gpu_revision == 0,
                 "GPU-host detach must preserve CPU items and invalidate their GPU revisions");
         require(tc_retained_chart3d_attach_gpu_host(chart, &host) != 0 &&
                     tc_retained_chart3d_render(chart, 320, 240) != 0,

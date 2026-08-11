@@ -20,6 +20,7 @@ include(CMakePackageConfigHelpers)
 
 add_library(tcplot_gui_native SHARED
     src/plot2d.cpp
+    src/plot3d.cpp
     src/widget_registration.cpp
 )
 add_library(tcplot_gui_native::tcplot_gui_native ALIAS tcplot_gui_native)
@@ -59,6 +60,46 @@ if(TERMIN_BUILD_TESTS OR TCPLOT_GUI_NATIVE_BUILD_TESTS)
     endif()
     add_test(NAME tcplot_gui_native_plot2d_test
         COMMAND tcplot_gui_native_plot2d_test)
+
+    add_executable(tcplot_gui_native_plot3d_test tests/test_plot3d.cpp)
+    target_link_libraries(tcplot_gui_native_plot3d_test PRIVATE
+        tcplot_gui_native
+        termin_gui_native::offscreen)
+    target_compile_definitions(tcplot_gui_native_plot3d_test PRIVATE
+        TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+    if(TARGET termin_shaderc)
+        add_dependencies(tcplot_gui_native_plot3d_test termin_shaderc)
+        target_compile_definitions(tcplot_gui_native_plot3d_test PRIVATE
+            TERMIN_GUI_NATIVE_TEST_SHADERC="$<TARGET_FILE:termin_shaderc>")
+    else()
+        find_program(_tcplot_gui_native_test_shaderc NAMES termin_shaderc
+            HINTS ${CMAKE_PREFIX_PATH} PATH_SUFFIXES bin REQUIRED)
+        target_compile_definitions(tcplot_gui_native_plot3d_test PRIVATE
+            TERMIN_GUI_NATIVE_TEST_SHADERC="${_tcplot_gui_native_test_shaderc}")
+    endif()
+    if(COMMAND termin_set_rpath_test)
+        termin_set_rpath_test(tcplot_gui_native_plot3d_test)
+    endif()
+    add_test(NAME tcplot_gui_native_plot3d_test COMMAND tcplot_gui_native_plot3d_test)
+    set_tests_properties(tcplot_gui_native_plot3d_test PROPERTIES
+        TIMEOUT 30
+        SKIP_RETURN_CODE 77
+        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")
+endif()
+
+if(TERMIN_BUILD_PYTHON)
+    find_package(Python 3.14 COMPONENTS Interpreter Development REQUIRED)
+    find_package(nanobind CONFIG REQUIRED)
+    nanobind_add_module(_tcplot_gui_native NB_SHARED
+        python/bindings/tcplot_gui_native_module.cpp)
+    target_link_libraries(_tcplot_gui_native PRIVATE tcplot_gui_native)
+    target_include_directories(_tcplot_gui_native PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    if(COMMAND termin_set_rpath_python)
+        termin_set_rpath_python(_tcplot_gui_native)
+    endif()
+    install(TARGETS _tcplot_gui_native DESTINATION lib/python/tcplot_gui_native)
+    install(FILES python/tcplot_gui_native/__init__.py DESTINATION lib/python/tcplot_gui_native)
 endif()
 
 install(TARGETS tcplot_gui_native
