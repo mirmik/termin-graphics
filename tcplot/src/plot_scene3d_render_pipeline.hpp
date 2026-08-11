@@ -2,9 +2,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <tgfx2/handles.hpp>
+
+#include "tcplot/retained_chart3d.h"
 
 namespace termin {
     class RenderItemSnapshot;
@@ -36,6 +39,10 @@ namespace tcplot {
                                         std::uint64_t selected_grid_namespace,
                                         std::uint64_t selected_grid_object,
                                         std::uint32_t selected_grid_generation,
+                                        std::uint64_t colorbar_surface_object,
+                                        std::uint32_t colorbar_surface_generation,
+                                        const std::string& colorbar_label,
+                                        const tc_colorbar3d_style& colorbar_style,
                                         tgfx::TextureHandle color,
                                         int width,
                                         int height);

@@ -126,6 +126,35 @@ namespace tcplot_bindings {
                 return tc_retained_chart3d_surface_set_style(chart_, item, &style) != 0;
             }
 
+            void set_colorbar(tc_plot_item3d_handle surface,
+                              const std::string& label,
+                              std::uint32_t tick_count,
+                              float width_px,
+                              float height_ratio) {
+                const tc_colorbar3d_style style{
+                    tick_count,
+                    width_px,
+                    height_ratio,
+                    18.0f,
+                    8.0f,
+                    13.0f,
+                    0.80f,
+                    0.80f,
+                    0.80f,
+                    1.0f,
+                    0.42f,
+                    0.45f,
+                    0.52f,
+                    1.0f,
+                };
+                require_success(tc_retained_chart3d_set_colorbar(chart_, surface, label.c_str(), &style),
+                                "set_colorbar");
+            }
+
+            void clear_colorbar() {
+                tc_retained_chart3d_clear_colorbar(chart_);
+            }
+
             bool destroy_item(tc_plot_item3d_handle item) {
                 return tc_retained_chart3d_destroy_item(chart_, item) != 0;
             }
@@ -265,6 +294,14 @@ namespace tcplot_bindings {
                  nb::arg("color"),
                  nb::arg("width_px") = 1.5f)
             .def("set_surface_wireframe", &PythonRetainedChart3D::set_surface_wireframe)
+            .def("set_colorbar",
+                 &PythonRetainedChart3D::set_colorbar,
+                 nb::arg("surface"),
+                 nb::arg("label") = "",
+                 nb::arg("tick_count") = 5,
+                 nb::arg("width_px") = 18.0f,
+                 nb::arg("height_ratio") = 0.62f)
+            .def("clear_colorbar", &PythonRetainedChart3D::clear_colorbar)
             .def("destroy_item", &PythonRetainedChart3D::destroy_item)
             .def("set_axis_labels", &PythonRetainedChart3D::set_axis_labels)
             .def("set_axis_scale", &PythonRetainedChart3D::set_axis_scale)

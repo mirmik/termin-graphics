@@ -27,6 +27,8 @@ def test_plot3d_accepts_series_before_gpu_attachment():
     assert len(plot.data.scatters) == 1
     assert len(plot.data.surfaces) == 1
     assert plot.set_surface_grid(0, visible=True)
+    plot.show_colorbar(label="height")
+    plot.hide_colorbar()
 
     plot.clear()
     assert not plot.data.lines

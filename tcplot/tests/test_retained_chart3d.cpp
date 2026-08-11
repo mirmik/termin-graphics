@@ -242,6 +242,30 @@ int main() {
         require(tc_retained_chart3d_item_is_valid(other, surface) == 0, "cross-scene surface handle must be rejected");
         require(tc_retained_chart3d_surface_set_style(other, surface, &surface_style) == 0,
                 "cross-scene surface mutation must be rejected");
+        tc_colorbar3d_style colorbar_style{
+            5,
+            18.0f,
+            0.62f,
+            18.0f,
+            8.0f,
+            13.0f,
+            0.8f,
+            0.8f,
+            0.8f,
+            1.0f,
+            0.42f,
+            0.45f,
+            0.52f,
+            1.0f,
+        };
+        require(tc_retained_chart3d_set_colorbar(chart, surface, "height", &colorbar_style) != 0,
+                "failed to enable the retained colorbar");
+        require(tc_retained_chart3d_set_colorbar(other, surface, "height", &colorbar_style) == 0,
+                "cross-scene colorbar source must be rejected");
+        tc_colorbar3d_style invalid_colorbar_style = colorbar_style;
+        invalid_colorbar_style.tick_count = 1;
+        require(tc_retained_chart3d_set_colorbar(chart, surface, "height", &invalid_colorbar_style) == 0,
+                "invalid colorbar style must be rejected");
 
         const double scatter_x[] = {-0.5, 0.0, 0.75};
         const double scatter_y[] = {0.5, -0.25, 0.25};
@@ -255,6 +279,8 @@ int main() {
         };
         const tc_plot_item3d_handle scatter =
             tc_retained_chart3d_add_scatter(chart, scatter_x, scatter_y, scatter_z, 3, &scatter_style);
+        require(tc_retained_chart3d_set_colorbar(chart, scatter, "invalid", &colorbar_style) == 0,
+                "a colorbar must reject a non-surface source");
 
         termin::RenderItemSource& render_item_source = tcplot::plot_scene3d_render_item_source(*chart);
         termin::RenderViewState first_view;

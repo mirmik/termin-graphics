@@ -180,6 +180,7 @@ class Plot3D(Widget):
         return handle
 
     def clear(self):
+        self._scene.clear_colorbar()
         for handle in (
             self._line_handles
             + self._scatter_handles
@@ -214,6 +215,37 @@ class Plot3D(Widget):
             color,
             width_px,
         )
+
+    def show_colorbar(
+        self,
+        idx=-1,
+        *,
+        label="",
+        tick_count=5,
+        width_px=18.0,
+        height_ratio=0.62,
+    ):
+        """Show a screen-space color legend for one surface.
+
+        The legend follows the selected surface's live colormap and the same
+        chart-wide Z range used by the surface shader.
+        """
+        if not self._surface_handles:
+            raise ValueError("a colorbar requires at least one surface")
+        try:
+            handle = self._surface_handles[idx]
+        except IndexError as error:
+            raise IndexError("surface index is out of range") from error
+        self._scene.set_colorbar(
+            handle,
+            label=label,
+            tick_count=tick_count,
+            width_px=width_px,
+            height_ratio=height_ratio,
+        )
+
+    def hide_colorbar(self):
+        self._scene.clear_colorbar()
 
     def toggle_wireframe(self):
         enabled = not self._show_wireframe
