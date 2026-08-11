@@ -15,6 +15,16 @@ graphics abstraction. Applications obtain renderer state from
 `session->graphics()` and create any number of equal `BackendWindow`
 presentation targets with `session->create_window()`. All GPU consumers and
 windows must be destroyed before `session->close()`.
+
+Python applications use the same ownership boundary directly:
+
+```python
+from termin.window import WindowManager, WindowedGraphicsSession
+```
+
+The `termin-window` distribution and its optional `_window_native` extension
+are part of SDL-enabled `graphics` and `full` SDK profiles. Engine-level
+`termin-display` is not required.
 Each window reports the `GraphicsHost` identity that created it; this is an
 identity/validation hook for injected composition and does not expose device
 or context ownership through the window abstraction.

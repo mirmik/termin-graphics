@@ -10,9 +10,11 @@ import sys
 import time
 
 import tgfx
-from termin.display.window import WindowManager, WindowedGraphicsSession, quit_sdl
-from termin.gui_native import tc_ui_document_create, tc_ui_document_destroy
-from termin.gui_native.window import GuiWindowAdapter
+from termin.gui_native import (
+    OffscreenGuiComposition,
+    tc_ui_document_create,
+    tc_ui_document_destroy,
+)
 
 from tcnodegraph.controller import GraphController
 from tcnodegraph.model import Graph
@@ -168,15 +170,11 @@ def _font_path() -> Path:
     return font
 
 
-def run(*, frame_limit: int = 0, second_limit: float = 0.0) -> int:
-    """Run the example; optional limits make window smoke tests deterministic."""
+def run_windowed(*, frame_limit: int = 0, second_limit: float = 0.0) -> int:
+    """Run the interactive example using the full SDK window host."""
 
-    if frame_limit < 0:
-        raise ValueError("frame_limit must be non-negative")
-    if second_limit < 0.0:
-        raise ValueError("second_limit must be non-negative")
-    if not tgfx.configure_default_shader_runtime("termin-nodegraph-example"):
-        return 77
+    from termin.window import WindowManager, WindowedGraphicsSession, quit_sdl
+    from termin.gui_native.window import GuiWindowAdapter
 
     graphics_session = None
     window_manager = None
@@ -247,6 +245,75 @@ def run(*, frame_limit: int = 0, second_limit: float = 0.0) -> int:
         quit_sdl()
 
 
+def run_offscreen(output_path: str | Path) -> int:
+    """Render one inspectable PNG using the graphics-profile composition host."""
+
+    import numpy as np
+    from termin.image import write_png_rgba8_file
+
+    output = Path(output_path).resolve()
+    composition = OffscreenGuiComposition(
+        width=1280,
+        height=820,
+        font_path=str(_font_path()),
+        continuous_rendering=False,
+    )
+    graph_view = None
+    try:
+        graph_view = build_native_node_graph_view(
+            composition.document,
+            make_demo_graph(),
+            request_render=composition.request_repaint,
+        )
+        if not composition.document.add_root(graph_view.root.handle):
+            raise RuntimeError("failed to attach the native nodegraph example root")
+        for _ in range(3):
+            composition.request_repaint()
+            if not composition.render_frame():
+                raise RuntimeError("failed to render the native nodegraph example")
+        composition.wait_idle()
+        rgba = composition.read_frame_rgba_float()
+        rgba8 = np.clip(rgba * 255.0, 0.0, 255.0).astype(np.uint8)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        write_png_rgba8_file(output, rgba8)
+        print(f"Native nodegraph example rendered to {output}")
+        return 0
+    except Exception:
+        _log.exception("termin-nodegraph offscreen example failed")
+        raise
+    finally:
+        if graph_view is not None:
+            graph_view.close()
+        composition.close()
+
+
+def run(
+    *,
+    frame_limit: int = 0,
+    second_limit: float = 0.0,
+    offscreen: bool = False,
+    output_path: str | Path = "nodegraph-example.png",
+) -> int:
+    """Run interactively when possible, otherwise render an inspectable PNG."""
+
+    if frame_limit < 0:
+        raise ValueError("frame_limit must be non-negative")
+    if second_limit < 0.0:
+        raise ValueError("second_limit must be non-negative")
+    if not tgfx.configure_default_shader_runtime("termin-nodegraph-example"):
+        return 77
+    if offscreen:
+        return run_offscreen(output_path)
+    try:
+        return run_windowed(frame_limit=frame_limit, second_limit=second_limit)
+    except ImportError as error:
+        _log.warning(
+            "window host is unavailable (%s); rendering the graphics-profile PNG instead",
+            error,
+        )
+        return run_offscreen(output_path)
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -255,12 +322,28 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--seconds", type=float, default=0.0, help="exit after this many seconds"
     )
+    parser.add_argument(
+        "--offscreen",
+        action="store_true",
+        help="render a PNG instead of opening a window",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("nodegraph-example.png"),
+        help="offscreen PNG path (default: nodegraph-example.png)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return run(frame_limit=args.frames, second_limit=args.seconds)
+    return run(
+        frame_limit=args.frames,
+        second_limit=args.seconds,
+        offscreen=args.offscreen,
+        output_path=args.output,
+    )
 
 
 if __name__ == "__main__":

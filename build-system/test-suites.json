@@ -407,6 +407,7 @@
     {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
     {"id": "termin-dispatch-tests-native", "module": "termin-dispatch", "executor": "ctest", "roots": ["termin-dispatch/tests"]},
     {"id": "termin-window-tests-native", "module": "termin-window", "executor": "ctest", "roots": ["termin-window/tests"]},
+    {"id": "termin-window-tests-python", "module": "termin-window", "executor": "pytest", "roots": ["termin-window/python/tests"]},
     {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
     {"id": "termin-glb-tests-native", "module": "termin-glb", "executor": "ctest", "roots": ["termin-glb/tests"]},
     {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},

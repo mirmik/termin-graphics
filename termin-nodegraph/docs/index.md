@@ -21,4 +21,7 @@ Python package: `tcnodegraph` через distribution `termin-nodegraph`.
 После сборки SDK пример запускается командой
 `./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py`.
 Параметры `--frames` и `--seconds` ограничивают время жизни окна для
-автоматизированного smoke.
+автоматизированного smoke. Оконный host принадлежит тонкому пакету
+`termin-window` и доступен в SDL-enabled профилях `graphics` и `full`.
+Параметр `--offscreen` создаёт PNG без оконного backend; путь задаётся через
+`--output`.

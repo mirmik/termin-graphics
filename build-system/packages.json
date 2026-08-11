@@ -114,6 +114,18 @@
       ]
     },
     {
+      "path": "termin-window",
+      "distribution": "termin-window",
+      "native_extensions": [
+        {
+          "extension": "termin.window._window_native",
+          "target": "_window_native",
+          "optional": true,
+          "features": ["sdl"]
+        }
+      ]
+    },
+    {
       "path": "termin-scene",
       "distribution": "termin-scene",
       "native_extensions": [

@@ -43,6 +43,15 @@ After building the SDK, launch the current native projection directly:
 ./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py
 ```
 
+With an SDL-enabled full or `graphics` SDK this opens an interactive window
+through the lightweight `termin-window` host. An explicit offscreen path works
+with either profile and does not need a window backend:
+
+```bash
+./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py \
+    --offscreen --output nodegraph-example.png
+```
+
 The example contains a typed render-style graph, a visual group, existing
 connections and bool/enum/int/float/text parameter editors. Drag nodes and the
 group with the left mouse button, drag between compatible sockets to reconnect,

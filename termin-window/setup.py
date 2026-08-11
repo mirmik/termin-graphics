@@ -15,23 +15,16 @@ class BuildExt(TerminCMakeBuildExt):
 
 
 setup(
-    name="termin-gui-native",
+    name="termin-window",
     version=BuildExt.compute_local_version("0.1.0"),
     license="MIT",
-    description="Experimental native Termin UI document Python bindings",
+    description="Framework-neutral native window ownership and Python bindings",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.14",
-    packages=["termin.gui_native"],
-    package_dir={"termin.gui_native": "python/termin/gui_native"},
-    install_requires=[
-        "PyYAML",
-        "termin-nanobind",
-        "termin-visual-scene",
-        "termin-window",
-        "tcbase",
-        "tgfx",
-    ],
+    packages=["termin.window"],
+    package_dir={"termin.window": "python/termin/window"},
+    install_requires=["termin-nanobind", "tcbase", "tgfx"],
     ext_modules=native_extensions_for_source(_DIR),
     cmdclass={"build": TerminCMakeBuild, "build_ext": BuildExt},
     zip_safe=False,

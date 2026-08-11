@@ -11,6 +11,7 @@ option(TERMIN_WINDOW_BUILD_WINDOW_TESTS "Build live termin-window smoke tests" O
 option(TERMIN_WINDOW_BUILD_D3D11_WINDOW_TEST
        "Build the termin-window D3D11 presentation smoke test"
        ${TERMIN_WINDOW_BUILD_WINDOW_TESTS})
+option(TERMIN_BUILD_PYTHON "Build Python bindings for termin-window" OFF)
 if(TERMIN_WINDOW_BUILD_TESTS)
     include(CTest)
 endif()
@@ -126,6 +127,19 @@ if(MSVC)
     target_compile_definitions(termin_window PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(termin_window PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(TERMIN_BUILD_PYTHON AND TERMIN_WINDOW_HAS_SDL)
+    find_package(Python 3.14 COMPONENTS Interpreter Development REQUIRED)
+    find_package(nanobind CONFIG REQUIRED)
+    nanobind_add_module(_window_native NB_SHARED
+        python/bindings/window_module.cpp)
+    target_link_libraries(_window_native PRIVATE termin_window)
+    termin_set_rpath_python(_window_native)
+    install(TARGETS _window_native DESTINATION lib/python/termin/window)
+    install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/python/termin/window/
+            DESTINATION lib/python/termin/window
+            FILES_MATCHING PATTERN "*.py")
 endif()
 
 if(TERMIN_WINDOW_BUILD_TESTS)
