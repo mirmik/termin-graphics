@@ -93,6 +93,11 @@ namespace termin {
     RENDER_CORE_API MaterialPipelineMaterialContract material_pipeline_material_contract_from_shader(
         TcShader shader, MaterialFragmentInterface final_color_required_fragment_input = {});
 
+    // Cheap, side-effect-free routing check used before variant assembly. A
+    // false result is a normal pass decline, not a shader error.
+    RENDER_CORE_API bool material_pipeline_pass_accepts_shader(const MaterialPipelinePassContract& pass,
+                                                               const TcShader& shader);
+
     RENDER_CORE_API MaterialPipelineShaderAssemblyResult
     material_pipeline_assemble_shader(const MaterialPipelineShaderAssemblyRequest& request);
 

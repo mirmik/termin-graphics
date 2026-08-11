@@ -337,6 +337,35 @@ namespace termin {
         return contract;
     }
 
+    bool material_pipeline_pass_accepts_shader(const MaterialPipelinePassContract& pass, const TcShader& shader) {
+        if (!shader.is_valid()) {
+            return false;
+        }
+        if (pass.fragment_composition == MaterialFragmentComposition::PassOwned) {
+            return true;
+        }
+
+        tc_shader_surface_producer_view producer{};
+        const bool has_surface_producer = tc_shader_get_surface_producer_view(shader.get(), &producer);
+        if (!has_surface_producer) {
+            return (pass.fragment_composition == MaterialFragmentComposition::FinalColor ||
+                    pass.fragment_composition == MaterialFragmentComposition::SurfaceConsumerOrFinalColor) &&
+                   shader.is_executable();
+        }
+
+        if (pass.fragment_composition != MaterialFragmentComposition::SurfaceConsumer &&
+            pass.fragment_composition != MaterialFragmentComposition::SurfaceConsumerOrFinalColor) {
+            return false;
+        }
+        if (!pass.surface_consumer.has_value()) {
+            // Let assembly diagnose a malformed pass contract.
+            return true;
+        }
+        const MaterialSurfaceConsumerContract& consumer = *pass.surface_consumer;
+        return consumer.accepted_surface.id == producer.contract_id &&
+               consumer.accepted_surface.version == producer.contract_version;
+    }
+
     MaterialPipelineShaderAssemblyResult
     material_pipeline_assemble_shader(const MaterialPipelineShaderAssemblyRequest& request) {
         MaterialPipelineShaderAssemblyResult result;
