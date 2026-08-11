@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import logging
 from pathlib import Path
 
 from tcnodegraph.model import Edge, Graph, Group, Node, Socket
+from tcnodegraph.schema import DefaultConnectionValidator, connection_rejection_reason
 
 
 _log = logging.getLogger(__name__)
 
 
 def graph_to_dict(graph: Graph) -> dict:
-    return {
+    serialized = {
         "nodes": [
             {
                 "id": n.id,
@@ -23,8 +25,8 @@ def graph_to_dict(graph: Graph) -> dict:
                 "y": n.y,
                 "width": n.width,
                 "height": n.height,
-                "params": n.params,
-                "data": n.data,
+                "params": deepcopy(n.params),
+                "data": deepcopy(n.data),
                 "inputs": [
                     {
                         "name": s.name,
@@ -64,15 +66,17 @@ def graph_to_dict(graph: Graph) -> dict:
                 "y": g.y,
                 "width": g.width,
                 "height": g.height,
-                "data": g.data,
+                "data": deepcopy(g.data),
             }
             for g in graph.groups.values()
         ],
+        "data": deepcopy(graph.data),
     }
+    return serialized
 
 
 def graph_from_dict(data: dict) -> Graph:
-    g = Graph()
+    g = Graph(data=deepcopy(dict(data.get("data", {}))))
     node_ids: set[str] = set()
     for raw in data.get("nodes", []):
         node_id = raw["id"]
@@ -89,8 +93,8 @@ def graph_from_dict(data: dict) -> Graph:
             y=float(raw.get("y", 0.0)),
             width=float(raw.get("width", 190.0)),
             height=float(raw.get("height", 120.0)),
-            params=dict(raw.get("params", {})),
-            data=dict(raw.get("data", {})),
+            params=deepcopy(dict(raw.get("params", {}))),
+            data=deepcopy(dict(raw.get("data", {}))),
             inputs=inputs,
             outputs=outputs,
         )
@@ -108,10 +112,6 @@ def graph_from_dict(data: dict) -> Graph:
         dst_node = g.nodes.get(dst_node_id)
         if src_node is None or dst_node is None:
             raise _invalid_graph(f"edge {edge_id} references a missing node")
-        if not any(socket.name == raw["src_socket"] for socket in src_node.outputs):
-            raise _invalid_graph(f"edge {edge_id} references a missing output socket")
-        if not any(socket.name == raw["dst_socket"] for socket in dst_node.inputs):
-            raise _invalid_graph(f"edge {edge_id} references a missing input socket")
         edge = Edge(
             id=edge_id,
             src_node_id=src_node_id,
@@ -119,6 +119,16 @@ def graph_from_dict(data: dict) -> Graph:
             dst_node_id=dst_node_id,
             dst_socket=raw["dst_socket"],
         )
+        rejection_reason = connection_rejection_reason(
+            g,
+            edge.src_node_id,
+            edge.src_socket,
+            edge.dst_node_id,
+            edge.dst_socket,
+            validator=DefaultConnectionValidator(),
+        )
+        if rejection_reason is not None:
+            raise _invalid_graph(f"edge {edge_id}: {rejection_reason}")
         g.edges[edge.id] = edge
 
     group_ids: set[str] = set()
@@ -134,7 +144,7 @@ def graph_from_dict(data: dict) -> Graph:
             y=float(raw.get("y", 0.0)),
             width=float(raw.get("width", 0.0)),
             height=float(raw.get("height", 0.0)),
-            data=dict(raw.get("data", {})),
+            data=deepcopy(dict(raw.get("data", {}))),
         )
         g.groups[group.id] = group
     return g

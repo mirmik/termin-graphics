@@ -69,6 +69,16 @@ def test_cross_scene_parent_is_rejected():
     tc_visual_scene_destroy(first)
 
 
+def test_hit_region_rect_has_bounds_without_painting():
+    scene = tc_visual_scene_create()
+    item = scene.create_hit_region_rect((2.0, 3.0, 30.0, 20.0))
+
+    assert item.type_name == "termin.visual.HitRegion2D"
+    assert item.local_bounds == pytest.approx((2.0, 3.0, 32.0, 23.0))
+
+    tc_visual_scene_destroy(scene)
+
+
 def test_text_accepts_optional_literal_coverage_gamma():
     scene = tc_visual_scene_create()
     inherited = scene.create_text(

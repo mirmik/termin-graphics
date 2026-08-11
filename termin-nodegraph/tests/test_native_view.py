@@ -1,6 +1,8 @@
 import gc
 import weakref
 
+import pytest
+
 from tcnodegraph import Graph, GraphController, build_native_node_graph_view
 from termin.gui_native import (
     DrawCommandType,
@@ -41,7 +43,9 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
         document,
         graph,
         request_render=lambda: renders.append(True),
+        controller=controller,
     )
+    assert native.controller is controller
     assert document.add_root(native.root.handle)
     document.layout_roots(Rect(0.0, 0.0, 1000.0, 700.0))
 
@@ -50,6 +54,8 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     command_types = [command.type for command in draw_list.commands]
     assert DrawCommandType.Canvas2DList in command_types
     checkbox = native.param_widgets[(target.id, "enabled")]
+    assert checkbox.widget.bounds.width > 0.0
+    assert checkbox.widget.bounds.height > 0.0
     checkbox.checked = False
     assert target.params["enabled"] is False
 
@@ -80,3 +86,41 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     del native
     gc.collect()
     assert native_ref() is None
+
+
+def test_native_node_graph_replacement_preserves_supplied_controller_policy():
+    class RejectingValidator:
+        def validate(self, *_args, **_kwargs):
+            return False
+
+    original = Graph()
+    validator = RejectingValidator()
+    controller = GraphController(original, validator=validator)
+    document = tc_ui_document_create()
+    native = build_native_node_graph_view(
+        document,
+        original,
+        request_render=lambda: None,
+        controller=controller,
+    )
+    replacement = Graph()
+
+    native.set_graph(replacement)
+
+    assert native.controller is controller
+    assert controller.graph is replacement
+    assert controller.validator is validator
+    native.close()
+    tc_ui_document_destroy(document)
+
+
+def test_native_node_graph_rejects_mismatched_supplied_controller():
+    document = tc_ui_document_create()
+    with pytest.raises(ValueError, match="does not own"):
+        build_native_node_graph_view(
+            document,
+            Graph(),
+            request_render=lambda: None,
+            controller=GraphController(Graph()),
+        )
+    tc_ui_document_destroy(document)

@@ -192,6 +192,11 @@ namespace termin {
     } // namespace
 
     void bind_render_pipeline(nb::module_& m) {
+        m.def("graph_socket_type_assignable",
+              &tc::graph_socket_type_assignable,
+              nb::arg("source_type"),
+              nb::arg("target_type"));
+
         nb::class_<TcPipelineTemplate>(m, "TcPipelineTemplate")
             .def_static("declare", &TcPipelineTemplate::declare, nb::arg("uuid"), nb::arg("name"))
             .def_static("find", &TcPipelineTemplate::find, nb::arg("uuid"))

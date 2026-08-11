@@ -52,6 +52,9 @@ namespace tc {
     RENDER_API std::unordered_map<std::string, std::string>
     build_node_viewport_map(const std::vector<NodeData>& nodes, const std::vector<ViewportFrameData>& frames);
 
+    RENDER_API bool graph_socket_type_assignable(const std::string& source_type,
+                                                 const std::string& target_type);
+
     RENDER_API const ViewportFrameData* find_containing_frame(const NodeData& node,
                                                               const std::vector<ViewportFrameData>& frames);
 

@@ -202,7 +202,7 @@ namespace tc {
         return std::nullopt;
     }
 
-    static bool socket_type_assignable(const std::string& source_type, const std::string& target_type) {
+    bool graph_socket_type_assignable(const std::string& source_type, const std::string& target_type) {
         if (source_type == target_type) {
             return true;
         }
@@ -313,7 +313,7 @@ namespace tc {
                                         conn.from_socket + " -> " + conn.to_node_id + "." + conn.to_socket);
             }
 
-            if (!socket_type_assignable(*from_type, *to_type)) {
+            if (!graph_socket_type_assignable(*from_type, *to_type)) {
                 throw GraphCompileError("Invalid resource connection type: " + conn.from_node_id + "." +
                                         conn.from_socket + " (" + *from_type + ") -> " + conn.to_node_id + "." +
                                         conn.to_socket + " (" + *to_type + ")");

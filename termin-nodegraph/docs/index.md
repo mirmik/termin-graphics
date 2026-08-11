@@ -11,10 +11,13 @@
 ## Основные области
 
 - Python package в `python/tcnodegraph`.
-- Examples в `examples/`.
+- Runnable native example в `tcnodegraph.example`.
 - Tests в `tests/`.
 
 ## Публичный API
 
 Python package: `tcnodegraph` через distribution `termin-nodegraph`.
 
+После сборки SDK пример запускается командой
+`./sdk/bin/termin_python -m tcnodegraph.example`. Параметры `--frames` и
+`--seconds` ограничивают время жизни окна для автоматизированного smoke.

@@ -109,6 +109,16 @@ namespace {
         return result;
     }
 
+    tgfx::Path2f rectangle_path(const termin::Rect2f& rect) {
+        tgfx::Path2f path;
+        if (!path.move_to({rect.x, rect.y}) || !path.line_to({rect.x + rect.width, rect.y}) ||
+            !path.line_to({rect.x + rect.width, rect.y + rect.height}) ||
+            !path.line_to({rect.x, rect.y + rect.height}) || !path.close()) {
+            throw nb::value_error("hit region rect must be finite and non-degenerate");
+        }
+        return path;
+    }
+
     GraphicItem2D* parent_object(TcVisualScene scene, nb::object parent) {
         if (parent.is_none())
             return nullptr;
@@ -318,6 +328,16 @@ NB_MODULE(_visual_scene_native, m) {
             nb::arg("fill"),
             nb::arg("stroke") = nb::none(),
             nb::arg("stroke_width") = 1.0f,
+            nb::arg("parent").none() = nb::none())
+        .def(
+            "create_hit_region_rect",
+            [](TcVisualScene self, nb::tuple rect, nb::object parent) {
+                return wrap(self,
+                            self.adopt(std::make_unique<termin::visual::HitRegionItem2D>(
+                                           rectangle_path(parse_rect(rect))),
+                                       parent_object(self, parent)));
+            },
+            nb::arg("rect"),
             nb::arg("parent").none() = nb::none())
         .def(
             "create_rounded_rect",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import logging
 
@@ -10,6 +11,7 @@ from tcnodegraph.schema import (
     ConnectionValidator,
     DefaultConnectionValidator,
     NodeSchemaProvider,
+    connection_rejection_reason,
 )
 
 
@@ -39,6 +41,11 @@ class GraphController:
         self.schema = schema
         self.validator = validator if validator is not None else DefaultConnectionValidator()
         self._id_counters: dict[str, int] = {}
+
+    def replace_graph(self, graph: Graph) -> None:
+        """Replace graph data while preserving this controller's editing policy."""
+        self.graph = graph
+        self._id_counters.clear()
 
     def _next_id(self, prefix: str) -> str:
         n = self._id_counters.get(prefix, 0) + 1
@@ -82,9 +89,9 @@ class GraphController:
             node.title = title or template.title
             node.width = template.width
             node.height = template.height
-            node.params.update(template.defaults)
+            node.params.update(deepcopy(template.defaults))
             node.inputs = [Socket(n, t, is_input=True) for n, t in template.inputs]
-            node.outputs = [Socket(n, t, is_input=False) for n, t in template.outputs]
+            node.outputs = [Socket(n, t, is_input=False, multi=True) for n, t in template.outputs]
 
         self.graph.nodes[node.id] = node
         return node
@@ -161,42 +168,52 @@ class GraphController:
         *,
         edge_id: str | None = None,
     ) -> ConnectResult:
-        src_node = self.graph.nodes.get(src_node_id)
-        dst_node = self.graph.nodes.get(dst_node_id)
-        if src_node is None or dst_node is None:
-            _log.error("NodeGraph: connection references missing node")
-            return ConnectResult(False, reason="node not found")
-
-        src = next((s for s in src_node.outputs if s.name == src_socket), None)
-        dst = next((s for s in dst_node.inputs if s.name == dst_socket), None)
-        if src is None or dst is None:
-            _log.error("NodeGraph: connection references missing socket")
-            return ConnectResult(False, reason="socket not found")
-
-        if not self.validator.validate(
-            src.socket_type,
-            dst.socket_type,
-            src_node_id=src_node_id,
-            src_socket=src_socket,
-            dst_node_id=dst_node_id,
-            dst_socket=dst_socket,
-        ):
-            return ConnectResult(False, reason="type mismatch")
-
-        resolved_edge_id = edge_id or self._next_id("edge")
-        if resolved_edge_id in self.graph.edges:
-            _log.error("NodeGraph: duplicate edge id rejected: %s", resolved_edge_id)
+        if edge_id is not None and edge_id in self.graph.edges:
+            _log.error("NodeGraph: duplicate edge id rejected: %s", edge_id)
             return ConnectResult(False, reason="duplicate edge id")
 
-        if not dst.multi:
-            to_delete = [
-                eid
-                for eid, edge in self.graph.edges.items()
-                if edge.dst_node_id == dst_node_id and edge.dst_socket == dst_socket
-            ]
-            for eid in to_delete:
-                del self.graph.edges[eid]
+        src_node = self.graph.nodes.get(src_node_id)
+        dst_node = self.graph.nodes.get(dst_node_id)
+        src = (
+            next((s for s in src_node.outputs if s.name == src_socket), None)
+            if src_node is not None
+            else None
+        )
+        dst = (
+            next((s for s in dst_node.inputs if s.name == dst_socket), None)
+            if dst_node is not None
+            else None
+        )
+        replaced_edge_ids = {
+            existing.id
+            for existing in self.graph.edges.values()
+            if (
+                src is not None
+                and not src.multi
+                and existing.src_node_id == src_node_id
+                and existing.src_socket == src_socket
+            )
+            or (
+                dst is not None
+                and not dst.multi
+                and existing.dst_node_id == dst_node_id
+                and existing.dst_socket == dst_socket
+            )
+        }
+        rejection_reason = connection_rejection_reason(
+            self.graph,
+            src_node_id,
+            src_socket,
+            dst_node_id,
+            dst_socket,
+            validator=self.validator,
+            ignored_edge_ids=replaced_edge_ids,
+        )
+        if rejection_reason is not None:
+            _log.error("NodeGraph: connection rejected: %s", rejection_reason)
+            return ConnectResult(False, reason=rejection_reason)
 
+        resolved_edge_id = edge_id or self._next_id("edge")
         e = Edge(
             id=resolved_edge_id,
             src_node_id=src_node_id,
@@ -204,6 +221,8 @@ class GraphController:
             dst_node_id=dst_node_id,
             dst_socket=dst_socket,
         )
+        for replaced_edge_id in replaced_edge_ids:
+            del self.graph.edges[replaced_edge_id]
         self.graph.edges[e.id] = e
         return ConnectResult(True, edge_id=e.id)
 

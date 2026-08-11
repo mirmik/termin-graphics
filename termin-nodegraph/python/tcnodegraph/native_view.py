@@ -133,7 +133,6 @@ class NativeNodeGraphView:
     """Own a native scene projection and graph editing interaction state."""
 
     document: TcDocument
-    graph: Graph
     controller: GraphController
     scene: TcVisualScene
     view: object
@@ -160,9 +159,12 @@ class NativeNodeGraphView:
     def root(self):
         return self.view.widget
 
+    @property
+    def graph(self) -> Graph:
+        return self.controller.graph
+
     def set_graph(self, graph: Graph) -> None:
-        self.graph = graph
-        self.controller = GraphController(graph)
+        self.controller.replace_graph(graph)
         self._clear_pending()
         self.rebuild()
 
@@ -230,7 +232,6 @@ class NativeNodeGraphView:
             self._register_semantic(item, f"node:{node.id}")
         for edge in self.graph.edges.values():
             self._append_edge(edge)
-        self.view.scene = self.scene
         self.view.invalidate_scene()
         self.request_render()
 
@@ -306,11 +307,8 @@ class NativeNodeGraphView:
         row_y = 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 5.0
         for name, value in node.params.items():
             widget = self._create_param_widget(node, name, value)
-            item = self.scene.create_rect(
+            item = self.scene.create_hit_region_rect(
                 _rect(Rect(0.0, 0.0, max(64.0, node.width * 0.46 - 8.0), 18.0)),
-                _color(SrgbColor(0.0, 0.0, 0.0, 0.0)),
-                None,
-                1.0,
                 parent,
             )
             item.position = (node.width * 0.52, row_y)
@@ -663,7 +661,11 @@ def build_native_node_graph_view(
     graph: Graph,
     *,
     request_render: Callable[[], None],
+    controller: GraphController | None = None,
 ) -> NativeNodeGraphView:
+    graph_controller = controller if controller is not None else GraphController(graph)
+    if graph_controller.graph is not graph:
+        raise ValueError("supplied GraphController does not own the supplied graph")
     scene = tc_visual_scene_create()
     view = document.create_scene_view(scene)
     view.widget.stable_id = "nodegraph.native-view"
@@ -672,8 +674,7 @@ def build_native_node_graph_view(
     view.offset = Point(500.0, 320.0)
     result = NativeNodeGraphView(
         document=document,
-        graph=graph,
-        controller=GraphController(graph),
+        controller=graph_controller,
         scene=scene,
         view=view,
         request_render=request_render,
