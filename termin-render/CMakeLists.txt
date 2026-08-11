@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(TERMIN_RENDER_BUILD_SHARED "Build shared library" ON)
 option(TERMIN_RENDER_BUILD_TESTS "Build tests" ON)
 option(TERMIN_BUILD_PYTHON "Build Python bindings for termin-render" OFF)
+option(TERMIN_RENDER_CORE_ONLY "Build only the scene-neutral render core" OFF)
 
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
@@ -26,19 +27,21 @@ else()
     find_package(termin_inspect REQUIRED)
 endif()
 if(COMMAND termin_require_package)
-    termin_require_package(termin_lighting termin_lighting::termin_lighting)
-else()
-    find_package(termin_lighting REQUIRED)
-endif()
-if(COMMAND termin_require_package)
     termin_require_package(termin_materials termin_materials::termin_materials)
 else()
     find_package(termin_materials REQUIRED)
 endif()
-if(COMMAND termin_require_package)
-    termin_require_package(termin_scene termin_scene::termin_scene)
-else()
-    find_package(termin_scene REQUIRED)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    if(COMMAND termin_require_package)
+        termin_require_package(termin_lighting termin_lighting::termin_lighting)
+    else()
+        find_package(termin_lighting REQUIRED)
+    endif()
+    if(COMMAND termin_require_package)
+        termin_require_package(termin_scene termin_scene::termin_scene)
+    else()
+        find_package(termin_scene REQUIRED)
+    endif()
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
@@ -204,47 +207,60 @@ if(TERMIN_RENDER_BUILD_SHARED)
     add_library(termin_render_core SHARED ${TERMIN_RENDER_CORE_SOURCES})
     target_compile_definitions(
         termin_render_core PRIVATE TERMIN_RENDER_CORE_EXPORTS TC_EXPORTS)
-    add_library(termin_render SHARED ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
-    target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_EXPORTS TC_EXPORTS)
 else()
     add_library(termin_render_core STATIC ${TERMIN_RENDER_CORE_SOURCES})
-    add_library(termin_render STATIC ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
+endif()
+
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    if(TERMIN_RENDER_BUILD_SHARED)
+        add_library(termin_render SHARED ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
+        target_compile_definitions(termin_render PRIVATE TERMIN_RENDER_EXPORTS TC_EXPORTS)
+    else()
+        add_library(termin_render STATIC ${TERMIN_RENDER_SOURCES} ${TERMIN_RENDER_HEADERS})
+    endif()
 endif()
 
 if(COMMAND termin_enable_unity_build_for)
     termin_enable_unity_build_for(termin_render_core)
-    termin_enable_unity_build_for(termin_render)
+    if(NOT TERMIN_RENDER_CORE_ONLY)
+        termin_enable_unity_build_for(termin_render)
+    endif()
 endif()
 if(COMMAND termin_enable_pch_for)
     termin_enable_pch_for(termin_render_core)
-    termin_enable_pch_for(termin_render)
+    if(NOT TERMIN_RENDER_CORE_ONLY)
+        termin_enable_pch_for(termin_render)
+    endif()
 endif()
 
 add_library(termin_render_core::termin_render_core ALIAS termin_render_core)
-add_library(termin_render::termin_render ALIAS termin_render)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    add_library(termin_render::termin_render ALIAS termin_render)
+endif()
 
-set_target_properties(termin_render_core termin_render PROPERTIES
+set_target_properties(termin_render_core PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 termin_set_rpath_lib(termin_render_core)
-termin_set_rpath_lib(termin_render)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    set_target_properties(termin_render PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+    termin_set_rpath_lib(termin_render)
+endif()
 
 target_include_directories(termin_render_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
-target_include_directories(termin_render
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-
 target_compile_features(termin_render_core PUBLIC cxx_std_20)
-target_compile_features(termin_render PUBLIC cxx_std_20)
 
 target_link_libraries(termin_render_core PUBLIC
     tcbase::termin_base
@@ -254,28 +270,41 @@ target_link_libraries(termin_render_core PUBLIC
     termin_materials::termin_materials
 )
 
-target_link_libraries(termin_render PUBLIC
-    termin_render_core::termin_render_core
-    termin_scene::termin_scene
-    termin_lighting::termin_lighting
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    target_include_directories(termin_render PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    )
+    target_compile_features(termin_render PUBLIC cxx_std_20)
+    target_link_libraries(termin_render PUBLIC
+        termin_render_core::termin_render_core
+        termin_scene::termin_scene
+        termin_lighting::termin_lighting
+    )
+endif()
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(termin_render_core PRIVATE m)
-    target_link_libraries(termin_render PRIVATE m)
+    if(NOT TERMIN_RENDER_CORE_ONLY)
+        target_link_libraries(termin_render PRIVATE m)
+    endif()
 endif()
 
 if(MSVC)
     target_compile_options(termin_render_core PRIVATE /W3 /wd4251 /wd4275)
     target_compile_definitions(termin_render_core PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(termin_render PRIVATE /W3 /wd4251 /wd4275)
-    target_compile_definitions(termin_render PRIVATE _CRT_SECURE_NO_WARNINGS)
+    if(NOT TERMIN_RENDER_CORE_ONLY)
+        target_compile_options(termin_render PRIVATE /W3 /wd4251 /wd4275)
+        target_compile_definitions(termin_render PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
 else()
     target_compile_options(termin_render_core PRIVATE -Wall -Wextra)
-    target_compile_options(termin_render PRIVATE -Wall -Wextra)
+    if(NOT TERMIN_RENDER_CORE_ONLY)
+        target_compile_options(termin_render PRIVATE -Wall -Wextra)
+    endif()
 endif()
 
-if(TERMIN_RENDER_BUILD_TESTS)
+if(TERMIN_RENDER_BUILD_TESTS AND NOT TERMIN_RENDER_CORE_ONLY)
     enable_testing()
 
     add_executable(termin_render_drawable_test tests/test_drawable_capability.c)
@@ -524,7 +553,7 @@ if(TERMIN_RENDER_BUILD_TESTS)
     )
 endif()
 
-if(TERMIN_BUILD_PYTHON)
+if(TERMIN_BUILD_PYTHON AND NOT TERMIN_RENDER_CORE_ONLY)
     find_package(Python 3.14 COMPONENTS Interpreter Development REQUIRED)
     find_package(nanobind CONFIG REQUIRED)
 
@@ -575,12 +604,14 @@ install(TARGETS termin_render_core
     RUNTIME DESTINATION bin
 )
 
-install(TARGETS termin_render
-    EXPORT termin_renderTargets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    install(TARGETS termin_render
+        EXPORT termin_renderTargets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(DIRECTORY include/
     DESTINATION include
@@ -592,19 +623,23 @@ install(EXPORT termin_render_coreTargets
     DESTINATION lib/cmake/termin_render_core
 )
 
-install(EXPORT termin_renderTargets
-    FILE termin_renderTargets.cmake
-    NAMESPACE termin_render::
-    DESTINATION lib/cmake/termin_render
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    install(EXPORT termin_renderTargets
+        FILE termin_renderTargets.cmake
+        NAMESPACE termin_render::
+        DESTINATION lib/cmake/termin_render
+    )
+endif()
 
 include(CMakePackageConfigHelpers)
 
-configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/termin_renderConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfig.cmake
-    INSTALL_DESTINATION lib/cmake/termin_render
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/termin_renderConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfig.cmake
+        INSTALL_DESTINATION lib/cmake/termin_render
+    )
+endif()
 
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/termin_render_coreConfig.cmake.in
@@ -612,11 +647,13 @@ configure_package_config_file(
     INSTALL_DESTINATION lib/cmake/termin_render_core
 )
 
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+endif()
 
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfigVersion.cmake
@@ -624,11 +661,13 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
-    DESTINATION lib/cmake/termin_render
-)
+if(NOT TERMIN_RENDER_CORE_ONLY)
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/termin_renderConfigVersion.cmake
+        DESTINATION lib/cmake/termin_render
+    )
+endif()
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/termin_render_coreConfig.cmake
