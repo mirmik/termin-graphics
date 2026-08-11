@@ -47,6 +47,10 @@ namespace tcplot {
             std::uint64_t selected_grid_namespace = 0;
             std::uint64_t selected_grid_object = 0;
             std::uint32_t selected_grid_generation = 0;
+            std::uint64_t colorbar_surface_object = 0;
+            std::uint32_t colorbar_surface_generation = 0;
+            std::string colorbar_label;
+            tc_colorbar3d_style colorbar_style{};
             PlotScene3DExecutionReport* report = nullptr;
         };
 
@@ -70,6 +74,14 @@ namespace tcplot {
                    item.source.namespace_id == services.selected_grid_namespace &&
                    item.source.object_id == services.selected_grid_object &&
                    item.source.generation == services.selected_grid_generation;
+        }
+
+        bool is_colorbar_surface(const tc_render_item& item, const PlotScene3DRenderServices& services) {
+            return item.kind == PLOT_RENDER_ITEM_KIND_SURFACE &&
+                   item.source.domain_id == PLOT_RENDER_ITEM_SOURCE_DOMAIN &&
+                   item.source.namespace_id == services.selected_grid_namespace &&
+                   item.source.object_id == services.colorbar_surface_object &&
+                   item.source.generation == services.colorbar_surface_generation;
         }
 
         const char* plot_item_debug_name(std::uint32_t kind) {
@@ -286,16 +298,23 @@ namespace tcplot {
                 }
 
                 const PlotScene3DRenderItemPayload* selected_grid_payload = nullptr;
+                const PlotScene3DRenderItemPayload* colorbar_surface_payload = nullptr;
                 for (std::size_t item_index = 0; item_index < context.render_item_snapshot->item_count();
                      ++item_index) {
                     const tc_render_item* item = context.render_item_snapshot->item(item_index);
                     if (item && is_selected_grid(*item, *services)) {
                         selected_grid_payload = plot_scene3d_render_item_payload(*item);
-                        break;
+                    }
+                    if (item && is_colorbar_surface(*item, *services)) {
+                        colorbar_surface_payload = plot_scene3d_render_item_payload(*item);
                     }
                 }
-                if (!selected_grid_payload || !selected_grid_payload->item ||
-                    selected_grid_payload->item->grid_style.labels_visible == 0) {
+                const bool draw_grid_labels = selected_grid_payload && selected_grid_payload->item &&
+                                              selected_grid_payload->item->grid_style.labels_visible != 0;
+                const bool draw_colorbar = colorbar_surface_payload && colorbar_surface_payload->item &&
+                                           colorbar_surface_payload->item->surface_style.colormap !=
+                                               TC_PLOT_COLORMAP3D_SOLID;
+                if (!draw_grid_labels && !draw_colorbar) {
                     return;
                 }
 
@@ -323,12 +342,24 @@ namespace tcplot {
                 }
 
                 context.ctx2->set_viewport(0, 0, context.render_rect.width, context.render_rect.height);
-                chrome_renderer_.draw_grid_labels(*context.ctx2,
-                                                  *services->font,
-                                                  selected_grid_payload->frame,
-                                                  selected_grid_payload->item->grid_style,
-                                                  context.render_rect.width,
-                                                  context.render_rect.height);
+                if (draw_grid_labels) {
+                    chrome_renderer_.draw_grid_labels(*context.ctx2,
+                                                      *services->font,
+                                                      selected_grid_payload->frame,
+                                                      selected_grid_payload->item->grid_style,
+                                                      context.render_rect.width,
+                                                      context.render_rect.height);
+                }
+                if (draw_colorbar) {
+                    chrome_renderer_.draw_colorbar(*context.ctx2,
+                                                   *services->font,
+                                                   colorbar_surface_payload->frame,
+                                                   colorbar_surface_payload->item->surface_style,
+                                                   services->colorbar_style,
+                                                   services->colorbar_label,
+                                                   context.render_rect.width,
+                                                   context.render_rect.height);
+                }
                 context.capture_internal("PlotScene3D grid labels",
                                          render_pass.colors[0].texture,
                                          context.render_rect.width,
@@ -410,6 +441,10 @@ namespace tcplot {
                                         std::uint64_t selected_grid_namespace,
                                         std::uint64_t selected_grid_object,
                                         std::uint32_t selected_grid_generation,
+                                        std::uint64_t colorbar_surface_object,
+                                        std::uint32_t colorbar_surface_generation,
+                                        const std::string& colorbar_label,
+                                        const tc_colorbar3d_style& colorbar_style,
                                         tgfx::TextureHandle color,
                                         int width,
                                         int height) {
@@ -420,6 +455,10 @@ namespace tcplot {
             services.selected_grid_namespace = selected_grid_namespace;
             services.selected_grid_object = selected_grid_object;
             services.selected_grid_generation = selected_grid_generation;
+            services.colorbar_surface_object = colorbar_surface_object;
+            services.colorbar_surface_generation = colorbar_surface_generation;
+            services.colorbar_label = colorbar_label;
+            services.colorbar_style = colorbar_style;
             services.report = &report;
 
             termin::RenderExecutionCapabilities capabilities;
@@ -472,6 +511,10 @@ namespace tcplot {
                                                                std::uint64_t selected_grid_namespace,
                                                                std::uint64_t selected_grid_object,
                                                                std::uint32_t selected_grid_generation,
+                                                               std::uint64_t colorbar_surface_object,
+                                                               std::uint32_t colorbar_surface_generation,
+                                                               const std::string& colorbar_label,
+                                                               const tc_colorbar3d_style& colorbar_style,
                                                                tgfx::TextureHandle color,
                                                                int width,
                                                                int height) {
@@ -479,6 +522,10 @@ namespace tcplot {
                               selected_grid_namespace,
                               selected_grid_object,
                               selected_grid_generation,
+                              colorbar_surface_object,
+                              colorbar_surface_generation,
+                              colorbar_label,
+                              colorbar_style,
                               color,
                               width,
                               height);

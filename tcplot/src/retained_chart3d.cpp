@@ -106,6 +106,25 @@ namespace {
         };
     }
 
+    tc_colorbar3d_style default_colorbar_style() {
+        return {
+            5,
+            18.0f,
+            0.62f,
+            18.0f,
+            8.0f,
+            13.0f,
+            0.80f,
+            0.80f,
+            0.80f,
+            1.0f,
+            0.42f,
+            0.45f,
+            0.52f,
+            1.0f,
+        };
+    }
+
     void validate(const tc_surface_item3d_style& style) {
         if (!finite_color(style.color_r, style.color_g, style.color_b, style.color_a) ||
             !std::isfinite(style.surface_grid_width_px) || style.surface_grid_width_px <= 0 ||
@@ -136,6 +155,17 @@ namespace {
             !finite_color(style.y_axis_r, style.y_axis_g, style.y_axis_b, 1.0f) ||
             !finite_color(style.z_axis_r, style.z_axis_g, style.z_axis_b, 1.0f)) {
             throw std::invalid_argument("invalid retained grid style");
+        }
+    }
+
+    void validate(const tc_colorbar3d_style& style) {
+        if (style.tick_count < 2 || style.tick_count > 32 || !std::isfinite(style.width_px) ||
+            style.width_px <= 0 || !std::isfinite(style.height_ratio) || style.height_ratio <= 0 ||
+            style.height_ratio > 1 || !std::isfinite(style.margin_right_px) || style.margin_right_px < 0 ||
+            !std::isfinite(style.text_gap_px) || style.text_gap_px < 0 || !std::isfinite(style.text_size_px) ||
+            style.text_size_px <= 0 || !finite_color(style.label_r, style.label_g, style.label_b, style.label_a) ||
+            !finite_color(style.border_r, style.border_g, style.border_b, style.border_a)) {
+            throw std::invalid_argument("invalid retained colorbar style");
         }
     }
 
@@ -494,6 +524,21 @@ namespace {
             return true;
         }
 
+        bool set_colorbar(tc_plot_item3d_handle surface, std::string label, const tc_colorbar3d_style& style) {
+            if (!resolve(surface, TC_PLOT_ITEM3D_SURFACE))
+                return false;
+            validate(style);
+            colorbar_surface_ = surface;
+            colorbar_label_ = std::move(label);
+            colorbar_style_ = style;
+            return true;
+        }
+
+        void clear_colorbar() {
+            colorbar_surface_ = invalid_item();
+            colorbar_label_.clear();
+        }
+
         void set_axis_labels(std::string x, std::string y, std::string z) {
             x_label_ = std::move(x);
             y_label_ = std::move(y);
@@ -650,8 +695,17 @@ namespace {
                 throw std::runtime_error("failed to publish retained Chart3D render items");
             }
 
-            const tcplot::PlotScene3DRenderResult render_result = render_pipeline_->execute(
-                item_snapshot, scene_id_, grid_part_.index, grid_part_.generation, color_, width, height);
+            const tcplot::PlotScene3DRenderResult render_result = render_pipeline_->execute(item_snapshot,
+                                                                                            scene_id_,
+                                                                                            grid_part_.index,
+                                                                                            grid_part_.generation,
+                                                                                            colorbar_surface_.index,
+                                                                                            colorbar_surface_.generation,
+                                                                                            colorbar_label_,
+                                                                                            colorbar_style_,
+                                                                                            color_,
+                                                                                            width,
+                                                                                            height);
             for (const tcplot::PlotScene3DRenderedItem& rendered_item : render_result.rendered_items) {
                 if (rendered_item.object_id >= slots_.size()) {
                     continue;
@@ -872,6 +926,9 @@ namespace {
         std::vector<Slot> slots_;
         std::vector<std::uint32_t> free_;
         tc_plot_item3d_handle grid_part_ = invalid_item();
+        tc_plot_item3d_handle colorbar_surface_ = invalid_item();
+        std::string colorbar_label_;
+        tc_colorbar3d_style colorbar_style_ = default_colorbar_style();
         tcplot::OrbitCamera camera_;
         bool shading_ = true;
         float shading_strength_ = 0.38f;
@@ -1249,6 +1306,23 @@ tc_plot_item3d_handle tc_retained_chart3d_grid_part(const tc_retained_chart3d* c
 
 int tc_retained_chart3d_set_grid_part(tc_retained_chart3d* chart, tc_plot_item3d_handle grid) {
     return chart && chart->value.set_grid_part(grid) ? 1 : 0;
+}
+
+int tc_retained_chart3d_set_colorbar(tc_retained_chart3d* chart,
+                                     tc_plot_item3d_handle surface,
+                                     const char* label,
+                                     const tc_colorbar3d_style* style) {
+    if (!chart)
+        return 0;
+    const tc_colorbar3d_style resolved = style ? *style : default_colorbar_style();
+    return logged("set_colorbar", 0, [&] {
+        return chart->value.set_colorbar(surface, label ? label : "", resolved) ? 1 : 0;
+    });
+}
+
+void tc_retained_chart3d_clear_colorbar(tc_retained_chart3d* chart) {
+    if (chart)
+        chart->value.clear_colorbar();
 }
 
 void tc_retained_chart3d_set_axis_labels(tc_retained_chart3d* chart,

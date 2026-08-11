@@ -86,6 +86,26 @@ typedef struct tc_grid_item3d_style {
     uint32_t labels_visible;
 } tc_grid_item3d_style;
 
+// Screen-space color legend for one retained surface. The legend uses the
+// surface's live colormap/reversal and the same chart Z bounds as the surface
+// shader, so its colors and numeric labels cannot drift apart.
+typedef struct tc_colorbar3d_style {
+    uint32_t tick_count;
+    float width_px;
+    float height_ratio;
+    float margin_right_px;
+    float text_gap_px;
+    float text_size_px;
+    float label_r;
+    float label_g;
+    float label_b;
+    float label_a;
+    float border_r;
+    float border_g;
+    float border_b;
+    float border_a;
+} tc_colorbar3d_style;
+
 typedef struct tc_plot_item3d_snapshot {
     uint32_t kind;
     uint64_t geometry_revision;
@@ -189,6 +209,14 @@ TCPLOT_API int tc_retained_chart3d_grid_get_style(const tc_retained_chart3d* cha
                                                   tc_grid_item3d_style* style);
 TCPLOT_API tc_plot_item3d_handle tc_retained_chart3d_grid_part(const tc_retained_chart3d* chart);
 TCPLOT_API int tc_retained_chart3d_set_grid_part(tc_retained_chart3d* chart, tc_plot_item3d_handle grid);
+
+// Enable or reconfigure the optional screen-space colorbar. `surface` must be
+// a live surface from this chart. Passing an empty label omits the title.
+TCPLOT_API int tc_retained_chart3d_set_colorbar(tc_retained_chart3d* chart,
+                                                tc_plot_item3d_handle surface,
+                                                const char* label,
+                                                const tc_colorbar3d_style* style);
+TCPLOT_API void tc_retained_chart3d_clear_colorbar(tc_retained_chart3d* chart);
 
 TCPLOT_API void tc_retained_chart3d_set_axis_labels(tc_retained_chart3d* chart,
                                                     const char* x_label,

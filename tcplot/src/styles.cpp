@@ -3,6 +3,8 @@
 #include "tcplot/styles.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 
 namespace tcplot {
     namespace styles {
@@ -87,27 +89,57 @@ namespace tcplot {
 
         SrgbColor colormap(SurfaceColorMap map, float t) {
             t = std::clamp(t, 0.0f, 1.0f);
+            const auto piecewise = [t](const auto& colors) {
+                const float x = t * static_cast<float>(colors.size() - 1);
+                const std::size_t index = std::min(static_cast<std::size_t>(std::floor(x)), colors.size() - 2);
+                const float f = x - static_cast<float>(index);
+                const SrgbColor& left = colors[index];
+                const SrgbColor& right = colors[index + 1];
+                return SrgbColor{
+                    left.r + (right.r - left.r) * f,
+                    left.g + (right.g - left.g) * f,
+                    left.b + (right.b - left.b) * f,
+                    1.0f,
+                };
+            };
             switch (map) {
-            case SurfaceColorMap::Viridis:
-                // Compact CPU-side approximation matching the shader palette closely
-                // enough for legends and 2D colored tracks.
-                return {
-                    0.277f + t * (0.741f - 0.277f),
-                    0.005f + t * (0.873f - 0.005f),
-                    0.334f + t * (0.150f - 0.334f),
-                    1.0f,
-                };
-            case SurfaceColorMap::Plasma:
-                return {
-                    0.050f + t * (0.940f - 0.050f),
-                    0.030f + t * (0.975f - 0.030f),
-                    0.528f + t * (0.131f - 0.528f),
-                    1.0f,
-                };
+            case SurfaceColorMap::Viridis: {
+                static constexpr std::array<SrgbColor, 10> colors{{
+                    {0.267f, 0.005f, 0.329f, 1.0f},
+                    {0.283f, 0.141f, 0.458f, 1.0f},
+                    {0.254f, 0.265f, 0.530f, 1.0f},
+                    {0.207f, 0.372f, 0.553f, 1.0f},
+                    {0.164f, 0.471f, 0.558f, 1.0f},
+                    {0.128f, 0.567f, 0.551f, 1.0f},
+                    {0.135f, 0.659f, 0.518f, 1.0f},
+                    {0.267f, 0.749f, 0.441f, 1.0f},
+                    {0.478f, 0.821f, 0.318f, 1.0f},
+                    {0.741f, 0.873f, 0.150f, 1.0f},
+                }};
+                return piecewise(colors);
+            }
+            case SurfaceColorMap::Plasma: {
+                static constexpr std::array<SrgbColor, 7> colors{{
+                    {0.050f, 0.030f, 0.528f, 1.0f},
+                    {0.362f, 0.004f, 0.649f, 1.0f},
+                    {0.610f, 0.090f, 0.620f, 1.0f},
+                    {0.798f, 0.280f, 0.470f, 1.0f},
+                    {0.928f, 0.473f, 0.326f, 1.0f},
+                    {0.994f, 0.704f, 0.184f, 1.0f},
+                    {0.940f, 0.975f, 0.131f, 1.0f},
+                }};
+                return piecewise(colors);
+            }
             case SurfaceColorMap::Grayscale:
                 return {t, t, t, 1.0f};
-            case SurfaceColorMap::CoolWarm:
-                return {t, 0.25f + 0.5f * (1.0f - std::abs(2.0f * t - 1.0f)), 1.0f - t, 1.0f};
+            case SurfaceColorMap::CoolWarm: {
+                static constexpr std::array<SrgbColor, 3> colors{{
+                    {0.230f, 0.299f, 0.754f, 1.0f},
+                    {0.865f, 0.865f, 0.865f, 1.0f},
+                    {0.706f, 0.016f, 0.150f, 1.0f},
+                }};
+                return piecewise(colors);
+            }
             case SurfaceColorMap::Solid:
                 return {1.0f, 1.0f, 1.0f, 1.0f};
             case SurfaceColorMap::Jet:

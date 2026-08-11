@@ -29,6 +29,7 @@ def make_plot():
     plot.z_scale = 5.0
     plot.surface(X, Y, Z, color=SrgbColor(0.12, 0.56, 0.85, 1.0))
     plot.surface(X, Y, Z, color=SrgbColor(0.0, 0.0, 0.0, 1.0), wireframe=True)
+    plot.show_colorbar(idx=0, label="z")
     return plot
 
 
