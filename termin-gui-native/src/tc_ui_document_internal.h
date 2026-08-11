@@ -118,6 +118,17 @@ TC_UI_INTERNAL void tc_ui_internal_clear_document_state_references(tc_ui_documen
 TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_interactive(const tc_widget* widget);
 TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_enabled(const tc_widget* widget);
 TC_UI_INTERNAL bool tc_ui_internal_widget_is_descendant_of(const tc_widget* widget, const tc_widget* ancestor);
+TC_UI_INTERNAL tc_ui_uniform_transform tc_ui_internal_widget_accumulated_transform(const tc_widget* widget);
+TC_UI_INTERNAL bool tc_ui_internal_widget_map_point_from_document(const tc_widget* widget,
+                                                                  tc_ui_point document_point,
+                                                                  tc_ui_point* out_widget_point);
+TC_UI_INTERNAL tc_ui_point tc_ui_internal_widget_map_point_to_document(const tc_widget* widget,
+                                                                       tc_ui_point widget_point);
+TC_UI_INTERNAL tc_ui_rect tc_ui_internal_widget_bounds_in_document(const tc_widget* widget);
+TC_UI_INTERNAL tc_ui_event_result tc_ui_internal_deliver_pointer_event(tc_ui_document* document,
+                                                                       tc_widget_handle handle,
+                                                                       const tc_ui_pointer_event* event,
+                                                                       bool require_interactive);
 TC_UI_INTERNAL bool
 tc_ui_internal_handle_is_in_subtree(tc_ui_document* document, tc_widget_handle handle, const tc_widget* root);
 TC_UI_INTERNAL bool tc_ui_internal_cancel_pointer_state(tc_ui_document* document,

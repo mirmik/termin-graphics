@@ -127,6 +127,12 @@ namespace termin::gui_native {
         bool detach() {
             return tc_widget_detach(&_widget);
         }
+        tc_ui_uniform_transform subtree_transform() const {
+            return tc_widget_subtree_transform(&_widget);
+        }
+        bool set_subtree_transform(tc_ui_uniform_transform transform) {
+            return tc_widget_set_subtree_transform(&_widget, transform);
+        }
         void mark_dirty(uint32_t dirty_flags) {
             tc_widget_mark_dirty(&_widget, dirty_flags);
         }

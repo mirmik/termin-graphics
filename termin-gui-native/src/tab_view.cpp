@@ -234,8 +234,8 @@ namespace termin::gui_native {
         }
         if (child_count() > 0 && selected_index_ < child_count() && rect_contains(page_rect(), x, y)) {
             tc_widget* selected = child_at(selected_index_);
-            if (selected && selected->vtable && selected->vtable->hit_test) {
-                tc_widget_handle hit = selected->vtable->hit_test(selected, document, x, y);
+            if (selected) {
+                tc_widget_handle hit = detail::hit_test_widget(selected, document, x, y);
                 if (!tc_widget_handle_is_invalid(hit)) {
                     return hit;
                 }

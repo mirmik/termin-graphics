@@ -148,10 +148,11 @@ namespace termin::gui_native {
         } else if (!tc_widget_handle_is_invalid(anchor_owner_)) {
             tc_widget* anchor = tc_ui_document_resolve_widget(document, anchor_owner_);
             if (anchor) {
+                const tc_ui_rect anchor_bounds = tc_widget_bounds_in_document(anchor);
                 overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW;
                 overlay_layout.anchor = anchor_owner_;
-                overlay_layout.offset.x = position.x - anchor->bounds.x;
-                overlay_layout.offset.y = position.y - (anchor->bounds.y + anchor->bounds.height);
+                overlay_layout.offset.x = position.x - anchor_bounds.x;
+                overlay_layout.offset.y = position.y - (anchor_bounds.y + anchor_bounds.height);
             } else {
                 overlay_layout.placement = TC_UI_OVERLAY_PLACEMENT_POINT;
                 overlay_layout.point = position;
@@ -476,7 +477,7 @@ namespace termin::gui_native {
             return own;
         if (!tc_widget_handle_is_invalid(anchor_owner_)) {
             tc_widget* owner = tc_ui_document_resolve_widget(document, anchor_owner_);
-            if (owner && rect_contains(owner->bounds, x, y))
+            if (owner && rect_contains(tc_widget_bounds_in_document(owner), x, y))
                 return anchor_owner_;
         }
         return tc_widget_handle_invalid();

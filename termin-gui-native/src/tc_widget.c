@@ -67,6 +67,7 @@ void tc_widget_init_unowned(tc_widget* widget,
     widget->cursor_intent = TC_UI_CURSOR_INHERIT;
     widget->style_role = TC_UI_STYLE_GENERIC;
     widget->layout_spec = tc_ui_widget_layout_spec_default();
+    widget->subtree_transform = tc_ui_uniform_transform_identity();
 }
 
 static void mark_style_subtree_dirty(tc_widget* widget) {
@@ -134,9 +135,14 @@ bool tc_ui_internal_cancel_pointer_state(tc_ui_document* document,
     event.type = TC_UI_POINTER_CANCEL;
     event.cancel_reason = reason;
     for (index = 0; index < target_count; ++index) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document_handle, targets[index]);
+        tc_widget* widget;
+        document = tc_ui_internal_resolve_document(document_handle);
+        if (!document) {
+            break;
+        }
+        widget = tc_ui_document_resolve_widget(document_handle, targets[index]);
         if (widget && widget->vtable && widget->vtable->pointer_event) {
-            widget->vtable->pointer_event(widget, document_handle, &event);
+            (void)tc_ui_internal_deliver_pointer_event(document, targets[index], &event, false);
             notified = true;
         }
     }
@@ -337,6 +343,140 @@ void tc_widget_set_bounds(tc_widget* widget, tc_ui_rect bounds) {
         return;
     }
     widget->bounds = bounds;
+}
+
+static void mark_transform_subtree_dirty(tc_widget* widget) {
+    size_t index;
+    if (!widget) {
+        return;
+    }
+    tc_widget_mark_dirty(widget, TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
+    for (index = 0; index < widget->child_count; ++index) {
+        mark_transform_subtree_dirty(widget->children[index]);
+    }
+}
+
+tc_ui_uniform_transform tc_ui_uniform_transform_identity(void) {
+    tc_ui_uniform_transform transform = {{0.0f, 0.0f}, 1.0f};
+    return transform;
+}
+
+bool tc_ui_uniform_transform_is_valid(const tc_ui_uniform_transform* transform) {
+    return transform && isfinite(transform->translation.x) && isfinite(transform->translation.y) &&
+           isfinite(transform->scale) && transform->scale > 0.0f;
+}
+
+tc_ui_uniform_transform tc_ui_uniform_transform_compose(tc_ui_uniform_transform outer, tc_ui_uniform_transform inner) {
+    tc_ui_uniform_transform result;
+    result.translation.x = outer.translation.x + inner.translation.x * outer.scale;
+    result.translation.y = outer.translation.y + inner.translation.y * outer.scale;
+    result.scale = outer.scale * inner.scale;
+    if (!tc_ui_uniform_transform_is_valid(&result)) {
+        tc_log_error("[termin-gui-native] uniform transform composition overflowed");
+    }
+    return result;
+}
+
+bool tc_ui_uniform_transform_inverse(tc_ui_uniform_transform transform, tc_ui_uniform_transform* out_inverse) {
+    if (!out_inverse || !tc_ui_uniform_transform_is_valid(&transform)) {
+        tc_log_error("[termin-gui-native] cannot invert invalid uniform transform");
+        return false;
+    }
+    out_inverse->scale = 1.0f / transform.scale;
+    out_inverse->translation.x = -transform.translation.x * out_inverse->scale;
+    out_inverse->translation.y = -transform.translation.y * out_inverse->scale;
+    if (!tc_ui_uniform_transform_is_valid(out_inverse)) {
+        tc_log_error("[termin-gui-native] uniform transform inverse overflowed");
+        *out_inverse = tc_ui_uniform_transform_identity();
+        return false;
+    }
+    return true;
+}
+
+tc_ui_point tc_ui_uniform_transform_map_point(tc_ui_uniform_transform transform, tc_ui_point point) {
+    tc_ui_point result = {
+        transform.translation.x + point.x * transform.scale,
+        transform.translation.y + point.y * transform.scale,
+    };
+    return result;
+}
+
+tc_ui_rect tc_ui_uniform_transform_map_rect(tc_ui_uniform_transform transform, tc_ui_rect rect) {
+    tc_ui_point origin = tc_ui_uniform_transform_map_point(transform, (tc_ui_point){rect.x, rect.y});
+    tc_ui_rect result = {origin.x, origin.y, rect.width * transform.scale, rect.height * transform.scale};
+    return result;
+}
+
+tc_ui_uniform_transform tc_widget_subtree_transform(const tc_widget* widget) {
+    return widget ? widget->subtree_transform : tc_ui_uniform_transform_identity();
+}
+
+bool tc_widget_set_subtree_transform(tc_widget* widget, tc_ui_uniform_transform transform) {
+    if (!widget) {
+        tc_log_error("[termin-gui-native] cannot set subtree transform on null widget");
+        return false;
+    }
+    if (!tc_ui_uniform_transform_is_valid(&transform)) {
+        tc_log_error("[termin-gui-native] rejected invalid widget subtree transform");
+        return false;
+    }
+    if (widget->subtree_transform.translation.x == transform.translation.x &&
+        widget->subtree_transform.translation.y == transform.translation.y &&
+        widget->subtree_transform.scale == transform.scale) {
+        return true;
+    }
+    widget->subtree_transform = transform;
+    mark_transform_subtree_dirty(widget);
+    return true;
+}
+
+tc_ui_uniform_transform tc_ui_internal_widget_accumulated_transform(const tc_widget* widget) {
+    if (!widget) {
+        return tc_ui_uniform_transform_identity();
+    }
+    return tc_ui_uniform_transform_compose(tc_ui_internal_widget_accumulated_transform(widget->parent),
+                                           widget->subtree_transform);
+}
+
+bool tc_ui_internal_widget_map_point_from_document(const tc_widget* widget,
+                                                   tc_ui_point document_point,
+                                                   tc_ui_point* out_widget_point) {
+    tc_ui_uniform_transform inverse;
+    if (!widget || !out_widget_point ||
+        !tc_ui_uniform_transform_inverse(tc_ui_internal_widget_accumulated_transform(widget), &inverse)) {
+        return false;
+    }
+    *out_widget_point = tc_ui_uniform_transform_map_point(inverse, document_point);
+    return true;
+}
+
+tc_ui_point tc_ui_internal_widget_map_point_to_document(const tc_widget* widget, tc_ui_point widget_point) {
+    return tc_ui_uniform_transform_map_point(tc_ui_internal_widget_accumulated_transform(widget), widget_point);
+}
+
+tc_ui_rect tc_ui_internal_widget_bounds_in_document(const tc_widget* widget) {
+    return widget
+               ? tc_ui_uniform_transform_map_rect(tc_ui_internal_widget_accumulated_transform(widget), widget->bounds)
+               : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
+bool tc_widget_map_point_from_document(const tc_widget* widget,
+                                       tc_ui_point document_point,
+                                       tc_ui_point* out_widget_point) {
+    return tc_ui_internal_widget_map_point_from_document(widget, document_point, out_widget_point);
+}
+
+tc_ui_point tc_widget_map_point_to_document(const tc_widget* widget, tc_ui_point widget_point) {
+    return tc_ui_internal_widget_map_point_to_document(widget, widget_point);
+}
+
+tc_ui_rect tc_widget_map_rect_to_document(const tc_widget* widget, tc_ui_rect widget_rect) {
+    return widget ? tc_ui_uniform_transform_map_rect(tc_ui_internal_widget_accumulated_transform(widget), widget_rect)
+                  : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
+tc_ui_rect tc_widget_bounds_in_document(const tc_widget* widget) {
+    return tc_ui_internal_widget_bounds_in_document(widget);
 }
 
 tc_ui_size tc_widget_min_size(const tc_widget* widget) {

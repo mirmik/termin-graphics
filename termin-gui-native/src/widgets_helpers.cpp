@@ -348,9 +348,12 @@ namespace termin::gui_native::detail {
     }
 
     void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context) {
-        if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
-            widget->vtable->paint(widget, document, context);
-        }
+        tc_widget_paint_subtree(widget, document, context);
+    }
+
+    tc_widget_handle
+    hit_test_widget(tc_widget* widget, tc_ui_document_handle document, float parent_x, float parent_y) {
+        return tc_widget_hit_test_subtree(widget, document, parent_x, parent_y);
     }
 
     tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding) {

@@ -143,18 +143,58 @@ namespace {
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
 
         assert(button->parent_widget() == view->c_widget());
-        assert(button->bounds().x == 25.0f);
-        assert(button->bounds().y == 32.0f);
+        assert(button->bounds().x == 15.0f);
+        assert(button->bounds().y == 12.0f);
         assert(tc_widget_handle_eq(document.hit_test(30.0f, 40.0f), button_handle));
+
+        view->set_zoom(2.0f, {10.0f, 20.0f});
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
+        assert(button->bounds().x == 15.0f);
+        assert(button->bounds().width == 100.0f);
+        assert(tc_widget_subtree_transform(button->c_widget()).scale == 2.0f);
+        assert(tc_widget_handle_eq(document.hit_test(50.0f, 60.0f), button_handle));
+
+        auto* draw_list = tc_ui_draw_list_create();
+        auto* context = tc_ui_paint_context_create(draw_list);
+        document.paint_roots(context);
+        assert(commands_of_type(draw_list, TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM).size() == 1);
+        assert(commands_of_type(draw_list, TC_UI_DRAW_POP_TRANSFORM).size() == 1);
+        tc_ui_paint_context_destroy(context);
+        tc_ui_draw_list_destroy(draw_list);
+
+        view->set_zoom(3.0f, {10.0f, 20.0f});
+        assert(tc_widget_subtree_transform(button->c_widget()).scale == 3.0f);
+        assert(tc_widget_handle_eq(document.hit_test(70.0f, 80.0f), button_handle));
+
+        assert(tc_ui_document_set_pointer_capture(document.get(), button_handle));
+        assert(view->clear_widget_portal(item->handle()));
+        assert(button->parent_widget() == nullptr);
+        assert(tc_widget_subtree_transform(button->c_widget()).scale == 1.0f);
+        assert(tc_widget_handle_is_invalid(tc_ui_document_pointer_capture(document.get())));
+
+        auto* replacement = new Button("Replacement");
+        const auto replacement_handle = document.adopt(replacement);
+        assert(view->set_widget_portal(item->handle(), button_handle));
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
+        assert(view->set_widget_portal(item->handle(), replacement_handle));
+        assert(button->parent_widget() == nullptr);
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
+        assert(replacement->parent_widget() == view->c_widget());
+        view->clear_widget_portals();
+        assert(replacement->parent_widget() == nullptr);
+        assert(view->set_widget_portal(item->handle(), button_handle));
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
 
         assert(scene.destroy(item->handle()));
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
         assert(button->parent_widget() == nullptr);
+        assert(tc_widget_subtree_transform(button->c_widget()).scale == 1.0f);
         assert(tc_ui_document_is_alive(document.get(), button_handle));
 
         assert(tc_ui_document_destroy_widget(document.get(), view_handle));
         assert(tc_ui_document_is_alive(document.get(), button_handle));
         assert(tc_ui_document_destroy_widget(document.get(), button_handle));
+        assert(tc_ui_document_destroy_widget(document.get(), replacement_handle));
         tc_ui_document_destroy(document_handle);
         tc_visual_scene_destroy(scene_handle);
     }

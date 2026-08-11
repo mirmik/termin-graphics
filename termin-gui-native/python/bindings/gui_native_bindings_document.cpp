@@ -136,7 +136,8 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
         .def_prop_ro("points", [](const DrawCommand& command) { return command.points; })
         .def_prop_ro("texture_id", [](const DrawCommand& command) { return command.value.texture_id; })
         .def_prop_ro("texture_sampling", [](const DrawCommand& command) { return command.value.texture_sampling; })
-        .def_prop_ro("flip_v", [](const DrawCommand& command) { return command.value.flip_v; });
+        .def_prop_ro("flip_v", [](const DrawCommand& command) { return command.value.flip_v; })
+        .def_prop_ro("transform", [](const DrawCommand& command) { return command.value.transform; });
 
     nb::class_<DrawList>(m, "DrawList")
         .def(nb::init<>())
@@ -220,7 +221,8 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                termin::SrgbColor color,
                float thickness,
                int32_t segments) {
-                const tc_ui_arc_draw_desc desc{center, radius, start_radians, end_radians, to_tc_ui_srgb(color), thickness, segments};
+                const tc_ui_arc_draw_desc desc{
+                    center, radius, start_radians, end_radians, to_tc_ui_srgb(color), thickness, segments};
                 tc_ui_painter_draw_arc(self.get(), &desc);
             },
             nb::arg("center"),
@@ -255,8 +257,12 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                std::optional<termin::SrgbColor> tint,
                bool flip_v,
                tc_ui_texture_sampling sampling) {
-                tc_ui_painter_draw_texture(
-                    self.get(), texture.id, rect, to_tc_ui_srgb(tint.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f})), sampling, flip_v);
+                tc_ui_painter_draw_texture(self.get(),
+                                           texture.id,
+                                           rect,
+                                           to_tc_ui_srgb(tint.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f})),
+                                           sampling,
+                                           flip_v);
             },
             nb::arg("texture"),
             nb::arg("rect"),
@@ -271,8 +277,12 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                std::optional<termin::SrgbColor> tint,
                bool flip_v,
                tc_ui_texture_sampling sampling) {
-                tc_ui_painter_draw_texture(
-                    self.get(), texture.id, rect, to_tc_ui_srgb(tint.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f})), sampling, flip_v);
+                tc_ui_painter_draw_texture(self.get(),
+                                           texture.id,
+                                           rect,
+                                           to_tc_ui_srgb(tint.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f})),
+                                           sampling,
+                                           flip_v);
             },
             nb::arg("texture"),
             nb::arg("rect"),
@@ -281,7 +291,11 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             nb::arg("sampling") = TC_UI_TEXTURE_SAMPLING_LINEAR)
         .def(
             "draw_text",
-            [](PaintContext& self, const std::string& text, tc_ui_point position, float font_size, termin::SrgbColor color) {
+            [](PaintContext& self,
+               const std::string& text,
+               tc_ui_point position,
+               float font_size,
+               termin::SrgbColor color) {
                 tc_ui_painter_draw_text(self.get(), text.c_str(), position, font_size, to_tc_ui_srgb(color));
             },
             nb::arg("text"),
@@ -292,7 +306,14 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             "push_clip",
             [](PaintContext& self, tc_ui_rect rect) { tc_ui_painter_push_clip(self.get(), rect); },
             nb::arg("rect"))
-        .def("pop_clip", [](PaintContext& self) { tc_ui_painter_pop_clip(self.get()); });
+        .def("pop_clip", [](PaintContext& self) { tc_ui_painter_pop_clip(self.get()); })
+        .def(
+            "push_uniform_transform",
+            [](PaintContext& self, tc_ui_uniform_transform transform) {
+                tc_ui_painter_push_uniform_transform(self.get(), transform);
+            },
+            nb::arg("transform"))
+        .def("pop_transform", [](PaintContext& self) { tc_ui_painter_pop_transform(self.get()); });
 
     m.def("tc_ui_document_create", []() {
         termin::gui_native::TcDocument document{tc_ui_document_create()};
@@ -539,8 +560,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
         .def(
             "create_swatch",
             [](termin::gui_native::TcDocument& self, termin::SrgbColor color) {
-                return SwatchRef{document_make_native<termin::gui_native::Swatch>(
-                    self, color)};
+                return SwatchRef{document_make_native<termin::gui_native::Swatch>(self, color)};
             },
             nb::arg("color"))
         .def(
@@ -736,8 +756,7 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
                 const termin::SrgbColor resolved_initial = initial.value_or(termin::SrgbColor{1.0f, 1.0f, 1.0f, 1.0f});
                 return ColorDialogRef{document_make_native<termin::gui_native::ColorDialog>(
                     self,
-                    termin::SrgbColor{
-                        resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
+                    termin::SrgbColor{resolved_initial.r, resolved_initial.g, resolved_initial.b, resolved_initial.a},
                     show_alpha,
                     title)};
             },
@@ -1006,7 +1025,9 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
 
     nb::class_<PythonMaterializedWidget>(m, "MaterializedWidget")
         .def_prop_ro("widget",
-                     [](const PythonMaterializedWidget& self) { return WidgetRef{self.state, self.value.handle}; })
+                     [](const PythonMaterializedWidget& self) {
+                         return WidgetRef{self.state, self.value.handle};
+                     })
         .def_prop_ro("public", &typed_uiscript_widget)
         .def_prop_ro("type_name", [](const PythonMaterializedWidget& self) { return self.value.type_name; })
         .def_prop_ro("properties", [](const PythonMaterializedWidget& self) {

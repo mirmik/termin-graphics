@@ -58,6 +58,39 @@ font atlas dimensions, and the per-integer-size metrics cache is capped at 256
 entries so repeated scale changes cannot grow it for the lifetime of the
 process.
 
+## Widget subtree transforms
+
+Presentation density and widget transforms solve different problems. Density
+belongs to the whole document and can cause layout/reflow. A widget
+`subtree_transform` is a local translation plus a finite positive uniform scale
+applied after layout; it changes presentation and input coordinates without
+changing intrinsic sizes or the widget's logical `bounds`.
+
+Transforms compose through widget ancestry. Canonical paint traversal emits
+balanced transform commands, child hit testing applies the local inverse, and
+pointer bubbling remaps the document point independently for every receiver.
+Capture therefore remains handle-based and continues to work if an ancestor's
+transform changes during a drag. Overlay geometry stays in document space;
+anchor rectangles are mapped to document coordinates before popup placement.
+
+At the renderer boundary geometry uses `density_scale * subtree_scale`.
+Direct UI text requests glyphs at
+`logical_size * density_scale * font_scale * subtree_scale`. Nested Canvas2D
+text derives a raster scale from its accumulated affine transform and requests
+the final display size from `FontAtlas`; the atlas itself remains
+transform-neutral. This avoids scaling a previously rasterized small bitmap.
+
+Scene views use this contract for widget portals: portal bounds remain in world
+logical coordinates and the camera is installed as their subtree transform.
+Thus labels, controls, clips, stroke widths and pointer coordinates zoom as one
+coherent subtree.
+
+Portal placement is deliberately axis-aligned: it uses the retained item's
+world-space AABB. Rotation, shear and non-uniform widget transforms are not
+inferred from item ancestry; an application that needs rotated interactive
+content must keep that content in the retained scene rather than attach a
+native widget portal.
+
 ## Desktop window source
 
 `termin-window` exposes `BackendWindow::content_scale()` as physical

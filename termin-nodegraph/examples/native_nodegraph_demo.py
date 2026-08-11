@@ -30,12 +30,9 @@ def make_demo_graph() -> Graph:
     graph = Graph(data={"example": "native-nodegraph"})
     controller = GraphController(graph)
 
-    scene_color = controller.create_node(
-        "resource", title="Scene Color", x=-360.0, y=-230.0
-    )
-    scene_color.params.update(
-        {"format": "RGBA16F", "width": 1920, "height": 1080}
-    )
+    scene_color = controller.create_node("resource", title="Scene Color", x=-360.0, y=-230.0)
+    scene_color.params.update({"format": "RGBA16F", "width": 1920, "height": 1080})
+    scene_color.width = 240.0
     scene_color.data["param_specs"] = {
         "format": {
             "kind": "enum",
@@ -68,6 +65,7 @@ def make_demo_graph() -> Graph:
             "label": "Main Color",
         }
     )
+    color.width = 240.0
     color.data["param_specs"] = {
         "enabled": {"kind": "bool", "label": "Enabled"},
         "samples": {
@@ -95,6 +93,7 @@ def make_demo_graph() -> Graph:
 
     bloom = controller.create_node("effect", title="Bloom", x=30.0, y=40.0)
     bloom.params.update({"enabled": True, "threshold": 1.25, "iterations": 5})
+    bloom.width = 240.0
     bloom.data["param_specs"] = {
         "enabled": {"kind": "bool", "label": "Enabled"},
         "threshold": {
@@ -116,6 +115,7 @@ def make_demo_graph() -> Graph:
 
     present = controller.create_node("output", title="Present", x=340.0, y=70.0)
     present.params.update({"vsync": True, "gamma": 2.2, "output": "sRGB"})
+    present.width = 240.0
     present.data["param_specs"] = {
         "vsync": {"kind": "bool", "label": "VSync"},
         "gamma": {
@@ -142,7 +142,7 @@ def make_demo_graph() -> Graph:
     controller.connect(scene_color.id, "fbo", color.id, "input")
     controller.connect(color.id, "output", bloom.id, "input")
     controller.connect(bloom.id, "output", present.id, "input")
-    controller.add_group("Main Viewport", -410.0, -280.0, 980.0, 570.0)
+    controller.add_group("Main Viewport", -410.0, -280.0, 1020.0, 570.0)
     return graph
 
 
@@ -153,12 +153,7 @@ def _font_path() -> Path:
     candidates.extend(
         (
             sdk_root / "share" / "termin" / "fonts" / "DroidSans.ttf",
-            Path.cwd()
-            / "termin-thirdparty"
-            / "recastnavigation"
-            / "RecastDemo"
-            / "Bin"
-            / "DroidSans.ttf",
+            Path.cwd() / "termin-thirdparty" / "recastnavigation" / "RecastDemo" / "Bin" / "DroidSans.ttf",
         )
     )
     font = next((candidate for candidate in candidates if candidate.is_file()), None)
@@ -185,9 +180,7 @@ def run_windowed(*, frame_limit: int = 0, second_limit: float = 0.0) -> int:
     try:
         graphics_session = WindowedGraphicsSession.create_native()
         window_manager = WindowManager(graphics_session)
-        window_handle = window_manager.create_window(
-            "termin-nodegraph native example", 1280, 820
-        )
+        window_handle = window_manager.create_window("termin-nodegraph native example", 1280, 820)
         document = tc_ui_document_create()
         adapter = GuiWindowAdapter(
             window_manager,
@@ -217,9 +210,7 @@ def run_windowed(*, frame_limit: int = 0, second_limit: float = 0.0) -> int:
             if adapter.repaint_requested:
                 adapter.render_frame()
                 frame_count += 1
-                if frame_count < warmup_frames or (
-                    frame_limit and frame_count < frame_limit
-                ):
+                if frame_count < warmup_frames or (frame_limit and frame_count < frame_limit):
                     adapter.request_repaint()
             else:
                 time.sleep(0.01)
@@ -316,12 +307,8 @@ def run(
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--frames", type=int, default=0, help="exit after this many rendered frames"
-    )
-    parser.add_argument(
-        "--seconds", type=float, default=0.0, help="exit after this many seconds"
-    )
+    parser.add_argument("--frames", type=int, default=0, help="exit after this many rendered frames")
+    parser.add_argument("--seconds", type=float, default=0.0, help="exit after this many seconds")
     parser.add_argument(
         "--offscreen",
         action="store_true",

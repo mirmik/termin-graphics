@@ -17,6 +17,8 @@ typedef struct tc_ui_widget_snapshot {
     tc_language native_language;
     tc_widget_ownership_policy ownership;
     tc_ui_rect bounds;
+    tc_ui_uniform_transform subtree_transform;
+    tc_ui_uniform_transform accumulated_transform;
     tc_ui_size min_size;
     tc_ui_size preferred_size;
     tc_ui_size max_size;

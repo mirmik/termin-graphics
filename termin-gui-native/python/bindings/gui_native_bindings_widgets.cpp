@@ -167,6 +167,14 @@ void bind_gui_native_widgets(nb::module_& m) {
             [](const WidgetRef& self) { return tc_widget_bounds(self.resolve_checked()); },
             [](const WidgetRef& self, tc_ui_rect value) { tc_widget_set_bounds(self.resolve_checked(), value); })
         .def_prop_rw(
+            "subtree_transform",
+            [](const WidgetRef& self) { return tc_widget_subtree_transform(self.resolve_checked()); },
+            [](const WidgetRef& self, tc_ui_uniform_transform value) {
+                if (!tc_widget_set_subtree_transform(self.resolve_checked(), value)) {
+                    throw std::invalid_argument("invalid native UI widget subtree transform");
+                }
+            })
+        .def_prop_rw(
             "min_size",
             [](const WidgetRef& self) { return tc_widget_min_size(self.resolve_checked()); },
             [](const WidgetRef& self, tc_ui_size value) { tc_widget_set_min_size(self.resolve_checked(), value); })
@@ -352,9 +360,7 @@ void bind_gui_native_widgets(nb::module_& m) {
             "paint",
             [](const WidgetRef& self, PaintContext& context) {
                 tc_widget* widget = self.resolve_checked();
-                if (widget->vtable && widget->vtable->paint) {
-                    widget->vtable->paint(widget, self.state->document, context.get());
-                }
+                tc_widget_paint_subtree(widget, self.state->document, context.get());
                 self.throw_pending_exception();
             },
             nb::arg("context"))
@@ -362,10 +368,7 @@ void bind_gui_native_widgets(nb::module_& m) {
             "hit_test",
             [](const WidgetRef& self, float x, float y) {
                 tc_widget* widget = self.resolve_checked();
-                tc_widget_handle result = tc_widget_handle_invalid();
-                if (widget->vtable && widget->vtable->hit_test) {
-                    result = widget->vtable->hit_test(widget, self.state->document, x, y);
-                }
+                const tc_widget_handle result = tc_widget_hit_test_subtree(widget, self.state->document, x, y);
                 self.throw_pending_exception();
                 return WidgetHandle{result};
             },
@@ -377,7 +380,14 @@ void bind_gui_native_widgets(nb::module_& m) {
                 tc_widget* widget = self.resolve_checked();
                 tc_ui_event_result result = TC_UI_EVENT_IGNORED;
                 if (widget->vtable && widget->vtable->pointer_event) {
-                    result = widget->vtable->pointer_event(widget, self.state->document, &event);
+                    tc_ui_pointer_event mapped = event;
+                    tc_ui_point local;
+                    if (!tc_widget_map_point_from_document(widget, {event.x, event.y}, &local)) {
+                        throw std::runtime_error("failed to map native UI pointer event into widget coordinates");
+                    }
+                    mapped.x = local.x;
+                    mapped.y = local.y;
+                    result = widget->vtable->pointer_event(widget, self.state->document, &mapped);
                 }
                 self.throw_pending_exception();
                 return result;
@@ -535,7 +545,9 @@ void bind_gui_native_widgets(nb::module_& m) {
         .def_prop_ro("handle", [](const PanelRef& self) { return WidgetHandle{self.widget.handle}; })
         .def(
             "set_fill",
-            [](const PanelRef& self, termin::SrgbColor color) { self.get().set_fill({color.r, color.g, color.b, color.a}); },
+            [](const PanelRef& self, termin::SrgbColor color) {
+                self.get().set_fill({color.r, color.g, color.b, color.a});
+            },
             nb::arg("color"))
         .def(
             "set_border",
@@ -554,7 +566,9 @@ void bind_gui_native_widgets(nb::module_& m) {
             [](const LabelRef& self, const std::string& text) { self.get().set_text(text); })
         .def(
             "set_color",
-            [](const LabelRef& self, termin::SrgbColor color) { self.get().set_color({color.r, color.g, color.b, color.a}); },
+            [](const LabelRef& self, termin::SrgbColor color) {
+                self.get().set_color({color.r, color.g, color.b, color.a});
+            },
             nb::arg("color"))
         .def(
             "set_font_size",

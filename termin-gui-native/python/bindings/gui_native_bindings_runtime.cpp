@@ -883,6 +883,8 @@ namespace termin::gui_native::python_bindings {
             item["native_language"] = widget.native_language;
             item["ownership"] = widget.ownership;
             item["bounds"] = widget.bounds;
+            item["subtree_transform"] = widget.subtree_transform;
+            item["accumulated_transform"] = widget.accumulated_transform;
             item["min_size"] = widget.min_size;
             item["preferred_size"] = widget.preferred_size;
             item["max_size"] = widget.max_size;

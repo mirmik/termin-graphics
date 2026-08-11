@@ -105,7 +105,10 @@ void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_u
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_srgb_color color) {
+void tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context,
+                                     tc_ui_rect rect,
+                                     float radius,
+                                     tc_ui_srgb_color color) {
     if (!finite_rect(rect) || !std::isfinite(radius) || radius < 0.0f) {
         tc_log_error("[termin-gui-native] rejected invalid rounded rectangle command");
         return;
@@ -209,8 +212,11 @@ void tc_ui_painter_draw_line(
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_draw_polyline(
-    tc_ui_paint_context* context, const tc_ui_point* points, size_t point_count, tc_ui_srgb_color color, float thickness) {
+void tc_ui_painter_draw_polyline(tc_ui_paint_context* context,
+                                 const tc_ui_point* points,
+                                 size_t point_count,
+                                 tc_ui_srgb_color color,
+                                 float thickness) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append polyline without paint context");
         return;
@@ -262,8 +268,10 @@ void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
     append_draw_command(context, command);
 }
 
-void tc_ui_painter_draw_icon(
-    tc_ui_paint_context* context, const char* icon_id, tc_ui_rect rect, tc_ui_srgb_color tint) {
+void tc_ui_painter_draw_icon(tc_ui_paint_context* context,
+                             const char* icon_id,
+                             tc_ui_rect rect,
+                             tc_ui_srgb_color tint) {
     if (!context || !context->draw_list) {
         tc_log_error("[termin-gui-native] cannot append icon without paint context");
         return;
@@ -325,6 +333,23 @@ void tc_ui_painter_push_clip(tc_ui_paint_context* context, tc_ui_rect rect) {
 void tc_ui_painter_pop_clip(tc_ui_paint_context* context) {
     tc_ui_draw_command command{};
     command.type = TC_UI_DRAW_POP_CLIP;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_push_uniform_transform(tc_ui_paint_context* context, tc_ui_uniform_transform transform) {
+    if (!tc_ui_uniform_transform_is_valid(&transform)) {
+        tc_log_error("[termin-gui-native] rejected invalid uniform transform");
+        return;
+    }
+    tc_ui_draw_command command{};
+    command.type = TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM;
+    command.transform = transform;
+    append_draw_command(context, command);
+}
+
+void tc_ui_painter_pop_transform(tc_ui_paint_context* context) {
+    tc_ui_draw_command command{};
+    command.type = TC_UI_DRAW_POP_TRANSFORM;
     append_draw_command(context, command);
 }
 

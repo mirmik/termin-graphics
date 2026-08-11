@@ -173,10 +173,10 @@ namespace termin::gui_native {
         }
         auto hit_child = [this, document, x, y](tc_widget_handle handle) {
             tc_widget* child = resolve_child(document, c_widget(), handle, "Splitter::hit_test");
-            if (!child || !child->vtable || !child->vtable->hit_test) {
+            if (!child) {
                 return tc_widget_handle_invalid();
             }
-            return child->vtable->hit_test(child, document, x, y);
+            return detail::hit_test_widget(child, document, x, y);
         };
         tc_widget_handle second_hit = hit_child(this->second());
         if (!tc_widget_handle_is_invalid(second_hit)) {

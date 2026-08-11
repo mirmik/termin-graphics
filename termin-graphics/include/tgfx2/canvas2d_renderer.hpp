@@ -109,6 +109,7 @@ namespace tgfx {
         // The list retains no resolver or render-context pointer. Returns false
         // when a runtime resource cannot be resolved or geometry cannot be lowered.
         bool execute(const DrawList2D& list, DrawResourceResolver2D& resources);
+        bool execute(const DrawList2D& list, DrawResourceResolver2D& resources, float font_scale);
 
         void begin_clip(float x, float y, float w, float h);
         void end_clip();

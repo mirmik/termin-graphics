@@ -54,9 +54,12 @@ namespace termin::gui_native::detail {
     NativeWidget* native_widget_body(tc_widget* widget);
     void layout_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_rect rect);
     void paint_widget(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
+    tc_widget_handle hit_test_widget(tc_widget* widget, tc_ui_document_handle document, float parent_x, float parent_y);
     tc_ui_srgb_color semantic_file_icon_color(std::string_view icon);
-    void
-    draw_semantic_file_icon(tc_ui_paint_context* context, tc_ui_rect rect, std::string_view icon, tc_ui_srgb_color tint);
+    void draw_semantic_file_icon(tc_ui_paint_context* context,
+                                 tc_ui_rect rect,
+                                 std::string_view icon,
+                                 tc_ui_srgb_color tint);
     tc_ui_rect inset_rect(tc_ui_rect rect, EdgeInsets padding);
     float primary_size(tc_ui_size size, Orientation orientation);
     float cross_size(tc_ui_size size, Orientation orientation);

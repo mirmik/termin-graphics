@@ -98,6 +98,8 @@ namespace {
         down.button = 1;
         down.click_count = 1;
         assert(tc_ui_document_dispatch_pointer_event(document.get(), &down) == TC_UI_EVENT_HANDLED);
+        assert(tc_widget_set_subtree_transform(&root.widget, {{1.0f, 2.0f}, 2.0f}));
+        assert(tc_widget_set_subtree_transform(&child.widget, {{3.0f, 4.0f}, 0.5f}));
 
         termin::gui_native::DocumentSnapshot snapshot(document);
         assert(snapshot.widgets().size() == 3);
@@ -119,6 +121,11 @@ namespace {
         assert(root_data->child_count == 1);
         assert(tc_widget_handle_eq(snapshot.children()[root_data->child_offset], child_handle));
         assert(tc_widget_handle_eq(child_data->parent, root_handle));
+        assert(child_data->subtree_transform.translation.x == 3.0f);
+        assert(child_data->subtree_transform.scale == 0.5f);
+        assert(child_data->accumulated_transform.translation.x == 7.0f);
+        assert(child_data->accumulated_transform.translation.y == 10.0f);
+        assert(child_data->accumulated_transform.scale == 1.0f);
         assert(child_data->preferred_size.width == 40.0f);
         assert(child_data->layout_spec.width.mode == TC_UI_LENGTH_FIXED);
         assert(child_data->layout_spec.width.value == 40.0f);

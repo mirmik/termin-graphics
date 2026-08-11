@@ -124,6 +124,8 @@ namespace termin::gui_native {
 
     private:
         void reconcile_portals(tc_ui_document_handle document);
+        void sync_portal_transforms();
+        void release_portal_widget(tc_widget_handle widget);
         void layout_portals(tc_ui_document_handle document);
         void paint_portals(tc_ui_document_handle document, tc_ui_paint_context* context);
         tc_widget_handle hit_test_portals(tc_ui_document_handle document, float x, float y) const;

@@ -134,8 +134,8 @@ namespace termin::gui_native {
         }
         if (!tc_widget_handle_is_invalid(this->content()) && rect_contains(content_rect(document), x, y)) {
             tc_widget* content = resolve_child(document, c_widget(), this->content(), "GroupBox::hit_test");
-            if (content && content->vtable && content->vtable->hit_test) {
-                tc_widget_handle hit = content->vtable->hit_test(content, document, x, y);
+            if (content) {
+                tc_widget_handle hit = detail::hit_test_widget(content, document, x, y);
                 if (!tc_widget_handle_is_invalid(hit)) {
                     return hit;
                 }

@@ -248,9 +248,9 @@ namespace termin::gui_native {
             return tc_widget_handle_invalid();
         for (size_t index = child_count(); index > 0; --index) {
             tc_widget* child = child_at(index - 1);
-            if (!child || !tc_widget_is_visible(child) || !child->vtable || !child->vtable->hit_test)
+            if (!child || !tc_widget_is_visible(child))
                 continue;
-            const tc_widget_handle hit = child->vtable->hit_test(child, document, x, y);
+            const tc_widget_handle hit = detail::hit_test_widget(child, document, x, y);
             if (!tc_widget_handle_is_invalid(hit))
                 return hit;
         }

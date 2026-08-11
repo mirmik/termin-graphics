@@ -84,6 +84,7 @@ namespace termin::gui_native {
         zoom_ = next;
         offset_.x = anchor.x - bounds().x - world_anchor.x * zoom_;
         offset_.y = anchor.y - bounds().y - world_anchor.y * zoom_;
+        sync_portal_transforms();
         mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
         emit_transform_changed();
     }
@@ -98,6 +99,7 @@ namespace termin::gui_native {
         const float clamped = detail::clamp_float(zoom_, minimum, maximum);
         if (clamped != zoom_) {
             zoom_ = clamped;
+            sync_portal_transforms();
             emit_transform_changed();
         }
         invalidate_scene();
@@ -119,6 +121,7 @@ namespace termin::gui_native {
         if (offset_.x == offset.x && offset_.y == offset.y)
             return;
         offset_ = offset;
+        sync_portal_transforms();
         mark_dirty(TC_WIDGET_DIRTY_LAYOUT | TC_WIDGET_DIRTY_PAINT | TC_WIDGET_DIRTY_STATE);
         emit_transform_changed();
     }
@@ -174,11 +177,22 @@ namespace termin::gui_native {
             tc_log_error("[termin-gui-native] one widget cannot belong to two scene portals");
             return false;
         }
-        const auto found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
+        auto found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
             return same_handle(portal.item, item);
         });
         if (found != portals_.end()) {
-            found->widget = widget;
+            if (!same_widget(found->widget, widget)) {
+                const tc_widget_handle previous = found->widget;
+                release_portal_widget(previous);
+                found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
+                    return same_handle(portal.item, item);
+                });
+            }
+            if (found != portals_.end()) {
+                found->widget = widget;
+            } else {
+                portals_.push_back({item, widget});
+            }
         } else {
             portals_.push_back({item, widget});
         }
@@ -187,10 +201,14 @@ namespace termin::gui_native {
     }
 
     bool SceneView::clear_widget_portal(GraphicItemHandle item) {
-        const auto before = portals_.size();
-        std::erase_if(portals_, [&](const WidgetPortal& portal) { return same_handle(portal.item, item); });
-        if (portals_.size() == before)
+        const auto found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
+            return same_handle(portal.item, item);
+        });
+        if (found == portals_.end())
             return false;
+        const tc_widget_handle widget = found->widget;
+        release_portal_widget(widget);
+        std::erase_if(portals_, [&](const WidgetPortal& portal) { return same_handle(portal.item, item); });
         invalidate_scene();
         return true;
     }
@@ -198,8 +216,40 @@ namespace termin::gui_native {
     void SceneView::clear_widget_portals() {
         if (portals_.empty())
             return;
+        const std::vector<WidgetPortal> retired = std::move(portals_);
         portals_.clear();
+        for (const auto& portal : retired) {
+            release_portal_widget(portal.widget);
+        }
         invalidate_scene();
+    }
+
+    void SceneView::sync_portal_transforms() {
+        const tc_ui_document_handle document = c_widget()->document;
+        if (tc_ui_document_handle_is_invalid(document))
+            return;
+        const SceneTransform current = transform();
+        const tc_ui_uniform_transform camera{{current.origin_x, current.origin_y}, current.zoom};
+        for (const auto& portal : portals_) {
+            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
+            if (widget && widget->parent == c_widget()) {
+                tc_widget_set_subtree_transform(widget, camera);
+            }
+        }
+    }
+
+    void SceneView::release_portal_widget(tc_widget_handle handle) {
+        const tc_ui_document_handle document = c_widget()->document;
+        if (tc_ui_document_handle_is_invalid(document))
+            return;
+        tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
+        if (widget && widget->parent == c_widget()) {
+            tc_widget_detach(widget);
+            widget = tc_ui_document_resolve_widget(document, handle);
+            if (widget) {
+                tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
+            }
+        }
     }
 
     void SceneView::reconcile_portals(tc_ui_document_handle document) {
@@ -230,8 +280,13 @@ namespace termin::gui_native {
             if (retained)
                 continue;
             tc_widget* widget = tc_ui_document_resolve_widget(document, previous.widget);
-            if (widget && widget->parent == c_widget())
+            if (widget && widget->parent == c_widget()) {
                 tc_widget_detach(widget);
+                widget = tc_ui_document_resolve_widget(document, previous.widget);
+                if (widget) {
+                    tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
+                }
+            }
         }
         portals_ = std::move(next);
     }
@@ -248,15 +303,17 @@ namespace termin::gui_native {
             tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
             if (!widget || widget->parent != c_widget())
                 continue;
-            const auto screen = world_to_screen({world->x0, world->y0});
+            const SceneTransform current = transform();
             detail::layout_widget(widget,
                                   document,
                                   {
-                                      screen.x,
-                                      screen.y,
-                                      std::max(1.0f, (world->x1 - world->x0) * zoom_),
-                                      std::max(1.0f, (world->y1 - world->y0) * zoom_),
+                                      world->x0,
+                                      world->y0,
+                                      std::max(1.0f, world->x1 - world->x0),
+                                      std::max(1.0f, world->y1 - world->y0),
                                   });
+            tc_widget_set_subtree_transform(
+                widget, tc_ui_uniform_transform{{current.origin_x, current.origin_y}, current.zoom});
         }
     }
 
@@ -471,8 +528,8 @@ namespace termin::gui_native {
                 continue;
             }
             tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget() && widget->vtable && widget->vtable->hit_test) {
-                const auto hit = widget->vtable->hit_test(widget, document, x, y);
+            if (widget && widget->parent == c_widget()) {
+                const auto hit = detail::hit_test_widget(widget, document, x, y);
                 if (!tc_widget_handle_is_invalid(hit))
                     return hit;
             }
@@ -493,8 +550,13 @@ namespace termin::gui_native {
     void SceneView::on_destroy(tc_ui_document_handle document) {
         for (const auto& portal : portals_) {
             tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget())
+            if (widget && widget->parent == c_widget()) {
                 tc_widget_detach(widget);
+                widget = tc_ui_document_resolve_widget(document, portal.widget);
+                if (widget) {
+                    tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
+                }
+            }
         }
         portals_.clear();
         pointer_handler_ = {};

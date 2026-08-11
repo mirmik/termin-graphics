@@ -512,8 +512,16 @@ namespace tgfx {
     }
 
     bool Canvas2DRenderer::execute(const DrawList2D& list, DrawResourceResolver2D& resources) {
+        return execute(list, resources, 1.0f);
+    }
+
+    bool Canvas2DRenderer::execute(const DrawList2D& list, DrawResourceResolver2D& resources, float font_scale) {
         if (ctx_ == nullptr) {
             tc::Log::error("[Canvas2DRenderer] execute requires an active Canvas frame");
+            return false;
+        }
+        if (!std::isfinite(font_scale) || font_scale <= 0.0f) {
+            tc::Log::error("[Canvas2DRenderer] execute requires a finite positive font scale");
             return false;
         }
 
@@ -680,40 +688,57 @@ namespace tgfx {
                             tc::Log::error("[Canvas2DRenderer] FontHandle %u did not resolve", value.font.id);
                             return false;
                         }
-                        font->ensure_glyphs(value.text, value.size_px, ctx_);
-                        const auto measured = font->measure_text(value.text, value.size_px);
+                        const auto& transform = transforms.back();
+                        const float xx = transform.m00 * transform.m00 + transform.m10 * transform.m10;
+                        const float yy = transform.m01 * transform.m01 + transform.m11 * transform.m11;
+                        const float xy = transform.m00 * transform.m01 + transform.m10 * transform.m11;
+                        const float discriminant = std::sqrt(std::max(0.0f, (xx - yy) * (xx - yy) + 4.0f * xy * xy));
+                        const float raster_scale = std::sqrt(std::max(0.0f, 0.5f * (xx + yy + discriminant)));
+                        if (!std::isfinite(raster_scale) || raster_scale <= 0.0f) {
+                            tc::Log::error("[Canvas2DRenderer] text transform has no finite raster scale");
+                            return false;
+                        }
+                        const float display_size_px = value.size_px * raster_scale * font_scale;
+                        if (!std::isfinite(display_size_px) || display_size_px <= 0.0f) {
+                            tc::Log::error("[Canvas2DRenderer] text has invalid display font size");
+                            return false;
+                        }
+                        font->ensure_glyphs(value.text, display_size_px, ctx_);
+                        const auto measured_px = font->measure_text(value.text, display_size_px);
+                        const FontAtlas::Size2f measured{measured_px.width / raster_scale,
+                                                         measured_px.height / raster_scale};
                         float start_x = value.origin.x;
                         float start_y = value.origin.y;
                         if (value.anchor == TextAnchor2D::Center) {
                             start_x -= measured.width * 0.5f;
-                            start_y -= value.size_px * 0.5f;
+                            start_y -= display_size_px * 0.5f / raster_scale;
                         } else if (value.anchor == TextAnchor2D::Right) {
                             start_x -= measured.width;
                         }
-                        const bool sdf = font->is_sdf_size(value.size_px);
-                        const float spread = sdf ? static_cast<float>(font->sdf_spread()) * value.size_px /
-                                                       static_cast<float>(font->sdf_reference_px())
-                                                 : 0.0f;
+                        const bool sdf = font->is_sdf_size(display_size_px);
+                        const float spread_px = sdf ? static_cast<float>(font->sdf_spread()) * display_size_px /
+                                                          static_cast<float>(font->sdf_reference_px())
+                                                    : 0.0f;
+                        const float spread = spread_px / raster_scale;
                         ClipMesh2D triangles;
                         float cursor_x = start_x;
                         std::size_t byte_index = 0;
                         while (byte_index < value.text.size()) {
                             const std::uint32_t codepoint = internal::utf8_decode(value.text, byte_index);
-                            const auto glyph = font->get_glyph(codepoint, value.size_px);
+                            const auto glyph = font->get_glyph(codepoint, display_size_px);
                             if (!glyph)
                                 continue;
                             const float x0 = cursor_x;
-                            const float x1 = x0 + glyph->width_px;
+                            const float x1 = x0 + glyph->width_px / raster_scale;
                             const float y0 = start_y - spread;
-                            const float y1 = y0 + glyph->height_px;
-                            const auto& transform = transforms.back();
+                            const float y1 = y0 + glyph->height_px / raster_scale;
                             const DrawVertex2D a{transform.transform_point({x0, y0}), {glyph->u0, glyph->v0}};
                             const DrawVertex2D b{transform.transform_point({x0, y1}), {glyph->u0, glyph->v1}};
                             const DrawVertex2D c{transform.transform_point({x1, y1}), {glyph->u1, glyph->v1}};
                             const DrawVertex2D d{transform.transform_point({x1, y0}), {glyph->u1, glyph->v0}};
                             triangles.push_back({{a, b, c}});
                             triangles.push_back({{a, c, d}});
-                            cursor_x += glyph->advance_px;
+                            cursor_x += glyph->advance_px / raster_scale;
                         }
                         const auto clipped = flatten_and_clip(triangles, clips);
                         if (clipped.empty())
@@ -728,7 +753,7 @@ namespace tgfx {
                         }
                         text2d_.draw_mesh_linear(text_vertices,
                                                  with_opacity(value.color, opacities.back()),
-                                                 value.size_px,
+                                                 display_size_px,
                                                  font,
                                                  value.coverage_gamma);
                         return true;

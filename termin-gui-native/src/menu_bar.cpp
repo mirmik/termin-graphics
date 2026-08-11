@@ -215,7 +215,7 @@ namespace termin::gui_native {
         while (root->parent)
             root = root->parent;
         const tc_ui_rect viewport = root->bounds;
-        const tc_ui_rect anchor = item_rects_[index];
+        const tc_ui_rect anchor = tc_widget_map_rect_to_document(c_widget(), item_rects_[index]);
         open_index_ = index;
         if (!popup_ptr->show(document, tc_ui_point{anchor.x, anchor.y + anchor.height}, viewport, true)) {
             tc_ui_document_destroy_widget(document, handle);

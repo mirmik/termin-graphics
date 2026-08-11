@@ -35,6 +35,15 @@ _GRID = SrgbColor(0.15, 0.16, 0.20, 1.0)
 _AXES = SrgbColor(0.24, 0.27, 0.34, 1.0)
 _TEXT = SrgbColor(0.92, 0.94, 0.98, 1.0)
 _PARAM_TEXT = SrgbColor(0.70, 0.74, 0.82, 1.0)
+_TITLE_HEIGHT = 26.0
+_SOCKET_ROW_HEIGHT = 20.0
+_PARAM_TOP_GAP = 7.0
+_PARAM_ROW_HEIGHT = 30.0
+_PARAM_EDITOR_HEIGHT = 28.0
+_PARAM_CHECKBOX_SIZE = 18.0
+_PARAM_LABEL_FRACTION = 0.44
+_PARAM_EDITOR_X_FRACTION = 0.47
+_NODE_BOTTOM_PADDING = 10.0
 _SOCKET_COLORS = {
     "fbo": SrgbColor(0.39, 0.70, 0.39, 1.0),
     "color_texture": SrgbColor(0.30, 0.62, 0.92, 1.0),
@@ -102,7 +111,7 @@ def _socket_position(node: Node, socket_name: str, *, output: bool) -> Point | N
         if socket.name == socket_name:
             return Point(
                 node.x + (node.width if output else 0.0),
-                node.y + 26.0 + 20.0 * (index + 0.5),
+                node.y + _TITLE_HEIGHT + _SOCKET_ROW_HEIGHT * (index + 0.5),
             )
     return None
 
@@ -119,10 +128,7 @@ def _bezier_points(start: Point, end: Point, *, steps: int = 32) -> list[Point]:
                 + 3.0 * mt * mt * t * (start.x + control_span)
                 + 3.0 * mt * t * t * (end.x - control_span)
                 + t**3 * end.x,
-                mt**3 * start.y
-                + 3.0 * mt * mt * t * start.y
-                + 3.0 * mt * t * t * end.y
-                + t**3 * end.y,
+                mt**3 * start.y + 3.0 * mt * mt * t * start.y + 3.0 * mt * t * t * end.y + t**3 * end.y,
             )
         )
     return result
@@ -209,7 +215,7 @@ class NativeNodeGraphView:
             )
             item.position = (node.x, node.y)
             title_item = self.scene.create_rect(
-                _rect(Rect(0.0, 0.0, node.width, 26.0)),
+                _rect(Rect(0.0, 0.0, node.width, _TITLE_HEIGHT)),
                 _color(title),
                 None,
                 1.0,
@@ -263,7 +269,7 @@ class NativeNodeGraphView:
             for index, socket in enumerate(sockets):
                 local = Point(
                     node.width if output else 0.0,
-                    26.0 + 20.0 * (index + 0.5),
+                    _TITLE_HEIGHT + _SOCKET_ROW_HEIGHT * (index + 0.5),
                 )
                 marker = self.scene.create_ellipse(
                     _rect(Rect(local.x - 4.0, local.y - 4.0, 8.0, 8.0)),
@@ -285,7 +291,7 @@ class NativeNodeGraphView:
                 del label
 
     def _append_param_labels(self, parent: GraphicItemRef2D, node: Node) -> None:
-        row_y = 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 8.0
+        row_y = self._param_section_y(node)
         specs = node.data.get("param_specs", {})
         if not isinstance(specs, dict):
             specs = {}
@@ -294,31 +300,42 @@ class NativeNodeGraphView:
             label = str(spec.get("label", name)) if isinstance(spec, dict) else name
             item = self.scene.create_text(
                 label,
-                (8.0, row_y + 13.0),
-                10.0,
+                (8.0, row_y + 19.0),
+                11.0,
                 _color(_PARAM_TEXT),
-                _rect(Rect(8.0, row_y, node.width * 0.45, 16.0)),
+                _rect(Rect(8.0, row_y, node.width * _PARAM_LABEL_FRACTION - 8.0, _PARAM_ROW_HEIGHT)),
                 parent,
             )
             del item
-            row_y += 18.0
+            row_y += _PARAM_ROW_HEIGHT
 
     def _append_param_widgets(self, parent: GraphicItemRef2D, node: Node) -> None:
-        row_y = 26.0 + max(len(node.inputs), len(node.outputs), 1) * 20.0 + 5.0
+        row_y = self._param_section_y(node)
+        editor_x = node.width * _PARAM_EDITOR_X_FRACTION
+        editor_width = max(64.0, node.width - editor_x - 8.0)
         for name, value in node.params.items():
             widget = self._create_param_widget(node, name, value)
+            kind = str(self._param_spec(node, name, value).get("kind", "string")).lower()
+            if kind == "bool":
+                width = _PARAM_CHECKBOX_SIZE
+                height = _PARAM_CHECKBOX_SIZE
+                x = editor_x + (editor_width - width) * 0.5
+            else:
+                width = editor_width
+                height = _PARAM_EDITOR_HEIGHT
+                x = editor_x
             item = self.scene.create_hit_region_rect(
-                _rect(Rect(0.0, 0.0, max(64.0, node.width * 0.46 - 8.0), 18.0)),
+                _rect(Rect(0.0, 0.0, width, height)),
                 parent,
             )
-            item.position = (node.width * 0.52, row_y)
+            item.position = (x, row_y + (_PARAM_ROW_HEIGHT - height) * 0.5)
             if not self.view.set_widget_portal(item.handle, widget.handle):
                 self.scene.destroy(item)
                 self.document.destroy_widget_recursive(widget.handle)
                 raise RuntimeError(f"failed to attach native node parameter '{node.id}.{name}'")
             self._embedded_items.append((item, widget))
             self.param_widgets[(node.id, name)] = widget
-            row_y += 18.0
+            row_y += _PARAM_ROW_HEIGHT
 
     def _create_param_widget(self, node: Node, name: str, value: object):
         spec = self._param_spec(node, name, value)
@@ -431,9 +448,7 @@ class NativeNodeGraphView:
                 self._install_pending_item()
                 self.request_render()
                 return True
-            semantic = self._semantic_item(
-                self.scene.hit_test(world.x, world.y)
-            )
+            semantic = self._semantic_item(self.scene.hit_test(world.x, world.y))
             self._selected_ids.clear()
             if semantic is None:
                 self._cancel_drag()
@@ -461,17 +476,17 @@ class NativeNodeGraphView:
             and self._drag_start_position is not None
         ):
             self._drag_item.position = (
-                self._drag_start_position[0]
-                + world.x - self._drag_start_world.x,
-                self._drag_start_position[1]
-                + world.y - self._drag_start_world.y,
+                self._drag_start_position[0] + world.x - self._drag_start_world.x,
+                self._drag_start_position[1] + world.y - self._drag_start_world.y,
             )
             self._item_moved(self._drag_item, self._drag_id)
             self.view.invalidate_scene()
             return True
-        if (event.type == PointerEventType.Up and
-                event.button == MouseButton.LEFT.value and
-                self._pending_connection is not None):
+        if (
+            event.type == PointerEventType.Up
+            and event.button == MouseButton.LEFT.value
+            and self._pending_connection is not None
+        ):
             start = self._pending_connection
             target = self._hit_socket(world)
             self._clear_pending()
@@ -486,10 +501,7 @@ class NativeNodeGraphView:
                     self.rebuild()
             self.request_render()
             return True
-        if (
-            event.type in (PointerEventType.Up, PointerEventType.Cancel)
-            and self._drag_item is not None
-        ):
+        if event.type in (PointerEventType.Up, PointerEventType.Cancel) and self._drag_item is not None:
             self._cancel_drag()
             return True
         return False
@@ -554,8 +566,7 @@ class NativeNodeGraphView:
         self._update_pending_item()
 
     def _update_pending_item(self) -> None:
-        if (self._pending_item is None or self._pending_connection is None
-                or self._pending_world is None):
+        if self._pending_item is None or self._pending_connection is None or self._pending_world is None:
             return
         node_id, socket_name, output = self._pending_connection
         node = self.graph.nodes.get(node_id)
@@ -622,9 +633,7 @@ class NativeNodeGraphView:
     ) -> tuple[str, GraphicItemRef2D] | None:
         current = item
         while current is not None:
-            stable_id = self._semantic_ids.get(
-                self._handle_key(current)
-            )
+            stable_id = self._semantic_ids.get(self._handle_key(current))
             if stable_id is not None:
                 return stable_id, current
             current = current.parent
@@ -648,8 +657,20 @@ class NativeNodeGraphView:
     def _node_height(node: Node) -> float:
         if bool(node.data.get("explicit_size", False)):
             return node.height
-        socket_height = max(len(node.inputs), len(node.outputs), 1) * 20.0
-        return max(node.height, 26.0 + socket_height + len(node.params) * 18.0 + 12.0)
+        socket_height = max(len(node.inputs), len(node.outputs), 1) * _SOCKET_ROW_HEIGHT
+        return max(
+            node.height,
+            _TITLE_HEIGHT
+            + socket_height
+            + _PARAM_TOP_GAP
+            + len(node.params) * _PARAM_ROW_HEIGHT
+            + _NODE_BOTTOM_PADDING,
+        )
+
+    @staticmethod
+    def _param_section_y(node: Node) -> float:
+        socket_height = max(len(node.inputs), len(node.outputs), 1) * _SOCKET_ROW_HEIGHT
+        return _TITLE_HEIGHT + socket_height + _PARAM_TOP_GAP
 
     def _notify_graph_changed(self) -> None:
         if self.on_graph_changed is not None:

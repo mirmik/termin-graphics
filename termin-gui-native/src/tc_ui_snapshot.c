@@ -133,6 +133,8 @@ bool tc_ui_document_capture_snapshot(tc_ui_document_handle document_handle,
         target->native_language = widget->native_language;
         target->ownership = widget->ownership_policy;
         target->bounds = widget->bounds;
+        target->subtree_transform = widget->subtree_transform;
+        target->accumulated_transform = tc_ui_internal_widget_accumulated_transform(widget);
         target->min_size = widget->min_size;
         target->preferred_size = widget->preferred_size;
         target->max_size = widget->max_size;

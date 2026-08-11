@@ -7,14 +7,65 @@
 
 #include <tcbase/tc_log.h>
 
-static tc_ui_event_result
-dispatch_pointer_event_to_widget(tc_ui_document* document, tc_widget_handle handle, const tc_ui_pointer_event* event) {
+void tc_widget_paint_subtree(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context) {
+    tc_ui_uniform_transform transform;
+    bool transformed;
+    if (!widget || !tc_widget_is_visible(widget) || !widget->vtable || !widget->vtable->paint) {
+        return;
+    }
+    transform = tc_widget_subtree_transform(widget);
+    transformed = transform.translation.x != 0.0f || transform.translation.y != 0.0f || transform.scale != 1.0f;
+    if (transformed) {
+        tc_ui_painter_push_uniform_transform(context, transform);
+    }
+    widget->vtable->paint(widget, document, context);
+    if (transformed) {
+        tc_ui_painter_pop_transform(context);
+    }
+}
+
+tc_widget_handle
+tc_widget_hit_test_subtree(tc_widget* widget, tc_ui_document_handle document, float parent_x, float parent_y) {
+    tc_ui_uniform_transform inverse;
+    tc_ui_point local;
+    tc_widget_handle hit;
+    tc_widget* hit_widget;
+    if (!widget || !tc_widget_is_visible(widget) || !widget->vtable || !widget->vtable->hit_test ||
+        !tc_ui_uniform_transform_inverse(tc_widget_subtree_transform(widget), &inverse)) {
+        return tc_widget_handle_invalid();
+    }
+    local = tc_ui_uniform_transform_map_point(inverse, (tc_ui_point){parent_x, parent_y});
+    hit = widget->vtable->hit_test(widget, document, local.x, local.y);
+    if (tc_widget_handle_is_invalid(hit)) {
+        return hit;
+    }
+    hit_widget = tc_ui_document_resolve_widget(document, hit);
+    if (!hit_widget || !tc_ui_internal_widget_is_descendant_of(hit_widget, widget)) {
+        tc_log_error("[termin-gui-native] subtree hit-test returned a foreign or stale handle");
+        return tc_widget_handle_invalid();
+    }
+    return hit;
+}
+
+tc_ui_event_result tc_ui_internal_deliver_pointer_event(tc_ui_document* document,
+                                                        tc_widget_handle handle,
+                                                        const tc_ui_pointer_event* event,
+                                                        bool require_interactive) {
     tc_widget* widget = tc_ui_document_resolve_widget(document->handle, handle);
-    if (!widget || !tc_ui_internal_widget_effectively_interactive(widget) || !widget->vtable ||
+    tc_ui_pointer_event mapped;
+    tc_ui_point local;
+    if (!widget || (require_interactive && !tc_ui_internal_widget_effectively_interactive(widget)) || !widget->vtable ||
         !widget->vtable->pointer_event) {
         return TC_UI_EVENT_IGNORED;
     }
-    return widget->vtable->pointer_event(widget, document->handle, event);
+    if (!tc_ui_internal_widget_map_point_from_document(widget, (tc_ui_point){event->x, event->y}, &local)) {
+        tc_log_error("[termin-gui-native] cannot map pointer event into widget coordinates");
+        return TC_UI_EVENT_IGNORED;
+    }
+    mapped = *event;
+    mapped.x = local.x;
+    mapped.y = local.y;
+    return widget->vtable->pointer_event(widget, document->handle, &mapped);
 }
 
 static tc_ui_event_result
@@ -132,7 +183,7 @@ static tc_ui_event_result dispatch_pointer_route(tc_ui_document* document,
         return TC_UI_EVENT_IGNORED;
     }
     for (index = 0; index < count; ++index) {
-        if (dispatch_pointer_event_to_widget(document, route[index], event) == TC_UI_EVENT_HANDLED) {
+        if (tc_ui_internal_deliver_pointer_event(document, route[index], event, true) == TC_UI_EVENT_HANDLED) {
             result = TC_UI_EVENT_HANDLED;
             if (out_handler) {
                 *out_handler = route[index];
@@ -200,7 +251,17 @@ static tc_widget_handle hit_test_entry(
     if (!widget || !tc_widget_is_visible(widget) || !widget->vtable || !widget->vtable->hit_test) {
         return tc_widget_handle_invalid();
     }
-    hit = widget->vtable->hit_test(widget, document->handle, x, y);
+    if (allow_root_hit) {
+        tc_ui_uniform_transform inverse;
+        tc_ui_point local;
+        if (!tc_ui_uniform_transform_inverse(tc_widget_subtree_transform(widget), &inverse)) {
+            return tc_widget_handle_invalid();
+        }
+        local = tc_ui_uniform_transform_map_point(inverse, (tc_ui_point){x, y});
+        hit = widget->vtable->hit_test(widget, document->handle, local.x, local.y);
+    } else {
+        hit = tc_widget_hit_test_subtree(widget, document->handle, x, y);
+    }
     if (tc_widget_handle_is_invalid(hit)) {
         return hit;
     }
@@ -305,9 +366,7 @@ void tc_ui_document_paint(tc_ui_document_handle document_handle, tc_ui_paint_con
     }
     for (index = 0; index < count; ++index) {
         tc_widget* widget = tc_ui_document_resolve_widget(document->handle, overlays[index].handle);
-        if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
-            widget->vtable->paint(widget, document->handle, context);
-        }
+        tc_widget_paint_subtree(widget, document->handle, context);
     }
     free(overlays);
 }
@@ -372,6 +431,7 @@ static bool layout_overlay_entry(tc_ui_document* document, const tc_ui_overlay_e
     tc_ui_constraints constraints;
     tc_ui_size wanted;
     tc_ui_rect bounds;
+    tc_ui_rect anchor_bounds = (tc_ui_rect){0};
     float margin;
     float max_x;
     float max_y;
@@ -414,9 +474,10 @@ static bool layout_overlay_entry(tc_ui_document* document, const tc_ui_overlay_e
             tc_log_error("[termin-gui-native] overlay layout anchor is not live");
             return false;
         }
+        anchor_bounds = tc_ui_internal_widget_bounds_in_document(anchor_widget);
     }
     if (entry->layout.match_anchor_width && anchor_widget) {
-        wanted.width = fminf(fmaxf(0.0f, anchor_widget->bounds.width), constraints.max_size.width);
+        wanted.width = fminf(fmaxf(0.0f, anchor_bounds.width), constraints.max_size.width);
     }
 
     bounds.width = wanted.width;
@@ -431,17 +492,17 @@ static bool layout_overlay_entry(tc_ui_document* document, const tc_ui_overlay_e
         bounds.y = entry->layout.point.y + entry->layout.offset.y;
         break;
     case TC_UI_OVERLAY_PLACEMENT_ANCHOR_BELOW:
-        bounds.x = anchor_widget->bounds.x + entry->layout.offset.x;
-        bounds.y = anchor_widget->bounds.y + anchor_widget->bounds.height + entry->layout.offset.y;
+        bounds.x = anchor_bounds.x + entry->layout.offset.x;
+        bounds.y = anchor_bounds.y + anchor_bounds.height + entry->layout.offset.y;
         if (bounds.y + bounds.height > viewport.y + viewport.height - margin) {
-            bounds.y = anchor_widget->bounds.y - bounds.height - entry->layout.offset.y;
+            bounds.y = anchor_bounds.y - bounds.height - entry->layout.offset.y;
         }
         break;
     case TC_UI_OVERLAY_PLACEMENT_ANCHOR_RIGHT:
-        bounds.x = anchor_widget->bounds.x + anchor_widget->bounds.width + entry->layout.offset.x;
-        bounds.y = anchor_widget->bounds.y + entry->layout.offset.y;
+        bounds.x = anchor_bounds.x + anchor_bounds.width + entry->layout.offset.x;
+        bounds.y = anchor_bounds.y + entry->layout.offset.y;
         if (bounds.x + bounds.width > viewport.x + viewport.width - margin) {
-            bounds.x = anchor_widget->bounds.x - bounds.width - entry->layout.offset.x;
+            bounds.x = anchor_bounds.x - bounds.width - entry->layout.offset.x;
         }
         break;
     default:
@@ -742,18 +803,12 @@ void tc_ui_internal_update_hover(tc_ui_document* document, tc_widget_handle next
     }
     document->hovered_widget = next;
     if (!tc_widget_handle_is_invalid(previous)) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, previous);
         transition.type = TC_UI_POINTER_LEAVE;
-        if (widget && widget->vtable && widget->vtable->pointer_event) {
-            widget->vtable->pointer_event(widget, document->handle, &transition);
-        }
+        (void)tc_ui_internal_deliver_pointer_event(document, previous, &transition, false);
     }
     if (!tc_widget_handle_is_invalid(next) && tc_ui_internal_same_handle(document->hovered_widget, next)) {
-        tc_widget* widget = tc_ui_document_resolve_widget(document->handle, next);
         transition.type = TC_UI_POINTER_ENTER;
-        if (widget && widget->vtable && widget->vtable->pointer_event) {
-            widget->vtable->pointer_event(widget, document->handle, &transition);
-        }
+        (void)tc_ui_internal_deliver_pointer_event(document, next, &transition, false);
     }
     tc_ui_internal_refresh_cursor(document);
 }

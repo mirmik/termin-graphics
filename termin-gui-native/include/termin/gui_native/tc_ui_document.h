@@ -49,6 +49,11 @@ typedef struct tc_ui_point {
     float y;
 } tc_ui_point;
 
+typedef struct tc_ui_uniform_transform {
+    tc_ui_point translation;
+    float scale;
+} tc_ui_uniform_transform;
+
 typedef struct tc_ui_insets {
     float left;
     float top;
@@ -107,7 +112,6 @@ typedef struct tc_ui_srgb_color {
     float b;
     float a;
 } tc_ui_srgb_color;
-
 
 typedef struct tc_ui_arc_draw_desc {
     tc_ui_point center;
@@ -249,7 +253,9 @@ typedef enum tc_ui_draw_command_type {
     TC_UI_DRAW_CANVAS2D_LIST = 13,
     // Semantic icon command. The draw list owns the icon id in `text` and the
     // renderer resolves it into a device-local antialiased mask.
-    TC_UI_DRAW_ICON = 14
+    TC_UI_DRAW_ICON = 14,
+    TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM = 15,
+    TC_UI_DRAW_POP_TRANSFORM = 16
 } tc_ui_draw_command_type;
 
 typedef enum tc_ui_texture_sampling {
@@ -276,6 +282,7 @@ typedef struct tc_ui_draw_command {
     tc_ui_texture_sampling texture_sampling;
     bool flip_v;
     const void* canvas2d_list;
+    tc_ui_uniform_transform transform;
 } tc_ui_draw_command;
 
 typedef enum tc_ui_event_result {
@@ -511,6 +518,7 @@ struct tc_widget {
     tc_ui_size preferred_size;
     tc_ui_size max_size;
     tc_ui_widget_layout_spec layout_spec;
+    tc_ui_uniform_transform subtree_transform;
 
     const char* stable_id;
     const char* name;
@@ -554,6 +562,28 @@ TERMIN_GUI_NATIVE_API bool tc_widget_set_cursor_intent(tc_widget* widget, tc_ui_
 TERMIN_GUI_NATIVE_API tc_ui_cursor_intent tc_widget_cursor_intent(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API tc_ui_rect tc_widget_bounds(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_bounds(tc_widget* widget, tc_ui_rect bounds);
+TERMIN_GUI_NATIVE_API tc_ui_uniform_transform tc_ui_uniform_transform_identity(void);
+TERMIN_GUI_NATIVE_API bool tc_ui_uniform_transform_is_valid(const tc_ui_uniform_transform* transform);
+TERMIN_GUI_NATIVE_API tc_ui_uniform_transform tc_ui_uniform_transform_compose(tc_ui_uniform_transform outer,
+                                                                              tc_ui_uniform_transform inner);
+TERMIN_GUI_NATIVE_API bool tc_ui_uniform_transform_inverse(tc_ui_uniform_transform transform,
+                                                           tc_ui_uniform_transform* out_inverse);
+TERMIN_GUI_NATIVE_API tc_ui_point tc_ui_uniform_transform_map_point(tc_ui_uniform_transform transform,
+                                                                    tc_ui_point point);
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_ui_uniform_transform_map_rect(tc_ui_uniform_transform transform, tc_ui_rect rect);
+TERMIN_GUI_NATIVE_API tc_ui_uniform_transform tc_widget_subtree_transform(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API bool tc_widget_set_subtree_transform(tc_widget* widget, tc_ui_uniform_transform transform);
+TERMIN_GUI_NATIVE_API bool
+tc_widget_map_point_from_document(const tc_widget* widget, tc_ui_point document_point, tc_ui_point* out_widget_point);
+TERMIN_GUI_NATIVE_API tc_ui_point tc_widget_map_point_to_document(const tc_widget* widget, tc_ui_point widget_point);
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_widget_map_rect_to_document(const tc_widget* widget, tc_ui_rect widget_rect);
+TERMIN_GUI_NATIVE_API tc_ui_rect tc_widget_bounds_in_document(const tc_widget* widget);
+TERMIN_GUI_NATIVE_API void
+tc_widget_paint_subtree(tc_widget* widget, tc_ui_document_handle document, tc_ui_paint_context* context);
+TERMIN_GUI_NATIVE_API tc_widget_handle tc_widget_hit_test_subtree(tc_widget* widget,
+                                                                  tc_ui_document_handle document,
+                                                                  float parent_x,
+                                                                  float parent_y);
 TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_min_size(const tc_widget* widget);
 TERMIN_GUI_NATIVE_API void tc_widget_set_min_size(tc_widget* widget, tc_ui_size size);
 TERMIN_GUI_NATIVE_API tc_ui_size tc_widget_preferred_size(const tc_widget* widget);
@@ -763,7 +793,8 @@ TERMIN_GUI_NATIVE_API tc_ui_paint_context* tc_ui_paint_context_create(tc_ui_draw
 TERMIN_GUI_NATIVE_API void tc_ui_paint_context_destroy(tc_ui_paint_context* context);
 TERMIN_GUI_NATIVE_API tc_ui_draw_list* tc_ui_paint_context_draw_list(tc_ui_paint_context* context);
 
-TERMIN_GUI_NATIVE_API void tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_srgb_color color);
+TERMIN_GUI_NATIVE_API void
+tc_ui_painter_fill_rect(tc_ui_paint_context* context, tc_ui_rect rect, tc_ui_srgb_color color);
 TERMIN_GUI_NATIVE_API void
 tc_ui_painter_fill_rounded_rect(tc_ui_paint_context* context, tc_ui_rect rect, float radius, tc_ui_srgb_color color);
 TERMIN_GUI_NATIVE_API void
@@ -781,16 +812,19 @@ TERMIN_GUI_NATIVE_API void tc_ui_painter_stroke_circle(tc_ui_paint_context* cont
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_arc(tc_ui_paint_context* context, const tc_ui_arc_draw_desc* desc);
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_line(
     tc_ui_paint_context* context, tc_ui_point p0, tc_ui_point p1, tc_ui_srgb_color color, float thickness);
-TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_polyline(
-    tc_ui_paint_context* context, const tc_ui_point* points, size_t point_count, tc_ui_srgb_color color, float thickness);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_polyline(tc_ui_paint_context* context,
+                                                       const tc_ui_point* points,
+                                                       size_t point_count,
+                                                       tc_ui_srgb_color color,
+                                                       float thickness);
 TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_texture(tc_ui_paint_context* context,
                                                       uint32_t texture_id,
                                                       tc_ui_rect rect,
                                                       tc_ui_srgb_color tint,
                                                       tc_ui_texture_sampling sampling,
                                                       bool flip_v);
-TERMIN_GUI_NATIVE_API void tc_ui_painter_draw_icon(
-    tc_ui_paint_context* context, const char* icon_id, tc_ui_rect rect, tc_ui_srgb_color tint);
+TERMIN_GUI_NATIVE_API void
+tc_ui_painter_draw_icon(tc_ui_paint_context* context, const char* icon_id, tc_ui_rect rect, tc_ui_srgb_color tint);
 TERMIN_GUI_NATIVE_API void
 tc_ui_painter_draw_text(tc_ui_paint_context* context,
                         const char* text,
@@ -800,6 +834,9 @@ tc_ui_painter_draw_text(tc_ui_paint_context* context,
                         tc_ui_srgb_color color);
 TERMIN_GUI_NATIVE_API void tc_ui_painter_push_clip(tc_ui_paint_context* context, tc_ui_rect rect);
 TERMIN_GUI_NATIVE_API void tc_ui_painter_pop_clip(tc_ui_paint_context* context);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_push_uniform_transform(tc_ui_paint_context* context,
+                                                                tc_ui_uniform_transform transform);
+TERMIN_GUI_NATIVE_API void tc_ui_painter_pop_transform(tc_ui_paint_context* context);
 
 #ifdef __cplusplus
 }

@@ -95,6 +95,7 @@ struct RouteWidget {
     std::vector<int>* paint_log = nullptr;
     std::vector<int>* dismiss_log = nullptr;
     std::vector<tc_ui_pointer_cancel_reason>* cancel_log = nullptr;
+    std::vector<tc_ui_point>* pointer_points = nullptr;
     tc_widget_handle hit_target = tc_widget_handle_invalid();
     tc_widget_handle destroy_target = tc_widget_handle_invalid();
     tc_widget_handle destroy_on_leave = tc_widget_handle_invalid();
@@ -122,6 +123,9 @@ route_widget_pointer_event(tc_widget* widget, tc_ui_document_handle document, co
     RouteWidget* self = route_widget_from(widget);
     if (self->pointer_log) {
         self->pointer_log->push_back(self->id * 10 + static_cast<int>(event->type));
+    }
+    if (self->pointer_points) {
+        self->pointer_points->push_back({event->x, event->y});
     }
     if (event->type == TC_UI_POINTER_CANCEL) {
         if (self->cancel_log) {
@@ -457,6 +461,18 @@ static void test_presentation_metrics_value_and_document_contract() {
     assert(document.presentation_revision() == revision);
 
     tc_ui_document_destroy(handle);
+}
+
+static void test_uniform_transform_rejects_non_finite_derived_values() {
+    tc_ui_uniform_transform inverse{};
+    const tc_ui_uniform_transform tiny{{1.0f, 1.0f}, std::numeric_limits<float>::denorm_min()};
+    assert(tc_ui_uniform_transform_is_valid(&tiny));
+    assert(!tc_ui_uniform_transform_inverse(tiny, &inverse));
+    assert(inverse.scale == 1.0f);
+
+    const tc_ui_uniform_transform huge{{std::numeric_limits<float>::max(), 0.0f}, std::numeric_limits<float>::max()};
+    const tc_ui_uniform_transform composed = tc_ui_uniform_transform_compose(huge, huge);
+    assert(!tc_ui_uniform_transform_is_valid(&composed));
 }
 
 static void test_document_pool_enumeration_reports_live_documents() {
@@ -841,6 +857,40 @@ static void test_keyboard_bubbling_focus_events_and_tab_traversal() {
     tc_ui_document_destroy(document);
 }
 
+static void test_nested_subtree_transforms_map_hit_and_bubbling_coordinates() {
+    const tc_ui_document_handle document = tc_ui_document_create();
+    RouteWidget root;
+    RouteWidget child;
+    std::vector<tc_ui_point> child_points;
+    std::vector<tc_ui_point> root_points;
+    const tc_widget_handle root_handle = adopt_route_widget(document, root, 1);
+    const tc_widget_handle child_handle = adopt_route_widget(document, child, 2);
+    root.hit_target = child_handle;
+    root.handled_pointer = TC_UI_POINTER_DOWN;
+    root.pointer_points = &root_points;
+    child.pointer_points = &child_points;
+    assert(tc_widget_append_child(&root.widget, &child.widget));
+    assert(tc_ui_document_add_root(document, root_handle));
+    assert(tc_widget_set_subtree_transform(&root.widget, {{100.0f, 50.0f}, 2.0f}));
+    assert(tc_widget_set_subtree_transform(&child.widget, {{5.0f, 7.0f}, 3.0f}));
+
+    const tc_ui_uniform_transform accumulated = tc_ui_uniform_transform_compose(
+        tc_widget_subtree_transform(&root.widget), tc_widget_subtree_transform(&child.widget));
+    assert(accumulated.translation.x == 110.0f && accumulated.translation.y == 64.0f);
+    assert(accumulated.scale == 6.0f);
+    assert(tc_widget_handle_eq(tc_ui_document_hit_test(document, 122.0f, 76.0f), child_handle));
+
+    tc_ui_pointer_event event{};
+    event.type = TC_UI_POINTER_DOWN;
+    event.x = 122.0f;
+    event.y = 76.0f;
+    assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_HANDLED);
+    assert(child_points.size() == 2 && child_points.back().x == 2.0f && child_points.back().y == 2.0f);
+    assert(root_points.size() == 1 && root_points[0].x == 11.0f && root_points[0].y == 13.0f);
+
+    tc_ui_document_destroy(document);
+}
+
 static void test_state_setters_survive_lifecycle_callback_destroy() {
     {
         tc_ui_document_handle document = tc_ui_document_create();
@@ -1030,6 +1080,14 @@ static void test_document_owned_overlay_layout_tracks_viewport_anchor_and_conten
     assert(overlay.widget.bounds.y == 15.0f);
     assert(overlay.widget.bounds.width == 50.0f);
     assert(overlay.widget.bounds.height == 30.0f);
+
+    assert(tc_widget_set_subtree_transform(&anchor.widget, {{20.0f, 10.0f}, 2.0f}));
+    tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 200.0f, 120.0f});
+    assert(overlay.widget.bounds.x == 40.0f);
+    assert(overlay.widget.bounds.y == 40.0f);
+    assert(overlay.widget.bounds.width == 100.0f);
+    assert(overlay.widget.bounds.height == 30.0f);
+    assert(tc_widget_set_subtree_transform(&anchor.widget, tc_ui_uniform_transform_identity()));
 
     overlay.preferred = tc_ui_size{90.0f, 60.0f};
     tc_ui_document_layout_roots(document, tc_ui_rect{0.0f, 0.0f, 200.0f, 120.0f});
@@ -1299,6 +1357,7 @@ int main() {
     test_borrowed_widget_can_be_adopted_and_released();
     test_document_handles_become_stale_after_destroy();
     test_presentation_metrics_value_and_document_contract();
+    test_uniform_transform_rejects_non_finite_derived_values();
     test_document_pool_enumeration_reports_live_documents();
     test_document_destroy_invalidates_widgets_once();
     test_owned_adoption_requires_deleter_and_is_atomic();
@@ -1310,6 +1369,7 @@ int main() {
     test_document_text_measurement_service_contract();
     test_pointer_routing_hover_pressed_and_bubbling();
     test_routing_snapshot_survives_destroyed_target();
+    test_nested_subtree_transforms_map_hit_and_bubbling_coordinates();
     test_keyboard_bubbling_focus_events_and_tab_traversal();
     test_state_setters_survive_lifecycle_callback_destroy();
     test_overlay_paint_hit_order_and_tooltip_transparency();

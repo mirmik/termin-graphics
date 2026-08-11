@@ -49,6 +49,7 @@ from termin.gui_native import (
     StyleOverride,
     StyleRole,
     StyleState,
+    UniformTransform,
     TextureSampling,
     TextOverflow,
     TextWrapMode,
@@ -466,6 +467,8 @@ def test_python_document_inspect_snapshot_is_neutral_and_independent():
     assert root.native.append_child(child.native)
     root.bounds = Rect(0.0, 0.0, 100.0, 60.0)
     child.bounds = Rect(5.0, 6.0, 40.0, 20.0)
+    root.native.subtree_transform = UniformTransform(Point(10.0, 20.0), 2.0)
+    child.native.subtree_transform = UniformTransform(Point(3.0, 4.0), 0.5)
     child.focusable = True
     root.cursor_intent = CursorIntent.Hand
     assert document.set_focus(child_handle)
@@ -503,6 +506,11 @@ def test_python_document_inspect_snapshot_is_neutral_and_independent():
     assert child_data["parent"] == root_handle
     assert child_data["bounds"].x == 5.0
     assert child_data["bounds"].height == 20.0
+    assert child_data["subtree_transform"].translation.x == 3.0
+    assert child_data["subtree_transform"].scale == 0.5
+    assert child_data["accumulated_transform"].translation.x == 16.0
+    assert child_data["accumulated_transform"].translation.y == 28.0
+    assert child_data["accumulated_transform"].scale == 1.0
     assert child_data["flags"] & int(WidgetFlag.Focusable)
     assert child_data["dirty_flags"] == child.native.dirty_flags
 
@@ -673,6 +681,24 @@ def test_python_extended_draw_commands_copy_polyline_points():
     assert commands[4].segments == 12
     assert commands[5].points[1].x == 3.0
     assert commands[6].text == "snapshot"
+
+
+def test_python_uniform_transform_draw_commands_preserve_value():
+    draw_list = DrawList()
+    context = PaintContext(draw_list)
+    transform = UniformTransform(Point(10.0, 20.0), 2.0)
+    assert transform.valid
+    context.push_uniform_transform(transform)
+    context.fill_rect(Rect(1.0, 2.0, 3.0, 4.0), SrgbColor(1.0, 1.0, 1.0, 1.0))
+    context.pop_transform()
+
+    push, fill, pop = draw_list.commands
+    assert push.type == DrawCommandType.PushUniformTransform
+    assert push.transform.translation.x == 10.0
+    assert push.transform.translation.y == 20.0
+    assert push.transform.scale == 2.0
+    assert fill.type == DrawCommandType.FillRect
+    assert pop.type == DrawCommandType.PopTransform
 
 
 def test_python_paint_exception_propagates():

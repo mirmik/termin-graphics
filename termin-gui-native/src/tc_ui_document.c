@@ -1451,8 +1451,6 @@ void tc_ui_document_paint_roots(tc_ui_document_handle document_handle, tc_ui_pai
     }
     for (index = 0; index < document->root_count; ++index) {
         tc_widget* widget = tc_ui_document_resolve_widget(document_handle, document->roots[index]);
-        if (widget && tc_widget_is_visible(widget) && widget->vtable && widget->vtable->paint) {
-            widget->vtable->paint(widget, document_handle, context);
-        }
+        tc_widget_paint_subtree(widget, document_handle, context);
     }
 }

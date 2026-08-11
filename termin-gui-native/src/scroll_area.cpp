@@ -337,8 +337,8 @@ namespace termin::gui_native {
         }
         if (!tc_widget_handle_is_invalid(this->content())) {
             tc_widget* content = resolve_child(document, c_widget(), this->content(), "ScrollArea::hit_test");
-            if (content && content->vtable && content->vtable->hit_test) {
-                const tc_widget_handle hit = content->vtable->hit_test(content, document, x, y);
+            if (content) {
+                const tc_widget_handle hit = detail::hit_test_widget(content, document, x, y);
                 if (!tc_widget_handle_is_invalid(hit)) {
                     return hit;
                 }

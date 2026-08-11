@@ -39,6 +39,14 @@ void bind_gui_native_core(nb::module_& m) {
         .def_rw("x", &tc_ui_point::x)
         .def_rw("y", &tc_ui_point::y);
 
+    nb::class_<tc_ui_uniform_transform>(m, "UniformTransform")
+        .def(nb::init<tc_ui_point, float>(), nb::arg("translation") = tc_ui_point{}, nb::arg("scale") = 1.0f)
+        .def_static("identity", &tc_ui_uniform_transform_identity)
+        .def_rw("translation", &tc_ui_uniform_transform::translation)
+        .def_rw("scale", &tc_ui_uniform_transform::scale)
+        .def_prop_ro("valid",
+                     [](const tc_ui_uniform_transform& self) { return tc_ui_uniform_transform_is_valid(&self); });
+
     nb::class_<tc_ui_insets>(m, "PhysicalInsets")
         .def(nb::init<float, float, float, float>(),
              nb::arg("left") = 0.0f,

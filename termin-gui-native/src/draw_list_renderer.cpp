@@ -6,6 +6,7 @@
 #include <cmath>
 #include <exception>
 #include <string_view>
+#include <vector>
 
 #include <tcbase/tc_log.h>
 #include <tgfx/tgfx2_interop.h>
@@ -47,6 +48,12 @@ namespace termin::gui_native {
             };
         }
 
+        tc_ui_point transformed_point(tc_ui_point logical, float density, const tc_ui_uniform_transform& transform) {
+            return physical_point({transform.translation.x + logical.x * transform.scale,
+                                   transform.translation.y + logical.y * transform.scale},
+                                  density);
+        }
+
         tc_ui_rect physical_rect(tc_ui_rect logical, float scale) {
             if (scale == 1.0f) {
                 return logical;
@@ -56,6 +63,14 @@ namespace termin::gui_native {
             const float right = std::round((logical.x + logical.width) * scale);
             const float bottom = std::round((logical.y + logical.height) * scale);
             return {left, top, right - left, bottom - top};
+        }
+
+        tc_ui_rect transformed_rect(tc_ui_rect logical, float density, const tc_ui_uniform_transform& transform) {
+            return physical_rect({transform.translation.x + logical.x * transform.scale,
+                                  transform.translation.y + logical.y * transform.scale,
+                                  logical.width * transform.scale,
+                                  logical.height * transform.scale},
+                                 density);
         }
 
         class UiDrawResources final : public tgfx::DrawResourceResolver2D {
@@ -282,6 +297,13 @@ namespace termin::gui_native {
             const float scale = batch.presentation_metrics.density_scale;
             const float effective_font_scale =
                 tc_ui_presentation_metrics_effective_font_scale(&batch.presentation_metrics);
+            tc_ui_uniform_transform active_transform = tc_ui_uniform_transform_identity();
+            std::vector<tc_ui_uniform_transform> transform_stack;
+            enum class ScopeKind {
+                Transform,
+                Clip
+            };
+            std::vector<ScopeKind> scope_stack;
             size_t clip_depth = 0;
             const size_t batch_end = batch.first_command + batch.command_count;
             for (size_t index = batch.first_command; index < batch_end; ++index) {
@@ -292,104 +314,132 @@ namespace termin::gui_native {
                                  index);
                     continue;
                 }
+                const float geometry_scale = scale * active_transform.scale;
 
                 switch (command->type) {
+                case TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM: {
+                    const tc_ui_uniform_transform local = command->transform;
+                    if (!tc_ui_uniform_transform_is_valid(&local)) {
+                        tc_log_error("[termin-gui-native] ignoring invalid draw-list transform at index %zu", index);
+                        break;
+                    }
+                    const tc_ui_uniform_transform composed = tc_ui_uniform_transform_compose(active_transform, local);
+                    if (!tc_ui_uniform_transform_is_valid(&composed)) {
+                        tc_log_error("[termin-gui-native] ignoring overflowing draw-list transform at index %zu",
+                                     index);
+                        break;
+                    }
+                    transform_stack.push_back(active_transform);
+                    scope_stack.push_back(ScopeKind::Transform);
+                    active_transform = composed;
+                    break;
+                }
+                case TC_UI_DRAW_POP_TRANSFORM:
+                    if (transform_stack.empty() || scope_stack.empty() || scope_stack.back() != ScopeKind::Transform) {
+                        tc_log_error("[termin-gui-native] ignoring unmatched UI pop-transform command");
+                    } else {
+                        active_transform = transform_stack.back();
+                        transform_stack.pop_back();
+                        scope_stack.pop_back();
+                    }
+                    break;
                 case TC_UI_DRAW_FILL_RECT: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.draw_rect(rect.x, rect.y, rect.width, rect.height, canvas_color(command->color));
                     break;
                 }
                 case TC_UI_DRAW_STROKE_RECT: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.draw_rect_outline(rect.x,
                                               rect.y,
                                               rect.width,
                                               rect.height,
                                               canvas_color(command->color),
-                                              physical_length(command->thickness, scale));
+                                              physical_length(command->thickness, geometry_scale));
                     break;
                 }
                 case TC_UI_DRAW_FILL_ROUNDED_RECT: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.draw_rect(rect.x,
                                       rect.y,
                                       rect.width,
                                       rect.height,
                                       canvas_color(command->color),
-                                      physical_length(command->radius, scale));
+                                      physical_length(command->radius, geometry_scale));
                     break;
                 }
                 case TC_UI_DRAW_STROKE_ROUNDED_RECT: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.draw_rounded_rect_outline(tgfx::CanvasRoundedRectOutline{
                         rect.x,
                         rect.y,
                         rect.width,
                         rect.height,
-                        physical_length(command->radius, scale),
+                        physical_length(command->radius, geometry_scale),
                         canvas_color(command->color),
-                        physical_length(command->thickness, scale),
+                        physical_length(command->thickness, geometry_scale),
                         command->segments > 0 ? command->segments : 6,
                     });
                     break;
                 }
                 case TC_UI_DRAW_FILL_CIRCLE: {
-                    const tc_ui_point center = physical_point(command->p0, scale);
+                    const tc_ui_point center = transformed_point(command->p0, scale, active_transform);
                     canvas_.draw_circle(center.x,
                                         center.y,
-                                        physical_length(command->radius, scale),
+                                        physical_length(command->radius, geometry_scale),
                                         canvas_color(command->color),
                                         command->segments > 0 ? command->segments : 24);
                     break;
                 }
                 case TC_UI_DRAW_STROKE_CIRCLE: {
-                    const tc_ui_point center = physical_point(command->p0, scale);
+                    const tc_ui_point center = transformed_point(command->p0, scale, active_transform);
                     canvas_.draw_circle_outline(center.x,
                                                 center.y,
-                                                physical_length(command->radius, scale),
+                                                physical_length(command->radius, geometry_scale),
                                                 canvas_color(command->color),
-                                                physical_length(command->thickness, scale),
+                                                physical_length(command->thickness, geometry_scale),
                                                 command->segments > 0 ? command->segments : 24);
                     break;
                 }
                 case TC_UI_DRAW_ARC: {
-                    const tc_ui_point center = physical_point(command->p0, scale);
+                    const tc_ui_point center = transformed_point(command->p0, scale, active_transform);
                     canvas_.draw_arc(tgfx::CanvasArc{
                         {center.x, center.y},
-                        physical_length(command->radius, scale),
+                        physical_length(command->radius, geometry_scale),
                         command->start_radians,
                         command->end_radians,
                         canvas_color(command->color),
-                        physical_length(command->thickness, scale),
+                        physical_length(command->thickness, geometry_scale),
                         command->segments,
                     });
                     break;
                 }
                 case TC_UI_DRAW_LINE: {
-                    const tc_ui_point p0 = physical_point(command->p0, scale);
-                    const tc_ui_point p1 = physical_point(command->p1, scale);
+                    const tc_ui_point p0 = transformed_point(command->p0, scale, active_transform);
+                    const tc_ui_point p1 = transformed_point(command->p1, scale, active_transform);
                     canvas_.draw_line(p0.x,
                                       p0.y,
                                       p1.x,
                                       p1.y,
                                       canvas_color(command->color),
-                                      physical_length(command->thickness, scale));
+                                      physical_length(command->thickness, geometry_scale));
                     break;
                 }
                 case TC_UI_DRAW_POLYLINE:
                     for (size_t point_index = 1; point_index < command->point_count; ++point_index) {
-                        const tc_ui_point p0 = physical_point(command->points[point_index - 1], scale);
-                        const tc_ui_point p1 = physical_point(command->points[point_index], scale);
+                        const tc_ui_point p0 =
+                            transformed_point(command->points[point_index - 1], scale, active_transform);
+                        const tc_ui_point p1 = transformed_point(command->points[point_index], scale, active_transform);
                         canvas_.draw_line(p0.x,
                                           p0.y,
                                           p1.x,
                                           p1.y,
                                           canvas_color(command->color),
-                                          physical_length(command->thickness, scale));
+                                          physical_length(command->thickness, geometry_scale));
                     }
                     break;
                 case TC_UI_DRAW_TEXTURE: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.draw_texture(tgfx::TextureHandle{command->texture_id},
                                          rect.x,
                                          rect.y,
@@ -401,19 +451,19 @@ namespace termin::gui_native {
                     break;
                 }
                 case TC_UI_DRAW_ICON: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     constexpr float kMaxIconExtent = 256.0f;
                     const float rounded_width = std::round(rect.width);
                     const float rounded_height = std::round(rect.height);
                     if (!std::isfinite(rounded_width) || !std::isfinite(rounded_height) || rounded_width < 1.0f ||
-                        rounded_height < 1.0f || rounded_width > kMaxIconExtent || rounded_height > kMaxIconExtent) {
+                        rounded_height < 1.0f) {
                         tc_log_error("[termin-gui-native] skipping invalid physical icon extent %.1fx%.1f",
                                      rounded_width,
                                      rounded_height);
                         break;
                     }
-                    const uint32_t icon_width = static_cast<uint32_t>(rounded_width);
-                    const uint32_t icon_height = static_cast<uint32_t>(rounded_height);
+                    const uint32_t icon_width = static_cast<uint32_t>(std::min(rounded_width, kMaxIconExtent));
+                    const uint32_t icon_height = static_cast<uint32_t>(std::min(rounded_height, kMaxIconExtent));
                     const tgfx::TextureHandle texture = sync_icon_texture(
                         context.device(), command->text ? command->text : "", icon_width, icon_height);
                     if (texture) {
@@ -429,17 +479,19 @@ namespace termin::gui_native {
                     break;
                 }
                 case TC_UI_DRAW_PUSH_CLIP: {
-                    const tc_ui_rect rect = physical_rect(command->rect, scale);
+                    const tc_ui_rect rect = transformed_rect(command->rect, scale, active_transform);
                     canvas_.begin_clip(rect.x, rect.y, rect.width, rect.height);
                     clip_depth += 1;
+                    scope_stack.push_back(ScopeKind::Clip);
                     break;
                 }
                 case TC_UI_DRAW_POP_CLIP:
-                    if (clip_depth == 0) {
+                    if (clip_depth == 0 || scope_stack.empty() || scope_stack.back() != ScopeKind::Clip) {
                         tc_log_error("[termin-gui-native] ignoring unmatched UI pop-clip command");
                     } else {
                         canvas_.end_clip();
                         clip_depth -= 1;
+                        scope_stack.pop_back();
                     }
                     break;
                 case TC_UI_DRAW_TEXT:
@@ -448,8 +500,13 @@ namespace termin::gui_native {
                         // Canvas2DRenderer's left anchor uses the top of the font line.
                         // Keep that difference at this backend boundary instead of
                         // leaking canvas semantics into every widget's layout code.
-                        const tc_ui_point baseline = physical_point(command->p0, scale);
-                        const float physical_font_size = command->font_size * effective_font_scale;
+                        const tc_ui_point baseline = transformed_point(command->p0, scale, active_transform);
+                        const float physical_font_size =
+                            command->font_size * effective_font_scale * active_transform.scale;
+                        if (!std::isfinite(physical_font_size) || physical_font_size <= 0.0f) {
+                            tc_log_error("[termin-gui-native] skipping text with invalid physical font size");
+                            break;
+                        }
                         const float line_top =
                             baseline.y - static_cast<float>(owned_font_->ascent_px(physical_font_size));
                         canvas_.draw_text(command->text ? command->text : "",
@@ -471,11 +528,16 @@ namespace termin::gui_native {
                     }
                     UiDrawResources resources(canvas_.default_font());
                     tgfx::DrawList2DBuilder transformed_builder;
-                    const bool transformed_ok = transformed_builder.push_transform(termin::Affine2f::scaling(scale)) &&
-                                                transformed_builder.append(*nested) &&
-                                                transformed_builder.pop_transform();
+                    const float nested_scale = scale * active_transform.scale;
+                    const bool transformed_ok =
+                        transformed_builder.push_transform(
+                            termin::Affine2f::translation(active_transform.translation.x * scale,
+                                                          active_transform.translation.y * scale) *
+                            termin::Affine2f::scaling(nested_scale)) &&
+                        transformed_builder.append(*nested) && transformed_builder.pop_transform();
                     auto transformed = transformed_ok ? transformed_builder.freeze() : std::nullopt;
-                    if (!transformed || !canvas_.execute(*transformed, resources)) {
+                    if (!transformed ||
+                        !canvas_.execute(*transformed, resources, batch.presentation_metrics.font_scale)) {
                         tc_log_error("[termin-gui-native] failed to transform or execute nested "
                                      "DrawList2D");
                     }
@@ -495,6 +557,10 @@ namespace termin::gui_native {
                     canvas_.end_clip();
                     --clip_depth;
                 }
+            }
+            if (!transform_stack.empty()) {
+                tc_log_error("[termin-gui-native] UI draw-list batch ended with %zu unclosed transform command(s)",
+                             transform_stack.size());
             }
         }
         canvas_.end();

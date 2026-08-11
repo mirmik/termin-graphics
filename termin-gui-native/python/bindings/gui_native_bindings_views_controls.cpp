@@ -177,9 +177,7 @@ void bind_gui_native_control_views(nb::module_& m) {
         .def("clear_texture", [](const ImageWidgetRef& self) { self.get().clear_texture(); })
         .def(
             "set_tint",
-            [](const ImageWidgetRef& self, termin::SrgbColor tint) {
-                self.get().set_tint(tint);
-            },
+            [](const ImageWidgetRef& self, termin::SrgbColor tint) { self.get().set_tint(tint); },
             nb::arg("tint"))
         .def_prop_rw(
             "fit",
@@ -307,5 +305,7 @@ void bind_gui_native_control_views(nb::module_& m) {
         .value("Polyline", TC_UI_DRAW_POLYLINE)
         .value("Texture", TC_UI_DRAW_TEXTURE)
         .value("Canvas2DList", TC_UI_DRAW_CANVAS2D_LIST)
-        .value("Icon", TC_UI_DRAW_ICON);
+        .value("Icon", TC_UI_DRAW_ICON)
+        .value("PushUniformTransform", TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM)
+        .value("PopTransform", TC_UI_DRAW_POP_TRANSFORM);
 }
