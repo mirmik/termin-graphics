@@ -101,6 +101,18 @@
       "distribution": "tcgui"
     },
     {
+      "path": "termin-window",
+      "distribution": "termin-window",
+      "native_extensions": [
+        {
+          "extension": "termin.window._window_native",
+          "target": "_window_native",
+          "optional": true,
+          "features": ["sdl"]
+        }
+      ]
+    },
+    {
       "path": "termin-gui-native",
       "distribution": "termin-gui-native",
       "native_extensions": [
@@ -108,18 +120,6 @@
         {
           "extension": "termin.gui_native._gui_native_window",
           "target": "_gui_native_window",
-          "optional": true,
-          "features": ["sdl"]
-        }
-      ]
-    },
-    {
-      "path": "termin-window",
-      "distribution": "termin-window",
-      "native_extensions": [
-        {
-          "extension": "termin.window._window_native",
-          "target": "_window_native",
           "optional": true,
           "features": ["sdl"]
         }
