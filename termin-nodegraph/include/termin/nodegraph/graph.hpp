@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include <tcbase/tc_trent.hpp>
+
 #include <termin/nodegraph/export.h>
 
 namespace termin::nodegraph {
@@ -44,6 +46,7 @@ namespace termin::nodegraph {
         SelfLink,
         TypeMismatch,
         CardinalityViolation,
+        InvalidValue,
     };
 
     template <typename T>
@@ -107,6 +110,8 @@ namespace termin::nodegraph {
         float height = 120.0f;
         std::vector<Socket> inputs;
         std::vector<Socket> outputs;
+        tc::trent params = tc::trent::dict();
+        tc::trent data = tc::trent::dict();
     };
 
     struct Node : NodeDescriptor {
@@ -129,6 +134,7 @@ namespace termin::nodegraph {
         float y = 0.0f;
         float width = 0.0f;
         float height = 0.0f;
+        tc::trent data = tc::trent::dict();
     };
 
     struct Group : GroupDescriptor {
@@ -186,6 +192,8 @@ namespace termin::nodegraph {
         Result<void> move_node(NodeHandle node, float x, float y);
         Result<void> add_input(NodeHandle node, Socket socket);
         Result<void> add_output(NodeHandle node, Socket socket);
+        Result<void> set_node_param(NodeHandle node, std::string name, const tc_value& value);
+        Result<void> set_node_data(NodeHandle node, const tc_value& value);
 
         Result<ConnectOutcome> connect(ConnectRequest request);
         Result<void> remove_edge(EdgeHandle edge);
@@ -193,6 +201,15 @@ namespace termin::nodegraph {
         Result<GroupHandle> create_group(GroupDescriptor descriptor);
         Result<void> remove_group(GroupHandle group);
         Result<void> move_group(GroupHandle group, float x, float y);
+        Result<void> set_group_data(GroupHandle group, const tc_value& value);
+
+        Result<void> set_data(const tc_value& value);
+        tc::trent data() const;
+
+        tc::trent to_value() const;
+        Result<void> replace_from_value(const tc_value& value);
+        std::string to_json(int indent = 2) const;
+        Result<void> replace_from_json(const std::string& json);
 
         std::optional<NodeHandle> find_node(const std::string& id) const;
         std::optional<EdgeHandle> find_edge(const std::string& id) const;
@@ -205,10 +222,11 @@ namespace termin::nodegraph {
         std::vector<Edge> edges() const;
         std::vector<Group> groups() const;
 
+        std::shared_ptr<const ConnectionValidator> connection_validator() const;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_;
     };
 
 } // namespace termin::nodegraph
-

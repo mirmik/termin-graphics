@@ -120,6 +120,41 @@ namespace termin::nodegraph {
             return true;
         }
 
+        bool value_is_valid(const tc_value& value) {
+            switch (value.type) {
+            case TC_VALUE_NIL:
+            case TC_VALUE_BOOL:
+            case TC_VALUE_INT:
+            case TC_VALUE_FLOAT:
+            case TC_VALUE_DOUBLE:
+                return true;
+            case TC_VALUE_STRING:
+                return value.data.s != nullptr;
+            case TC_VALUE_LIST:
+                if (value.data.list.count > 0 && value.data.list.items == nullptr)
+                    return false;
+                for (std::size_t index = 0; index < value.data.list.count; ++index) {
+                    if (!value_is_valid(value.data.list.items[index]))
+                        return false;
+                }
+                return true;
+            case TC_VALUE_DICT:
+                if (value.data.dict.count > 0 && value.data.dict.entries == nullptr)
+                    return false;
+                for (std::size_t index = 0; index < value.data.dict.count; ++index) {
+                    const tc_value_dict_entry& entry = value.data.dict.entries[index];
+                    if (entry.key == nullptr || entry.value == nullptr || !value_is_valid(*entry.value))
+                        return false;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        bool dict_is_valid(const tc_value& value) {
+            return value.type == TC_VALUE_DICT && value_is_valid(value);
+        }
+
         const Socket* find_socket(const std::vector<Socket>& sockets, const std::string& name) {
             const auto found = std::find_if(sockets.begin(), sockets.end(), [&](const Socket& socket) {
                 return socket.name == name;
@@ -170,6 +205,7 @@ namespace termin::nodegraph {
         std::unordered_map<std::string, EdgeHandle> edge_ids;
         std::unordered_map<std::string, GroupHandle> group_ids;
         std::shared_ptr<const ConnectionValidator> validator;
+        tc::trent data = tc::trent::dict();
         std::uint64_t node_counter = 0;
         std::uint64_t edge_counter = 0;
         std::uint64_t group_counter = 0;
@@ -203,6 +239,9 @@ namespace termin::nodegraph {
         if (!sockets_valid(descriptor.inputs) || !sockets_valid(descriptor.outputs))
             return failure<NodeHandle>(ErrorCode::DuplicateSocket,
                                        "node has an empty or duplicate socket: " + descriptor.id);
+        if (!dict_is_valid(descriptor.params.get()) || !dict_is_valid(descriptor.data.get()))
+            return failure<NodeHandle>(ErrorCode::InvalidValue,
+                                       "node params and data must be valid dictionaries: " + descriptor.id);
         if (descriptor.title.empty())
             descriptor.title = descriptor.kind;
         Node node;
@@ -262,6 +301,30 @@ namespace termin::nodegraph {
         if (find_socket(value->outputs, socket.name) != nullptr)
             return failure_void(ErrorCode::DuplicateSocket, "duplicate output socket: " + socket.name);
         value->outputs.push_back(std::move(socket));
+        impl_->touch();
+        return Result<void>::success();
+    }
+
+    Result<void> Graph::set_node_param(NodeHandle handle, std::string name, const tc_value& value) {
+        Node* node = impl_->nodes.resolve(handle);
+        if (node == nullptr)
+            return failure_void(ErrorCode::InvalidHandle, "invalid node handle");
+        if (name.empty())
+            return failure_void(ErrorCode::InvalidId, "node parameter name is empty");
+        if (!value_is_valid(value))
+            return failure_void(ErrorCode::InvalidValue, "node parameter value is malformed");
+        node->params[name] = tc::trent::copy_of(value);
+        impl_->touch();
+        return Result<void>::success();
+    }
+
+    Result<void> Graph::set_node_data(NodeHandle handle, const tc_value& value) {
+        Node* node = impl_->nodes.resolve(handle);
+        if (node == nullptr)
+            return failure_void(ErrorCode::InvalidHandle, "invalid node handle");
+        if (!dict_is_valid(value))
+            return failure_void(ErrorCode::InvalidValue, "node data must be a valid dictionary");
+        node->data = tc::trent::copy_of(value);
         impl_->touch();
         return Result<void>::success();
     }
@@ -330,6 +393,9 @@ namespace termin::nodegraph {
             descriptor.id = impl_->next_id("group", impl_->group_counter, impl_->group_ids);
         if (impl_->group_ids.contains(descriptor.id))
             return failure<GroupHandle>(ErrorCode::DuplicateId, "duplicate group id: " + descriptor.id);
+        if (!dict_is_valid(descriptor.data.get()))
+            return failure<GroupHandle>(ErrorCode::InvalidValue,
+                                        "group data must be a valid dictionary: " + descriptor.id);
         Group group;
         static_cast<GroupDescriptor&>(group) = std::move(descriptor);
         const GroupHandle handle = impl_->groups.insert(std::move(group));
@@ -356,6 +422,29 @@ namespace termin::nodegraph {
         value->y = y;
         impl_->touch();
         return Result<void>::success();
+    }
+
+    Result<void> Graph::set_group_data(GroupHandle handle, const tc_value& value) {
+        Group* group = impl_->groups.resolve(handle);
+        if (group == nullptr)
+            return failure_void(ErrorCode::InvalidHandle, "invalid group handle");
+        if (!dict_is_valid(value))
+            return failure_void(ErrorCode::InvalidValue, "group data must be a valid dictionary");
+        group->data = tc::trent::copy_of(value);
+        impl_->touch();
+        return Result<void>::success();
+    }
+
+    Result<void> Graph::set_data(const tc_value& value) {
+        if (!dict_is_valid(value))
+            return failure_void(ErrorCode::InvalidValue, "graph data must be a valid dictionary");
+        impl_->data = tc::trent::copy_of(value);
+        impl_->touch();
+        return Result<void>::success();
+    }
+
+    tc::trent Graph::data() const {
+        return impl_->data;
     }
 
     std::optional<NodeHandle> Graph::find_node(const std::string& id) const {
@@ -398,6 +487,10 @@ namespace termin::nodegraph {
 
     std::vector<Group> Graph::groups() const {
         return impl_->groups.snapshots();
+    }
+
+    std::shared_ptr<const ConnectionValidator> Graph::connection_validator() const {
+        return impl_->validator;
     }
 
 } // namespace termin::nodegraph

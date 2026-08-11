@@ -6,6 +6,8 @@
 
 #include <termin/nodegraph/graph.hpp>
 
+#include <tcbase/tc_value.h>
+
 namespace ng = termin::nodegraph;
 
 namespace {
@@ -159,6 +161,57 @@ int main() {
     auto any_sink_handle = any_graph.create_node(std::move(any_sink));
     assert(any_source_handle && any_sink_handle);
     assert(any_graph.connect(connection(any_source_handle.value, any_sink_handle.value)));
+
+    ng::Graph serialized_graph;
+    ng::NodeDescriptor serialized_source = source_descriptor("serialized_source");
+    serialized_source.params["nil"] = nullptr;
+    serialized_source.params["bool"] = true;
+    serialized_source.params["int"] = int64_t{42};
+    serialized_source.params["float"] = 1.25f;
+    serialized_source.params["double"] = 2.5;
+    serialized_source.params["string"] = "value";
+    serialized_source.params["list"] = tc::trent::list();
+    serialized_source.params["list"].push_back("nested");
+    serialized_source.params["dict"] = tc::trent::dict();
+    serialized_source.params["dict"]["key"] = "nested-value";
+    serialized_source.data["presentation"]["color"] = "blue";
+    auto serialized_source_handle = serialized_graph.create_node(std::move(serialized_source));
+    auto serialized_sink_handle = serialized_graph.create_node(sink_descriptor("serialized_sink"));
+    assert(serialized_source_handle && serialized_sink_handle);
+    assert(serialized_graph.connect(connection(serialized_source_handle.value,
+                                               serialized_sink_handle.value,
+                                               "serialized_edge")));
+    ng::GroupDescriptor serialized_group{"serialized_group", "Serialized", 1.0f, 2.0f, 3.0f, 4.0f};
+    serialized_group.data["collapsed"] = false;
+    assert(serialized_graph.create_group(std::move(serialized_group)));
+    tc::trent graph_data = tc::trent::dict();
+    graph_data["selection"] = tc::trent::list();
+    graph_data["selection"].push_back("serialized_source");
+    assert(serialized_graph.set_data(graph_data.get()));
+
+    tc::trent encoded = serialized_graph.to_value();
+    ng::Graph decoded;
+    assert(decoded.replace_from_value(encoded.get()));
+    tc::trent reencoded = decoded.to_value();
+    assert(tc_value_equals(encoded.raw(), reencoded.raw()));
+    assert(decoded.nodes().size() == 2);
+    assert(decoded.edges().size() == 1);
+    assert(decoded.groups().size() == 1);
+
+    const std::string json = serialized_graph.to_json();
+    ng::Graph json_decoded;
+    assert(json_decoded.replace_from_json(json));
+    assert(json_decoded.nodes().size() == 2);
+    assert(json_decoded.node(*json_decoded.find_node("serialized_source"))->params["string"].as_string() == "value");
+
+    tc::trent invalid = encoded;
+    tc_value* invalid_nodes = tc_value_dict_get(invalid.raw(), "nodes");
+    assert(invalid_nodes != nullptr);
+    tc_value_list_push(invalid_nodes, tc_value_copy(&invalid_nodes->data.list.items[0]));
+    const std::uint64_t before_invalid_replace = decoded.revision();
+    assert(!decoded.replace_from_value(invalid.get()));
+    assert(decoded.revision() == before_invalid_replace);
+    assert(decoded.nodes().size() == 2);
 
     return 0;
 }

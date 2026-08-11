@@ -4,12 +4,19 @@ Abstract node graph library for Termin ecosystem.
 
 ## Layers
 
-1. Core model: `tcnodegraph.model`
-2. Editing operations: `tcnodegraph.controller`
-3. Serialization: `tcnodegraph.io`
-4. Native UI projection: `tcnodegraph.native_view`
+1. Native graph/controller and serialization: `termin_nodegraph_core`
+2. Stable language boundary: `termin/nodegraph/c_api.h`
+3. Transitional Python model and UI projection: `tcnodegraph`
 
-Core modules do not require UI runtime.
+The C++ core depends only on `termin-base` and does not require a UI runtime.
+The Python implementation remains temporarily while its binding and consumers
+move to the native core.
+
+The C ABI uses generation-checked graph/entity handles, descriptor `struct_size`
+fields, copied `tc_value` snapshots and size-query/copy strings. Inputs are
+deep-copied; callers own returned `tc_value` trees and release them with
+`tc_value_free`. `tc_nodegraph_replace` and `tc_nodegraph_replace_json` validate
+into a staging graph and never partially modify the destination.
 
 ## Quick start
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(termin_nodegraph VERSION 0.1.0 LANGUAGES CXX)
+project(termin_nodegraph VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
 add_library(termin_nodegraph_core SHARED
+    src/c_api.cpp
     src/graph.cpp
+    src/serialization.cpp
 )
 add_library(termin_nodegraph::core ALIAS termin_nodegraph_core)
 set_target_properties(termin_nodegraph_core PROPERTIES EXPORT_NAME core)
@@ -39,6 +41,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_nodegraph_core_test)
     add_test(NAME termin_nodegraph_core_test
         COMMAND termin_nodegraph_core_test)
+
+    add_executable(termin_nodegraph_c_api_test
+        tests/test_c_api.c)
+    target_link_libraries(termin_nodegraph_c_api_test PRIVATE
+        termin_nodegraph_core)
+    termin_set_rpath_test(termin_nodegraph_c_api_test)
+    add_test(NAME termin_nodegraph_c_api_test
+        COMMAND termin_nodegraph_c_api_test)
 endif()
 
 include(GNUInstallDirs)
