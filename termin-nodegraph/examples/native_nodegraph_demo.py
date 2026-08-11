@@ -294,7 +294,7 @@ def run(
     offscreen: bool = False,
     output_path: str | Path = "nodegraph-example.png",
 ) -> int:
-    """Run interactively when possible, otherwise render an inspectable PNG."""
+    """Run the explicitly selected interactive or offscreen host."""
 
     if frame_limit < 0:
         raise ValueError("frame_limit must be non-negative")
@@ -304,14 +304,7 @@ def run(
         return 77
     if offscreen:
         return run_offscreen(output_path)
-    try:
-        return run_windowed(frame_limit=frame_limit, second_limit=second_limit)
-    except ImportError as error:
-        _log.warning(
-            "window host is unavailable (%s); rendering the graphics-profile PNG instead",
-            error,
-        )
-        return run_offscreen(output_path)
+    return run_windowed(frame_limit=frame_limit, second_limit=second_limit)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
