@@ -31,6 +31,7 @@ namespace tgfx {
         struct BuiltinShaderRootState {
             std::mutex mutex;
             std::filesystem::path explicit_root;
+            BuiltinShaderReadCallback read_callback;
         };
 
         BuiltinShaderRootState& builtin_shader_root_state() {
@@ -104,6 +105,12 @@ namespace tgfx {
         state.explicit_root = root ? std::filesystem::path(root) : std::filesystem::path();
     }
 
+    void set_builtin_shader_read_callback(BuiltinShaderReadCallback callback) {
+        BuiltinShaderRootState& state = builtin_shader_root_state();
+        std::lock_guard<std::mutex> lock(state.mutex);
+        state.read_callback = std::move(callback);
+    }
+
     std::string get_builtin_shader_root() {
         BuiltinShaderRootState& state = builtin_shader_root_state();
         std::lock_guard<std::mutex> lock(state.mutex);
@@ -160,6 +167,28 @@ namespace tgfx {
                                                                            const char* debug_name) {
             if (!filename || filename[0] == '\0') {
                 return std::nullopt;
+            }
+
+            BuiltinShaderReadCallback read_callback;
+            std::filesystem::path callback_root;
+            {
+                BuiltinShaderRootState& state = builtin_shader_root_state();
+                std::lock_guard<std::mutex> lock(state.mutex);
+                read_callback = state.read_callback;
+                callback_root = state.explicit_root;
+            }
+            if (read_callback) {
+                const std::string path = (callback_root / filename).generic_string();
+                std::string source;
+                if (read_callback(path, source)) {
+                    if (source.empty()) {
+                        tc::Log::error("[BuiltInShaderSource] Built-in shader file '%s' for '%s' is empty",
+                                       path.c_str(),
+                                       debug_name ? debug_name : "<unnamed>");
+                        return std::nullopt;
+                    }
+                    return BuiltinLocatedSource{path, std::move(source)};
+                }
             }
 
             const auto roots = builtin_shader_roots();
@@ -444,6 +473,15 @@ namespace tgfx {
     }
 
     tc_shader_handle register_builtin_shader_from_catalog(const char* uuid) {
+        if (!uuid || uuid[0] == '\0') {
+            tc::Log::error("[BuiltInShaderCatalog] Missing shader uuid");
+            return tc_shader_handle_invalid();
+        }
+        const tc_shader_handle registered = tc_shader_find(uuid);
+        if (tc_shader_is_valid(registered)) {
+            return registered;
+        }
+
         std::optional<nos::trent> entry = find_builtin_shader_catalog_entry(uuid);
         if (!entry) {
             return tc_shader_handle_invalid();

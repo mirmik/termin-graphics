@@ -158,13 +158,20 @@ set(TGFX2_SOURCES
 
 if(EMSCRIPTEN)
     # The browser render profile needs the same backend-neutral scene/render
-    # bridge as native hosts. Native font/canvas helpers and subprocess-based
-    # shader compilation stay outside this closure.
+    # bridge and retained 2D command executor as native hosts. Subprocess-based
+    # shader compilation and desktop-only renderer helpers stay outside this
+    # closure; Canvas2D consumes packaged WebGPU shader artifacts.
     set(TGFX2_SOURCES
         src/tgfx2/builtin_shader_sources.cpp
+        src/tgfx2/canvas2d_renderer.cpp
         src/tgfx2/device_factory.cpp
+        src/tgfx2/draw_list2d.cpp
+        src/tgfx2/engine_shader_catalog.cpp
+        src/tgfx2/font_atlas.cpp
         src/tgfx2/output_transform.cpp
+        src/tgfx2/path2d.cpp
         src/tgfx2/point_cloud_renderer.cpp
+        src/tgfx2/text2d_renderer.cpp
         src/tgfx2/pixel_format_utils.cpp
         src/tgfx2/pipeline_cache.cpp
         src/tgfx2/render_context.cpp

@@ -341,16 +341,14 @@ namespace tgfx {
                 const TextureDesc resolve_desc = device_.texture_desc(color.resolve_texture);
                 bool resolve_aliases_attachment = pass.has_depth && color.resolve_texture == pass.depth.texture;
                 for (size_t other = 0; other < pass.colors.size(); ++other) {
-                    resolve_aliases_attachment = resolve_aliases_attachment ||
-                                                 color.resolve_texture == pass.colors[other].texture ||
-                                                 (other < i && color.resolve_texture == pass.colors[other].resolve_texture);
+                    resolve_aliases_attachment =
+                        resolve_aliases_attachment || color.resolve_texture == pass.colors[other].texture ||
+                        (other < i && color.resolve_texture == pass.colors[other].resolve_texture);
                 }
-                if (resolve_aliases_attachment ||
-                    !has_flag(resolve_desc.usage, TextureUsage::ColorAttachment) || desc.sample_count <= 1 ||
-                    resolve_desc.sample_count != 1 || resolve_desc.format != desc.format ||
+                if (resolve_aliases_attachment || !has_flag(resolve_desc.usage, TextureUsage::ColorAttachment) ||
+                    desc.sample_count <= 1 || resolve_desc.sample_count != 1 || resolve_desc.format != desc.format ||
                     resolve_desc.width != desc.width || resolve_desc.height != desc.height ||
-                    resolve_desc.array_layers != desc.array_layers ||
-                    (!multiview && resolve_desc.array_layers != 1) ||
+                    resolve_desc.array_layers != desc.array_layers || (!multiview && resolve_desc.array_layers != 1) ||
                     (multiview && resolve_desc.array_layers < view_count)) {
                     tc_log(TC_LOG_ERROR,
                            "RenderContext2::begin_pass: color resolve attachment %zu is incompatible with its source",
@@ -1597,7 +1595,10 @@ namespace tgfx {
     void RenderContext2::draw_immediate_generic(const float* data, uint32_t vertex_count, PrimitiveTopology topo) {
         VertexLayoutDesc layout;
         layout.stride = 7 * sizeof(float);
-        layout.use_shader_input_locations = true;
+        // Vulkan may remap renderer-owned transient attributes to reflected
+        // entry-point locations. WebGPU pipelines require the explicit WGSL
+        // locations carried by the canonical immediate layout below.
+        layout.use_shader_input_locations = device_.backend_type() != BackendType::WebGPU;
         layout.attribute_count = 2;
         layout.attributes[0] = {0, VertexFormat::Float3, 0, nullptr};
         layout.attributes[1] = {1, VertexFormat::Float4, 3 * sizeof(float), nullptr};

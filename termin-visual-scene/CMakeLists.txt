@@ -31,7 +31,12 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
-add_library(termin_visual_scene SHARED
+set(_TERMIN_VISUAL_SCENE_LIBRARY_TYPE SHARED)
+if(EMSCRIPTEN)
+    set(_TERMIN_VISUAL_SCENE_LIBRARY_TYPE STATIC)
+endif()
+
+add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/tc_graphic_item.c
     src/tc_visual_scene.c
     src/tc_visual_scene_item2d.cpp

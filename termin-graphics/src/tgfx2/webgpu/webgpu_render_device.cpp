@@ -171,6 +171,48 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             return ShaderResourceKind::None;
         }
 
+        wgpu::BlendFactor blend_factor(BlendFactor value) {
+            switch (value) {
+            case BlendFactor::Zero:
+                return wgpu::BlendFactor::Zero;
+            case BlendFactor::One:
+                return wgpu::BlendFactor::One;
+            case BlendFactor::SrcAlpha:
+                return wgpu::BlendFactor::SrcAlpha;
+            case BlendFactor::OneMinusSrcAlpha:
+                return wgpu::BlendFactor::OneMinusSrcAlpha;
+            case BlendFactor::DstAlpha:
+                return wgpu::BlendFactor::DstAlpha;
+            case BlendFactor::OneMinusDstAlpha:
+                return wgpu::BlendFactor::OneMinusDstAlpha;
+            case BlendFactor::SrcColor:
+                return wgpu::BlendFactor::Src;
+            case BlendFactor::OneMinusSrcColor:
+                return wgpu::BlendFactor::OneMinusSrc;
+            case BlendFactor::DstColor:
+                return wgpu::BlendFactor::Dst;
+            case BlendFactor::OneMinusDstColor:
+                return wgpu::BlendFactor::OneMinusDst;
+            }
+            fail("unsupported blend factor");
+        }
+
+        wgpu::BlendOperation blend_operation(BlendOp value) {
+            switch (value) {
+            case BlendOp::Add:
+                return wgpu::BlendOperation::Add;
+            case BlendOp::Subtract:
+                return wgpu::BlendOperation::Subtract;
+            case BlendOp::ReverseSubtract:
+                return wgpu::BlendOperation::ReverseSubtract;
+            case BlendOp::Min:
+                return wgpu::BlendOperation::Min;
+            case BlendOp::Max:
+                return wgpu::BlendOperation::Max;
+            }
+            fail("unsupported blend operation");
+        }
+
         std::vector<WebGpuLayoutEntry> parse_layout(const ShaderDesc& desc) {
             if (desc.resource_layout_json.empty())
                 return {};
@@ -810,7 +852,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         texture_ops_.reset();
     }
 
-    void WebGpuRenderDevice::clear_texture(TextureHandle dst_handle, termin::LinearColor color, termin::Bounds2i viewport) {
+    void
+    WebGpuRenderDevice::clear_texture(TextureHandle dst_handle, termin::LinearColor color, termin::Bounds2i viewport) {
         const WebGpuTexture* dst = textures_.get(dst_handle.id);
         if (!dst)
             fail("clear_texture requires a valid destination texture");
@@ -1106,6 +1149,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             buffers[i].attributes = attributes[i].data();
         }
 
+        std::vector<wgpu::BlendState> blend_states(desc.color_formats.size());
         std::vector<wgpu::ColorTargetState> color_targets(desc.color_formats.size());
         for (size_t i = 0; i < color_targets.size(); ++i) {
             color_targets[i].format = texture_format(desc.color_formats[i]);
@@ -1114,8 +1158,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 (desc.color_mask.g ? static_cast<uint64_t>(wgpu::ColorWriteMask::Green) : 0) |
                 (desc.color_mask.b ? static_cast<uint64_t>(wgpu::ColorWriteMask::Blue) : 0) |
                 (desc.color_mask.a ? static_cast<uint64_t>(wgpu::ColorWriteMask::Alpha) : 0));
-            if (desc.blend.enabled)
-                fail("WebGPU blend mapping is not implemented yet");
+            if (desc.blend.enabled) {
+                blend_states[i].color.operation = blend_operation(desc.blend.color_op);
+                blend_states[i].color.srcFactor = blend_factor(desc.blend.src_color);
+                blend_states[i].color.dstFactor = blend_factor(desc.blend.dst_color);
+                blend_states[i].alpha.operation = blend_operation(desc.blend.alpha_op);
+                blend_states[i].alpha.srcFactor = blend_factor(desc.blend.src_alpha);
+                blend_states[i].alpha.dstFactor = blend_factor(desc.blend.dst_alpha);
+                color_targets[i].blend = &blend_states[i];
+            }
         }
         wgpu::FragmentState fragment_state;
         fragment_state.module = fragment->object;

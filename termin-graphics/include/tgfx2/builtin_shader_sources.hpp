@@ -3,7 +3,9 @@
 #include "tgfx2/tgfx2_api.h"
 
 #include <filesystem>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 extern "C" {
@@ -11,6 +13,8 @@ extern "C" {
 }
 
 namespace tgfx {
+
+    using BuiltinShaderReadCallback = std::function<bool(std::string_view path, std::string& output)>;
 
     struct BuiltinShaderProgramSource {
         std::string name;
@@ -27,6 +31,7 @@ namespace tgfx {
 
     TGFX2_API std::string load_builtin_shader_source(const char* filename, const char* debug_name);
     TGFX2_API void set_builtin_shader_root(const char* root);
+    TGFX2_API void set_builtin_shader_read_callback(BuiltinShaderReadCallback callback);
     TGFX2_API std::string get_builtin_shader_root();
     TGFX2_API std::vector<std::filesystem::path> builtin_shader_roots();
     TGFX2_API tc_shader_handle register_builtin_fragment_shader(const char* filename,
