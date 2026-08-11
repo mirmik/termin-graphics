@@ -12,7 +12,7 @@
 
 - Headless C++ core в `include/termin/nodegraph` и `src`.
 - Стабильный C ABI в `include/termin/nodegraph/c_api.h`.
-- Временно сохраняемый до consumer cutover Python package в `python/tcnodegraph`.
+- Native Python binding и snapshot-обёртки в `python/tcnodegraph`.
 - Runnable native example в `examples/native_nodegraph_demo.py`.
 - Tests в `tests/`.
 
@@ -25,8 +25,9 @@ CMake target: `termin_nodegraph::core`. C++ API объявлен в
 cardinality отклоняются без частичной замены графа.
 
 Python package: `tcnodegraph` через distribution `termin-nodegraph`.
-До завершения native Python binding это прежняя совместимая реализация, а не
-вторая публичная точка расширения.
+`Graph` владеет C++ core, а Python-объекты узлов, рёбер и групп являются
+отсоединёнными снимками. Все изменения проходят через `GraphController` и
+повторно проверяются native core; прямое изменение снимка граф не меняет.
 
 После сборки SDK пример запускается командой
 `./sdk/bin/termin_python termin-nodegraph/examples/native_nodegraph_demo.py`.

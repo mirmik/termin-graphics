@@ -533,10 +533,7 @@ class NativeNodeGraphView:
         if stable_id.startswith("node:"):
             self.controller.move_node(stable_id[5:], position_x, position_y)
         elif stable_id.startswith("group:"):
-            group = self.graph.groups.get(stable_id[6:])
-            if group is not None:
-                group.x = position_x
-                group.y = position_y
+            self.controller.move_group(stable_id[6:], position_x, position_y)
         self._refresh_edges()
         self._notify_graph_changed()
         self.request_render()

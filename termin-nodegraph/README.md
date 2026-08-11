@@ -6,11 +6,12 @@ Abstract node graph library for Termin ecosystem.
 
 1. Native graph/controller and serialization: `termin_nodegraph_core`
 2. Stable language boundary: `termin/nodegraph/c_api.h`
-3. Transitional Python model and UI projection: `tcnodegraph`
+3. Native Python binding and UI projection: `tcnodegraph`
 
 The C++ core depends only on `termin-base` and does not require a UI runtime.
-The Python implementation remains temporarily while its binding and consumers
-move to the native core.
+`tcnodegraph.Graph` owns the C++ graph. Its `nodes`, `edges`, `groups`, and
+`data` properties return disconnected Python snapshots; mutations must go
+through `GraphController`, so Python cannot bypass native invariants.
 
 The C ABI uses generation-checked graph/entity handles, descriptor `struct_size`
 fields, copied `tc_value` snapshots and size-query/copy strings. Inputs are
@@ -85,7 +86,8 @@ violates either endpoint's cardinality is rejected instead of being repaired.
 
 `graph_to_dict()` and `graph_from_dict()` preserve graph, node, and group
 metadata, including `Graph.data`. Mutable parameter and metadata containers are
-deep-copied at both boundaries, so mutating a serialized dictionary or a loaded
-graph does not mutate its source. JSON values are preserved by `save_graph_json()`
+deep-copied at both boundaries. Entity snapshots are likewise disconnected:
+edit a copied `params`/`data` value and submit it with `GraphController` rather
+than mutating the snapshot in place. JSON values are preserved by `save_graph_json()`
 and `load_graph_json()`. Invalid loads and rejected controller connections raise
 or return diagnostics and emit an error log without partially changing a graph.

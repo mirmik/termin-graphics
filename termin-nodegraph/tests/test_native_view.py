@@ -36,7 +36,7 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     source = controller.create_node("source", title="Source", x=0.0, y=0.0)
     controller.add_output_socket(source.id, "color", "fbo")
     target = controller.create_node("target", title="Target", x=350.0, y=0.0)
-    target.params["enabled"] = True
+    controller.set_node_param(target.id, "enabled", True)
     controller.add_input_socket(target.id, "color", "fbo")
     document = tc_ui_document_create()
     renders = []
@@ -58,7 +58,7 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     assert checkbox.widget.bounds.width > 0.0
     assert checkbox.widget.bounds.height == pytest.approx(18.0)
     checkbox.checked = False
-    assert target.params["enabled"] is False
+    assert graph.nodes[target.id].params["enabled"] is False
 
     assert document.dispatch_pointer_event(_pointer(PointerEventType.Down, 690.0, 356.0)) == EventResult.Handled
     document.dispatch_pointer_event(_pointer(PointerEventType.Move, 850.0, 356.0))
@@ -68,8 +68,8 @@ def test_native_node_graph_projects_connects_drags_deletes_and_releases():
     document.dispatch_pointer_event(_pointer(PointerEventType.Down, 900.0, 390.0))
     document.dispatch_pointer_event(_pointer(PointerEventType.Move, 930.0, 420.0))
     document.dispatch_pointer_event(_pointer(PointerEventType.Up, 930.0, 420.0))
-    assert target.x == 380.0
-    assert target.y == 30.0
+    assert graph.nodes[target.id].x == 380.0
+    assert graph.nodes[target.id].y == 30.0
 
     key = KeyEvent()
     key.type = KeyEventType.Down
@@ -117,12 +117,14 @@ def test_native_node_graph_parameter_rows_use_editor_sized_layout():
     graph = Graph()
     controller = GraphController(graph)
     node = controller.create_node("pass", title="Pass")
-    node.params.update({"enabled": True, "samples": 4, "quality": "High"})
-    node.data["param_specs"] = {
+    for name, value in {"enabled": True, "samples": 4, "quality": "High"}.items():
+        controller.set_node_param(node.id, name, value)
+    controller.set_node_data(node.id, {"param_specs": {
         "enabled": {"kind": "bool"},
         "samples": {"kind": "int"},
         "quality": {"kind": "enum", "items": ["Low", "High"]},
-    }
+    }})
+    node = graph.nodes[node.id]
     document = tc_ui_document_create()
     native = build_native_node_graph_view(
         document,

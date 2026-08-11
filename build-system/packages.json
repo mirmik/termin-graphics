@@ -354,7 +354,10 @@
     },
     {
       "path": "termin-nodegraph",
-      "distribution": "termin-nodegraph"
+      "distribution": "termin-nodegraph",
+      "native_extensions": [
+        {"extension": "tcnodegraph._nodegraph_native", "target": "_nodegraph_native"}
+      ]
     },
     {
       "path": "tcplot",

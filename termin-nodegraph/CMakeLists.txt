@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(TERMIN_BUILD_PYTHON "Build Python bindings" OFF)
+
 if(COMMAND termin_require_package)
     termin_require_package(termin_base tcbase::termin_base)
 else()
@@ -31,6 +33,17 @@ target_link_libraries(termin_nodegraph_core PUBLIC
     tcbase::termin_base
 )
 termin_set_rpath_lib(termin_nodegraph_core)
+
+if(TERMIN_BUILD_PYTHON)
+    find_package(Python 3.14 COMPONENTS Interpreter Development REQUIRED)
+    find_package(nanobind CONFIG REQUIRED)
+    nanobind_add_module(_nodegraph_native NB_SHARED
+        python/bindings/nodegraph_module.cpp)
+    target_link_libraries(_nodegraph_native PRIVATE
+        termin_nodegraph_core tcbase::termin_base)
+    termin_set_rpath_python(_nodegraph_native)
+    install(TARGETS _nodegraph_native DESTINATION lib/python/tcnodegraph)
+endif()
 
 if(TERMIN_BUILD_TESTS)
     enable_testing()

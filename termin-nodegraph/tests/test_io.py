@@ -47,7 +47,9 @@ class IoTests(unittest.TestCase):
         }
 
         graph = graph_from_dict(source)
-        graph.data["layout"]["selection"].append("other")
+        updated_data = graph.data
+        updated_data["layout"]["selection"].append("other")
+        GraphController(graph).set_graph_data(updated_data)
         self.assertEqual(source["data"]["layout"]["selection"], ["node"])
 
         serialized = graph_to_dict(graph)

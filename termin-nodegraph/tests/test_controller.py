@@ -32,9 +32,9 @@ class ControllerTests(unittest.TestCase):
         controller.add_input_socket(target.id, "in", "depth")
 
         self.assertFalse(controller.connect(source.id, "out", target.id, "in").ok)
-        target.inputs[0].socket_type = "color"
+        controller.add_input_socket(target.id, "compatible", "color")
 
-        result = controller.connect(source.id, "out", target.id, "in")
+        result = controller.connect(source.id, "out", target.id, "compatible")
         self.assertTrue(result.ok)
         self.assertEqual(result.edge_id, "edge_1")
 
@@ -159,6 +159,7 @@ class ControllerTests(unittest.TestCase):
         second = c.create_node(template.kind)
         first.params["settings"]["levels"].append(3)
 
+        self.assertEqual(c.graph.nodes[first.id].params["settings"], {"levels": [1, 2]})
         self.assertEqual(second.params["settings"], {"levels": [1, 2]})
         self.assertEqual(template.defaults["settings"], {"levels": [1, 2]})
 
@@ -180,6 +181,21 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(duplicate.reason, "duplicate edge id")
         self.assertEqual(set(g.nodes), {"source", "target"})
         self.assertEqual(set(g.edges), {"edge"})
+
+    def test_snapshot_update_is_transactional(self):
+        graph = Graph()
+        controller = GraphController(graph)
+        source = controller.create_node("Source")
+        target = controller.create_node("Target")
+        controller.add_output_socket(source.id, "out", "color")
+        controller.add_input_socket(target.id, "in", "color")
+        self.assertTrue(controller.connect(source.id, "out", target.id, "in").ok)
+
+        with self.assertRaisesRegex(ValueError, "socket not found"):
+            controller.update_node(source.id, outputs=[])
+
+        self.assertEqual([socket.name for socket in graph.nodes[source.id].outputs], ["out"])
+        self.assertEqual(len(graph.edges), 1)
 
 
 if __name__ == "__main__":

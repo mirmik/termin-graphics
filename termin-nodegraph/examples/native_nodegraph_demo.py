@@ -31,9 +31,9 @@ def make_demo_graph() -> Graph:
     controller = GraphController(graph)
 
     scene_color = controller.create_node("resource", title="Scene Color", x=-360.0, y=-230.0)
-    scene_color.params.update({"format": "RGBA16F", "width": 1920, "height": 1080})
-    scene_color.width = 240.0
-    scene_color.data["param_specs"] = {
+    for name, value in {"format": "RGBA16F", "width": 1920, "height": 1080}.items():
+        controller.set_node_param(scene_color.id, name, value)
+    controller.set_node_data(scene_color.id, {"param_specs": {
         "format": {
             "kind": "enum",
             "label": "Format",
@@ -53,20 +53,18 @@ def make_demo_graph() -> Graph:
             "max": 8192,
             "step": 1,
         },
-    }
+    }})
 
     color = controller.create_node("pass", title="Color Pass", x=-300.0, y=20.0)
-    color.params.update(
-        {
+    for name, value in {
             "enabled": True,
             "samples": 4,
             "exposure": 1.1,
             "quality": "High",
             "label": "Main Color",
-        }
-    )
-    color.width = 240.0
-    color.data["param_specs"] = {
+        }.items():
+        controller.set_node_param(color.id, name, value)
+    controller.set_node_data(color.id, {"param_specs": {
         "enabled": {"kind": "bool", "label": "Enabled"},
         "samples": {
             "kind": "int",
@@ -89,12 +87,12 @@ def make_demo_graph() -> Graph:
             "items": ["Low", "Medium", "High", "Ultra"],
         },
         "label": {"kind": "string", "label": "Debug Label"},
-    }
+    }})
 
     bloom = controller.create_node("effect", title="Bloom", x=30.0, y=40.0)
-    bloom.params.update({"enabled": True, "threshold": 1.25, "iterations": 5})
-    bloom.width = 240.0
-    bloom.data["param_specs"] = {
+    for name, value in {"enabled": True, "threshold": 1.25, "iterations": 5}.items():
+        controller.set_node_param(bloom.id, name, value)
+    controller.set_node_data(bloom.id, {"param_specs": {
         "enabled": {"kind": "bool", "label": "Enabled"},
         "threshold": {
             "kind": "float",
@@ -111,12 +109,12 @@ def make_demo_graph() -> Graph:
             "max": 16,
             "step": 1,
         },
-    }
+    }})
 
     present = controller.create_node("output", title="Present", x=340.0, y=70.0)
-    present.params.update({"vsync": True, "gamma": 2.2, "output": "sRGB"})
-    present.width = 240.0
-    present.data["param_specs"] = {
+    for name, value in {"vsync": True, "gamma": 2.2, "output": "sRGB"}.items():
+        controller.set_node_param(present.id, name, value)
+    controller.set_node_data(present.id, {"param_specs": {
         "vsync": {"kind": "bool", "label": "VSync"},
         "gamma": {
             "kind": "float",
@@ -131,7 +129,7 @@ def make_demo_graph() -> Graph:
             "label": "Output",
             "items": ["Linear", "sRGB", "HDR10"],
         },
-    }
+    }})
 
     controller.add_output_socket(scene_color.id, "fbo", "fbo", multi=False)
     controller.add_input_socket(color.id, "input", "fbo")
