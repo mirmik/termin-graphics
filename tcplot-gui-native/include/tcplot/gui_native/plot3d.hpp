@@ -42,6 +42,8 @@ namespace tcplot::gui_native {
         bool set_axis_scale(float x, float y, float z);
         bool set_surface_shading(bool enabled, float strength = 0.35f);
         bool set_light_direction(float x, float y, float z);
+        bool set_colorbar(tc_plot_item3d_handle surface, const char* label);
+        void clear_colorbar();
         void fit_camera();
         void reset_camera();
         bool camera(tc_orbit_camera3d_state& state) const;

@@ -28,6 +28,10 @@ class Plot2D:
     def line_count(self) -> int:
         return self._native.line_count
 
+    @property
+    def scatter_count(self) -> int:
+        return self._native.scatter_count
+
     def _color(self, color: SrgbColor | None) -> SrgbColor:
         if color is not None:
             return color
@@ -63,8 +67,44 @@ class Plot2D:
         if not self._native.append_line_data(index, xa, ya):
             raise RuntimeError("tcplot Plot2D rejected appended line data")
 
+    def scatter(
+        self,
+        x,
+        y,
+        *,
+        color: SrgbColor | None = None,
+        size: float = 5.0,
+    ) -> int:
+        xa, ya = self._xy(x, y)
+        resolved = self._color(color)
+        index = self._native.add_scatter(
+            resolved.r, resolved.g, resolved.b, resolved.a, size
+        )
+        if not self._native.set_scatter_data(index, xa, ya):
+            raise RuntimeError("tcplot Plot2D rejected scatter data")
+        return index
+
+    def create_data_marker(
+        self,
+        x: float,
+        y: float,
+        text: str,
+        *,
+        snap_line_index: int = 0,
+    ) -> tuple[int, int, int]:
+        handle = tuple(
+            int(value)
+            for value in self._native.create_data_marker(
+                x, y, text, snap_line_index
+            )
+        )
+        if handle[0] == 0:
+            raise RuntimeError("tcplot Plot2D rejected data marker")
+        return handle
+
     def clear(self) -> None:
         self._native.clear_lines()
+        self._native.clear_scatters()
         self._next_color = 0
 
     def set_title(self, title: str) -> None:
@@ -202,6 +242,17 @@ class Plot3D:
 
     def set_light_direction(self, x: float, y: float, z: float) -> None:
         self._native.set_light_direction(x, y, z)
+
+    def show_colorbar(self, surface: Plot3DItem, label: str = "") -> None:
+        self._native.set_colorbar(
+            surface.scene_id,
+            surface.index,
+            surface.generation,
+            label,
+        )
+
+    def clear_colorbar(self) -> None:
+        self._native.clear_colorbar()
 
     def fit_camera(self) -> None:
         self._native.fit_camera()

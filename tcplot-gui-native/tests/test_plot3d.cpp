@@ -74,6 +74,24 @@ int main() {
             std::fprintf(stderr, "Plot3D retained line creation failed\n");
             return 1;
         }
+        const std::vector<double> surface_x{-1.0, 1.0, -1.0, 1.0};
+        const std::vector<double> surface_y{-1.0, -1.0, 1.0, 1.0};
+        const std::vector<double> surface_z{-0.5, 0.5, 0.5, -0.5};
+        tc_surface_item3d_style surface_style{};
+        surface_style.color_r = 1.0f;
+        surface_style.color_g = 1.0f;
+        surface_style.color_b = 1.0f;
+        surface_style.color_a = 0.75f;
+        surface_style.colormap = TC_PLOT_COLORMAP3D_VIRIDIS;
+        surface_style.surface_grid_row_step = 1;
+        surface_style.surface_grid_col_step = 1;
+        surface_style.surface_grid_width_px = 1.0f;
+        const tc_plot_item3d_handle surface =
+            plot->add_surface(surface_x, surface_y, surface_z, 2, 2, surface_style);
+        if (surface.scene_id == 0 || !plot->set_colorbar(surface, "height")) {
+            std::fprintf(stderr, "Plot3D surface colorbar creation failed\n");
+            return 1;
+        }
         plot->set_axis_labels("x", "y", "z");
         plot->fit_camera();
 

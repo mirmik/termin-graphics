@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+from functools import lru_cache
+import math
 from pathlib import Path
 import sys
 
@@ -17,7 +20,8 @@ from tcnodegraph import (
 )
 from tcplot import SurfaceColorMap
 from tcplot_gui_native import Plot2D, Plot3D
-from termin.gui_native import Size, build_python_showcase
+from termin.gui_native import Point, Size, build_python_showcase
+from termin.visual_scene import tc_visual_scene_create, tc_visual_scene_destroy
 
 from .model import Section, SectionContent
 
@@ -80,20 +84,162 @@ def _native_ui(application) -> SectionContent:
     )
 
 
-def _plot_2d(application) -> SectionContent:
-    plot = Plot2D(application.document)
-    plot.widget.preferred_size = Size(960.0, 640.0)
-    x = np.linspace(0.0, 4.0 * np.pi, 480)
-    first = plot.plot(x, np.sin(x), thickness=2.5)
-    plot.plot(x, 0.55 * np.cos(2.0 * x), thickness=2.0)
-    plot.append_line_data(first, [4.0 * np.pi + 0.05], [0.05])
-    plot.set_title("Graphics profile — retained Plot2D")
-    plot.set_axis_labels("phase", "amplitude")
-    if not application.document.add_root(plot.handle):
-        raise RuntimeError("failed to add Plot2D showcase root")
+def _graphics_line_gallery(application) -> SectionContent:
+    from tcbase._geom_native import LinearColor
+    from termin.geombase import OrbitCamera, Vec3
+    from tgfx import (
+        CULL_NONE,
+        LineCapStyle,
+        LineJoinStyle,
+        LinePoint3,
+        LineStyle,
+        Tgfx2Context,
+        Tgfx2PixelFormat,
+        Tgfx2ShaderStage,
+        build_line_mesh,
+    )
+
+    if application.graphics is None:
+        raise RuntimeError("graphics line gallery requires its composition GraphicsHost")
+    width, height = 1100, 620
+    context = Tgfx2Context.from_runtime(application.graphics)
+    color = context.create_color_attachment(width, height, Tgfx2PixelFormat.RGBA8_UNorm)
+    depth = context.create_depth_attachment(width, height, Tgfx2PixelFormat.D32F)
+    camera = OrbitCamera()
+    camera.target = Vec3(0.0, 0.0, 0.2)
+    camera.distance = 6.2
+    camera.fitted_radius = 2.8
+    vertex_source = """#version 450 core
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { mat4 u_mvp; vec4 u_color; } pc;
+#define U_MVP pc.u_mvp
+#else
+uniform mat4 u_mvp;
+#define U_MVP u_mvp
+#endif
+layout(location=0) in vec3 a_position;
+layout(location=1) in vec4 a_color;
+layout(location=0) out vec4 v_color;
+void main() { gl_Position = U_MVP * vec4(a_position, 1.0); v_color = a_color; }
+"""
+    fragment_source = """#version 450 core
+#ifdef VULKAN
+layout(push_constant) uniform PCBlock { mat4 u_mvp; vec4 u_color; } pc;
+#define U_COLOR pc.u_color
+#else
+uniform vec4 u_color;
+#define U_COLOR u_color
+#endif
+layout(location=0) out vec4 frag_color;
+layout(location=0) in vec4 v_color;
+void main() { frag_color = U_COLOR * v_color; }
+"""
+    vertex_shader = context.device.create_shader(Tgfx2ShaderStage.Vertex, vertex_source)
+    fragment_shader = context.device.create_shader(Tgfx2ShaderStage.Fragment, fragment_source)
+
+    colors = (
+        (0.25, 0.65, 1.0, 1.0),
+        (0.35, 0.92, 0.55, 1.0),
+        (1.0, 0.68, 0.22, 1.0),
+        (0.95, 0.32, 0.48, 1.0),
+    )
+    lines = []
+    for index, angle_degrees in enumerate((20.0, 45.0, 90.0, 145.0)):
+        angle = math.radians(angle_degrees)
+        y = 1.75 - index * 1.05
+        style = LineStyle()
+        style.width = 0.045 + index * 0.018
+        style.up_hint = LinePoint3(0.0, 0.0, 1.0)
+        style.cap = (LineCapStyle.Butt, LineCapStyle.Square, LineCapStyle.Round, LineCapStyle.Round)[index]
+        style.join = (LineJoinStyle.Bevel, LineJoinStyle.Bevel, LineJoinStyle.Round, LineJoinStyle.Round)[index]
+        style.round_segments = 18
+        points = [
+            LinePoint3(-2.2, y, 0.0),
+            LinePoint3(-0.6, y, 0.0),
+            LinePoint3(-0.6 + math.cos(angle), y + math.sin(angle), 0.0),
+            LinePoint3(1.9, y + math.sin(angle), 0.0),
+        ]
+        mesh = build_line_mesh(points, style)
+        lines.append((np.asarray(mesh.triangle_vertices, dtype=np.float32), colors[index]))
+    spiral = [
+        LinePoint3(
+            1.15 * math.cos(index / 90.0 * math.tau * 2.4),
+            1.15 * math.sin(index / 90.0 * math.tau * 2.4),
+            -1.2 + index / 90.0 * 2.4,
+        )
+        for index in range(91)
+    ]
+    spiral_style = LineStyle()
+    spiral_style.width = 0.055
+    spiral_style.up_hint = LinePoint3(0.0, 0.0, 1.0)
+    spiral_style.cap = LineCapStyle.Round
+    spiral_style.join = LineJoinStyle.Round
+    spiral_style.round_segments = 18
+    spiral_mesh = build_line_mesh(spiral, spiral_style)
+    lines.append((np.asarray(spiral_mesh.triangle_vertices, dtype=np.float32), (0.72, 0.58, 1.0, 1.0)))
+
+    try:
+        context.context.begin_frame()
+        context.context.begin_pass(
+            color,
+            depth,
+            clear_linear_color=LinearColor(0.025, 0.035, 0.055, 1.0),
+            clear_depth_enabled=True,
+            clear_depth=1.0,
+        )
+        context.context.set_viewport(0, 0, width, height)
+        context.context.set_depth_test(True)
+        context.context.set_depth_write(True)
+        context.context.set_cull(CULL_NONE)
+        context.context.bind_shader(vertex_shader, fragment_shader)
+        mvp = np.asarray(camera.mvp(width / height), dtype=np.float32)
+        for vertices, rgba in lines:
+            if vertices.size == 0:
+                continue
+            packed = np.concatenate((mvp, np.ones(4, dtype=np.float32))).view(np.uint8)
+            context.context.set_push_constants(np.ascontiguousarray(packed, dtype=np.uint8))
+            expanded = np.zeros((vertices.shape[0], 7), dtype=np.float32)
+            expanded[:, :3] = vertices
+            expanded[:, 3:] = np.asarray(rgba, dtype=np.float32)
+            context.context.draw_immediate_triangles(expanded, int(expanded.shape[0]))
+        context.context.end_pass()
+        context.context.end_frame()
+    except Exception:
+        context.device.destroy_shader(fragment_shader)
+        context.device.destroy_shader(vertex_shader)
+        context.destroy_texture(depth)
+        context.destroy_texture(color)
+        raise
+
+    canvas = application.document.create_canvas()
+    canvas.widget.preferred_size = Size(float(width), float(height))
+    canvas.set_texture(color, Size(float(width), float(height)))
+    canvas.fit_in_view()
+    if not application.document.add_root(canvas.handle):
+        canvas.clear_texture()
+        context.device.destroy_shader(fragment_shader)
+        context.device.destroy_shader(vertex_shader)
+        context.destroy_texture(depth)
+        context.destroy_texture(color)
+        raise RuntimeError("failed to add graphics line gallery root")
+
+    def cleanup() -> None:
+        canvas.clear_texture()
+        context.device.destroy_shader(fragment_shader)
+        context.device.destroy_shader(vertex_shader)
+        context.destroy_texture(depth)
+        context.destroy_texture(color)
+
     return SectionContent(
-        root=plot.widget,
-        facts={"line_count": plot.line_count, "samples": 961},
+        root=canvas.widget,
+        cleanup=cleanup,
+        facts={
+            "renderer": "build_line_mesh",
+            "polylines": len(lines),
+            "caps": ["butt", "square", "round"],
+            "joins": ["bevel", "round"],
+            "world_width": [0.045, 0.063, 0.081, 0.099],
+        },
     )
 
 
@@ -127,13 +273,78 @@ def _populate_plot_3d(plot: Plot3D) -> dict[str, object]:
     }
 
 
-def _plot_3d(application) -> SectionContent:
-    plot = Plot3D(application.document)
-    plot.widget.preferred_size = Size(960.0, 640.0)
-    facts = _populate_plot_3d(plot)
-    if not application.document.add_root(plot.handle):
-        raise RuntimeError("failed to add Plot3D showcase root")
-    return SectionContent(root=plot.widget, facts=facts)
+@lru_cache(maxsize=1)
+def _tcplot_gallery_module():
+    source = Path(__file__).resolve().parents[3] / "tcplot" / "examples" / "_gallery.py"
+    spec = importlib.util.spec_from_file_location("termin_graphics_showcase_tcplot_gallery", source)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load restored tcplot gallery: {source}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _tcplot_example(application, builder_name: str, facts: dict[str, object]) -> SectionContent:
+    gallery = _tcplot_gallery_module()
+    builder = vars(gallery)[builder_name]
+    root = builder(application.document)
+    if not application.document.add_root(root.handle):
+        raise RuntimeError(f"failed to add restored tcplot example '{builder_name}'")
+    return SectionContent(root=root.widget, facts=facts)
+
+
+def _tcplot_sine(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "sine_plot",
+        {"line_series": 3, "samples": 1500, "scenario": "trigonometric-functions"},
+    )
+
+
+def _tcplot_scatter(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "scatter_plot",
+        {"scatter_series": 3, "points": 300, "line_series": 1},
+    )
+
+
+def _tcplot_multi(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "multi_plot",
+        {"plots": 2, "line_series": 7, "layout": "side-by-side"},
+    )
+
+
+def _tcplot_marker(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "marker_plot",
+        {"line_series": 1, "annotation": "draggable-data-marker", "snap": "nearest-sample"},
+    )
+
+
+def _tcplot_helix(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "helix_plot",
+        {"line_series": 2, "scatter_series": 1, "scenario": "double-helix"},
+    )
+
+
+def _tcplot_surface(application) -> SectionContent:
+    return _tcplot_example(
+        application,
+        "surface_plot",
+        {
+            "surfaces": 2,
+            "colormap": "Viridis",
+            "colorbar": True,
+            "wireframe": True,
+            "z_scale": 5.0,
+        },
+    )
 
 
 def _make_graph() -> tuple[Graph, GraphController, dict[str, str]]:
@@ -164,6 +375,138 @@ def _make_graph() -> tuple[Graph, GraphController, dict[str, str]]:
         raise RuntimeError(f"failed to connect showcase nodes: {result.reason}")
     controller.add_group("Graphics profile composition", -510.0, -250.0, 1110.0, 540.0)
     return graph, controller, {signal.id: "plot2d", surface.id: "plot3d"}
+
+
+def _visual_scene_gallery(application) -> SectionContent:
+    from termin.geombase import SrgbColor
+
+    scene = tc_visual_scene_create()
+    view = application.document.create_scene_view(scene)
+    view.widget.stable_id = "graphics-showcase.visual-scene"
+    view.widget.preferred_size = Size(1160.0, 700.0)
+    view.set_scene_colors(
+        SrgbColor(0.035, 0.045, 0.065, 1.0),
+        SrgbColor(0.09, 0.12, 0.17, 0.8),
+        SrgbColor(0.25, 0.32, 0.42, 0.9),
+    )
+    view.offset = Point(80.0, 70.0)
+
+    cards = scene.create_group()
+    cards.position = (30.0, 25.0)
+    scene.create_rounded_rect(
+        (0.0, 0.0, 300.0, 190.0),
+        22.0,
+        SrgbColor(0.08, 0.16, 0.29, 1.0),
+        SrgbColor(0.25, 0.62, 1.0, 1.0),
+        3.0,
+        cards,
+    )
+    scene.create_text(
+        "Retained hierarchy",
+        (24.0, 38.0),
+        22.0,
+        SrgbColor(0.92, 0.96, 1.0, 1.0),
+        (20.0, 12.0, 250.0, 40.0),
+        cards,
+    )
+    child = scene.create_group(cards)
+    child.set_transform(0.94, 0.22, -0.22, 0.94, 75.0, 78.0)
+    scene.create_rect(
+        (0.0, 0.0, 150.0, 72.0),
+        SrgbColor(0.16, 0.55, 0.95, 0.9),
+        SrgbColor(0.72, 0.88, 1.0, 1.0),
+        2.0,
+        child,
+    )
+    scene.create_ellipse(
+        (105.0, -22.0, 84.0, 84.0),
+        SrgbColor(1.0, 0.46, 0.23, 0.88),
+        SrgbColor(1.0, 0.82, 0.52, 1.0),
+        3.0,
+        child,
+    )
+
+    waves = scene.create_group()
+    waves.position = (390.0, 40.0)
+    scene.create_text(
+        "Polyline geometry",
+        (0.0, 22.0),
+        20.0,
+        SrgbColor(0.90, 0.95, 1.0, 1.0),
+        (0.0, 0.0, 280.0, 36.0),
+        waves,
+    )
+    for index, color in enumerate(
+        (
+            SrgbColor(0.25, 0.78, 1.0, 1.0),
+            SrgbColor(0.55, 0.92, 0.48, 1.0),
+            SrgbColor(1.0, 0.62, 0.24, 1.0),
+        )
+    ):
+        points = [
+            (float(x), 92.0 + index * 52.0 + 24.0 * np.sin(x * 0.035 + index))
+            for x in range(0, 330, 10)
+        ]
+        scene.create_polyline(points, color, 3.0 + index, False, waves)
+
+    layering = scene.create_group()
+    layering.position = (115.0, 330.0)
+    scene.create_text(
+        "Z-order · opacity · transforms",
+        (0.0, 25.0),
+        20.0,
+        SrgbColor(0.90, 0.95, 1.0, 1.0),
+        (0.0, 0.0, 380.0, 36.0),
+        layering,
+    )
+    for index in range(7):
+        tile = scene.create_rounded_rect(
+            (0.0, 0.0, 150.0, 96.0),
+            18.0,
+            SrgbColor(0.18 + index * 0.08, 0.35, 0.78 - index * 0.06, 1.0),
+            SrgbColor(0.8, 0.9, 1.0, 0.8),
+            2.0,
+            layering,
+        )
+        tile.position = (index * 58.0, 70.0 + index * 15.0)
+        tile.opacity = 0.46 + index * 0.08
+        tile.z_order = index
+
+    hit = scene.create_hit_region_rect((720.0, 330.0, 220.0, 150.0))
+    hit.enabled = True
+    scene.create_rounded_rect(
+        (720.0, 330.0, 220.0, 150.0),
+        18.0,
+        SrgbColor(0.10, 0.30, 0.20, 0.88),
+        SrgbColor(0.35, 0.95, 0.62, 1.0),
+        3.0,
+    )
+    scene.create_text(
+        "Invisible hit region\nshares these bounds",
+        (746.0, 390.0),
+        18.0,
+        SrgbColor(0.84, 1.0, 0.90, 1.0),
+        (735.0, 350.0, 190.0, 90.0),
+    )
+
+    if not application.document.add_root(view.widget.handle):
+        tc_visual_scene_destroy(scene)
+        raise RuntimeError("failed to add visual-scene showcase root")
+
+    def cleanup() -> None:
+        view.set_pointer_handler(None)
+        tc_visual_scene_destroy(scene)
+
+    return SectionContent(
+        root=view.widget,
+        cleanup=cleanup,
+        facts={
+            "items": scene.size,
+            "hierarchy": len(cards.children),
+            "retained_types": sorted({item.type_name for item in scene.items}),
+            "hit_region": hit.type_name,
+        },
+    )
 
 
 def _visual_scene_nodegraph(application) -> SectionContent:
@@ -234,16 +577,52 @@ def section_registry() -> tuple[Section, ...]:
             build=_native_ui,
         ),
         Section(
-            name="plot_2d",
-            description="Retained 2D lines, updates, axes and labels",
-            capabilities=("tcplot", "tcplot-gui-native", "visual-scene", "plot2d"),
-            build=_plot_2d,
+            name="graphics_lines",
+            description="Mesh-expanded line caps, joins, widths and 3D polylines",
+            capabilities=("termin-graphics", "line-mesh", "caps", "joins"),
+            build=_graphics_line_gallery,
         ),
         Section(
-            name="plot_3d",
-            description="Retained 3D line, scatter, surface and colormap",
-            capabilities=("tcplot", "tcplot-gui-native", "tgfx", "plot3d"),
-            build=_plot_3d,
+            name="tcplot_sine",
+            description="Sine, cosine and damped-sine line families",
+            capabilities=("tcplot", "plot2d", "multi-line", "axes"),
+            build=_tcplot_sine,
+        ),
+        Section(
+            name="tcplot_scatter",
+            description="Three deterministic scatter clusters and a trend line",
+            capabilities=("tcplot", "plot2d", "scatter", "line"),
+            build=_tcplot_scatter,
+        ),
+        Section(
+            name="tcplot_multi",
+            description="Polynomial and damped-oscillation plots side by side",
+            capabilities=("tcplot", "plot2d", "layout", "multiple-plots"),
+            build=_tcplot_multi,
+        ),
+        Section(
+            name="tcplot_marker",
+            description="Draggable retained marker with nearest-sample snapping",
+            capabilities=("tcplot", "plot2d", "annotation", "interaction"),
+            build=_tcplot_marker,
+        ),
+        Section(
+            name="tcplot_helix",
+            description="Double helix lines with a deterministic 3D point cloud",
+            capabilities=("tcplot", "plot3d", "line", "scatter"),
+            build=_tcplot_helix,
+        ),
+        Section(
+            name="tcplot_surface",
+            description="Sinc surface with Viridis mapping, wireframe and z scaling",
+            capabilities=("tcplot", "plot3d", "surface", "colormap", "wireframe"),
+            build=_tcplot_surface,
+        ),
+        Section(
+            name="visual_scene_gallery",
+            description="Retained primitives, hierarchy, transforms, opacity and hit regions",
+            capabilities=("termin-visual-scene", "retained-2d", "transforms", "hit-test"),
+            build=_visual_scene_gallery,
         ),
         Section(
             name="visual_scene_nodegraph",

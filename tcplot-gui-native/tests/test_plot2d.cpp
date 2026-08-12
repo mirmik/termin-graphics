@@ -107,6 +107,16 @@ int main() {
     require(plot->set_line_data(target, time, target_coordinate), "setting target line data failed");
     require(plot->line_count() == 2, "unexpected line count");
 
+    tcplot::PlotScatterSeriesStyle2D scatter_style;
+    scatter_style.diameter_px = 7.0f;
+    const std::size_t samples = plot->add_scatter(scatter_style);
+    require(samples == 0, "unexpected first scatter index");
+    require(plot->set_scatter_data(samples, time, coordinate), "setting scatter data failed");
+    require(plot->scatter_count() == 1, "unexpected scatter count");
+
+    const auto marker = plot->create_data_marker(0.5, 42.0, "drag me", actual);
+    require(marker.valid(), "creating retained data marker failed");
+
     document.layout_roots({0.0f, 0.0f, 640.0f, 320.0f});
     tc_ui_draw_list* draw_list = tc_ui_draw_list_create();
     tc_ui_paint_context* paint_context = tc_ui_paint_context_create(draw_list);

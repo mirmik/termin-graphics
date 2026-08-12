@@ -52,6 +52,25 @@ namespace {
             return get().append_line_data(index, array_span(x), array_span(y));
         }
 
+        std::size_t add_scatter(float r, float g, float b, float a, float diameter) const {
+            tcplot::PlotScatterSeriesStyle2D style;
+            style.color = {r, g, b, a};
+            style.diameter_px = diameter;
+            return get().add_scatter(style);
+        }
+
+        bool set_scatter_data(std::size_t index, Array x, Array y) const {
+            return get().set_scatter_data(index, array_span(x), array_span(y));
+        }
+
+        nb::tuple create_data_marker(double x,
+                                     double y,
+                                     const std::string& text,
+                                     std::size_t snap_line_index) const {
+            const auto handle = get().create_data_marker(x, y, text, snap_line_index);
+            return nb::make_tuple(handle.layer_id, handle.index, handle.generation);
+        }
+
     private:
         static std::span<const double> array_span(const Array& value) {
             return {value.data(), value.size()};
@@ -166,6 +185,10 @@ NB_MODULE(_tcplot_gui_native, module) {
         .def("set_line_data", &Plot2DAccess::set_line_data)
         .def("append_line_data", &Plot2DAccess::append_line_data)
         .def("clear_lines", [](const Plot2DAccess& self) { self.get().clear_lines(); })
+        .def("add_scatter", &Plot2DAccess::add_scatter)
+        .def("set_scatter_data", &Plot2DAccess::set_scatter_data)
+        .def("clear_scatters", [](const Plot2DAccess& self) { self.get().clear_scatters(); })
+        .def("create_data_marker", &Plot2DAccess::create_data_marker)
         .def("set_title", [](const Plot2DAccess& self, const std::string& title) { self.get().set_title(title); })
         .def("set_axis_labels",
              [](const Plot2DAccess& self, const std::string& x, const std::string& y) {
@@ -176,7 +199,8 @@ NB_MODULE(_tcplot_gui_native, module) {
         .def("set_view", [](const Plot2DAccess& self, double x_min, double x_max, double y_min, double y_max) {
             self.get().set_view(x_min, x_max, y_min, y_max);
         })
-        .def_prop_ro("line_count", [](const Plot2DAccess& self) { return self.get().line_count(); });
+        .def_prop_ro("line_count", [](const Plot2DAccess& self) { return self.get().line_count(); })
+        .def_prop_ro("scatter_count", [](const Plot2DAccess& self) { return self.get().scatter_count(); });
 
     nb::class_<Plot3DAccess>(module, "Plot3DAccess")
         .def(nb::init<termin::gui_native::TcDocument, uint32_t, uint32_t>())
@@ -201,6 +225,16 @@ NB_MODULE(_tcplot_gui_native, module) {
             if (!self.get().set_light_direction(x, y, z))
                 throw std::runtime_error("tcplot Plot3D rejected light direction");
         })
+        .def("set_colorbar",
+             [](const Plot3DAccess& self,
+                uint64_t scene_id,
+                uint32_t index,
+                uint32_t generation,
+                const std::string& label) {
+                 if (!self.get().set_colorbar({scene_id, index, generation}, label.c_str()))
+                     throw std::runtime_error("tcplot Plot3D rejected colorbar surface");
+             })
+        .def("clear_colorbar", [](const Plot3DAccess& self) { self.get().clear_colorbar(); })
         .def("fit_camera", [](const Plot3DAccess& self) { self.get().fit_camera(); })
         .def("reset_camera", [](const Plot3DAccess& self) { self.get().reset_camera(); })
         .def_prop_ro("scene_id", [](const Plot3DAccess& self) { return self.get().scene_id(); })

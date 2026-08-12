@@ -14,8 +14,14 @@ import tempfile
 
 EXPECTED_SECTIONS = {
     "native_ui",
-    "plot_2d",
-    "plot_3d",
+    "graphics_lines",
+    "tcplot_sine",
+    "tcplot_scatter",
+    "tcplot_multi",
+    "tcplot_marker",
+    "tcplot_helix",
+    "tcplot_surface",
+    "visual_scene_gallery",
     "visual_scene_nodegraph",
     "plot_nodegraph_composition",
 }
