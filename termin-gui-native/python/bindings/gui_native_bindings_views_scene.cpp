@@ -1,6 +1,26 @@
 #include "gui_native_bindings_shared.hpp"
 
+#include <cstring>
+
+#include <termin/geom/mat44.hpp>
+
 using namespace termin::gui_native::python_bindings;
+
+namespace {
+
+    tc_mat44 to_tc_mat44(const termin::Mat44& value) {
+        tc_mat44 result{};
+        std::memcpy(result.m, value.data, sizeof(result.m));
+        return result;
+    }
+
+    termin::Mat44 from_tc_mat44(const tc_mat44& value) {
+        termin::Mat44 result{};
+        std::memcpy(result.data, value.m, sizeof(result.data));
+        return result;
+    }
+
+} // namespace
 
 void bind_gui_native_scene_views(nb::module_& m) {
     nb::class_<termin::gui_native::SceneTransform>(m, "SceneTransform")
@@ -93,7 +113,10 @@ void bind_gui_native_scene_views(nb::module_& m) {
         .def(nb::init<>())
         .def(
             "__init__",
-            [](termin::gui_native::RichTextStyle* self, std::optional<termin::SrgbColor> color, bool bold, bool italic) {
+            [](termin::gui_native::RichTextStyle* self,
+               std::optional<termin::SrgbColor> color,
+               bool bold,
+               bool italic) {
                 new (self) termin::gui_native::RichTextStyle{
                     color ? std::optional<tc_ui_srgb_color>(to_tc_ui_srgb(*color)) : std::nullopt, bold, italic};
             },
@@ -332,6 +355,34 @@ void bind_gui_native_scene_views(nb::module_& m) {
         .def_rw("width", &termin::gui_native::ViewportSurfaceSize::width)
         .def_rw("height", &termin::gui_native::ViewportSurfaceSize::height);
 
+    nb::class_<termin::gui_native::SceneView3DCamera>(m, "SceneView3DCamera")
+        .def(nb::init<>())
+        .def(
+            "__init__",
+            [](termin::gui_native::SceneView3DCamera* self,
+               const termin::Mat44& view_matrix,
+               const termin::Mat44& projection_matrix,
+               termin::Vec3 world_position) {
+                new (self) termin::gui_native::SceneView3DCamera{
+                    to_tc_mat44(view_matrix), to_tc_mat44(projection_matrix), world_position};
+            },
+            nb::arg("view_matrix"),
+            nb::arg("projection_matrix"),
+            nb::arg("world_position"))
+        .def_prop_rw(
+            "view_matrix",
+            [](const termin::gui_native::SceneView3DCamera& self) { return from_tc_mat44(self.view_matrix); },
+            [](termin::gui_native::SceneView3DCamera& self, const termin::Mat44& value) {
+                self.view_matrix = to_tc_mat44(value);
+            })
+        .def_prop_rw(
+            "projection_matrix",
+            [](const termin::gui_native::SceneView3DCamera& self) { return from_tc_mat44(self.projection_matrix); },
+            [](termin::gui_native::SceneView3DCamera& self, const termin::Mat44& value) {
+                self.projection_matrix = to_tc_mat44(value);
+            })
+        .def_rw("world_position", &termin::gui_native::SceneView3DCamera::world_position);
+
     nb::enum_<termin::gui_native::ViewportExternalDragPhase>(m, "ViewportExternalDragPhase")
         .value("Enter", termin::gui_native::ViewportExternalDragPhase::Enter)
         .value("Move", termin::gui_native::ViewportExternalDragPhase::Move)
@@ -510,10 +561,7 @@ void bind_gui_native_scene_views(nb::module_& m) {
         .def(
             "set_scene_colors",
             [](const SceneViewRef& self, termin::SrgbColor background, termin::SrgbColor grid, termin::SrgbColor axes) {
-                self.get().set_scene_colors(
-                    background,
-                    grid,
-                    axes);
+                self.get().set_scene_colors(background, grid, axes);
             },
             nb::arg("background"),
             nb::arg("grid"),
@@ -635,4 +683,128 @@ void bind_gui_native_scene_views(nb::module_& m) {
                 return self.get().transform_changed().disconnect(connection);
             },
             nb::arg("connection"));
+
+    nb::class_<SceneView3DRef>(m, "SceneView3D")
+        .def_prop_ro("widget", [](const SceneView3DRef& self) { return self.widget; })
+        .def_prop_ro("handle", [](const SceneView3DRef& self) { return WidgetHandle{self.widget.handle}; })
+        .def_prop_ro("scene", [](const SceneView3DRef& self) { return self.get().scene(); })
+        .def(
+            "set_scene",
+            [](const SceneView3DRef& self, termin::visual::TcVisualScene3D scene) { self.get().set_scene(scene); },
+            nb::arg("scene"))
+        .def("detach_scene", [](const SceneView3DRef& self) { self.get().set_scene({}); })
+        .def("invalidate_scene", [](const SceneView3DRef& self) { self.get().invalidate_scene(); })
+        .def_prop_rw(
+            "camera",
+            [](const SceneView3DRef& self) { return self.get().camera(); },
+            [](const SceneView3DRef& self, termin::gui_native::SceneView3DCamera camera) {
+                self.get().set_camera(camera);
+                self.widget.throw_pending_exception();
+            })
+        .def(
+            "set_camera_provider",
+            [](const SceneView3DRef& self, nb::object callback) {
+                if (callback.is_none()) {
+                    self.get().set_camera_provider({});
+                    return;
+                }
+                if (!nb::isinstance<nb::callable>(callback)) {
+                    throw nb::type_error("camera provider must be callable or None");
+                }
+                const std::shared_ptr<DocumentState> state = self.widget.state;
+                self.get().set_camera_provider(
+                    [state, callback = std::move(callback)](termin::gui_native::ViewportSurfaceSize size)
+                        -> std::optional<termin::gui_native::SceneView3DCamera> {
+                        if (!state || tc_ui_document_handle_is_invalid(state->document))
+                            return std::nullopt;
+                        nb::gil_scoped_acquire gil;
+                        try {
+                            nb::object value = callback(size);
+                            if (value.is_none())
+                                return std::nullopt;
+                            return nb::cast<termin::gui_native::SceneView3DCamera>(value);
+                        } catch (...) {
+                            tc_log_error("[termin-gui-native/python] SceneView3D camera provider failed");
+                            if (!state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                            return std::nullopt;
+                        }
+                    });
+            },
+            nb::arg("callback").none())
+        .def("invalidate_view", [](const SceneView3DRef& self) { self.get().invalidate_view(); })
+        .def_prop_ro("framebuffer_size", [](const SceneView3DRef& self) { return self.get().framebuffer_size(); })
+        .def_prop_ro("texture_id", [](const SceneView3DRef& self) { return self.get().texture_id(); })
+        .def(
+            "world_ray",
+            [](const SceneView3DRef& self, float x, float y) { return self.get().world_ray(x, y); },
+            nb::arg("x"),
+            nb::arg("y"))
+        .def(
+            "set_action_handler",
+            [](const SceneView3DRef& self, termin::visual::VisualItem3DHandle item, nb::object callback) {
+                const auto scene = self.get().scene();
+                if (!scene.valid() || !scene.contains(item)) {
+                    throw nb::value_error("action target must belong to the SceneView3D scene");
+                }
+                if (callback.is_none()) {
+                    self.get().interaction().clear_action_handler(item);
+                    return;
+                }
+                if (!nb::isinstance<nb::callable>(callback)) {
+                    throw nb::type_error("action handler must be callable or None");
+                }
+                const std::shared_ptr<DocumentState> state = self.widget.state;
+                self.get().interaction().set_action_handler(
+                    item, [state, callback = std::move(callback)](const termin::visual::ActionEvent3D& event) {
+                        if (!state || tc_ui_document_handle_is_invalid(state->document))
+                            return;
+                        nb::gil_scoped_acquire gil;
+                        try {
+                            callback(event.part, event.action);
+                        } catch (...) {
+                            tc_log_error("[termin-gui-native/python] SceneView3D action handler failed");
+                            if (!state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                        }
+                    });
+            },
+            nb::arg("item"),
+            nb::arg("callback").none())
+        .def(
+            "set_fallback_pointer_handler",
+            [](const SceneView3DRef& self, nb::object callback) {
+                if (callback.is_none()) {
+                    self.get().set_fallback_pointer_handler({});
+                    return;
+                }
+                if (!nb::isinstance<nb::callable>(callback)) {
+                    throw nb::type_error("fallback pointer handler must be callable or None");
+                }
+                const std::shared_ptr<DocumentState> state = self.widget.state;
+                self.get().set_fallback_pointer_handler(
+                    [state, callback = std::move(callback)](termin::gui_native::SceneView3D&,
+                                                            const tc_ui_pointer_event& event,
+                                                            const std::optional<termin::Ray3>& ray) {
+                        if (!state || tc_ui_document_handle_is_invalid(state->document))
+                            return false;
+                        nb::gil_scoped_acquire gil;
+                        try {
+                            return nb::cast<bool>(callback(event, ray));
+                        } catch (...) {
+                            tc_log_error("[termin-gui-native/python] SceneView3D fallback pointer handler failed");
+                            if (!state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                            return false;
+                        }
+                    });
+            },
+            nb::arg("callback").none())
+        .def(
+            "set_clear_color",
+            [](const SceneView3DRef& self, termin::LinearColor color) {
+                self.get().set_clear_color(color);
+                self.widget.throw_pending_exception();
+            },
+            nb::arg("color"));
 }

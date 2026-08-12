@@ -1309,3 +1309,48 @@ def test_native_scene_transform_and_scene_view_handler_errors_propagate():
     event.y = 10.0
     with pytest.raises(RuntimeError, match="scene pointer failed"):
         document.dispatch_pointer_event(event)
+
+
+def test_native_scene_view3d_projects_camera_routes_action_and_detaches_scene():
+    from termin.geombase import Mat44, SrgbColor, Vec3
+    from termin.gui_native import SceneView3DCamera
+    from termin.visual_scene import tc_visual_scene3d_create, tc_visual_scene3d_destroy
+
+    document = tc_ui_document_create()
+    scene = tc_visual_scene3d_create()
+    item = scene.create_primitive(
+        ((-0.7, -0.7, 0.5), (0.7, -0.7, 0.5), (0.0, 0.7, 0.5)),
+        ((0, 1, 2),),
+        colors=(SrgbColor(1.0, 0.2, 0.1, 1.0),) * 3,
+        triangle_parts=(17,),
+    )
+    view = document.create_scene_view3d(scene)
+    view.camera = SceneView3DCamera(
+        Mat44.identity(),
+        Mat44.identity(),
+        Vec3(0.0, 0.0, 0.0),
+    )
+    actions = []
+    view.set_action_handler(item.handle, lambda part, action: actions.append((part, action)))
+    assert document.add_root(view.handle)
+    document.layout_roots(Rect(0.0, 0.0, 100.0, 100.0))
+
+    ray = view.world_ray(50.0, 50.0)
+    assert ray is not None
+    assert (ray.origin.x, ray.origin.y, ray.origin.z) == pytest.approx((0.0, 0.0, 0.0))
+    assert (ray.direction.x, ray.direction.y, ray.direction.z) == pytest.approx((0.0, 0.0, 1.0))
+
+    event = PointerEvent()
+    event.x = 50.0
+    event.y = 50.0
+    event.button = 0
+    event.type = PointerEventType.Down
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    event.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    assert actions == [(17, "activate")]
+
+    view.set_action_handler(item.handle, None)
+    view.detach_scene()
+    assert not view.scene.valid
+    tc_visual_scene3d_destroy(scene)

@@ -38,6 +38,7 @@ with its name and makes the process fail.
 | `tcplot_surface` | Sinc surface, Viridis colorbar, wireframe and z scaling |
 | `visual_scene_gallery` | Retained shapes, hierarchy, transforms, opacity, z-order and hit regions |
 | `visual_scene_nodegraph` | Visual-scene primitives, nodegraph model and projection |
+| `visual_scene3d_widget` | Retained 3D items, camera provider, orbit fallback and item actions in `SceneView3D` |
 | `plot_nodegraph_composition` | Plot2D and Plot3D embedded as node-body widgets |
 
 The remaining profile packages are exercised as supporting parts of those

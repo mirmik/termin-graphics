@@ -23,6 +23,7 @@ EXPECTED_SECTIONS = {
     "tcplot_surface",
     "visual_scene_gallery",
     "visual_scene_nodegraph",
+    "visual_scene3d_widget",
     "plot_nodegraph_composition",
 }
 FORBIDDEN_MODULES = ("termin.display", "termin.engine", "termin.runtime")

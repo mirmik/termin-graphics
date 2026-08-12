@@ -660,6 +660,12 @@ void bind_gui_native_rendering_and_document(nb::module_& m) {
             },
             nb::arg("scene") = termin::visual::TcVisualScene{})
         .def(
+            "create_scene_view3d",
+            [](termin::gui_native::TcDocument& self, termin::visual::TcVisualScene3D scene) {
+                return SceneView3DRef{document_make_native<termin::gui_native::SceneView3D>(self, scene)};
+            },
+            nb::arg("scene") = termin::visual::TcVisualScene3D{})
+        .def(
             "create_spin_box",
             [](termin::gui_native::TcDocument& self, float value) {
                 return SpinBoxRef{document_make_native<termin::gui_native::SpinBox>(self, value)};

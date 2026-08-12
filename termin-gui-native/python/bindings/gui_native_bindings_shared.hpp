@@ -221,6 +221,7 @@ namespace termin::gui_native::python_bindings {
     TERMIN_GUI_NATIVE_WIDGET_REF(Viewport3DRef, Viewport3D);
     TERMIN_GUI_NATIVE_WIDGET_REF(OverlayLayoutRef, OverlayLayout);
     TERMIN_GUI_NATIVE_WIDGET_REF(SceneViewRef, SceneView);
+    TERMIN_GUI_NATIVE_WIDGET_REF(SceneView3DRef, SceneView3D);
     TERMIN_GUI_NATIVE_WIDGET_REF(ListWidgetRef, ListWidget);
     TERMIN_GUI_NATIVE_WIDGET_REF(FileGridWidgetRef, FileGridWidget);
     TERMIN_GUI_NATIVE_WIDGET_REF(ToolBarRef, ToolBar);

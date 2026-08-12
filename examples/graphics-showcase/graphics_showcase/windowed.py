@@ -30,6 +30,7 @@ _SECTION_TITLES = {
     "tcplot_surface": "3D Surface",
     "visual_scene_gallery": "Visual Scene",
     "visual_scene_nodegraph": "Nodegraph",
+    "visual_scene3d_widget": "SceneView3D",
     "plot_nodegraph_composition": "Composition",
 }
 

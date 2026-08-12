@@ -21,7 +21,12 @@ from tcnodegraph import (
 from tcplot import SurfaceColorMap
 from tcplot_gui_native import Plot2D, Plot3D
 from termin.gui_native import Point, Size, build_python_showcase
-from termin.visual_scene import tc_visual_scene_create, tc_visual_scene_destroy
+from termin.visual_scene import (
+    tc_visual_scene3d_create,
+    tc_visual_scene3d_destroy,
+    tc_visual_scene_create,
+    tc_visual_scene_destroy,
+)
 
 from .model import Section, SectionContent
 
@@ -527,6 +532,182 @@ def _visual_scene_nodegraph(application) -> SectionContent:
     )
 
 
+def _visual_scene3d_widget(application) -> SectionContent:
+    from tcbase._geom_native import LinearColor
+    from termin.geombase import Mat44, SrgbColor, Vec3
+    from termin.gui_native import PointerEventType, SceneView3DCamera
+    from tgfx import PointCloudStyle
+
+    scene = tc_visual_scene3d_create()
+    view = application.document.create_scene_view3d(scene)
+    view.widget.stable_id = "graphics-showcase.visual-scene3d"
+    view.widget.preferred_size = Size(1160.0, 700.0)
+    view.set_clear_color(LinearColor(0.018, 0.026, 0.045, 1.0))
+
+    cube_vertices = (
+        (-1.0, -1.0, -1.0),
+        (1.0, -1.0, -1.0),
+        (1.0, 1.0, -1.0),
+        (-1.0, 1.0, -1.0),
+        (-1.0, -1.0, 1.0),
+        (1.0, -1.0, 1.0),
+        (1.0, 1.0, 1.0),
+        (-1.0, 1.0, 1.0),
+    )
+    cube_triangles = (
+        (0, 2, 1), (0, 3, 2),
+        (4, 5, 6), (4, 6, 7),
+        (0, 1, 5), (0, 5, 4),
+        (1, 2, 6), (1, 6, 5),
+        (2, 3, 7), (2, 7, 6),
+        (3, 0, 4), (3, 4, 7),
+    )
+    cube_parts = tuple(face for face in range(1, 7) for _ in range(2))
+    base_colors = (
+        SrgbColor(0.16, 0.46, 0.95, 1.0),
+        SrgbColor(0.22, 0.74, 1.0, 1.0),
+        SrgbColor(0.16, 0.88, 0.68, 1.0),
+        SrgbColor(0.12, 0.56, 0.55, 1.0),
+        SrgbColor(0.78, 0.36, 0.96, 1.0),
+        SrgbColor(1.0, 0.44, 0.62, 1.0),
+        SrgbColor(1.0, 0.72, 0.28, 1.0),
+        SrgbColor(0.56, 0.36, 0.96, 1.0),
+    )
+    selected_colors = tuple(
+        SrgbColor(1.0, 0.48 + 0.04 * index, 0.16, 1.0)
+        for index in range(len(cube_vertices))
+    )
+    cube = scene.create_primitive(
+        cube_vertices,
+        cube_triangles,
+        colors=base_colors,
+        triangle_parts=cube_parts,
+    )
+
+    floor = scene.create_primitive(
+        ((-4.5, -4.5, -1.05), (4.5, -4.5, -1.05), (4.5, 4.5, -1.05), (-4.5, 4.5, -1.05)),
+        ((0, 2, 1), (0, 3, 2)),
+        colors=(SrgbColor(0.08, 0.13, 0.22, 1.0),) * 4,
+    )
+    floor.enabled = False
+
+    cloud_style = PointCloudStyle()
+    cloud_style.size_px = 8.0
+    cloud_points = [
+        (
+            2.5 * math.cos(index * math.tau / 32.0),
+            2.5 * math.sin(index * math.tau / 32.0),
+            -0.4 + 0.8 * (index % 5) / 4.0,
+        )
+        for index in range(32)
+    ]
+    cloud = scene.create_point_cloud(
+        cloud_points,
+        colors=[SrgbColor(0.25, 0.82, 1.0, 1.0)] * len(cloud_points),
+        style=cloud_style,
+        pick_radius=0.12,
+    )
+    cloud.enabled = False
+
+    camera_state = {
+        "azimuth": -0.78,
+        "elevation": 0.52,
+        "distance": 7.2,
+        "dragging": False,
+        "last_x": 0.0,
+        "last_y": 0.0,
+    }
+
+    def camera_provider(size):
+        if size.width <= 0 or size.height <= 0:
+            return None
+        azimuth = camera_state["azimuth"]
+        elevation = camera_state["elevation"]
+        distance = camera_state["distance"]
+        horizontal = distance * math.cos(elevation)
+        eye = Vec3(
+            horizontal * math.cos(azimuth),
+            horizontal * math.sin(azimuth),
+            distance * math.sin(elevation),
+        )
+        return SceneView3DCamera(
+            Mat44.look_at(eye, Vec3(0.0, 0.0, 0.0)),
+            Mat44.perspective(math.radians(48.0), size.width / size.height, 0.05, 100.0),
+            eye,
+        )
+
+    def update_camera() -> None:
+        view.invalidate_view()
+        application.request_repaint()
+
+    def fallback_pointer(event, _ray) -> bool:
+        if event.type == PointerEventType.Wheel:
+            camera_state["distance"] = min(
+                14.0,
+                max(3.0, camera_state["distance"] * math.exp(event.wheel_y * 0.12)),
+            )
+            update_camera()
+            return True
+        if event.type == PointerEventType.Down and event.button == 1:
+            camera_state["dragging"] = True
+            camera_state["last_x"] = event.x
+            camera_state["last_y"] = event.y
+            return True
+        if event.type == PointerEventType.Move and camera_state["dragging"]:
+            dx = event.x - camera_state["last_x"]
+            dy = event.y - camera_state["last_y"]
+            camera_state["last_x"] = event.x
+            camera_state["last_y"] = event.y
+            camera_state["azimuth"] -= dx * 0.008
+            camera_state["elevation"] = min(
+                1.35,
+                max(-1.2, camera_state["elevation"] + dy * 0.008),
+            )
+            update_camera()
+            return True
+        if event.type in (PointerEventType.Up, PointerEventType.Cancel) and camera_state["dragging"]:
+            camera_state["dragging"] = False
+            return True
+        return False
+
+    interaction_state = {"clicks": 0, "last_part": 0}
+
+    def activate_cube(part: int, _action: str) -> None:
+        interaction_state["clicks"] += 1
+        interaction_state["last_part"] = part
+        colors = selected_colors if interaction_state["clicks"] % 2 else base_colors
+        cube.set_geometry(cube_vertices, cube_triangles, colors=colors, triangle_parts=cube_parts)
+        view.invalidate_scene()
+        application.request_repaint()
+
+    view.set_camera_provider(camera_provider)
+    view.set_fallback_pointer_handler(fallback_pointer)
+    view.set_action_handler(cube.handle, activate_cube)
+    if not application.document.add_root(view.widget.handle):
+        view.detach_scene()
+        tc_visual_scene3d_destroy(scene)
+        raise RuntimeError("failed to add SceneView3D showcase root")
+
+    def cleanup() -> None:
+        view.set_action_handler(cube.handle, None)
+        view.set_fallback_pointer_handler(None)
+        view.set_camera_provider(None)
+        view.detach_scene()
+        tc_visual_scene3d_destroy(scene)
+
+    return SectionContent(
+        root=view.widget,
+        cleanup=cleanup,
+        facts={
+            "retained_items": scene.size,
+            "render_protocols": ["primitive", "point-cloud"],
+            "camera": "provider+fallback-orbit",
+            "interaction": "cube-face-action",
+            "cube_parts": 6,
+        },
+    )
+
+
 def _plot_nodegraph_composition(application) -> SectionContent:
     graph, controller, kinds = _make_graph()
     plots: dict[str, object] = {}
@@ -629,6 +810,12 @@ def section_registry() -> tuple[Section, ...]:
             description="Visual-scene primitives projected as a native node graph",
             capabilities=("termin-visual-scene", "termin-nodegraph", "interaction"),
             build=_visual_scene_nodegraph,
+        ),
+        Section(
+            name="visual_scene3d_widget",
+            description="Interactive retained 3D scene embedded as a native widget",
+            capabilities=("termin-visual-scene", "termin-gui-native", "scene3d", "interaction"),
+            build=_visual_scene3d_widget,
         ),
         Section(
             name="plot_nodegraph_composition",
