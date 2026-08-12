@@ -35,6 +35,11 @@ TERMIN_VISUAL_SCENE_API void tc_visual_scene3d_clear(tc_visual_scene3d_handle);
 // local_bounds is never used as a mandatory broad phase.
 TERMIN_VISUAL_SCENE_API bool
 tc_visual_scene3d_hit_test(tc_visual_scene3d_handle, tc_ray3 world_ray, tc_visual_hit_result3d* out_result);
+// Synchronously collects one transactional scene batch. Visible items may omit
+// paint for grouping/hit-only behavior. Camera ownership and projection remain
+// outside the scene.
+TERMIN_VISUAL_SCENE_API bool
+tc_visual_scene3d_paint(tc_visual_scene3d_handle, const tc_visual_view3d*, tc_visual_draw_sink3d*);
 #ifdef __cplusplus
 }
 #endif

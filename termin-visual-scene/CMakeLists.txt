@@ -59,6 +59,7 @@ add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/scene2d.cpp
     src/interaction2d.cpp
     src/interaction3d.cpp
+    src/paint3d.cpp
     src/scene3d.cpp
     src/visual_item3d.cpp
 )
@@ -172,6 +173,14 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_visual_scene3d_interaction_test)
     add_test(NAME termin_visual_scene3d_interaction_test
         COMMAND termin_visual_scene3d_interaction_test)
+
+    add_executable(termin_visual_scene3d_paint_test
+        tests/test_paint3d.cpp)
+    target_link_libraries(termin_visual_scene3d_paint_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene3d_paint_test)
+    add_test(NAME termin_visual_scene3d_paint_test
+        COMMAND termin_visual_scene3d_paint_test)
 
     if(TARGET termin_visual_scene_draggable_example)
         add_test(NAME termin_visual_scene_draggable_example_smoke

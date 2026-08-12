@@ -15,6 +15,7 @@ extern "C" {
 
 typedef struct tc_visual_scene3d tc_visual_scene3d;
 typedef struct tc_visual_item3d tc_visual_item3d;
+typedef struct tc_visual_item_paint_context3d tc_visual_item_paint_context3d;
 TC_DEFINE_HANDLE(tc_visual_scene3d_handle)
 typedef struct tc_visual_item3d_handle {
     uint64_t scene_id;
@@ -61,6 +62,51 @@ typedef struct tc_visual_hit_result3d {
     tc_vec3 local_point;
 } tc_visual_hit_result3d;
 
+// Caller-owned view state borrowed for one synchronous scene paint. Matrices
+// are column-major. extension is an optional host-defined borrowed view whose
+// contract is established by the submitted packet protocol.
+typedef struct tc_visual_view3d {
+    tc_mat44 view_matrix;
+    tc_mat44 projection_matrix;
+    tc_vec3 camera_world_position;
+    uint32_t viewport_width;
+    uint32_t viewport_height;
+    const void* extension;
+} tc_visual_view3d;
+
+// Item-defined borrowed draw payload. protocol identifies its representation;
+// a sink must consume or retain everything it needs before submit returns.
+typedef struct tc_visual_draw_packet3d {
+    const char* protocol;
+    const void* payload;
+    size_t payload_size;
+} tc_visual_draw_packet3d;
+
+typedef struct tc_visual_draw_submission3d {
+    tc_visual_item3d_handle item;
+    tc_affine3d world_from_local;
+    bool effective_visible;
+    bool effective_enabled;
+    const tc_visual_view3d* view;
+    tc_visual_draw_packet3d packet;
+} tc_visual_draw_submission3d;
+
+typedef bool (*tc_visual_draw_sink3d_begin_fn)(const tc_visual_view3d* view, void* user_data);
+typedef bool (*tc_visual_draw_sink3d_submit_fn)(const tc_visual_draw_submission3d* submission, void* user_data);
+typedef bool (*tc_visual_draw_sink3d_end_fn)(void* user_data);
+typedef void (*tc_visual_draw_sink3d_abort_fn)(void* user_data);
+
+// Transactional scene sink. A successful begin is completed by end or abort;
+// when end reports failure it is followed by abort for cleanup. The sink must
+// not publish a partially collected frame before end succeeds.
+typedef struct tc_visual_draw_sink3d {
+    tc_visual_draw_sink3d_begin_fn begin;
+    tc_visual_draw_sink3d_submit_fn submit;
+    tc_visual_draw_sink3d_end_fn end;
+    tc_visual_draw_sink3d_abort_fn abort;
+    void* user_data;
+} tc_visual_draw_sink3d;
+
 typedef struct tc_visual_item3d_vtable {
     const char* type_name;
     void (*on_destroy)(tc_visual_item3d* item, tc_visual_scene3d* scene);
@@ -68,6 +114,7 @@ typedef struct tc_visual_item3d_vtable {
                      const tc_visual_hit_test_context3d* context,
                      tc_visual_hit_candidate3d* out_candidate);
     bool (*local_bounds)(const tc_visual_item3d* item, tc_visual_bounds3d* out_bounds);
+    bool (*paint)(const tc_visual_item3d* item, tc_visual_item_paint_context3d* context);
 } tc_visual_item3d_vtable;
 
 struct tc_visual_item3d {
@@ -114,6 +161,18 @@ TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_get_enabled(tc_visual_scene3d_hand
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_set_enabled(tc_visual_scene3d_handle, tc_visual_item3d_handle, bool);
 TERMIN_VISUAL_SCENE_API bool
 tc_visual_item3d_local_bounds_in_scene(tc_visual_scene3d_handle, tc_visual_item3d_handle, tc_visual_bounds3d*);
+TERMIN_VISUAL_SCENE_API tc_visual_item3d_handle
+tc_visual_item_paint_context3d_item(const tc_visual_item_paint_context3d*);
+TERMIN_VISUAL_SCENE_API tc_affine3d
+tc_visual_item_paint_context3d_world_from_local(const tc_visual_item_paint_context3d*);
+TERMIN_VISUAL_SCENE_API bool tc_visual_item_paint_context3d_effective_visible(const tc_visual_item_paint_context3d*);
+TERMIN_VISUAL_SCENE_API bool tc_visual_item_paint_context3d_effective_enabled(const tc_visual_item_paint_context3d*);
+TERMIN_VISUAL_SCENE_API const tc_visual_view3d*
+tc_visual_item_paint_context3d_view(const tc_visual_item_paint_context3d*);
+TERMIN_VISUAL_SCENE_API bool tc_visual_item_paint_context3d_submit(tc_visual_item_paint_context3d*,
+                                                                   const char* protocol,
+                                                                   const void* payload,
+                                                                   size_t payload_size);
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_is_valid(tc_visual_scene3d_handle, tc_visual_item3d_handle);
 TERMIN_VISUAL_SCENE_API const char* tc_visual_item3d_type_name_in_scene(tc_visual_scene3d_handle,
                                                                         tc_visual_item3d_handle);

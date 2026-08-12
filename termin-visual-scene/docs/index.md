@@ -58,6 +58,27 @@ install camera navigation as the generic unhandled-event fallback. This lets
 one VisualScene3D be displayed by multiple views and lets a small 3D scene be
 embedded as an ordinary native GUI widget.
 
+3D painting is likewise item-owned. `tc_visual_scene3d_paint` synchronously
+visits visible items in stable scene order and supplies each callback with its
+exact `world_from_local` affine, effective visibility/enabled state and the
+caller-owned `tc_visual_view3d`. Items submit borrowed draw packets identified
+by protocol strings; renderer-specific sinks interpret them. The scene never
+branches on meshes, point clouds, gizmos or annotations.
+
+The draw sink is transactional. It stages packets after `begin`, publishes the
+complete batch only when `end` succeeds and discards staged work on `abort`.
+Item failure, packet rejection, topology mutation during a callback or sink
+failure aborts traversal and is logged. All view, packet and submission pointers
+are borrowed only for the current callback; a sink must copy data or retain
+resources according to its packet protocol before `submit` returns. Invisible
+ancestors skip their subtree. Disabled items still paint with
+`effective_enabled = false`, allowing the consumer to choose their appearance.
+
+The C++ `ScenePaintSink3D` in `paint3d.hpp` is the adapter seam for an external
+`RenderItemSource` or immediate-renderer collector. Camera projection and
+render-engine integration remain outside this package; `termin-visual-scene`
+does not depend on `tc_scene` or `termin-render`.
+
 The module is deliberately modeled after the native widget object model:
 
 - every implementation embeds one `tc_graphic_item` C base;

@@ -25,6 +25,16 @@ struct tc_visual_scene3d {
     bool clearing;
 };
 
+struct tc_visual_item_paint_context3d {
+    tc_visual_item3d_handle item;
+    tc_affine3d world_from_local;
+    bool effective_visible;
+    bool effective_enabled;
+    const tc_visual_view3d* view;
+    tc_visual_draw_sink3d* sink;
+    bool submit_failed;
+};
+
 static atomic_uint_fast64_t g_next_scene_id = 1;
 static tc_pool g_scene_pool;
 static bool g_scene_pool_initialized = false;
@@ -457,12 +467,24 @@ void tc_visual_scene3d_clear(tc_visual_scene3d_handle handle) {
         clear_scene(scene);
 }
 
-static bool item_effectively_hittable(const tc_visual_item3d* item) {
+static bool item_effectively_visible(const tc_visual_item3d* item) {
     for (const tc_visual_item3d* cursor = item; cursor != NULL; cursor = cursor->parent) {
-        if (!cursor->visible || !cursor->enabled)
+        if (!cursor->visible)
             return false;
     }
     return true;
+}
+
+static bool item_effectively_enabled(const tc_visual_item3d* item) {
+    for (const tc_visual_item3d* cursor = item; cursor != NULL; cursor = cursor->parent) {
+        if (!cursor->enabled)
+            return false;
+    }
+    return true;
+}
+
+static bool item_effectively_hittable(const tc_visual_item3d* item) {
+    return item_effectively_visible(item) && item_effectively_enabled(item);
 }
 
 static tc_affine3d item_world_transform(const tc_visual_item3d* item) {
@@ -574,4 +596,134 @@ bool tc_visual_scene3d_hit_test(tc_visual_scene3d_handle scene_handle,
         out_result->local_point = ray_point(local_ray, candidate.distance);
     }
     return found;
+}
+
+tc_visual_item3d_handle tc_visual_item_paint_context3d_item(const tc_visual_item_paint_context3d* context) {
+    return context != NULL ? context->item : tc_visual_item3d_handle_invalid();
+}
+
+tc_affine3d tc_visual_item_paint_context3d_world_from_local(const tc_visual_item_paint_context3d* context) {
+    return context != NULL ? context->world_from_local : tc_affine3d_identity();
+}
+
+bool tc_visual_item_paint_context3d_effective_visible(const tc_visual_item_paint_context3d* context) {
+    return context != NULL && context->effective_visible;
+}
+
+bool tc_visual_item_paint_context3d_effective_enabled(const tc_visual_item_paint_context3d* context) {
+    return context != NULL && context->effective_enabled;
+}
+
+const tc_visual_view3d* tc_visual_item_paint_context3d_view(const tc_visual_item_paint_context3d* context) {
+    return context != NULL ? context->view : NULL;
+}
+
+bool tc_visual_item_paint_context3d_submit(tc_visual_item_paint_context3d* context,
+                                           const char* protocol,
+                                           const void* payload,
+                                           size_t payload_size) {
+    if (context == NULL || context->sink == NULL || protocol == NULL || protocol[0] == '\0' ||
+        (payload == NULL && payload_size != 0)) {
+        tc_log_error("tc_visual_item_paint_context3d_submit: context, protocol and payload must be valid");
+        if (context != NULL)
+            context->submit_failed = true;
+        return false;
+    }
+    const tc_visual_draw_submission3d submission = {
+        .item = context->item,
+        .world_from_local = context->world_from_local,
+        .effective_visible = context->effective_visible,
+        .effective_enabled = context->effective_enabled,
+        .view = context->view,
+        .packet =
+            {
+                .protocol = protocol,
+                .payload = payload,
+                .payload_size = payload_size,
+            },
+    };
+    if (!context->sink->submit(&submission, context->sink->user_data)) {
+        tc_log_error("visual item3d draw sink rejected protocol '%s'", protocol);
+        context->submit_failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool view_is_valid(const tc_visual_view3d* view) {
+    if (view == NULL || view->viewport_width == 0 || view->viewport_height == 0 ||
+        !isfinite(view->camera_world_position.x) || !isfinite(view->camera_world_position.y) ||
+        !isfinite(view->camera_world_position.z)) {
+        return false;
+    }
+    for (size_t index = 0; index < 16; ++index) {
+        if (!isfinite(view->view_matrix.m[index]) || !isfinite(view->projection_matrix.m[index]))
+            return false;
+    }
+    return true;
+}
+
+bool tc_visual_scene3d_paint(tc_visual_scene3d_handle scene_handle,
+                             const tc_visual_view3d* view,
+                             tc_visual_draw_sink3d* sink) {
+    tc_visual_scene3d* scene = resolve_scene(scene_handle);
+    if (scene == NULL || !view_is_valid(view) || sink == NULL || sink->begin == NULL || sink->submit == NULL ||
+        sink->end == NULL || sink->abort == NULL) {
+        tc_log_error("tc_visual_scene3d_paint: valid scene, view and transactional sink are required");
+        return false;
+    }
+
+    const uint64_t traversal_revision = scene->order_revision;
+    if (!sink->begin(view, sink->user_data)) {
+        tc_log_error("tc_visual_scene3d_paint: draw sink failed to begin batch");
+        return false;
+    }
+    if (scene->order_revision != traversal_revision) {
+        tc_log_error("tc_visual_scene3d_paint: scene topology mutated during draw sink begin");
+        sink->abort(sink->user_data);
+        return false;
+    }
+
+    const size_t count = tc_pool_count(&scene->items);
+    uint64_t previous_order = 0;
+    for (size_t visited = 0; visited < count; ++visited) {
+        tc_visual_item3d* item = next_item_after(scene, previous_order);
+        if (item == NULL) {
+            tc_log_error("tc_visual_scene3d_paint: inconsistent stable traversal state");
+            sink->abort(sink->user_data);
+            return false;
+        }
+        previous_order = item->stable_order;
+        if (!item_effectively_visible(item) || item->vtable == NULL || item->vtable->paint == NULL)
+            continue;
+
+        tc_visual_item_paint_context3d context = {
+            .item = item->handle,
+            .world_from_local = item_world_transform(item),
+            .effective_visible = true,
+            .effective_enabled = item_effectively_enabled(item),
+            .view = view,
+            .sink = sink,
+            .submit_failed = false,
+        };
+        const char* type_name = tc_visual_item3d_type_name(item);
+        const bool painted = item->vtable->paint(item, &context);
+        if (scene->order_revision != traversal_revision) {
+            tc_log_error("tc_visual_scene3d_paint: scene topology mutated during item callback");
+            sink->abort(sink->user_data);
+            return false;
+        }
+        if (!painted || context.submit_failed) {
+            tc_log_error("visual item3d '%s' failed to paint", type_name);
+            sink->abort(sink->user_data);
+            return false;
+        }
+    }
+
+    if (!sink->end(sink->user_data)) {
+        tc_log_error("tc_visual_scene3d_paint: draw sink failed to complete batch");
+        sink->abort(sink->user_data);
+        return false;
+    }
+    return true;
 }
