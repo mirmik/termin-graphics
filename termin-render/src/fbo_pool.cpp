@@ -5,8 +5,9 @@ namespace termin {
 
     bool FBOPool::ensure_native(tgfx::IRenderDevice& device,
                                 const std::string& key,
-                                const tgfx::RenderTargetPoolDesc& desc) {
-        return ensure(device, key, desc);
+                                const tgfx::RenderTargetPoolDesc& desc,
+                                tgfx::TextureHandle external_color) {
+        return ensure(device, key, desc, external_color);
     }
 
     tgfx::TextureHandle FBOPool::get_color_tgfx2(const std::string& key) const {

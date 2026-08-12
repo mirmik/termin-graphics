@@ -30,7 +30,7 @@ namespace tgfx {
 
         void release_render_target(RenderTargetEntry& entry) {
             if (entry.native_device) {
-                if (entry.color_tgfx2) {
+                if (entry.owns_color && entry.color_tgfx2) {
                     entry.native_device->destroy(entry.color_tgfx2);
                 }
                 if (entry.depth_tgfx2) {
@@ -40,6 +40,7 @@ namespace tgfx {
             entry.color_tgfx2 = {};
             entry.depth_tgfx2 = {};
             entry.native_device = nullptr;
+            entry.owns_color = true;
         }
 
     } // namespace
@@ -97,6 +98,21 @@ namespace tgfx {
         return {};
     }
 
+    void TexturePool::erase(std::string_view key) {
+        for (auto it = entries.begin(); it != entries.end(); ++it) {
+            if (it->key != key) {
+                continue;
+            }
+            IRenderDevice* device = it->device;
+            release_texture(*it);
+            entries.erase(it);
+            if (device) {
+                device->invalidate_render_target_cache();
+            }
+            return;
+        }
+    }
+
     void TexturePool::clear() {
         for (auto& entry : entries) {
             release_texture(entry);
@@ -108,8 +124,17 @@ namespace tgfx {
         clear();
     }
 
-    bool RenderTargetPool::ensure(IRenderDevice& device, std::string_view key, const RenderTargetPoolDesc& desc) {
-        auto alloc_textures = [&](RenderTargetEntry& entry) {
+    bool RenderTargetPool::ensure(IRenderDevice& device,
+                                  std::string_view key,
+                                  const RenderTargetPoolDesc& desc,
+                                  TextureHandle external_color) {
+        auto allocate_color = [&](RenderTargetEntry& entry) {
+            if (external_color) {
+                entry.color_tgfx2 = external_color;
+                entry.owns_color = false;
+                return;
+            }
+
             TextureDesc color_desc;
             color_desc.width = static_cast<uint32_t>(desc.width);
             color_desc.height = static_cast<uint32_t>(desc.height);
@@ -119,18 +144,21 @@ namespace tgfx {
             color_desc.usage =
                 TextureUsage::Sampled | TextureUsage::ColorAttachment | TextureUsage::CopySrc | TextureUsage::CopyDst;
             entry.color_tgfx2 = device.create_texture(color_desc);
-
-            if (desc.has_depth) {
-                TextureDesc depth_desc;
-                depth_desc.width = static_cast<uint32_t>(desc.width);
-                depth_desc.height = static_cast<uint32_t>(desc.height);
-                depth_desc.format = desc.depth_format;
-                depth_desc.sample_count = static_cast<uint32_t>(desc.samples);
-                depth_desc.array_layers = static_cast<uint32_t>(desc.array_layers);
-                depth_desc.usage = TextureUsage::Sampled | TextureUsage::DepthStencilAttachment |
-                                   TextureUsage::CopySrc | TextureUsage::CopyDst;
-                entry.depth_tgfx2 = device.create_texture(depth_desc);
+            entry.owns_color = true;
+        };
+        auto allocate_depth = [&](RenderTargetEntry& entry) {
+            if (!desc.has_depth) {
+                return;
             }
+            TextureDesc depth_desc;
+            depth_desc.width = static_cast<uint32_t>(desc.width);
+            depth_desc.height = static_cast<uint32_t>(desc.height);
+            depth_desc.format = desc.depth_format;
+            depth_desc.sample_count = static_cast<uint32_t>(desc.samples);
+            depth_desc.array_layers = static_cast<uint32_t>(desc.array_layers);
+            depth_desc.usage = TextureUsage::Sampled | TextureUsage::DepthStencilAttachment | TextureUsage::CopySrc |
+                               TextureUsage::CopyDst;
+            entry.depth_tgfx2 = device.create_texture(depth_desc);
         };
 
         for (auto& entry : entries) {
@@ -138,17 +166,33 @@ namespace tgfx {
                 continue;
             }
 
-            const bool needs_recreate = entry.native_device != &device || !render_target_desc_equal(entry.desc, desc) ||
-                                        !entry.color_tgfx2 || (desc.has_depth && !entry.depth_tgfx2);
-            if (!needs_recreate) {
-                return true;
+            const bool target_shape_changed =
+                entry.native_device != &device || !render_target_desc_equal(entry.desc, desc);
+            if (target_shape_changed) {
+                release_render_target(entry);
+                device.invalidate_render_target_cache();
+                entry.native_device = &device;
+                entry.desc = desc;
+                allocate_color(entry);
+                allocate_depth(entry);
+            } else if (external_color) {
+                if (entry.owns_color && entry.color_tgfx2) {
+                    device.destroy(entry.color_tgfx2);
+                }
+                if (entry.owns_color || entry.color_tgfx2 != external_color) {
+                    device.invalidate_render_target_cache();
+                }
+                entry.color_tgfx2 = external_color;
+                entry.owns_color = false;
+            } else if (!entry.owns_color || !entry.color_tgfx2) {
+                entry.color_tgfx2 = {};
+                entry.owns_color = true;
+                allocate_color(entry);
+                device.invalidate_render_target_cache();
             }
-
-            release_render_target(entry);
-            device.invalidate_render_target_cache();
-            entry.native_device = &device;
-            entry.desc = desc;
-            alloc_textures(entry);
+            if (desc.has_depth && !entry.depth_tgfx2) {
+                allocate_depth(entry);
+            }
             const bool ok =
                 static_cast<bool>(entry.color_tgfx2) && (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
             if (!ok) {
@@ -163,7 +207,8 @@ namespace tgfx {
         entry.key = std::string(key);
         entry.native_device = &device;
         entry.desc = desc;
-        alloc_textures(entry);
+        allocate_color(entry);
+        allocate_depth(entry);
         const bool ok =
             static_cast<bool>(entry.color_tgfx2) && (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
         if (!ok) {

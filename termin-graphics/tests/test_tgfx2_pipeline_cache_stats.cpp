@@ -106,6 +106,7 @@ namespace {
 
         void destroy(tgfx::BufferHandle) override {}
         void destroy(tgfx::TextureHandle handle) override {
+            destroyed_textures.push_back(handle);
             texture_descs_.erase(handle.id);
         }
         void destroy(tgfx::SamplerHandle) override {}
@@ -143,6 +144,7 @@ namespace {
         uint32_t create_texture_count = 0;
         uint32_t create_pipeline_count = 0;
         std::vector<tgfx::PipelineDesc> created_pipeline_descs;
+        std::vector<tgfx::TextureHandle> destroyed_textures;
         RecordingCommandList* last_command_list = nullptr;
 
     private:
@@ -602,5 +604,40 @@ TEST_CASE("texture pools retry failed allocations using the same key and descrip
     CHECK(targets.ensure(device, "main", target_desc));
     CHECK(targets.color("main"));
     CHECK(targets.depth("main"));
-    CHECK(device.create_texture_count == 6u);
+    CHECK(device.create_texture_count == 5u);
+}
+
+TEST_CASE("render target pool borrows an external color while owning depth") {
+    PipelineCacheStatsDevice device;
+    tgfx::TextureDesc color_desc;
+    color_desc.width = 32;
+    color_desc.height = 16;
+    color_desc.format = tgfx::PixelFormat::RGBA16F;
+    color_desc.usage = tgfx::TextureUsage::ColorAttachment;
+    const tgfx::TextureHandle external_color = device.create_texture(color_desc);
+
+    tgfx::RenderTargetPoolDesc target_desc;
+    target_desc.width = 32;
+    target_desc.height = 16;
+    target_desc.color_format = tgfx::PixelFormat::RGBA16F;
+    target_desc.has_depth = true;
+
+    tgfx::RenderTargetPool targets;
+    REQUIRE(targets.ensure(device, "main", target_desc, external_color));
+    CHECK(targets.color("main") == external_color);
+    REQUIRE(targets.depth("main"));
+    CHECK(device.create_texture_count == 2u);
+
+    const tgfx::TextureHandle owned_depth = targets.depth("main");
+    const tgfx::TextureHandle next_external_color = device.create_texture(color_desc);
+    REQUIRE(targets.ensure(device, "main", target_desc, next_external_color));
+    CHECK(targets.color("main") == next_external_color);
+    CHECK(targets.depth("main") == owned_depth);
+    CHECK(device.create_texture_count == 3u);
+
+    targets.clear();
+    CHECK(device.texture_desc(external_color).format == tgfx::PixelFormat::RGBA16F);
+    CHECK(device.texture_desc(next_external_color).format == tgfx::PixelFormat::RGBA16F);
+    REQUIRE(device.destroyed_textures.size() == 1u);
+    CHECK(device.destroyed_textures[0] == owned_depth);
 }

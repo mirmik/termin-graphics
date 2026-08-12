@@ -130,6 +130,7 @@ namespace {
 
     struct ExecutionRecordingState {
         std::vector<RecordedRenderScope> scopes;
+        std::vector<std::pair<tgfx::TextureHandle, tgfx::TextureDesc>> created_textures;
         std::vector<std::pair<tgfx::TextureHandle, tgfx::TextureHandle>> texture_copies;
         uint32_t framebuffer_local_barriers = 0;
     };
@@ -200,6 +201,7 @@ namespace {
         tgfx::TextureHandle create_texture(const tgfx::TextureDesc& desc) override {
             const tgfx::TextureHandle handle{next_texture_id_++};
             texture_descs_[handle.id] = desc;
+            state.created_textures.emplace_back(handle, desc);
             return handle;
         }
         tgfx::SamplerHandle create_sampler(const tgfx::SamplerDesc&) override {
@@ -361,6 +363,46 @@ namespace {
 
         void execute(termin::ExecuteContext&) override {
             ++g_raster_probe_execute_count;
+        }
+    };
+
+    class ComposedClearRasterProbe final : public termin::CxxFramePass {
+    public:
+        ComposedClearRasterProbe() {
+            pass_name_set("ComposedClearRasterProbe");
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {"joined_target", "scene_color", "scene_depth"};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            termin::ResourceSpec color;
+            color.resource = "scene_color";
+            color.resource_type = "color_texture";
+            color.format = "rgba16f";
+            color.size = {16, 16};
+
+            termin::ResourceSpec depth;
+            depth.resource = "scene_depth";
+            depth.resource_type = "depth_texture";
+            depth.size = {16, 16};
+            return {color, depth};
+        }
+
+        bool get_raster_contract(termin::ExecuteContext&, tc_raster_pass_contract& contract) const override {
+            contract.target_resource = "joined_target";
+            contract.view_count = 1;
+            contract.color_load = TC_RASTER_LOAD;
+            contract.depth_load = TC_RASTER_LOAD;
+            contract.has_color = true;
+            contract.has_depth = true;
+            contract.fusion_eligible = true;
+            return true;
+        }
+
+        bool record_raster(termin::ExecuteContext&) override {
+            return true;
         }
     };
 
@@ -799,6 +841,66 @@ TEST_CASE("compatible color export is bound directly to the physical target") {
     REQUIRE(recording_device->state.scopes.size() == 1u);
     REQUIRE(recording_device->state.scopes[0].pass.colors.size() == 1u);
     CHECK(recording_device->state.scopes[0].pass.colors[0].texture == output);
+    CHECK(recording_device->state.scopes[0].pass.has_depth);
+    CHECK(recording_device->state.scopes[0].pass.depth.texture);
+    CHECK(recording_device->state.scopes[0].pass.depth.texture != output);
+    REQUIRE(recording_device->state.created_textures.size() == 2u);
+    CHECK(recording_device->state.created_textures[0].first == output);
+    CHECK(recording_device->state.created_textures[1].second.format == tgfx::PixelFormat::D32F);
+    CHECK(recording_device->state.texture_copies.empty());
+    pipeline.destroy();
+}
+
+TEST_CASE("direct composed color export preserves its internal depth view") {
+    termin::RenderPipeline pipeline("direct-composed-color-export-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ComposedClearRasterProbe())->tc_pass_ptr());
+
+    pipeline.cache().resource_views.emplace("scene_color_view",
+                                            termin::ResourceView{"scene_color", termin::AttachmentKind::Color});
+    pipeline.cache().resource_views.emplace("scene_depth_view",
+                                            termin::ResourceView{"scene_depth", termin::AttachmentKind::Depth});
+    pipeline.cache().fbo_compositions.emplace("joined_target",
+                                              termin::FboComposition{"scene_color_view", "scene_depth_view"});
+    pipeline.set_color_export("joined_target", termin::ColorContent::DisplayLinear);
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA16F;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "DirectComposedColorTarget";
+    target.render_rect = {0, 0, 16, 16};
+    target.output_color.texture = output;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1u);
+    REQUIRE(recording_device->state.scopes[0].pass.colors.size() == 1u);
+    CHECK(recording_device->state.scopes[0].pass.colors[0].texture == output);
+    CHECK(recording_device->state.scopes[0].pass.has_depth);
+    CHECK(recording_device->state.scopes[0].pass.depth.texture);
+    REQUIRE(recording_device->state.created_textures.size() == 2u);
+    CHECK(recording_device->state.created_textures[0].first == output);
+    CHECK(recording_device->state.created_textures[1].second.format == tgfx::PixelFormat::D32F);
     CHECK(recording_device->state.texture_copies.empty());
     pipeline.destroy();
 }

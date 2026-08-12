@@ -478,13 +478,117 @@ namespace termin {
                 }
             }
         }
+
+        PipelineRenderCache& pipeline_cache = pipeline.cache();
+        auto find_resource_spec = [&](const std::string& resource) -> const ResourceSpec* {
+            auto direct = spec_map.find(resource);
+            if (direct != spec_map.end()) {
+                return &direct->second;
+            }
+            for (const char* alias : collect_alias_group(fg, resource.c_str())) {
+                auto aliased = spec_map.find(alias);
+                if (aliased != spec_map.end()) {
+                    return &aliased->second;
+                }
+            }
+            return nullptr;
+        };
+
+        // Resolve the allocation that physically owns a color result. FBO
+        // compositions and attachment views are names for an underlying color
+        // resource; direct export binding must replace that resource's color
+        // attachment while preserving any separately allocated depth.
+        auto resolve_color_storage = [&](const std::string& resource) {
+            std::string current = resource;
+            for (size_t depth = 0; depth < 8; ++depth) {
+                const char* canonical = tc_frame_graph_canonical_resource(fg, current.c_str());
+                if (canonical) {
+                    current = canonical;
+                }
+
+                auto view = pipeline_cache.resource_views.find(current);
+                if (view != pipeline_cache.resource_views.end()) {
+                    if (view->second.attachment != AttachmentKind::Color) {
+                        return std::string{};
+                    }
+                    current = view->second.parent;
+                    continue;
+                }
+
+                auto composition = pipeline_cache.fbo_compositions.find(current);
+                if (composition != pipeline_cache.fbo_compositions.end()) {
+                    current = composition->second.color;
+                    continue;
+                }
+                return current;
+            }
+            tc::Log::error("RenderEngine: color resource '%s' has a cyclic view/composition chain", resource.c_str());
+            return std::string{};
+        };
+
+        struct DirectColorCandidate {
+            std::string storage_resource;
+            tgfx::TextureHandle target;
+            ColorOutputBindingPlan plan;
+        };
+        std::unordered_map<std::string, size_t> valid_color_consumer_counts;
+        auto plan_direct_color_candidate = [&](const PipelineColorExport& color_export,
+                                               DirectColorCandidate& candidate) {
+            auto target_it = color_export.viewport_name.empty() ? default_it
+                                                                : render_target_contexts.find(color_export.viewport_name);
+            if (target_it == render_target_contexts.end() || !target_it->second.output_color.texture) {
+                return false;
+            }
+
+            candidate.storage_resource = resolve_color_storage(color_export.resource);
+            if (candidate.storage_resource.empty()) {
+                return false;
+            }
+            const ResourceSpec* spec = find_resource_spec(candidate.storage_resource);
+            const std::string resource_type = spec && !spec->resource_type.empty() ? spec->resource_type : "fbo";
+            if (resource_type != "fbo" && resource_type != "multiview_fbo" && resource_type != "color_texture" &&
+                resource_type != "multiview_color_texture") {
+                return false;
+            }
+
+            tgfx::TextureDesc source_desc;
+            source_desc.width = static_cast<uint32_t>(spec && spec->size ? spec->size->first : default_width);
+            source_desc.height = static_cast<uint32_t>(spec && spec->size ? spec->size->second : default_height);
+            source_desc.format =
+                resolve_fbo_color_format(spec && spec->format ? *spec->format : std::string{}, default_rt_ctx, *device);
+            source_desc.array_layers = static_cast<uint32_t>(spec && spec->array_layers > 0 ? spec->array_layers : 1);
+            source_desc.sample_count = static_cast<uint32_t>(spec && spec->samples > 0 ? spec->samples : 1);
+
+            candidate.target = target_it->second.output_color.texture;
+            candidate.plan =
+                plan_color_output_binding(source_desc, color_export.content, device->texture_desc(candidate.target));
+            return true;
+        };
+
+        for (const PipelineColorExport& color_export : pipeline.color_exports()) {
+            DirectColorCandidate candidate;
+            if (plan_direct_color_candidate(color_export, candidate) && candidate.plan.valid) {
+                ++valid_color_consumer_counts[candidate.storage_resource];
+            }
+        }
+
+        std::unordered_map<std::string, tgfx::TextureHandle> direct_color_allocations;
+        for (const PipelineColorExport& color_export : pipeline.color_exports()) {
+            DirectColorCandidate candidate;
+            if (!plan_direct_color_candidate(color_export, candidate)) {
+                continue;
+            }
+            if (candidate.plan.valid && candidate.plan.operation == ColorOutputBindingOp::Direct &&
+                valid_color_consumer_counts[candidate.storage_resource] == 1) {
+                direct_color_allocations[candidate.storage_resource] = candidate.target;
+            }
+        }
         tc_profiler_end_section();
         specs_ms = timing_ms(specs_begin, RenderTimingClock::now());
 
         tc_profiler_begin_section("Allocate Resources");
         const auto allocate_begin = RenderTimingClock::now();
         FBOMap resources;
-        PipelineRenderCache& pipeline_cache = pipeline.cache();
         pipeline_cache.texture_alias_to_canonical.clear();
         // OUTPUT/DISPLAY no longer travel through the FBOMap — they're
         // native tgfx2 textures owned by the caller (ViewportRenderState)
@@ -555,10 +659,15 @@ namespace termin {
                     static_cast<uint32_t>(spec && spec->array_layers > 0 ? spec->array_layers : 1);
                 texture_desc.sample_count = static_cast<uint32_t>(spec && spec->samples > 0 ? spec->samples : 1);
                 texture_desc.usage = usage;
-                if (!pipeline_cache.texture_pool.ensure(*device, canon, texture_desc)) {
-                    tc::Log::error("RenderEngine::execute_pipeline: failed to allocate color_texture '%s'", canon);
-                    tc_profiler_end_section();
-                    return;
+                auto direct_color = direct_color_allocations.find(canon);
+                if (direct_color != direct_color_allocations.end()) {
+                    pipeline_cache.texture_pool.erase(canon);
+                } else {
+                    if (!pipeline_cache.texture_pool.ensure(*device, canon, texture_desc)) {
+                        tc::Log::error("RenderEngine::execute_pipeline: failed to allocate color_texture '%s'", canon);
+                        tc_profiler_end_section();
+                        return;
+                    }
                 }
 
                 std::vector<const char*> aliases = collect_alias_group(fg, canon);
@@ -669,7 +778,12 @@ namespace termin {
             target_desc.has_depth = true;
             target_desc.depth_format = tgfx::PixelFormat::D32F;
 
-            if (!fbo_pool.ensure_native(*device, canon, target_desc)) {
+            tgfx::TextureHandle direct_color;
+            auto direct_color_it = direct_color_allocations.find(canon);
+            if (direct_color_it != direct_color_allocations.end()) {
+                direct_color = direct_color_it->second;
+            }
+            if (!fbo_pool.ensure_native(*device, canon, target_desc, direct_color)) {
                 tc::Log::error("RenderEngine::execute_pipeline: failed to allocate fbo '%s'", canon);
                 tc_profiler_end_section();
                 return;
@@ -702,6 +816,12 @@ namespace termin {
         std::unordered_map<std::string, tgfx::TextureHandle> tex2_resources;
         std::unordered_map<std::string, tgfx::TextureHandle> tex2_depth_resources;
         if (ctx2 && device) {
+            for (const auto& [storage_resource, target] : direct_color_allocations) {
+                for (const char* alias : collect_alias_group(fg, storage_resource.c_str())) {
+                    tex2_resources[alias] = target;
+                }
+                tex2_resources[storage_resource] = target;
+            }
             FBOPool& fbo_pool = pipeline.fbo_pool();
             for (const auto& [name, res] : resources) {
                 tgfx::TextureHandle color_handle = fbo_pool.get_color_tgfx2(name);
@@ -814,6 +934,7 @@ namespace termin {
         struct PreparedColorOutputBinding {
             PipelineColorExport export_desc;
             std::string canonical_resource;
+            std::string storage_resource;
             tgfx::TextureHandle source;
             tgfx::TextureHandle target;
             ColorOutputBindingPlan plan;
@@ -858,19 +979,21 @@ namespace termin {
                 device->texture_desc(source), color_export.content, device->texture_desc(target));
             const char* canonical = tc_frame_graph_canonical_resource(fg, color_export.resource.c_str());
             const std::string canonical_resource = canonical ? canonical : color_export.resource;
+            const std::string storage_resource = resolve_color_storage(canonical_resource);
             if (!plan.valid) {
                 tc::Log::error("RenderEngine: refusing to bind scene-linear export '%s' to an SDR color target",
                                color_export.resource.c_str());
-                color_output_bindings.push_back({color_export, canonical_resource, source, target, plan});
+                color_output_bindings.push_back(
+                    {color_export, canonical_resource, storage_resource, source, target, plan});
                 continue;
             }
-            color_output_bindings.push_back({color_export, canonical_resource, source, target, plan});
+            color_output_bindings.push_back({color_export, canonical_resource, storage_resource, source, target, plan});
         }
 
         std::unordered_map<std::string, size_t> color_export_consumer_counts;
         for (const PreparedColorOutputBinding& binding : color_output_bindings) {
             if (binding.plan.valid)
-                ++color_export_consumer_counts[binding.canonical_resource];
+                ++color_export_consumer_counts[binding.storage_resource];
         }
         for (PreparedColorOutputBinding& binding : color_output_bindings) {
             if (!binding.plan.valid || binding.plan.operation != ColorOutputBindingOp::Direct)
@@ -880,7 +1003,7 @@ namespace termin {
             // cannot be rebound directly in that case because the global
             // resource map can name only one texture; preserve the internal
             // producer and copy once to each consumer instead.
-            if (color_export_consumer_counts[binding.canonical_resource] != 1) {
+            if (color_export_consumer_counts[binding.storage_resource] != 1) {
                 binding.plan.operation = ColorOutputBindingOp::CopyOrResolve;
                 continue;
             }

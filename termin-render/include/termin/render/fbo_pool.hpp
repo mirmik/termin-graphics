@@ -39,7 +39,10 @@ namespace termin {
         // On resize/format change the old handles are destroyed and new
         // ones are allocated; the device's internal FBO cache is also
         // invalidated because the driver may recycle gl_ids.
-        bool ensure_native(tgfx::IRenderDevice& device, const std::string& key, const tgfx::RenderTargetPoolDesc& desc);
+        bool ensure_native(tgfx::IRenderDevice& device,
+                           const std::string& key,
+                           const tgfx::RenderTargetPoolDesc& desc,
+                           tgfx::TextureHandle external_color = {});
 
         // Persistent tgfx2 texture handles for this entry's color / depth
         // attachment. Alias-resolving.

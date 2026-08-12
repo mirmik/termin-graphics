@@ -39,6 +39,7 @@ namespace tgfx {
 
         bool ensure(IRenderDevice& device, std::string_view key, const TextureDesc& desc);
         TextureHandle get(std::string_view key) const;
+        void erase(std::string_view key);
         void clear();
     };
 
@@ -58,6 +59,7 @@ namespace tgfx {
         RenderTargetPoolDesc desc;
         TextureHandle color_tgfx2;
         TextureHandle depth_tgfx2;
+        bool owns_color = true;
 
         RenderTargetEntry() = default;
         RenderTargetEntry(RenderTargetEntry&&) = default;
@@ -77,7 +79,13 @@ namespace tgfx {
         RenderTargetPool& operator=(const RenderTargetPool&) = delete;
         ~RenderTargetPool();
 
-        bool ensure(IRenderDevice& device, std::string_view key, const RenderTargetPoolDesc& desc);
+        // `external_color`, when valid, is borrowed from the caller. The pool
+        // still owns and caches the matching depth attachment, but never
+        // destroys the external color texture.
+        bool ensure(IRenderDevice& device,
+                    std::string_view key,
+                    const RenderTargetPoolDesc& desc,
+                    TextureHandle external_color = {});
         TextureHandle color(std::string_view key) const;
         TextureHandle depth(std::string_view key) const;
         IRenderDevice* device() const;
