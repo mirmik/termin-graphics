@@ -182,12 +182,16 @@ if(EMSCRIPTEN)
         src/tgfx2/draw_list2d.cpp
         src/tgfx2/engine_shader_catalog.cpp
         src/tgfx2/font_atlas.cpp
+        src/tgfx2/line_renderer_common.cpp
         src/tgfx2/output_transform.cpp
         src/tgfx2/opengl/gl_features.cpp
         src/tgfx2/opengl/gl_coordinates.cpp
         src/tgfx2/path2d.cpp
         src/tgfx2/point_cloud_renderer.cpp
+        src/tgfx2/screen_space_line_renderer.cpp
         src/tgfx2/text2d_renderer.cpp
+        src/tgfx2/world_space_line_renderer.cpp
+        src/tgfx2/world_tube_line_renderer.cpp
         src/tgfx2/pixel_format_utils.cpp
         src/tgfx2/pipeline_cache.cpp
         src/tgfx2/render_context.cpp

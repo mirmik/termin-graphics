@@ -95,7 +95,7 @@ namespace tgfx::line_renderer {
 
         BufferDesc desc;
         desc.size = byte_size;
-        desc.usage = BufferUsage::Vertex;
+        desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
         BufferHandle buffer = device.create_buffer(desc);
         device.upload_buffer(buffer, {reinterpret_cast<const uint8_t*>(data), byte_size});
         return buffer;
