@@ -22,6 +22,12 @@ Changing the remote must not change the `termin-glb` adapter API.
 
 ## Static mesh import contract
 
+The supported minimal Python boundary is distributed as `termin-glb-native`.
+It owns `termin.glb.native` and the `_glb_native` extension and depends only on
+`tmesh` plus the shared nanobind runtime helper. The high-level `termin-glb`
+package depends on this distribution and adds `GLBAsset`, resource publication,
+scene instantiation, materials, skeletons, and animation integration.
+
 `NativeGLBDocument` is the explicit migration boundary for binary GLB
 files. Construction maps the file read-only, parses it with cgltf, loads the
 embedded BIN chunk as a view of that mapping, and exposes only compact mesh

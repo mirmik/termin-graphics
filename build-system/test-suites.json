@@ -619,6 +619,12 @@
       "roots": ["termin-engine/tests"]
     },
     {
+      "id": "termin-glb-native-tests",
+      "module": "termin-glb-native",
+      "executor": "pytest",
+      "roots": ["termin-glb-native/tests"]
+    },
+    {
       "id": "termin-glb-tests",
       "module": "termin-glb",
       "executor": "pytest",

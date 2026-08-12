@@ -326,11 +326,15 @@
       ]
     },
     {
-      "path": "termin-glb",
-      "distribution": "termin-glb",
+      "path": "termin-glb-native",
+      "distribution": "termin-glb-native",
       "native_extensions": [
         {"extension": "termin.glb._glb_native", "target": "_glb_native"}
       ]
+    },
+    {
+      "path": "termin-glb",
+      "distribution": "termin-glb"
     },
     {
       "path": "termin-project",
