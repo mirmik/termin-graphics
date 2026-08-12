@@ -1354,3 +1354,81 @@ def test_native_scene_view3d_projects_camera_routes_action_and_detaches_scene():
     view.detach_scene()
     assert not view.scene.valid
     tc_visual_scene3d_destroy(scene)
+
+
+def test_native_scene_view3d_routes_part_aware_target_capture():
+    from termin.geombase import Mat44, SrgbColor, Vec3
+    from termin.gui_native import SceneView3DCamera
+    from termin.visual_scene import (
+        TargetPointerEventKind3D,
+        tc_visual_scene3d_create,
+        tc_visual_scene3d_destroy,
+    )
+
+    document = tc_ui_document_create()
+    scene = tc_visual_scene3d_create()
+    item = scene.create_primitive(
+        ((-0.7, -0.7, 0.5), (0.7, -0.7, 0.5), (0.0, 0.7, 0.5)),
+        ((0, 1, 2),),
+        colors=(SrgbColor(1.0, 0.2, 0.1, 1.0),) * 3,
+        triangle_parts=(23,),
+    )
+    view = document.create_scene_view3d(scene)
+    view.camera = SceneView3DCamera(
+        Mat44.identity(),
+        Mat44.identity(),
+        Vec3(0.0, 0.0, 0.0),
+    )
+    target_events = []
+    fallbacks = []
+    view.set_target_pointer_handler(
+        item.handle,
+        lambda event: target_events.append((event.kind, event.part, event.captured)),
+    )
+    view.set_fallback_pointer_handler(
+        lambda event, ray: fallbacks.append((event.type, ray is not None)) or True
+    )
+    assert document.add_root(view.handle)
+    document.layout_roots(Rect(0.0, 0.0, 100.0, 100.0))
+
+    event = PointerEvent()
+    event.x = 50.0
+    event.y = 50.0
+    event.button = 0
+    event.type = PointerEventType.Down
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    event.x = 95.0
+    event.y = 95.0
+    event.type = PointerEventType.Move
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    event.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+
+    assert (TargetPointerEventKind3D.Down, 23, True) in target_events
+    assert (TargetPointerEventKind3D.Move, 23, True) in target_events
+    assert (TargetPointerEventKind3D.Up, 23, True) in target_events
+    assert all(kind == PointerEventType.Enter for kind, _has_ray in fallbacks)
+
+    view.set_target_pointer_handler(item.handle, None)
+    actions = []
+    view.set_action_handler(item.handle, lambda part, action: actions.append((part, action)))
+    event.x = 50.0
+    event.y = 50.0
+    event.type = PointerEventType.Down
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    event.type = PointerEventType.Up
+    assert document.dispatch_pointer_event(event) == EventResult.Handled
+    assert actions == [(23, "activate")]
+
+    other_scene = tc_visual_scene3d_create()
+    other_item = other_scene.create_primitive(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        ((0, 1, 2),),
+    )
+    with pytest.raises(ValueError, match="must belong"):
+        view.set_target_pointer_handler(other_item.handle, lambda _event: None)
+    tc_visual_scene3d_destroy(other_scene)
+
+    view.set_action_handler(item.handle, None)
+    view.detach_scene()
+    tc_visual_scene3d_destroy(scene)

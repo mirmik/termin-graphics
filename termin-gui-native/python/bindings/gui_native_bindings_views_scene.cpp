@@ -8,6 +8,11 @@ using namespace termin::gui_native::python_bindings;
 
 namespace {
 
+    struct SceneView3DTargetPointerEventRef {
+        termin::visual::TcVisualScene3D scene{};
+        termin::visual::TargetPointerEvent3D event{};
+    };
+
     tc_mat44 to_tc_mat44(const termin::Mat44& value) {
         tc_mat44 result{};
         std::memcpy(result.m, value.data, sizeof(result.m));
@@ -23,6 +28,20 @@ namespace {
 } // namespace
 
 void bind_gui_native_scene_views(nb::module_& m) {
+    nb::class_<SceneView3DTargetPointerEventRef>(m, "SceneView3DTargetPointerEvent")
+        .def_prop_ro("kind", [](const SceneView3DTargetPointerEventRef& self) { return self.event.kind; })
+        .def_prop_ro(
+            "pointer_event",
+            [](const SceneView3DTargetPointerEventRef& self) { return self.event.pointer_event; })
+        .def_prop_ro("target", [](const SceneView3DTargetPointerEventRef& self) { return self.event.target; })
+        .def_prop_ro("part", [](const SceneView3DTargetPointerEventRef& self) { return self.event.part; })
+        .def_prop_ro("captured", [](const SceneView3DTargetPointerEventRef& self) { return self.event.captured; })
+        .def_prop_ro(
+            "current_hit_world_point",
+            [](const SceneView3DTargetPointerEventRef& self) -> nb::object {
+                return self.event.current_hit ? nb::cast(self.event.current_hit->world_point) : nb::none();
+            });
+
     nb::class_<termin::gui_native::SceneTransform>(m, "SceneTransform")
         .def(nb::init<>())
         .def(
@@ -740,6 +759,40 @@ void bind_gui_native_scene_views(nb::module_& m) {
             [](const SceneView3DRef& self, float x, float y) { return self.get().world_ray(x, y); },
             nb::arg("x"),
             nb::arg("y"))
+        .def(
+            "set_target_pointer_handler",
+            [](const SceneView3DRef& self, termin::visual::VisualItem3DHandle item, nb::object callback) {
+                const auto scene = self.get().scene();
+                if (!scene.valid() || !scene.contains(item)) {
+                    throw nb::value_error("pointer target must belong to the SceneView3D scene");
+                }
+                if (callback.is_none()) {
+                    self.get().interaction().clear_target_pointer_handler(item);
+                    return;
+                }
+                if (!nb::isinstance<nb::callable>(callback)) {
+                    throw nb::type_error("target pointer handler must be callable or None");
+                }
+                const std::shared_ptr<DocumentState> state = self.widget.state;
+                self.get().interaction().set_target_pointer_handler(
+                    item,
+                    [state, scene, callback = std::move(callback)](
+                        const termin::visual::TargetPointerEvent3D& event) {
+                        if (!state || tc_ui_document_handle_is_invalid(state->document))
+                            return;
+                        nb::gil_scoped_acquire gil;
+                        try {
+                            callback(SceneView3DTargetPointerEventRef{scene, event});
+                        } catch (...) {
+                            tc_log_error(
+                                "[termin-gui-native/python] SceneView3D target pointer handler failed");
+                            if (!state->pending_exception)
+                                state->pending_exception = std::current_exception();
+                        }
+                    });
+            },
+            nb::arg("item"),
+            nb::arg("callback").none())
         .def(
             "set_action_handler",
             [](const SceneView3DRef& self, termin::visual::VisualItem3DHandle item, nb::object callback) {
