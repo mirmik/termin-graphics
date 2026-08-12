@@ -533,6 +533,7 @@ def _visual_scene_nodegraph(application) -> SectionContent:
 
 
 def _visual_scene3d_widget(application) -> SectionContent:
+    from tcbase import MouseButton
     from tcbase._geom_native import LinearColor
     from termin.geombase import Mat44, SrgbColor, Vec3
     from termin.gui_native import PointerEventType, SceneView3DCamera
@@ -648,7 +649,7 @@ def _visual_scene3d_widget(application) -> SectionContent:
             )
             update_camera()
             return True
-        if event.type == PointerEventType.Down and event.button == 1:
+        if event.type == PointerEventType.Down and event.button == MouseButton.LEFT.value:
             camera_state["dragging"] = True
             camera_state["last_x"] = event.x
             camera_state["last_y"] = event.y
