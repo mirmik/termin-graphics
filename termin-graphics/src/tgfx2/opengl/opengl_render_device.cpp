@@ -1,12 +1,16 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/opengl/opengl_command_list.hpp"
+#include "tgfx2/opengl/gl_platform_operations.hpp"
+#include "gl_web_compat.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 #include "tgfx2/tc_texture_upload.hpp"
 
 #include <array>
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -16,51 +20,9 @@
 #include <tcbase/tc_log.hpp>
 #include <vector>
 
-// glClipControl is GL 4.5 / ARB_clip_control. Our glad generator targets
-// 3.3 core and doesn't expose it. On Linux libGL.so exports the symbol
-// so a forward-declare + dynamic link resolves it; on Windows
-// opengl32.lib only exports GL 1.1, so we have to fetch the entry
-// point through wglGetProcAddress at runtime.
-#ifndef GL_UPPER_LEFT
-#define GL_UPPER_LEFT 0x8CA2
-#endif
-#ifndef GL_ZERO_TO_ONE
-#define GL_ZERO_TO_ONE 0x935F
-#endif
-// Enum queries from GL 4.5, not in our glad-3.3 header.
-#ifndef GL_CLIP_ORIGIN
-#define GL_CLIP_ORIGIN 0x935C
-#endif
-#ifndef GL_CLIP_DEPTH_MODE
-#define GL_CLIP_DEPTH_MODE 0x935D
-#endif
-#if defined(_WIN32)
-// windows.h drags in min/max macros that collide with std::min/std::max
-// (and with std::numeric_limits<T>::max()). Suppress them.
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-typedef void(APIENTRY* PFN_glClipControl)(GLenum, GLenum);
-static PFN_glClipControl s_glClipControl = nullptr;
-static bool load_clip_control_win32() {
-    if (s_glClipControl)
-        return true;
-    PROC proc = wglGetProcAddress("glClipControl");
-    // wglGetProcAddress documents these sentinel values as failures in
-    // addition to NULL. Never turn a missing capability into a no-op.
-    if (!proc || proc == reinterpret_cast<PROC>(1) || proc == reinterpret_cast<PROC>(2) ||
-        proc == reinterpret_cast<PROC>(3) || proc == reinterpret_cast<PROC>(-1)) {
-        return false;
-    }
-    s_glClipControl = reinterpret_cast<PFN_glClipControl>(proc);
-    return true;
-}
-#else
-extern "C" void glClipControl(GLenum origin, GLenum depth);
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5_webgl.h>
+extern "C" void* tgfx_webgl2_get_proc_address(const char* name);
 #endif
 
 extern "C" {
@@ -86,12 +48,107 @@ static void opengl_invalidate_tc_shader_trampoline(uint32_t pool_index, void* us
 
 namespace tgfx {
 
-    OpenGLRenderDevice::OpenGLRenderDevice() {
+    namespace {
+        const char* gl_shader_stage_name(ShaderStage stage) {
+            switch (stage) {
+            case ShaderStage::Vertex:
+                return "vertex";
+            case ShaderStage::Fragment:
+                return "fragment";
+            case ShaderStage::Geometry:
+                return "geometry";
+            case ShaderStage::Compute:
+                return "compute";
+            }
+            return "unknown";
+        }
+    } // namespace
+
+    OpenGLRenderDevice::OpenGLRenderDevice(const OpenGLDeviceCreateInfo& info)
+        : requested_tier_(info.feature_tier) {
         // glad is a static library — each DLL/exe gets its own copy of function pointers.
         // We must load GL pointers within this DLL even if the caller already did so.
+#if defined(__EMSCRIPTEN__)
+        if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(tgfx_webgl2_get_proc_address))) {
+#else
         if (!gladLoaderLoadGL()) {
+#endif
             throw std::runtime_error("Failed to initialize OpenGL function pointers (glad)");
         }
+#if defined(__EMSCRIPTEN__)
+        // GLAD is generated for desktop GL and sees WebGL's reported
+        // "OpenGL ES 3.0" version as desktop 3.0. Several ES3-core entry
+        // points are grouped under desktop GL 3.1-3.3 and therefore are not
+        // requested automatically. Load that shared subset explicitly from
+        // the static GLES bridge.
+#define TGFX_LOAD_WEBGL2_GLAD(proc, type)                                                                              \
+    glad_##proc = reinterpret_cast<type>(tgfx_webgl2_get_proc_address(#proc))
+        TGFX_LOAD_WEBGL2_GLAD(glBindBufferBase, PFNGLBINDBUFFERBASEPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glBindBufferRange, PFNGLBINDBUFFERRANGEPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glBindSampler, PFNGLBINDSAMPLERPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glClientWaitSync, PFNGLCLIENTWAITSYNCPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glCopyBufferSubData, PFNGLCOPYBUFFERSUBDATAPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glDeleteSamplers, PFNGLDELETESAMPLERSPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glDeleteSync, PFNGLDELETESYNCPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glDrawArraysInstanced, PFNGLDRAWARRAYSINSTANCEDPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glDrawElementsInstanced, PFNGLDRAWELEMENTSINSTANCEDPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glFenceSync, PFNGLFENCESYNCPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glGenSamplers, PFNGLGENSAMPLERSPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glGetUniformBlockIndex, PFNGLGETUNIFORMBLOCKINDEXPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glSamplerParameterf, PFNGLSAMPLERPARAMETERFPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glSamplerParameteri, PFNGLSAMPLERPARAMETERIPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glUniformBlockBinding, PFNGLUNIFORMBLOCKBINDINGPROC);
+        TGFX_LOAD_WEBGL2_GLAD(glVertexAttribDivisor, PFNGLVERTEXATTRIBDIVISORPROC);
+#undef TGFX_LOAD_WEBGL2_GLAD
+#define TGFX_REQUIRE_WEBGL2_PROC(proc)                                                                                 \
+    do {                                                                                                               \
+        if (!(proc)) {                                                                                                 \
+            tc_log_error("WebGL2 required entry point is unavailable: %s", #proc);                                    \
+            throw std::runtime_error("WebGL2 required entry point is unavailable: " #proc);                           \
+        }                                                                                                              \
+    } while (false)
+        TGFX_REQUIRE_WEBGL2_PROC(glGetString);
+        TGFX_REQUIRE_WEBGL2_PROC(glGetIntegerv);
+        TGFX_REQUIRE_WEBGL2_PROC(glGenBuffers);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindBuffer);
+        TGFX_REQUIRE_WEBGL2_PROC(glBufferData);
+        TGFX_REQUIRE_WEBGL2_PROC(glBufferSubData);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindBufferBase);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindBufferRange);
+        TGFX_REQUIRE_WEBGL2_PROC(glGenTextures);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindTexture);
+        TGFX_REQUIRE_WEBGL2_PROC(glTexImage2D);
+        TGFX_REQUIRE_WEBGL2_PROC(glTexSubImage2D);
+        TGFX_REQUIRE_WEBGL2_PROC(glGenSamplers);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindSampler);
+        TGFX_REQUIRE_WEBGL2_PROC(glSamplerParameteri);
+        TGFX_REQUIRE_WEBGL2_PROC(glCreateShader);
+        TGFX_REQUIRE_WEBGL2_PROC(glShaderSource);
+        TGFX_REQUIRE_WEBGL2_PROC(glCompileShader);
+        TGFX_REQUIRE_WEBGL2_PROC(glGetShaderiv);
+        TGFX_REQUIRE_WEBGL2_PROC(glCreateProgram);
+        TGFX_REQUIRE_WEBGL2_PROC(glAttachShader);
+        TGFX_REQUIRE_WEBGL2_PROC(glLinkProgram);
+        TGFX_REQUIRE_WEBGL2_PROC(glGetProgramiv);
+        TGFX_REQUIRE_WEBGL2_PROC(glUseProgram);
+        TGFX_REQUIRE_WEBGL2_PROC(glGetUniformBlockIndex);
+        TGFX_REQUIRE_WEBGL2_PROC(glUniformBlockBinding);
+        TGFX_REQUIRE_WEBGL2_PROC(glGetUniformLocation);
+        TGFX_REQUIRE_WEBGL2_PROC(glUniform1i);
+        TGFX_REQUIRE_WEBGL2_PROC(glGenVertexArrays);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindVertexArray);
+        TGFX_REQUIRE_WEBGL2_PROC(glEnableVertexAttribArray);
+        TGFX_REQUIRE_WEBGL2_PROC(glVertexAttribPointer);
+        TGFX_REQUIRE_WEBGL2_PROC(glGenFramebuffers);
+        TGFX_REQUIRE_WEBGL2_PROC(glBindFramebuffer);
+        TGFX_REQUIRE_WEBGL2_PROC(glFramebufferTexture2D);
+        TGFX_REQUIRE_WEBGL2_PROC(glDrawBuffers);
+        TGFX_REQUIRE_WEBGL2_PROC(glReadBuffer);
+        TGFX_REQUIRE_WEBGL2_PROC(glClearBufferfv);
+        TGFX_REQUIRE_WEBGL2_PROC(glDrawArrays);
+        TGFX_REQUIRE_WEBGL2_PROC(glDrawElements);
+#undef TGFX_REQUIRE_WEBGL2_PROC
+#endif
 
         // Align OpenGL's NDC + window-coord convention with Vulkan:
         //   GL_UPPER_LEFT   — window-coord origin at top-left (like Vulkan),
@@ -101,9 +158,8 @@ namespace tgfx {
         // All our projection matrices (termin-base/geom/mat44.hpp) target
         // this convention; shaders write clip-space Y pointing down already.
         // Requires GL 4.5 or ARB_clip_control (ubiquitous on desktop GL).
-        enforce_clip_space_contract();
-
         query_capabilities();
+        enforce_clip_space_contract();
         ensure_ring_ubo();
 
         tc_texture_registry_add_destroy_hook(&opengl_invalidate_tc_texture_trampoline, this);
@@ -112,43 +168,9 @@ namespace tgfx {
     }
 
     void OpenGLRenderDevice::enforce_clip_space_contract() {
-        // Do not attribute an error left by unrelated host rendering to
-        // glClipControl. Preserve visibility of it before checking our call.
-        for (GLenum stale_error = glGetError(); stale_error != GL_NO_ERROR; stale_error = glGetError()) {
-            tc_log_warn("OpenGL clip-space setup observed a pre-existing GL error: 0x%04x",
-                        static_cast<unsigned>(stale_error));
-        }
-
-#if defined(_WIN32)
-        if (!load_clip_control_win32()) {
-            const char* message = "OpenGL backend requires OpenGL 4.5 or ARB_clip_control, but "
-                                  "wglGetProcAddress(glClipControl) failed";
-            tc_log_error("%s", message);
-            throw std::runtime_error(message);
-        }
-        s_glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
-#else
-        glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
-#endif
-
-        const GLenum apply_error = glGetError();
-        GLint origin = 0;
-        GLint depth_mode = 0;
-        glGetIntegerv(GL_CLIP_ORIGIN, &origin);
-        glGetIntegerv(GL_CLIP_DEPTH_MODE, &depth_mode);
-        const GLenum query_error = glGetError();
-        if (apply_error != GL_NO_ERROR || query_error != GL_NO_ERROR || origin != GL_UPPER_LEFT ||
-            depth_mode != GL_ZERO_TO_ONE) {
-            tc_log_error("OpenGL clip-space contract failed: apply_error=0x%04x "
-                         "query_error=0x%04x origin=0x%04x depth_mode=0x%04x "
-                         "(required origin=GL_UPPER_LEFT depth=GL_ZERO_TO_ONE)",
-                         static_cast<unsigned>(apply_error),
-                         static_cast<unsigned>(query_error),
-                         static_cast<unsigned>(origin),
-                         static_cast<unsigned>(depth_mode));
-            throw std::runtime_error("OpenGL backend could not establish the required upper-left, "
-                                     "zero-to-one clip-space contract");
-        }
+        std::string error;
+        if (!gl_operations_ || !gl_operations_->apply_clip_space_contract(error))
+            throw std::runtime_error("OpenGL backend could not establish its clip-space contract: " + error);
     }
 
     OpenGLRenderDevice::~OpenGLRenderDevice() {
@@ -247,19 +269,97 @@ namespace tgfx {
         caps_.backend = BackendType::OpenGL;
         caps_.texture_origin_top_left = true;
 
-        GLint val;
+        GLint major = 0;
+        GLint minor = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &major);
+        glGetIntegerv(GL_MINOR_VERSION, &minor);
+
+        GLint val = 0;
         glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &val);
-        caps_.max_color_attachments = static_cast<uint32_t>(val);
+        const uint32_t max_color_attachments = static_cast<uint32_t>(val);
 
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &val);
-        caps_.max_texture_dimension_2d = static_cast<uint32_t>(val);
+        const uint32_t max_texture_dimension_2d = static_cast<uint32_t>(val);
 
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &val);
-        caps_.max_texture_units = static_cast<uint32_t>(val);
+        const uint32_t max_texture_units = static_cast<uint32_t>(val);
 
-        caps_.supports_compute = false; // Requires GL 4.3, not available with GL 3.3 glad
-        caps_.supports_geometry_shaders = true;
-        caps_.supports_timestamp_queries = (glQueryCounter != nullptr);
+        glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &val);
+        const uint32_t max_fragment_texture_units = static_cast<uint32_t>(val);
+
+        GlRuntimeInfo runtime;
+#if defined(__EMSCRIPTEN__)
+        runtime.api = GlApi::WebGL;
+        runtime.major = 2;
+        runtime.minor = 0;
+#else
+        runtime.api = GlApi::Desktop;
+        runtime.major = static_cast<uint32_t>(major);
+        runtime.minor = static_cast<uint32_t>(minor);
+#endif
+        runtime.has_clip_control = GlPlatformOperations::runtime_has_clip_control(
+            static_cast<uint32_t>(major), static_cast<uint32_t>(minor));
+        runtime.has_polygon_mode = glPolygonMode != nullptr;
+        runtime.has_base_vertex_draws = glDrawElementsBaseVertex != nullptr &&
+                                        glDrawElementsInstancedBaseVertex != nullptr;
+        runtime.has_multisample_textures = glTexImage2DMultisample != nullptr;
+        runtime.has_timestamp_queries = glQueryCounter != nullptr && glGetQueryObjectui64v != nullptr;
+        // Preserve the current public capability contract until the shared GL
+        // command path actually implements compute dispatch.
+        runtime.has_compute = false;
+        runtime.has_geometry_shaders = major > 3 || (major == 3 && minor >= 2);
+        runtime.max_color_attachments = max_color_attachments;
+        runtime.max_texture_dimension_2d = max_texture_dimension_2d;
+        runtime.max_texture_units = max_texture_units;
+        runtime.max_fragment_texture_units = max_fragment_texture_units;
+
+        std::string feature_error;
+        if (!derive_gl_feature_set(requested_tier_, runtime, gl_features_, feature_error)) {
+            tc_log_error("OpenGL feature-tier validation failed: %s", feature_error.c_str());
+            throw std::runtime_error(feature_error);
+        }
+        gl_coordinates_ = gl_coordinate_contract(gl_features_.tier);
+        gl_operations_ = std::make_unique<GlPlatformOperations>(gl_features_);
+
+        const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+        const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        adapter_info_.backend = BackendType::OpenGL;
+        adapter_info_.adapter_name = renderer ? renderer : "unknown OpenGL renderer";
+        adapter_info_.driver_name = std::string(vendor ? vendor : "unknown vendor") + " / " +
+                                    (version ? version : "unknown version");
+        std::string renderer_lower = adapter_info_.adapter_name;
+        std::transform(renderer_lower.begin(), renderer_lower.end(), renderer_lower.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        adapter_info_.hardware_class =
+            renderer_lower.find("llvmpipe") != std::string::npos ||
+                    renderer_lower.find("softpipe") != std::string::npos ||
+                    renderer_lower.find("swiftshader") != std::string::npos ||
+                    renderer_lower.find("software") != std::string::npos
+                ? AdapterClass::Cpu
+                : AdapterClass::Unknown;
+        tc_log_info("OpenGL device initialized: tier=%s target=%s api=%d.%d renderer='%s' driver='%s' "
+                    "fragment_textures=%u shadow_maps=%u",
+                    gl_feature_tier_name(gl_features_.tier),
+                    shader_artifact_target_name(gl_features_.shader_target),
+                    major,
+                    minor,
+                    adapter_info_.adapter_name.c_str(),
+                    adapter_info_.driver_name.c_str(),
+                    gl_features_.max_fragment_texture_units,
+                    gl_features_.max_shadow_maps);
+
+        caps_.shader_artifact_target = gl_features_.shader_target;
+        caps_.max_color_attachments = gl_features_.max_color_attachments;
+        caps_.max_texture_dimension_2d = gl_features_.max_texture_dimension_2d;
+        caps_.max_texture_units = gl_features_.max_texture_units;
+        caps_.max_fragment_texture_units = gl_features_.max_fragment_texture_units;
+        caps_.max_shadow_maps = gl_features_.max_shadow_maps;
+
+        caps_.supports_compute = gl_features_.supports_compute;
+        caps_.supports_geometry_shaders = gl_features_.supports_geometry_shaders;
+        caps_.supports_timestamp_queries = gl_features_.supports_timestamp_queries;
         caps_.supports_multisample_resolve = true;
         caps_.supports_dynamic_uniform_offsets = false;
         caps_.supports_storage_textures = false;
@@ -292,11 +392,11 @@ namespace tgfx {
 
         bool load_opengl_shader_artifact_source(const termin::ShaderArtifactResolver& resolver,
                                                 tc_shader* shader,
+                                                ShaderArtifactTarget target,
                                                 ShaderStage stage,
                                                 std::string& out_source) {
             std::vector<uint8_t> bytes;
-            if (!termin::tgfx2_load_or_compile_shader_artifact_for_backend(
-                    resolver, shader, BackendType::OpenGL, stage, bytes)) {
+            if (!termin::tgfx2_load_or_compile_shader_artifact_for_target(resolver, shader, target, stage, bytes)) {
                 return false;
             }
             out_source.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
@@ -552,7 +652,8 @@ namespace tgfx {
             ShaderDesc vs_desc;
             vs_desc.stage = ShaderStage::Vertex;
             vs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":vertex";
-            if (!load_opengl_shader_artifact_source(resolver, shader, vs_desc.stage, vs_desc.source)) {
+            if (!load_opengl_shader_artifact_source(
+                    resolver, shader, shader_artifact_target(), vs_desc.stage, vs_desc.source)) {
                 if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
                     tc_log_error("OpenGLRenderDevice::ensure_tc_shader: %s vertex artifact missing or dev compile "
                                  "failed for '%s' language=%u",
@@ -574,7 +675,8 @@ namespace tgfx {
         ShaderDesc fs_desc;
         fs_desc.stage = ShaderStage::Fragment;
         fs_desc.debug_name = std::string(shader->name ? shader->name : shader->uuid) + ":fragment";
-        if (!load_opengl_shader_artifact_source(resolver, shader, fs_desc.stage, fs_desc.source)) {
+        if (!load_opengl_shader_artifact_source(
+                resolver, shader, shader_artifact_target(), fs_desc.stage, fs_desc.source)) {
             if (artifacts_required || shader_language != TC_SHADER_LANGUAGE_GLSL) {
                 if (vs)
                     destroy(vs);
@@ -658,8 +760,12 @@ namespace tgfx {
             tex.target = GL_TEXTURE_2D_MULTISAMPLE;
             glGenTextures(1, &tex.gl_id);
             glBindTexture(tex.target, tex.gl_id);
-            glTexImage2DMultisample(
-                tex.target, desc.sample_count, fmt.internal_format, desc.width, desc.height, GL_TRUE);
+            if (!gl_operations_->allocate_multisample_texture_2d(
+                    tex.target, desc.sample_count, fmt.internal_format, desc.width, desc.height, true)) {
+                glBindTexture(tex.target, 0);
+                glDeleteTextures(1, &tex.gl_id);
+                return {};
+            }
         } else {
             tex.target = GL_TEXTURE_2D;
             glGenTextures(1, &tex.gl_id);
@@ -733,17 +839,22 @@ namespace tgfx {
     //     to the builtin, not to itself.
     static constexpr const char* kGLSamplingFlipOverlay =
         "// tgfx2-GL-sampling-flip\n"
-        "vec4  _tgfx_gl_tex(sampler2D s, vec2 uv)             { return texture(s, vec2(uv.x, 1.0 - uv.y)); }\n"
-        "vec4  _tgfx_gl_tex(sampler2D s, vec2 uv, float lod)  { return textureLod(s, vec2(uv.x, 1.0 - uv.y), lod); }\n"
-        "vec4  _tgfx_gl_tex(sampler3D s, vec3 uvw)            { return texture(s, uvw); }\n"
-        "vec4  _tgfx_gl_tex(samplerCube s, vec3 dir)          { return texture(s, dir); }\n"
-        "float _tgfx_gl_tex(sampler2DShadow s, vec3 uvz)      { return texture(s, vec3(uvz.x, 1.0 - uvz.y, uvz.z)); }\n"
-        "vec4  _tgfx_gl_texel(sampler2D s, ivec2 p, int lod) {\n"
+        "vec4  _tgfx_gl_tex(highp sampler2D s, vec2 uv)             { return texture(s, vec2(uv.x, 1.0 - uv.y)); }\n"
+        "vec4  _tgfx_gl_tex(highp sampler2D s, vec2 uv, float lod)  { return textureLod(s, vec2(uv.x, 1.0 - uv.y), lod); }\n"
+        "vec4  _tgfx_gl_tex(highp sampler3D s, vec3 uvw)            { return texture(s, uvw); }\n"
+        "vec4  _tgfx_gl_tex(highp samplerCube s, vec3 dir)          { return texture(s, dir); }\n"
+        "float _tgfx_gl_tex(highp sampler2DShadow s, vec3 uvz)      { return texture(s, vec3(uvz.x, 1.0 - uvz.y, uvz.z)); }\n"
+        "vec4  _tgfx_gl_texel(highp sampler2D s, ivec2 p, int lod) {\n"
         "    ivec2 sz = textureSize(s, lod);\n"
         "    return texelFetch(s, ivec2(p.x, sz.y - 1 - p.y), lod);\n"
         "}\n"
         "#define texture _tgfx_gl_tex\n"
         "#define texelFetch _tgfx_gl_texel\n";
+
+    static constexpr const char* kWebGL2PrecisionOverlay =
+        "// tgfx2-WebGL2-default-precision\n"
+        "precision highp float;\n"
+        "precision highp int;\n";
 
     // Find the end of the #version directive (and subsequent #extension
     // lines — they must precede any non-preprocessor code in GLSL) and
@@ -793,15 +904,38 @@ namespace tgfx {
 
         GLShaderModule mod;
         mod.stage = desc.stage;
+        mod.debug_name = desc.debug_name.empty() ? "<unnamed>" : desc.debug_name;
+
+        if (desc.stage == ShaderStage::Compute && !caps_.supports_compute) {
+            tc_log_error("OpenGL shader rejected: name='%s' stage=compute target=%s reason=unsupported stage",
+                         mod.debug_name.c_str(),
+                         shader_artifact_target_name(gl_features_.shader_target));
+            throw std::runtime_error("OpenGL target " +
+                                     std::string(shader_artifact_target_name(gl_features_.shader_target)) +
+                                     " does not support compute shader '" + mod.debug_name + "'");
+        }
+        if (desc.stage == ShaderStage::Geometry && !caps_.supports_geometry_shaders) {
+            tc_log_error("OpenGL shader rejected: name='%s' stage=geometry target=%s reason=unsupported stage",
+                         mod.debug_name.c_str(),
+                         shader_artifact_target_name(gl_features_.shader_target));
+            throw std::runtime_error("OpenGL target " +
+                                     std::string(shader_artifact_target_name(gl_features_.shader_target)) +
+                                     " does not support geometry shader '" + mod.debug_name + "'");
+        }
 
         GLenum gl_stage = gl::to_gl_shader_stage(desc.stage);
         mod.gl_shader = glCreateShader(gl_stage);
 
         std::string resolved = desc.source;
+        if (gl_features_.tier == GlFeatureTier::WebGL2) {
+            const std::string overlay = std::string(kWebGL2PrecisionOverlay) + kGLSamplingFlipOverlay;
+            resolved = inject_after_version(resolved, overlay.c_str());
+        } else {
+            resolved = inject_after_version(resolved, kGLSamplingFlipOverlay);
+        }
         // On OpenGL, wrap sampling builtins so v=0 = top of content
         // regardless of whether the texture was uploaded from CPU (flipped
         // in upload_texture) or rendered into (bottom-up FBO memory).
-        resolved = inject_after_version(resolved, kGLSamplingFlipOverlay);
         const char* src = resolved.c_str();
 
         glShaderSource(mod.gl_shader, 1, &src, nullptr);
@@ -810,10 +944,19 @@ namespace tgfx {
         GLint status;
         glGetShaderiv(mod.gl_shader, GL_COMPILE_STATUS, &status);
         if (!status) {
-            char log[1024];
-            glGetShaderInfoLog(mod.gl_shader, sizeof(log), nullptr, log);
+            GLint log_size = 0;
+            glGetShaderiv(mod.gl_shader, GL_INFO_LOG_LENGTH, &log_size);
+            std::string log(static_cast<size_t>(std::max(log_size, 1)), '\0');
+            glGetShaderInfoLog(mod.gl_shader, log_size, nullptr, log.data());
             glDeleteShader(mod.gl_shader);
-            throw std::runtime_error(std::string("Shader compile error: ") + log);
+            tc_log_error("OpenGL shader compile failed: name='%s' stage=%s target=%s: %s",
+                         mod.debug_name.c_str(),
+                         gl_shader_stage_name(mod.stage),
+                         shader_artifact_target_name(gl_features_.shader_target),
+                         log.c_str());
+            throw std::runtime_error("OpenGL shader compile failed for '" + mod.debug_name + "' stage=" +
+                                     gl_shader_stage_name(mod.stage) + " target=" +
+                                     shader_artifact_target_name(gl_features_.shader_target) + ": " + log);
         }
 
         return {shaders_.add(std::move(mod))};
@@ -855,10 +998,26 @@ namespace tgfx {
         GLint status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
-            char log[1024];
-            glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+            GLint log_size = 0;
+            glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_size);
+            std::string log(static_cast<size_t>(std::max(log_size, 1)), '\0');
+            glGetProgramInfoLog(program, log_size, nullptr, log.data());
             glDeleteProgram(program);
-            throw std::runtime_error(std::string("Program link error: ") + log);
+            const char* gs_name = "<none>";
+            if (desc.geometry_shader) {
+                if (const auto* gs = get_shader(desc.geometry_shader))
+                    gs_name = gs->debug_name.c_str();
+            }
+            tc_log_error("OpenGL program link failed: target=%s vertex='%s' fragment='%s' geometry='%s': %s",
+                         shader_artifact_target_name(gl_features_.shader_target),
+                         vs->debug_name.c_str(),
+                         fs->debug_name.c_str(),
+                         gs_name,
+                         log.c_str());
+            throw std::runtime_error("OpenGL program link failed target=" +
+                                     std::string(shader_artifact_target_name(gl_features_.shader_target)) +
+                                     " vertex='" + vs->debug_name + "' fragment='" + fs->debug_name +
+                                     "' geometry='" + gs_name + "': " + log);
         }
 
         program_cache_[key] = GLSharedProgram{program, 1};
@@ -1216,7 +1375,7 @@ namespace tgfx {
 
         // Depth-only FBO (e.g. shadow map): disable color read/write
         if (!has_color) {
-            glDrawBuffer(GL_NONE);
+            gl_web_compat::set_draw_buffer(GL_NONE);
             glReadBuffer(GL_NONE);
         } else {
             std::array<GLenum, TGFX2_MAX_COLOR_ATTACHMENTS> draw_buffers{};
@@ -1408,7 +1567,7 @@ namespace tgfx {
         }
 
         GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
-        GLboolean was_framebuffer_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
+        const bool was_framebuffer_srgb = gl_web_compat::framebuffer_srgb_enabled();
         GLboolean color_mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
         glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
         GLboolean depth_mask = GL_TRUE;
@@ -1425,7 +1584,7 @@ namespace tgfx {
         // This blit is raw transport; applying framebuffer sRGB conversion a
         // second time would destroy the target-domain dithering pattern.
         if (was_framebuffer_srgb)
-            glDisable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(false);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
@@ -1436,7 +1595,7 @@ namespace tgfx {
         glReadBuffer(GL_COLOR_ATTACHMENT0);
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glDrawBuffer(GL_BACK);
+        gl_web_compat::set_draw_buffer(GL_BACK);
 
         if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
             glBlitFramebuffer(0, 0, src_w, src_h, 0, 0, dst_w, dst_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -1453,7 +1612,7 @@ namespace tgfx {
         if (was_scissor)
             glEnable(GL_SCISSOR_TEST);
         if (was_framebuffer_srgb)
-            glEnable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(true);
     }
 
     void OpenGLRenderDevice::reset_state() {
@@ -1467,7 +1626,7 @@ namespace tgfx {
         glCullFace(GL_BACK);
         glFrontFace(GL_CCW);
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        gl_operations_->apply_polygon_mode(GL_FILL);
 
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 

@@ -135,6 +135,27 @@ TEST_CASE("material UBO authored #808080 decodes once and preserves alpha") {
     CHECK_EQ(read_float_at(buffer, 12), 0.5f);
 }
 
+TEST_CASE("material UBO reflected Vec4 preserves authored color semantics") {
+    std::array<uint8_t, 16> buffer{};
+    constexpr float authored = 128.0f / 255.0f;
+    const tc_uniform_value srgb =
+        uniform_color("u_srgb", TC_UNIFORM_SRGB_COLOR, authored, authored, authored, 0.25f);
+
+    REQUIRE(termin::pack_material_uniform_value_to_std140_field(srgb, "Vec4", buffer.data()));
+    CHECK(std::fabs(read_float_at(buffer, 0) - 0.2158605f) < 1.0e-5f);
+    CHECK(std::fabs(read_float_at(buffer, 4) - 0.2158605f) < 1.0e-5f);
+    CHECK(std::fabs(read_float_at(buffer, 8) - 0.2158605f) < 1.0e-5f);
+    CHECK_EQ(read_float_at(buffer, 12), 0.25f);
+
+    const tc_uniform_value linear =
+        uniform_color("u_linear", TC_UNIFORM_LINEAR_COLOR, 4.0f, 0.5f, -2.0f, 0.75f);
+    REQUIRE(termin::pack_material_uniform_value_to_std140_field(linear, "Vec4", buffer.data()));
+    CHECK_EQ(read_float_at(buffer, 0), 4.0f);
+    CHECK_EQ(read_float_at(buffer, 4), 0.5f);
+    CHECK_EQ(read_float_at(buffer, 8), -2.0f);
+    CHECK_EQ(read_float_at(buffer, 12), 0.75f);
+}
+
 TEST_CASE("material UBO LinearColor and Vec4 preserve literal values including HDR") {
     std::array<uint8_t, 16> buffer{};
     const tc_uniform_value linear = uniform_color("u_linear", TC_UNIFORM_LINEAR_COLOR, 4.0f, 0.5f, -2.0f, 0.5f);

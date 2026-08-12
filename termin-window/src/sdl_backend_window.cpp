@@ -451,16 +451,17 @@ namespace termin {
 
         if (impl_->backend == tgfx::BackendType::OpenGL) {
 #ifdef TGFX2_HAS_OPENGL
-            // GL 4.3 core — gives us `layout(binding=N)` on UBOs (GL 4.2+,
-            // needed for the push-constants ring UBO trick at binding 14)
-            // plus `layout(location=N)` on varyings (GL 4.1+). The single
-            // shader source that compiles on Vulkan SPIR-V via shaderc
-            // (`#version 450`) then compiles on this GL context too —
-            // `#version 450 core` is a subset of what 4.3 accepts. macOS
-            // is a loss at core-profile 4.3, but the cross-backend story
-            // is unusable on macOS anyway (no Vulkan natively).
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+            tgfx::GlFeatureTier gl_tier = tgfx::GlFeatureTier::Modern;
+            std::string gl_tier_error;
+            const char* gl_tier_env = std::getenv("TERMIN_OPENGL_TIER");
+            if (!tgfx::parse_desktop_gl_feature_tier(gl_tier_env ? gl_tier_env : "", gl_tier, gl_tier_error)) {
+                tc_log_error("[SDLWindowSystem] %s", gl_tier_error.c_str());
+                throw std::runtime_error(gl_tier_error);
+            }
+            const int gl_major = gl_tier == tgfx::GlFeatureTier::Modern ? 4 : 3;
+            const int gl_minor = gl_tier == tgfx::GlFeatureTier::Modern ? 5 : 3;
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gl_major);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, gl_minor);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
             SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
             SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
@@ -483,7 +484,9 @@ namespace termin {
 
             // OpenGLRenderDevice ctor loads GLAD and validates the live
             // context — it expects MakeCurrent to already have happened.
-            impl_->prepared_device = tgfx::create_device(tgfx::BackendType::OpenGL);
+            tgfx::OpenGLDeviceCreateInfo device_info;
+            device_info.feature_tier = gl_tier;
+            impl_->prepared_device = std::make_unique<tgfx::OpenGLRenderDevice>(device_info);
 
 #else
             throw std::runtime_error("SDLWindowSystem: OpenGL backend not compiled");

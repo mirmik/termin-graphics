@@ -17,6 +17,7 @@
 
 #include "tgfx2/enums.hpp"
 #include "tgfx2/handles.hpp"
+#include "tgfx2/shader_artifact_target.hpp"
 #include "tgfx2/tgfx2_api.h"
 
 #include <cstdint>
@@ -61,9 +62,18 @@ namespace termin {
                                               tgfx::BackendType backend,
                                               tgfx::ShaderStage stage,
                                               std::string& out);
+    TGFX2_API bool tgfx2_shader_artifact_path(const char* shader_uuid,
+                                              tgfx::ShaderArtifactTarget target,
+                                              tgfx::ShaderStage stage,
+                                              std::string& out);
     TGFX2_API bool tgfx2_shader_artifact_path(const ShaderArtifactResolver& resolver,
                                               const char* shader_uuid,
                                               tgfx::BackendType backend,
+                                              tgfx::ShaderStage stage,
+                                              std::string& out);
+    TGFX2_API bool tgfx2_shader_artifact_path(const ShaderArtifactResolver& resolver,
+                                              const char* shader_uuid,
+                                              tgfx::ShaderArtifactTarget target,
                                               tgfx::ShaderStage stage,
                                               std::string& out);
     TGFX2_API bool tgfx2_load_shader_artifact_for_backend(const char* shader_uuid,
@@ -79,6 +89,11 @@ namespace termin {
                                                                      tgfx::BackendType backend,
                                                                      tgfx::ShaderStage stage,
                                                                      std::vector<uint8_t>& out);
+    TGFX2_API bool tgfx2_load_or_compile_shader_artifact_for_target(const ShaderArtifactResolver& resolver,
+                                                                    ::tc_shader* shader,
+                                                                    tgfx::ShaderArtifactTarget target,
+                                                                    tgfx::ShaderStage stage,
+                                                                    std::vector<uint8_t>& out);
     TGFX2_API bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
         const tgfx::EngineShaderStageSource& shader, tgfx::BackendType backend, std::vector<uint8_t>& out);
     TGFX2_API bool
@@ -86,6 +101,11 @@ namespace termin {
                                                                    const tgfx::EngineShaderStageSource& shader,
                                                                    tgfx::BackendType backend,
                                                                    std::vector<uint8_t>& out);
+    TGFX2_API bool
+    tgfx2_load_or_compile_engine_shader_stage_artifact_for_target(const ShaderArtifactResolver& resolver,
+                                                                  const tgfx::EngineShaderStageSource& shader,
+                                                                  tgfx::ShaderArtifactTarget target,
+                                                                  std::vector<uint8_t>& out);
     TGFX2_API bool
     tgfx2_load_shader_artifact(const char* shader_uuid, tgfx::ShaderStage stage, std::vector<uint8_t>& out);
 

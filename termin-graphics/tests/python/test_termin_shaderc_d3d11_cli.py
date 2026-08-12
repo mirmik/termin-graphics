@@ -87,6 +87,8 @@ def test_termin_shaderc_compiles_slang_to_d3d11_cso_with_fake_tools(tmp_path: Pa
     slang_args = json.loads(slang_args_path.read_text(encoding="utf-8"))
     assert slang_args[slang_args.index("-target") + 1] == "hlsl"
     assert "-DTERMIN_NATIVE_CLIP_Y_UP=1" in slang_args
+    assert "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0" in slang_args
+    assert "-DTERMIN_MAX_SHADOW_SAMPLERS=16" in slang_args
     assert slang_args[slang_args.index("-profile") + 1] == "sm_5_0"
     assert slang_args[slang_args.index("-o") + 1] == str(output) + ".hlsl"
 

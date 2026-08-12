@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 
 import pytest
@@ -26,6 +27,8 @@ def test_termin_shaderc_help_describes_compile_debug_options() -> None:
     assert "--slangc <path>" in result.stdout
     assert "--fxc <path>" in result.stdout
     assert "--wgsl-validator <path>" in result.stdout
+    assert "opengl330" in result.stdout
+    assert "webgl2" in result.stdout
     assert "--include-dir <dir>" in result.stdout
     assert "--default-scope <scope>" in result.stdout
     assert "<output>.layout.json" in result.stdout
@@ -196,6 +199,8 @@ def test_termin_shaderc_invokes_fake_slangc_for_vulkan(tmp_path: Path) -> None:
     assert "-matrix-layout-column-major" in slang_args
     assert slang_args[slang_args.index("-reflection-json") + 1] == str(output) + ".reflection.json"
     assert slang_args[slang_args.index("-profile") + 1] == "spirv_1_5"
+    assert "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0" in slang_args
+    assert "-DTERMIN_MAX_SHADOW_SAMPLERS=16" in slang_args
     assert slang_args[slang_args.index("-o") + 1] == str(output)
     include_values = [
         slang_args[i + 1]
@@ -1726,6 +1731,237 @@ def test_builtin_shadow_helper_compiles_with_filtering_and_cascades(tmp_path: Pa
     assert result.returncode == 0, result.stderr
     assert output.is_file()
     assert Path(f"{output}.layout.json").is_file()
+
+
+def test_opengl330_shadow_helper_uses_constrained_static_sampler_budget(tmp_path: Path) -> None:
+    slangc_value = os.environ.get("TERMIN_SLANGC") or shutil.which("slangc")
+    if not slangc_value or not Path(slangc_value).is_file():
+        pytest.skip("slangc is not available")
+
+    source_root = (
+        Path(__file__).resolve().parents[3]
+        / "termin-graphics"
+        / "resources"
+        / "builtin_shaders"
+    )
+    shader = tmp_path / "shadow-budget.slang"
+    shader.write_text(
+        "import termin_shadows;\n"
+        "struct FragmentInput { float3 world_pos : TEXCOORD0; };\n"
+        "[shader(\"fragment\")]\n"
+        "float4 fs_main(FragmentInput input) : SV_Target0 {\n"
+        "    float visibility = compute_shadow_auto(0, input.world_pos);\n"
+        "    return float4(visibility, visibility, visibility, 1.0);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "shadow-budget.frag.glsl"
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "opengl330",
+            "--stage",
+            "fragment",
+            "--entry",
+            "fs_main",
+            "--input",
+            str(shader),
+            "--output",
+            str(output),
+            "--slangc",
+            str(slangc_value),
+            "--include-dir",
+            str(source_root),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    source = output.read_text(encoding="utf-8")
+    assert re.search(r"uniform\s+sampler2DShadow\s+shadow_maps\[8\]", source)
+    assert "shadow_maps[15]" not in source
+    layout = json.loads(Path(f"{output}.layout.json").read_text(encoding="utf-8"))
+    assert any(resource["name"] == "shadow_maps" for resource in layout["resources"])
+
+
+@pytest.mark.parametrize(
+    ("target", "stage", "entry", "source_name", "version_line", "expects_clip_remap"),
+    [
+        ("opengl330", "vertex", "vs_main", "termin-engine-canvas2d-solid.slang", "#version 330", True),
+        ("webgl2", "vertex", "vs_main", "termin-engine-canvas2d-solid.slang", "#version 300 es", True),
+        ("webgl2", "fragment", "fs_main", "termin-engine-canvas2d-texture.slang", "#version 300 es", False),
+    ],
+)
+def test_constrained_gl_targets_cross_compile_real_slang(
+    tmp_path: Path,
+    target: str,
+    stage: str,
+    entry: str,
+    source_name: str,
+    version_line: str,
+    expects_clip_remap: bool,
+) -> None:
+    slangc_value = os.environ.get("TERMIN_SLANGC") or shutil.which("slangc")
+    if not slangc_value or not Path(slangc_value).is_file():
+        pytest.skip("slangc is not available")
+
+    source_root = (
+        Path(__file__).resolve().parents[3]
+        / "termin-graphics"
+        / "resources"
+        / "builtin_shaders"
+    )
+    output = tmp_path / f"canvas.{stage}.glsl"
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            target,
+            "--stage",
+            stage,
+            "--entry",
+            entry,
+            "--input",
+            str(source_root / source_name),
+            "--output",
+            str(output),
+            "--slangc",
+            str(slangc_value),
+            "--include-dir",
+            str(source_root),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    source = output.read_text(encoding="utf-8")
+    assert source.startswith(version_line + "\n")
+    assert "layout(binding" not in source
+    if expects_clip_remap:
+        assert re.search(r"\.y\s*=\s*-.*\.y", source)
+        assert re.search(r"\.z\s*=\s*\(2\.0\s*\*.*\.z\)\s*-.*\.w", source)
+    layout = json.loads(Path(f"{output}.layout.json").read_text(encoding="utf-8"))
+    assert layout["target"] == target
+    if target == "webgl2" and stage == "fragment":
+        assert "uniform highp sampler2D u_texture;" in source
+        texture = next(resource for resource in layout["resources"] if resource["name"] == "u_texture")
+        assert texture["binding"] == 0
+
+
+def test_opengl330_cross_stage_varying_names_match(tmp_path: Path) -> None:
+    slangc_value = os.environ.get("TERMIN_SLANGC") or shutil.which("slangc")
+    if not slangc_value or not Path(slangc_value).is_file():
+        pytest.skip("slangc is not available")
+
+    source_root = Path(__file__).resolve().parents[3] / "termin-graphics" / "resources" / "builtin_shaders"
+    source = source_root / "termin-engine-canvas2d-texture.slang"
+    declarations: dict[str, str] = {}
+    for stage, entry, qualifier in (("vertex", "vs_main", "out"), ("fragment", "fs_main", "in")):
+        output = tmp_path / f"canvas.{stage}.glsl"
+        result = _run_shaderc(
+            [
+                "compile",
+                "--language",
+                "slang",
+                "--target",
+                "opengl330",
+                "--stage",
+                stage,
+                "--entry",
+                entry,
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--slangc",
+                str(slangc_value),
+                "--include-dir",
+                str(source_root),
+            ]
+        )
+        assert result.returncode == 0, result.stderr
+        match = re.search(rf"\b{qualifier}\s+vec2\s+(termin_varying_\d+)\s*;", output.read_text(encoding="utf-8"))
+        assert match
+        declarations[stage] = match.group(1)
+
+    assert declarations["vertex"] == declarations["fragment"]
+
+
+@pytest.mark.parametrize("target", ["opengl330", "webgl2"])
+def test_constrained_gl_program_resources_share_one_binding_universe(
+    tmp_path: Path, target: str
+) -> None:
+    slangc_value = os.environ.get("TERMIN_SLANGC") or shutil.which("slangc")
+    if not slangc_value or not Path(slangc_value).is_file():
+        pytest.skip("slangc is not available")
+
+    vertex = tmp_path / "program.vert.slang"
+    fragment = tmp_path / "program.frag.slang"
+    source_root = Path(__file__).resolve().parents[3] / "termin-graphics" / "resources" / "builtin_shaders"
+    vertex.write_text(
+        "import termin_prelude;\n"
+        "struct FrameData { float4x4 view_projection; };\n"
+        "struct DrawData { float4x4 model; };\n"
+        "[[TerminScope(\"frame\")]] ConstantBuffer<FrameData> per_frame;\n"
+        "[[TerminScope(\"draw\")]] ConstantBuffer<DrawData> draw_data;\n"
+        "[shader(\"vertex\")] float4 vs_main(float3 position : POSITION) : SV_Position {\n"
+        "  return mul(per_frame.view_projection, mul(draw_data.model, float4(position, 1.0)));\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    fragment.write_text(
+        "import termin_prelude;\n"
+        "struct MaterialData { float4 color; };\n"
+        "[[TerminScope(\"material\")]] ConstantBuffer<MaterialData> material;\n"
+        "[shader(\"fragment\")] float4 fs_main() : SV_Target0 { return material.color; }\n",
+        encoding="utf-8",
+    )
+
+    layouts: list[dict] = []
+    for stage, entry, source in (
+        ("vertex", "vs_main", vertex),
+        ("fragment", "fs_main", fragment),
+    ):
+        output = tmp_path / f"program.{stage}.glsl"
+        result = _run_shaderc(
+            [
+                "compile",
+                "--language",
+                "slang",
+                "--target",
+                target,
+                "--stage",
+                stage,
+                "--entry",
+                entry,
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--slangc",
+                str(slangc_value),
+                "--include-dir",
+                str(source_root),
+                "--program-source",
+                str(vertex),
+                "--program-source",
+                str(fragment),
+            ]
+        )
+        assert result.returncode == 0, result.stderr
+        layouts.append(json.loads(Path(f"{output}.layout.json").read_text(encoding="utf-8")))
+
+    bindings = {
+        resource["name"]: resource["binding"]
+        for layout in layouts
+        for resource in layout["resources"]
+        if resource["kind"] == "constant_buffer"
+    }
+    assert set(bindings) == {"per_frame", "draw_data", "material"}
+    assert len(set(bindings.values())) == 3
 
 
 def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:

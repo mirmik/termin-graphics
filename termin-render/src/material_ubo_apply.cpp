@@ -242,6 +242,27 @@ namespace termin {
                 write_float_array(dst, uniform.data.v4, 4);
                 return true;
             }
+            // Backend reflection can only recover the physical float4 shape;
+            // SrgbColor and LinearColor are authored material semantics, not
+            // distinct Slang/SPIR-V/WGSL types. Preserve that semantic from
+            // the typed uniform while writing the reflected vec4 slot.
+            if (uniform.type == TC_UNIFORM_SRGB_COLOR) {
+                const termin::LinearColor linear = termin::srgb_to_linear(termin::SrgbColor{uniform.data.srgb_color.r,
+                                                                                            uniform.data.srgb_color.g,
+                                                                                            uniform.data.srgb_color.b,
+                                                                                            uniform.data.srgb_color.a});
+                const float values[4] = {linear.r, linear.g, linear.b, linear.a};
+                write_float_array(dst, values, 4);
+                return true;
+            }
+            if (uniform.type == TC_UNIFORM_LINEAR_COLOR) {
+                const float values[4] = {uniform.data.linear_color.r,
+                                         uniform.data.linear_color.g,
+                                         uniform.data.linear_color.b,
+                                         uniform.data.linear_color.a};
+                write_float_array(dst, values, 4);
+                return true;
+            }
             return incompatible_type();
         }
         if (type_is(field_type, "SrgbColor")) {

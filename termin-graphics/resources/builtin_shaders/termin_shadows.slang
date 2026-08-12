@@ -3,6 +3,10 @@ import termin_lighting;
 
 public static const int MAX_SHADOW_MAPS = 16;
 
+#ifndef TERMIN_MAX_SHADOW_SAMPLERS
+#define TERMIN_MAX_SHADOW_SAMPLERS 16
+#endif
+
 public struct ShadowBlock {
     int u_shadow_map_count;
     // Explicit matrix rows keep the std140 footprint stable without nested
@@ -24,7 +28,7 @@ public struct ShadowBlock {
 public ConstantBuffer<ShadowBlock> shadow_block;
 
 [[TerminScope("pass")]]
-public Sampler2DShadow shadow_maps[MAX_SHADOW_MAPS];
+public Sampler2DShadow shadow_maps[TERMIN_MAX_SHADOW_SAMPLERS];
 
 public static const int SHADOW_METHOD_HARD = 0;
 public static const int SHADOW_METHOD_PCF = 1;
@@ -67,6 +71,7 @@ public float sample_shadow_map(int sm, float2 uv, float depth) {
         case 5: return shadow_maps[5].SampleCmp(uv, depth);
         case 6: return shadow_maps[6].SampleCmp(uv, depth);
         case 7: return shadow_maps[7].SampleCmp(uv, depth);
+#if TERMIN_MAX_SHADOW_SAMPLERS > 8
         case 8: return shadow_maps[8].SampleCmp(uv, depth);
         case 9: return shadow_maps[9].SampleCmp(uv, depth);
         case 10: return shadow_maps[10].SampleCmp(uv, depth);
@@ -75,6 +80,7 @@ public float sample_shadow_map(int sm, float2 uv, float depth) {
         case 13: return shadow_maps[13].SampleCmp(uv, depth);
         case 14: return shadow_maps[14].SampleCmp(uv, depth);
         case 15: return shadow_maps[15].SampleCmp(uv, depth);
+#endif
         default: return 1.0;
     }
 }

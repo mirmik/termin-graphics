@@ -12,6 +12,7 @@
 #include "tgfx2/handles.hpp"
 #include "tgfx2/i_command_list.hpp"
 #include "tgfx2/shader_artifact_resolver.hpp"
+#include "tgfx2/shader_artifact_target.hpp"
 #include "tgfx2/tgfx2_api.h"
 #include <termin/geom/bounds2.hpp>
 #include <termin/geom/color.hpp>
@@ -60,6 +61,12 @@ namespace tgfx {
         // host integration (FBO invalidation, external texture handles, ...)
         // without a dynamic_cast to the concrete device class.
         virtual BackendType backend_type() const = 0;
+
+        ShaderArtifactTarget shader_artifact_target() const {
+            const ShaderArtifactTarget selected = capabilities().shader_artifact_target;
+            return selected == ShaderArtifactTarget::None ? shader_artifact_target_for_backend(backend_type())
+                                                          : selected;
+        }
 
         virtual AdapterInfo adapter_info() const {
             AdapterInfo info;

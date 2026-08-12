@@ -44,3 +44,6 @@
 [submodule "termin-thirdparty/cgltf"]
 	path = termin-thirdparty/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
+[submodule "termin-thirdparty/spirv-cross"]
+	path = termin-thirdparty/spirv-cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git

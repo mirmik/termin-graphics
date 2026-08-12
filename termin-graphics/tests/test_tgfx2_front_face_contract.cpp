@@ -18,8 +18,10 @@ int main() {
         return 1;
     }
 
-    if (tgfx::gl::to_gl_front_face(tgfx::FrontFace::CCW) != GL_CW ||
-        tgfx::gl::to_gl_front_face(tgfx::FrontFace::CW) != GL_CCW) {
+    if (tgfx::gl::to_gl_front_face(tgfx::FrontFace::CCW, true) != GL_CW ||
+        tgfx::gl::to_gl_front_face(tgfx::FrontFace::CW, true) != GL_CCW ||
+        tgfx::gl::to_gl_front_face(tgfx::FrontFace::CCW, false) != GL_CCW ||
+        tgfx::gl::to_gl_front_face(tgfx::FrontFace::CW, false) != GL_CW) {
         std::fprintf(stderr, "OpenGL logical front-face mapping regressed\n");
         return 1;
     }

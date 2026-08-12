@@ -7,7 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(TGFX2_ENABLE_OPENGL "Enable OpenGL backend for tgfx2" ON)
+option(TGFX2_ENABLE_WEBGL2 "Enable WebGL 2 through the shared constrained-GL backend" ${EMSCRIPTEN})
 option(TGFX2_ENABLE_WEBGPU "Enable WebGPU backend for tgfx2" ${EMSCRIPTEN})
+if(TGFX2_ENABLE_WEBGL2 AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR "TGFX2_ENABLE_WEBGL2 currently requires Emscripten")
+endif()
 if(TGFX2_ENABLE_WEBGPU AND NOT EMSCRIPTEN)
     message(FATAL_ERROR "TGFX2_ENABLE_WEBGPU currently requires Emscripten")
 endif()
@@ -26,6 +30,12 @@ option(TGFX2_ENABLE_SHADERC "Enable runtime GLSL to SPIR-V compilation through s
 
 if(TGFX2_ENABLE_OPENGL)
     find_package(OpenGL REQUIRED)
+endif()
+
+if(TGFX2_ENABLE_OPENGL OR TGFX2_ENABLE_WEBGL2)
+    set(_TGFX2_ENABLE_GL_IMPLEMENTATION ON)
+else()
+    set(_TGFX2_ENABLE_GL_IMPLEMENTATION OFF)
 endif()
 
 # termin-base (provides tc_log shared logging)
@@ -136,6 +146,8 @@ set(TGFX2_SOURCES
     src/tgfx2/line_renderer_common.cpp
     src/tgfx2/line_mesh_builder.cpp
     src/tgfx2/output_transform.cpp
+    src/tgfx2/opengl/gl_features.cpp
+    src/tgfx2/opengl/gl_coordinates.cpp
     src/tgfx2/path2d.cpp
     src/tgfx2/point_cloud_renderer.cpp
     src/tgfx2/screen_space_line_renderer.cpp
@@ -169,6 +181,8 @@ if(EMSCRIPTEN)
         src/tgfx2/engine_shader_catalog.cpp
         src/tgfx2/font_atlas.cpp
         src/tgfx2/output_transform.cpp
+        src/tgfx2/opengl/gl_features.cpp
+        src/tgfx2/opengl/gl_coordinates.cpp
         src/tgfx2/path2d.cpp
         src/tgfx2/point_cloud_renderer.cpp
         src/tgfx2/text2d_renderer.cpp
@@ -200,13 +214,17 @@ target_include_directories(termin_graphics_binding_policy PUBLIC
 target_link_libraries(termin_graphics_binding_policy PRIVATE termin_graphics)
 termin_set_rpath_lib(termin_graphics_binding_policy)
 
-if(TGFX2_ENABLE_OPENGL)
+if(_TGFX2_ENABLE_GL_IMPLEMENTATION)
     list(APPEND TGFX2_SOURCES
+        src/tgfx2/opengl/gl_platform_operations.cpp
         src/tgfx2/opengl/opengl_render_device.cpp
         src/tgfx2/opengl/opengl_texture_readback.cpp
         src/tgfx2/opengl/opengl_command_list.cpp
         src/tgfx2/opengl/opengl_type_conversions.cpp
     )
+    if(TGFX2_ENABLE_WEBGL2)
+        list(APPEND TGFX2_SOURCES src/tgfx2/opengl/webgl2_proc_loader.c)
+    endif()
 endif()
 
 # --- Optional Vulkan backend ---
@@ -336,8 +354,11 @@ add_custom_target(termin_builtin_shaders_build_tree
 )
 add_dependencies(termin_graphics2 termin_builtin_shaders_build_tree)
 
-if(TGFX2_ENABLE_OPENGL)
+if(_TGFX2_ENABLE_GL_IMPLEMENTATION)
     target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_OPENGL)
+endif()
+if(TGFX2_ENABLE_WEBGL2)
+    target_compile_definitions(termin_graphics2 PUBLIC TGFX2_HAS_WEBGL2)
 endif()
 
 if(TGFX2_ENABLE_VULKAN)
@@ -418,12 +439,31 @@ termin_set_rpath_lib(termin_graphics2)
 # configuration with every graphics backend disabled.  Only the optional
 # GLSL-to-SPIR-V implementation below depends on Vulkan/shaderc.
 if(NOT ANDROID AND NOT EMSCRIPTEN)
+    # Constrained GL artifacts are generated from Slang SPIR-V through one
+    # pinned cross-compiler. This avoids unsafe text-level GLSL downgrades and
+    # gives desktop GLSL 330 and WebGL2 ESSL 300 the same source pipeline.
+    set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_GLSL ON CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_MSL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+    add_subdirectory(
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/spirv-cross
+        ${CMAKE_CURRENT_BINARY_DIR}/spirv-cross
+        EXCLUDE_FROM_ALL)
+
     add_executable(termin_shaderc
         tools/termin_shaderc.cpp
         tools/termin_shaderc/compiler_support.cpp
         tools/termin_shaderc/file_io.cpp
         tools/termin_shaderc/backend_patchers.cpp
         tools/termin_shaderc/cli.cpp
+        tools/termin_shaderc/glsl_cross_compiler.cpp
     )
     target_compile_features(termin_shaderc PRIVATE cxx_std_20)
     target_include_directories(termin_shaderc PRIVATE
@@ -436,6 +476,7 @@ if(NOT ANDROID AND NOT EMSCRIPTEN)
         termin_graphics
         termin_graphics_binding_policy
         termin_graphics_process_runner
+        spirv-cross-glsl
     )
     if(TGFX2_ENABLE_VULKAN AND TGFX2_ENABLE_SHADERC)
         target_compile_definitions(termin_shaderc PRIVATE TERMIN_SHADERC_HAS_SHADERC)
@@ -462,7 +503,7 @@ endif()
 set(TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS
     "${_TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS_DEFAULT}"
     CACHE STRING
-    "Semicolon-separated built-in shader artifact targets: vulkan, opengl, d3d11, webgpu")
+    "Semicolon-separated built-in shader artifact targets: vulkan, opengl, opengl330, webgl2, d3d11, webgpu")
 
 if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
     if(NOT TARGET termin_shaderc)
@@ -477,7 +518,7 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
     set(_termin_builtin_shader_artifact_targets
         ${TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS})
     set(_termin_supported_builtin_shader_artifact_targets
-        vulkan opengl d3d11 webgpu)
+        vulkan opengl opengl330 webgl2 d3d11 webgpu)
     if(NOT _termin_builtin_shader_artifact_targets)
         message(FATAL_ERROR
             "TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=ON but no built-in shader artifact targets are enabled")
@@ -489,7 +530,8 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
         endif()
     endforeach()
 
-    set(_termin_builtin_shader_slangc "")
+    unset(_termin_builtin_shader_slangc)
+    unset(_termin_builtin_shader_slangc CACHE)
     if(DEFINED ENV{TERMIN_SLANGC} AND EXISTS "$ENV{TERMIN_SLANGC}")
         set(_termin_builtin_shader_slangc "$ENV{TERMIN_SLANGC}")
     elseif(WIN32 AND DEFINED ENV{VULKAN_SDK} AND EXISTS "$ENV{VULKAN_SDK}/Bin/slangc.exe")
@@ -531,7 +573,8 @@ if(TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS)
     endforeach()
 
     if(WIN32)
-        set(_termin_builtin_shader_fxc "")
+        unset(_termin_builtin_shader_fxc)
+        unset(_termin_builtin_shader_fxc CACHE)
         if(DEFINED ENV{TERMIN_FXC} AND EXISTS "$ENV{TERMIN_FXC}")
             set(_termin_builtin_shader_fxc "$ENV{TERMIN_FXC}")
         else()
@@ -718,6 +761,7 @@ if(BUILD_TGFX2_TESTS)
         tests/test_tgfx2_device_factory.cpp
         tests/test_tgfx2_interop_ownership.cpp
         tests/test_tgfx2_line_mesh_builder.cpp
+        tests/test_tgfx2_gl_features.cpp
         tests/test_tgfx2_point_cloud_contract.cpp
         tests/test_tgfx2_pipeline_cache_stats.cpp
         tests/test_tgfx2_texture_encoding.cpp

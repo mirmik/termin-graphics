@@ -1,4 +1,5 @@
 #include "tgfx2/opengl/opengl_render_device.hpp"
+#include "gl_web_compat.hpp"
 
 #include "tgfx2/pixel_format_utils.hpp"
 
@@ -67,7 +68,7 @@ namespace tgfx {
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, t->target, t->gl_id, 0);
         // Depth-only FBO — disable color read/draw explicitly, otherwise
         // some drivers report incomplete.
-        glDrawBuffer(GL_NONE);
+        gl_web_compat::set_draw_buffer(GL_NONE);
         glReadBuffer(GL_NONE);
 
         bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
@@ -106,7 +107,7 @@ namespace tgfx {
             // (window-space convention). glReadPixels wants bottom-up, so
             // flip Y here — stays a backend-local detail instead of leaking
             // into the caller.
-            const int gl_y = static_cast<int>(t->desc.height) - y - 1;
+            const int gl_y = gl_native_readback_y(gl_coordinates_, static_cast<int>(t->desc.height), y);
             uint8_t pixel[4] = {0, 0, 0, 0};
             glReadBuffer(GL_COLOR_ATTACHMENT0);
             glReadPixels(x, gl_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
@@ -133,12 +134,12 @@ namespace tgfx {
         glGenFramebuffers(1, &fbo);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, t->target, t->gl_id, 0);
-        glDrawBuffer(GL_NONE);
+        gl_web_compat::set_draw_buffer(GL_NONE);
         glReadBuffer(GL_NONE);
 
         bool ok = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
         if (ok) {
-            const int gl_y = static_cast<int>(t->desc.height) - y - 1;
+            const int gl_y = gl_native_readback_y(gl_coordinates_, static_cast<int>(t->desc.height), y);
             glReadPixels(x, gl_y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, out_depth);
         }
 
@@ -303,12 +304,12 @@ namespace tgfx {
         if (kind == PixelReadbackKind::Rgba8) {
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture->target, 0, 0);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture->target, texture->gl_id, 0);
-            glDrawBuffer(GL_COLOR_ATTACHMENT0);
+            gl_web_compat::set_draw_buffer(GL_COLOR_ATTACHMENT0);
             glReadBuffer(GL_COLOR_ATTACHMENT0);
         } else {
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture->target, 0, 0);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture->target, texture->gl_id, 0);
-            glDrawBuffer(GL_NONE);
+            gl_web_compat::set_draw_buffer(GL_NONE);
             glReadBuffer(GL_NONE);
             read_format = GL_DEPTH_COMPONENT;
             read_type = GL_FLOAT;
@@ -328,7 +329,7 @@ namespace tgfx {
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
         // IRenderDevice coordinates are top-down; OpenGL readback coordinates
         // remain bottom-up even with the upper-left clip-control contract.
-        const int gl_y = static_cast<int>(texture->desc.height) - y - 1;
+        const int gl_y = gl_native_readback_y(gl_coordinates_, static_cast<int>(texture->desc.height), y);
         glReadPixels(x, gl_y, 1, 1, read_format, read_type, nullptr);
         slot->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 

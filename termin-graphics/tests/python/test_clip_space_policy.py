@@ -71,22 +71,38 @@ def test_opengl_clip_control_is_validated_and_centralized() -> None:
     root = _repo_root() / "termin-graphics" / "src" / "tgfx2" / "opengl"
     device_source = (root / "opengl_render_device.cpp").read_text(encoding="utf-8")
     command_source = (root / "opengl_command_list.cpp").read_text(encoding="utf-8")
+    operations_source = (root / "gl_platform_operations.cpp").read_text(encoding="utf-8")
+    coordinates_source = (root / "gl_coordinates.cpp").read_text(encoding="utf-8")
 
-    assert "if (s_glClipControl) s_glClipControl" not in device_source
-    assert "OpenGL backend requires OpenGL 4.5 or ARB_clip_control" in device_source
-    assert "glGetIntegerv(GL_CLIP_ORIGIN, &origin)" in device_source
-    assert "glGetIntegerv(GL_CLIP_DEPTH_MODE, &depth_mode)" in device_source
+    assert "glClipControl(" not in device_source
+    assert "\n        glClipControl(" not in command_source
+    assert "glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)" in operations_source
+    assert "glGetIntegerv(GL_CLIP_ORIGIN, &origin)" in operations_source
+    assert "glGetIntegerv(GL_CLIP_DEPTH_MODE, &depth_mode)" in operations_source
+    assert "apply_clip_space_contract(error)" in device_source
     assert "throw std::runtime_error" in device_source
-
-    stale_drain = device_source.index("for (GLenum stale_error = glGetError()")
-    clip_control_call = device_source.index(
-        "s_glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)"
-    )
-    apply_error_check = device_source.index(
-        "const GLenum apply_error = glGetError()"
-    )
+    stale_drain = operations_source.index("for (GLenum stale = glGetError()")
+    clip_control_call = operations_source.index("glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)")
+    apply_error_check = operations_source.index("const GLenum apply_error = glGetError()")
     assert stale_drain < clip_control_call < apply_error_check
-    assert "pre-existing GL error" in device_source
+    assert "pre-existing error" in operations_source
 
     assert "wglGetProcAddress" not in command_source
     assert "device_.enforce_clip_space_contract();" in command_source
+    assert "gl_native_framebuffer_rect(" in command_source
+    assert "framebuffer_height - (top_left_rect.y + top_left_rect.height)" in coordinates_source
+
+
+def test_constrained_gl_prelude_remaps_y_and_depth() -> None:
+    prelude = (
+        _repo_root()
+        / "termin-graphics"
+        / "resources"
+        / "builtin_shaders"
+        / "termin_prelude.slang"
+    ).read_text(encoding="utf-8")
+
+    assert "#if TERMIN_NATIVE_CLIP_Y_UP" in prelude
+    assert "clip.y = -clip.y;" in prelude
+    assert "#if TERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE" in prelude
+    assert "clip.z = 2.0 * clip.z - clip.w;" in prelude

@@ -123,16 +123,17 @@ namespace tgfx::gl {
         return GL_BACK;
     }
 
-    GLenum to_gl_front_face(FrontFace face) {
-        // GL_UPPER_LEFT reverses glFrontFace interpretation, so compensate at the
-        // backend boundary and keep RasterState in logical authoring space.
+    GLenum to_gl_front_face(FrontFace face, bool invert_native_winding) {
+        // GL_UPPER_LEFT reverses glFrontFace interpretation. Constrained GL
+        // instead flips clip Y in the shader and keeps the default lower-left
+        // origin, so its native winding is direct.
         switch (face) {
         case FrontFace::CCW:
-            return GL_CW;
+            return invert_native_winding ? GL_CW : GL_CCW;
         case FrontFace::CW:
-            return GL_CCW;
+            return invert_native_winding ? GL_CCW : GL_CW;
         }
-        return GL_CW;
+        return invert_native_winding ? GL_CW : GL_CCW;
     }
 
     GLenum to_gl_polygon_mode(PolygonMode mode) {

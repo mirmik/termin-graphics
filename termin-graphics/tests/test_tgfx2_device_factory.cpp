@@ -16,6 +16,7 @@
 #include "tgfx2/engine_shader_catalog.hpp"
 #include "tgfx2/enums.hpp"
 #include "tgfx2/shader_artifact_resolver.hpp"
+#include "tgfx2/shader_artifact_target.hpp"
 #include "tgfx2/tc_shader_bridge.hpp"
 #ifdef TGFX2_HAS_VULKAN
 #include "tgfx2/vulkan/vulkan_render_device.hpp"
@@ -233,6 +234,8 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
     fs::create_directories(root / "shaders" / "opengl");
     fs::create_directories(root / "shaders" / "d3d11");
     fs::create_directories(root / "shaders" / "webgpu");
+    fs::create_directories(root / "shaders" / "opengl330");
+    fs::create_directories(root / "shaders" / "webgl2");
 
     const std::string root_str = root.generic_string();
     termin::tgfx2_set_shader_artifact_root(root_str.c_str());
@@ -252,6 +255,19 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
     CHECK(termin::tgfx2_shader_artifact_path(
         "shader-uuid", tgfx::BackendType::WebGPU, tgfx::ShaderStage::Fragment, path));
     CHECK(path == root_str + "/shaders/webgpu/shader-uuid.frag.wgsl");
+
+    CHECK(tgfx::shader_artifact_target_for_backend(tgfx::BackendType::OpenGL) ==
+          tgfx::ShaderArtifactTarget::OpenGL450);
+    CHECK(std::string(tgfx::shader_artifact_target_name(tgfx::ShaderArtifactTarget::OpenGL450)) == "opengl450");
+    CHECK(std::string(tgfx::shader_artifact_target_directory(tgfx::ShaderArtifactTarget::OpenGL450)) == "opengl");
+
+    CHECK(termin::tgfx2_shader_artifact_path(
+        "shader-uuid", tgfx::ShaderArtifactTarget::OpenGL330, tgfx::ShaderStage::Fragment, path));
+    CHECK(path == root_str + "/shaders/opengl330/shader-uuid.frag.glsl");
+
+    CHECK(termin::tgfx2_shader_artifact_path(
+        "shader-uuid", tgfx::ShaderArtifactTarget::WebGL2, tgfx::ShaderStage::Vertex, path));
+    CHECK(path == root_str + "/shaders/webgl2/shader-uuid.vert.glsl");
 
     const fs::path spirv_path = root / "shaders" / "vulkan" / "shader-uuid.frag.spv";
     {

@@ -132,6 +132,8 @@ switch ($VulkanMode) {
     }
 }
 $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
+$TerminBuildBuiltinShaderArtifacts = $TerminEnableOpenGl
+$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") { "d3d11;opengl330" } else { "" }
 $TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
 $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
@@ -236,6 +238,8 @@ $cmakeArgs += @(
     "-DTERMIN_BUILD_WINDOW_TESTS=$TerminBuildWindowTests",
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
+    "-DTERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=$TerminBuildBuiltinShaderArtifacts",
+    "-DTERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS=$TerminBuiltinShaderArtifactTargets",
     "-DTERMIN_ENABLE_SDL=$TerminEnableSdl"
 )
 

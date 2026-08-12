@@ -1,4 +1,5 @@
 #include "tgfx2/opengl/opengl_command_list.hpp"
+#include "gl_web_compat.hpp"
 #include "tgfx2/opengl/opengl_render_device.hpp"
 #include "tgfx2/opengl/opengl_type_conversions.hpp"
 #include "tgfx2/pixel_format_utils.hpp"
@@ -75,27 +76,27 @@ namespace tgfx {
             }
         }
         if (has_srgb_color_attachment)
-            glEnable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(true);
         else
-            glDisable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(false);
 
         // FBO draw-buffer selection is persistent object state in OpenGL, but
         // embedding hosts and direct GL users may modify it between passes.
         // Reassert the ordered mapping on every begin: fragment location N writes
         // GL_COLOR_ATTACHMENT0 + N.
-        if (!pass.colors.empty()) {
+        if (current_fbo_ == 0) {
+            gl_web_compat::set_draw_buffer(GL_BACK);
+            glReadBuffer(GL_BACK);
+        } else if (!pass.colors.empty()) {
             std::array<GLenum, TGFX2_MAX_COLOR_ATTACHMENTS> draw_buffers{};
             for (size_t i = 0; i < pass.colors.size(); ++i) {
                 draw_buffers[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
             }
             glDrawBuffers(static_cast<GLsizei>(pass.colors.size()), draw_buffers.data());
             glReadBuffer(GL_COLOR_ATTACHMENT0);
-        } else if (current_fbo_ != 0) {
-            glDrawBuffer(GL_NONE);
-            glReadBuffer(GL_NONE);
         } else {
-            glDrawBuffer(GL_BACK);
-            glReadBuffer(GL_BACK);
+            gl_web_compat::set_draw_buffer(GL_NONE);
+            glReadBuffer(GL_NONE);
         }
 
         // Re-apply clip-control at the start of every pass. Our ortho
@@ -171,7 +172,7 @@ namespace tgfx {
             glBindFramebuffer(GL_READ_FRAMEBUFFER, current_fbo_);
             glReadBuffer(static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + pending.source_index));
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, destination_fbo);
-            glDrawBuffer(GL_COLOR_ATTACHMENT0);
+            gl_web_compat::set_draw_buffer(GL_COLOR_ATTACHMENT0);
             glBlitFramebuffer(0,
                               0,
                               static_cast<GLint>(pending.width),
@@ -211,8 +212,9 @@ namespace tgfx {
         } else {
             glDisable(GL_CULL_FACE);
         }
-        glFrontFace(gl::to_gl_front_face(raster.front_face));
-        glPolygonMode(GL_FRONT_AND_BACK, gl::to_gl_polygon_mode(raster.polygon_mode));
+        glFrontFace(gl::to_gl_front_face(
+            raster.front_face, device_.gl_coordinates().native_front_face_inverted));
+        device_.gl_operations().apply_polygon_mode(gl::to_gl_polygon_mode(raster.polygon_mode));
         if (raster.depth_bias_enabled) {
             glEnable(GL_POLYGON_OFFSET_FILL);
             glPolygonOffset(raster.depth_bias_slope, raster.depth_bias_constant);
@@ -310,10 +312,23 @@ namespace tgfx {
 
     // --- Resource binding ---
 
-    void bind_bound_resource_binding(OpenGLRenderDevice& device, const BoundResourceBinding& binding) {
+    void bind_bound_resource_binding(OpenGLRenderDevice& device,
+                                     GLuint program,
+                                     const BoundResourceBinding& binding) {
         const OpenGLBindingPlacement& placement = binding.slot.placement.opengl;
         switch (placement.binding_class) {
         case OpenGLBindingClass::UniformBuffer: {
+            if (device.shader_artifact_target() != ShaderArtifactTarget::OpenGL450) {
+                const GLuint block_index = glGetUniformBlockIndex(program, bound_resource_debug_name(binding));
+                if (block_index == GL_INVALID_INDEX) {
+                    tc::Log::error(
+                        "OpenGLCommandList::bind_resource_set: uniform block '%s' is absent from program %u",
+                        bound_resource_debug_name(binding),
+                        program);
+                    break;
+                }
+                glUniformBlockBinding(program, block_index, placement.binding_point);
+            }
             auto* buf = device.get_buffer(binding.value.buffer);
             if (buf) {
                 if (binding.value.range > 0) {
@@ -347,6 +362,14 @@ namespace tgfx {
             auto* tex = device.get_texture(binding.value.texture);
             if (tex) {
                 const GLuint unit = placement.texture_unit + binding.value.array_element;
+                const GLint location = glGetUniformLocation(program, bound_resource_debug_name(binding));
+                if (location >= 0) {
+                    glUniform1i(location, static_cast<GLint>(unit));
+                } else if (device.shader_artifact_target() != ShaderArtifactTarget::OpenGL450) {
+                    tc::Log::error("OpenGLCommandList::bind_resource_set: sampler uniform '%s' is absent from program %u",
+                                   bound_resource_debug_name(binding),
+                                   program);
+                }
                 glActiveTexture(GL_TEXTURE0 + unit);
                 glBindTexture(tex->target, tex->gl_id);
                 auto* samp = device.get_sampler(binding.value.sampler);
@@ -385,9 +408,14 @@ namespace tgfx {
         auto* rs = device_.get_resource_set(set);
         if (!rs)
             return;
+        auto* pipeline = device_.get_pipeline(current_pipeline_);
+        if (!pipeline) {
+            tc::Log::error("OpenGLCommandList::bind_resource_set: no current pipeline");
+            return;
+        }
 
         for_each_dirty_bound_resource_binding(rs->bound_resources.view(), [&](const BoundResourceBinding& b) {
-            bind_bound_resource_binding(device_, b);
+            bind_bound_resource_binding(device_, pipeline->program, b);
         });
     }
 
@@ -475,11 +503,8 @@ namespace tgfx {
         auto byte_offset = current_index_offset_ + first_index * index_size;
         auto* offset_ptr = reinterpret_cast<const void*>(static_cast<uintptr_t>(byte_offset));
 
-        if (vertex_offset != 0) {
-            glDrawElementsBaseVertex(current_topology_, index_count, current_index_type_, offset_ptr, vertex_offset);
-        } else {
-            glDrawElements(current_topology_, index_count, current_index_type_, offset_ptr);
-        }
+        device_.gl_operations().draw_elements(
+            current_topology_, index_count, current_index_type_, offset_ptr, vertex_offset);
     }
 
     void OpenGLCommandList::draw_indexed_instanced(uint32_t index_count,
@@ -504,12 +529,8 @@ namespace tgfx {
         auto byte_offset = current_index_offset_ + first_index * index_size;
         auto* offset_ptr = reinterpret_cast<const void*>(static_cast<uintptr_t>(byte_offset));
 
-        if (vertex_offset != 0) {
-            glDrawElementsInstancedBaseVertex(
-                current_topology_, index_count, current_index_type_, offset_ptr, instance_count, vertex_offset);
-        } else {
-            glDrawElementsInstanced(current_topology_, index_count, current_index_type_, offset_ptr, instance_count);
-        }
+        device_.gl_operations().draw_elements_instanced(
+            current_topology_, index_count, current_index_type_, offset_ptr, instance_count, vertex_offset);
     }
 
     void OpenGLCommandList::dispatch(uint32_t /*group_x*/, uint32_t /*group_y*/, uint32_t /*group_z*/) {
@@ -566,7 +587,7 @@ namespace tgfx {
         // would sidestep this entirely but glad in this project is loaded
         // for GL 4.1 only.
         GLboolean was_scissor = glIsEnabled(GL_SCISSOR_TEST);
-        GLboolean was_framebuffer_srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
+        const bool was_framebuffer_srgb = gl_web_compat::framebuffer_srgb_enabled();
         GLboolean color_mask[4];
         glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
         GLboolean depth_mask = GL_TRUE;
@@ -577,7 +598,7 @@ namespace tgfx {
         // Texture copies are transport operations. They must preserve stored
         // codes even when the previous render pass targeted an sRGB texture.
         if (was_framebuffer_srgb)
-            glDisable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(false);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
@@ -597,7 +618,7 @@ namespace tgfx {
             GLenum draw_buf = GL_COLOR_ATTACHMENT0;
             glDrawBuffers(1, &draw_buf);
         } else {
-            glDrawBuffer(GL_NONE);
+            gl_web_compat::set_draw_buffer(GL_NONE);
             glReadBuffer(GL_NONE);
         }
 
@@ -612,7 +633,7 @@ namespace tgfx {
         if (was_scissor)
             glEnable(GL_SCISSOR_TEST);
         if (was_framebuffer_srgb)
-            glEnable(GL_FRAMEBUFFER_SRGB);
+            gl_web_compat::set_framebuffer_srgb(true);
     }
 
     // --- Dynamic state ---
@@ -625,8 +646,9 @@ namespace tgfx {
     // in begin_render_pass so callers can stay backend-agnostic.
 
     void OpenGLCommandList::set_viewport(int x, int y, int width, int height) {
-        const int gl_y = (cached_fb_height_ > 0) ? (cached_fb_height_ - (y + height)) : y;
-        glViewport(x, gl_y, width, height);
+        const auto rect = gl_native_framebuffer_rect(
+            device_.gl_coordinates(), cached_fb_height_, {x, y, width, height});
+        glViewport(rect.x, rect.y, rect.width, rect.height);
     }
 
     void OpenGLCommandList::set_scissor(int x, int y, int width, int height) {
@@ -646,9 +668,10 @@ namespace tgfx {
         if (width == 0 && height == 0) {
             glDisable(GL_SCISSOR_TEST);
         } else {
-            const int gl_y = (cached_fb_height_ > 0) ? (cached_fb_height_ - (y + height)) : y;
+            const auto rect = gl_native_framebuffer_rect(
+                device_.gl_coordinates(), cached_fb_height_, {x, y, width, height});
             glEnable(GL_SCISSOR_TEST);
-            glScissor(x, gl_y, width, height);
+            glScissor(rect.x, rect.y, rect.width, rect.height);
         }
     }
 

@@ -22,6 +22,8 @@ D3D11_STAGE_EXTENSIONS = {
 TARGET_EXTENSIONS = {
     "vulkan": "spv",
     "opengl": "glsl",
+    "opengl330": "glsl",
+    "webgl2": "glsl",
     "d3d11": "cso",
     "webgpu": "wgsl",
 }
@@ -192,6 +194,9 @@ def main() -> int:
                     "--debug-name",
                     f"{uuid}:{stage}",
                 ]
+                for program_spec in stages.values():
+                    if isinstance(program_spec, dict) and isinstance(program_spec.get("path"), str):
+                        cmd.extend(["--program-source", str(source_dir / program_spec["path"])])
                 if args.slangc:
                     cmd.extend(["--slangc", args.slangc])
                 if args.fxc:

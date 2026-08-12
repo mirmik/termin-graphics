@@ -21,7 +21,8 @@ namespace termin_shaderc {
                 << "\n"
                 << "Compile options:\n"
                 << "  --language <name>    Source language: glsl or slang. Required.\n"
-                << "  --target <name>      Backend target: vulkan, opengl, d3d11, or webgpu.\n"
+                << "  --target <name>      Artifact target: vulkan, opengl, opengl330, webgl2,\n"
+                << "                       d3d11, or webgpu.\n"
                 << "  --stage <name>       Shader stage: vertex, fragment, geometry, or compute.\n"
                 << "  --input <path>       Source file to compile.\n"
                 << "  --output <path>      Artifact output path (.spv for Vulkan Slang/GLSL).\n"
@@ -65,7 +66,8 @@ namespace termin_shaderc {
 
         void usage() {
             std::cerr << "Usage: termin_shaderc compile --language glsl|slang "
-                      << "--target opengl|vulkan|d3d11|webgpu --stage vertex|fragment|geometry|compute "
+                      << "--target opengl|opengl330|webgl2|vulkan|d3d11|webgpu "
+                      << "--stage vertex|fragment|geometry|compute "
                       << "--input <source> --output <artifact> [--entry main]\n"
                       << "Run 'termin_shaderc --help' for full help.\n";
         }

@@ -127,6 +127,8 @@ switch ($VulkanMode) {
 }
 $TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
+$TerminBuildBuiltinShaderArtifacts = $TerminEnableOpenGl
+$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") { "d3d11;opengl330" } else { "" }
 $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnablePch = if ($PchMode -eq "on") { "ON" } else { "OFF" }
@@ -172,6 +174,7 @@ Write-Host "Python:      $pythonExec"
 Write-Host "Vulkan:      $VulkanModeLabel"
 Write-Host "SDL2:        $TerminEnableSdl"
 Write-Host "OpenGL:      $TerminEnableOpenGl"
+Write-Host "Shaders:     $(if ($TerminBuiltinShaderArtifactTargets) { $TerminBuiltinShaderArtifactTargets } else { 'source-only' })"
 Write-Host "ccache:      $TerminUseCcache"
 Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"
@@ -228,6 +231,8 @@ $cmakeArgs += @(
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",
     "-DTERMIN_ENABLE_SDL=$TerminEnableSdl",
     "-DTERMIN_ENABLE_OPENGL=$TerminEnableOpenGl",
+    "-DTERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS=$TerminBuildBuiltinShaderArtifacts",
+    "-DTERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS=$TerminBuiltinShaderArtifactTargets",
     "-DTERMIN_BUILD_EDITOR_MINIMAL=$(if ($Profile -eq 'full') { 'ON' } else { 'OFF' })",
     "-DTERMIN_BUILD_LAUNCHER=$(if ($Profile -eq 'full') { 'ON' } else { 'OFF' })",
     "-DPython_EXECUTABLE=$pythonExec"

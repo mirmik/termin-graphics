@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tgfx2/enums.hpp"
+#include "tgfx2/shader_artifact_target.hpp"
 #include <cstdint>
 #include <string>
 
@@ -43,6 +44,9 @@ namespace tgfx {
 
     struct BackendCapabilities {
         BackendType backend = BackendType::Null;
+        // Concrete offline shader profile selected by this device. None means
+        // the legacy one-to-one BackendType mapping.
+        ShaderArtifactTarget shader_artifact_target = ShaderArtifactTarget::None;
         // Public texture coordinates use a top-left image origin:
         // row 0 in CPU uploads and v=0 in shader sampling both refer to
         // the visual top of the image. Backends with a different native
@@ -60,6 +64,8 @@ namespace tgfx {
         uint32_t max_color_attachments = 4;
         uint32_t max_texture_dimension_2d = 8192;
         uint32_t max_texture_units = 16;
+        uint32_t max_fragment_texture_units = 16;
+        uint32_t max_shadow_maps = 16;
     };
 
 } // namespace tgfx

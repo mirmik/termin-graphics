@@ -207,29 +207,12 @@ namespace termin {
     }
 
     static const char* backend_directory(tgfx::BackendType backend) {
-        switch (backend) {
-        case tgfx::BackendType::OpenGL:
-            return "opengl";
-        case tgfx::BackendType::Vulkan:
-            return "vulkan";
-        case tgfx::BackendType::D3D11:
-            return "d3d11";
-        case tgfx::BackendType::WebGPU:
-            return "webgpu";
-        case tgfx::BackendType::Metal:
-        case tgfx::BackendType::Null:
-            return "";
-        }
-        return "";
+        return tgfx::shader_artifact_target_directory(tgfx::shader_artifact_target_for_backend(backend));
     }
 
-    static const char* backend_stage_suffix(tgfx::BackendType backend, tgfx::ShaderStage stage) {
-        switch (backend) {
-        case tgfx::BackendType::OpenGL:
-        case tgfx::BackendType::Vulkan:
-        case tgfx::BackendType::WebGPU:
-            return stage_extension(stage);
-        case tgfx::BackendType::D3D11:
+    static const char* shader_artifact_target_stage_suffix(tgfx::ShaderArtifactTarget target,
+                                                           tgfx::ShaderStage stage) {
+        if (target == tgfx::ShaderArtifactTarget::D3D11) {
             switch (stage) {
             case tgfx::ShaderStage::Vertex:
                 return "vs";
@@ -240,29 +223,52 @@ namespace termin {
             case tgfx::ShaderStage::Compute:
                 return "cs";
             }
-            return "";
-        case tgfx::BackendType::Metal:
-        case tgfx::BackendType::Null:
+        }
+        return target == tgfx::ShaderArtifactTarget::None ? "" : stage_extension(stage);
+    }
+
+    static const char* shader_artifact_target_extension(tgfx::ShaderArtifactTarget target) {
+        switch (target) {
+        case tgfx::ShaderArtifactTarget::OpenGL450:
+        case tgfx::ShaderArtifactTarget::OpenGL330:
+        case tgfx::ShaderArtifactTarget::WebGL2:
+            return "glsl";
+        case tgfx::ShaderArtifactTarget::Vulkan:
+            return "spv";
+        case tgfx::ShaderArtifactTarget::D3D11:
+            return "cso";
+        case tgfx::ShaderArtifactTarget::WebGPU:
+            return "wgsl";
+        case tgfx::ShaderArtifactTarget::None:
             return "";
         }
         return "";
     }
 
-    static const char* backend_artifact_extension(tgfx::BackendType backend) {
-        switch (backend) {
-        case tgfx::BackendType::OpenGL:
-            return "glsl";
-        case tgfx::BackendType::Vulkan:
-            return "spv";
-        case tgfx::BackendType::D3D11:
-            return "cso";
-        case tgfx::BackendType::WebGPU:
-            return "wgsl";
-        case tgfx::BackendType::Metal:
-        case tgfx::BackendType::Null:
-            return "";
+    static tgfx::BackendType backend_for_shader_artifact_target(tgfx::ShaderArtifactTarget target) {
+        switch (target) {
+        case tgfx::ShaderArtifactTarget::OpenGL450:
+        case tgfx::ShaderArtifactTarget::OpenGL330:
+        case tgfx::ShaderArtifactTarget::WebGL2:
+            return tgfx::BackendType::OpenGL;
+        case tgfx::ShaderArtifactTarget::Vulkan:
+            return tgfx::BackendType::Vulkan;
+        case tgfx::ShaderArtifactTarget::D3D11:
+            return tgfx::BackendType::D3D11;
+        case tgfx::ShaderArtifactTarget::WebGPU:
+            return tgfx::BackendType::WebGPU;
+        case tgfx::ShaderArtifactTarget::None:
+            return tgfx::BackendType::Null;
         }
-        return "";
+        return tgfx::BackendType::Null;
+    }
+
+    static const char* backend_stage_suffix(tgfx::BackendType backend, tgfx::ShaderStage stage) {
+        return shader_artifact_target_stage_suffix(tgfx::shader_artifact_target_for_backend(backend), stage);
+    }
+
+    static const char* backend_artifact_extension(tgfx::BackendType backend) {
+        return shader_artifact_target_extension(tgfx::shader_artifact_target_for_backend(backend));
     }
 
     static const char* stage_name(tgfx::ShaderStage stage) {
@@ -1221,13 +1227,14 @@ namespace termin {
 
     static bool compile_shader_artifact(const ShaderArtifactResolver& resolver,
                                         const tc_shader* shader,
-                                        tgfx::BackendType backend,
+                                        tgfx::ShaderArtifactTarget target,
                                         tgfx::ShaderStage stage,
                                         const std::filesystem::path& artifact_path,
                                         const std::filesystem::path& compiler,
                                         const std::string& compiler_fingerprint,
                                         const std::string& dependency_fingerprint) {
         const tc_shader_language language = (tc_shader_language)shader->language;
+        const tgfx::BackendType backend = backend_for_shader_artifact_target(target);
         if (!shader_language_target_supported(language, backend)) {
             tc_log(TC_LOG_ERROR,
                    "tgfx2 shader dev compile: unsupported language/target for shader '%s': %s -> %s",
@@ -1290,7 +1297,7 @@ namespace termin {
             "--language",
             shader_language_name(language),
             "--target",
-            backend_name(backend),
+            tgfx::shader_artifact_target_name(target),
             "--stage",
             stage_name(stage),
             "--entry",
@@ -1326,7 +1333,7 @@ namespace termin {
                    "tgfx2 shader dev compile: termin_shaderc failed for '%s' stage=%s target=%s rc=%d",
                    shader->name ? shader->name : shader->uuid,
                    stage_name(stage),
-                   backend_name(backend),
+                   tgfx::shader_artifact_target_name(target),
                    rc);
             return false;
         }
@@ -1373,6 +1380,7 @@ namespace termin {
         const tgfx::EngineShaderStageSource& shader;
         tc_shader_language language;
         tgfx::BackendType backend;
+        tgfx::ShaderArtifactTarget target;
         const std::string& source;
         const std::string& source_hash;
         const std::filesystem::path& artifact_path;
@@ -1414,7 +1422,7 @@ namespace termin {
             "--language",
             shader_language_name(request.language),
             "--target",
-            backend_name(request.backend),
+            tgfx::shader_artifact_target_name(request.target),
             "--stage",
             stage_name(request.shader.stage),
             "--entry",
@@ -1439,7 +1447,7 @@ namespace termin {
                    "tgfx2 engine shader dev compile: termin_shaderc failed for '%s' stage=%s target=%s rc=%d",
                    request.shader.name ? request.shader.name : request.shader.uuid,
                    stage_name(request.shader.stage),
-                   backend_name(request.backend),
+                   tgfx::shader_artifact_target_name(request.target),
                    rc);
             return false;
         }
@@ -1460,7 +1468,7 @@ namespace termin {
 
     bool tgfx2_shader_artifact_path(const ShaderArtifactResolver& resolver,
                                     const char* shader_uuid,
-                                    tgfx::BackendType backend,
+                                    tgfx::ShaderArtifactTarget target,
                                     tgfx::ShaderStage stage,
                                     std::string& out) {
         const std::string& root = resolver.artifact_root();
@@ -1474,17 +1482,36 @@ namespace termin {
             return false;
         }
 
-        const char* backend_dir = backend_directory(backend);
-        const char* stage_suffix = backend_stage_suffix(backend, stage);
-        const char* artifact_ext = backend_artifact_extension(backend);
+        const char* backend_dir = tgfx::shader_artifact_target_directory(target);
+        const char* stage_suffix = shader_artifact_target_stage_suffix(target, stage);
+        const char* artifact_ext = shader_artifact_target_extension(target);
         if (!backend_dir[0] || !stage_suffix[0] || !artifact_ext[0]) {
-            tc_log(TC_LOG_ERROR, "tgfx2_shader_artifact_path: unsupported backend/stage for shader '%s'", shader_uuid);
+            tc_log(TC_LOG_ERROR,
+                   "tgfx2_shader_artifact_path: unsupported target='%s' stage for shader '%s'",
+                   tgfx::shader_artifact_target_name(target),
+                   shader_uuid);
             return false;
         }
 
         out = root.empty() ? std::string() : root + "/";
         out += "shaders/" + std::string(backend_dir) + "/" + shader_uuid + "." + stage_suffix + "." + artifact_ext;
         return true;
+    }
+
+    bool tgfx2_shader_artifact_path(const ShaderArtifactResolver& resolver,
+                                    const char* shader_uuid,
+                                    tgfx::BackendType backend,
+                                    tgfx::ShaderStage stage,
+                                    std::string& out) {
+        return tgfx2_shader_artifact_path(
+            resolver, shader_uuid, tgfx::shader_artifact_target_for_backend(backend), stage, out);
+    }
+
+    bool tgfx2_shader_artifact_path(const char* shader_uuid,
+                                    tgfx::ShaderArtifactTarget target,
+                                    tgfx::ShaderStage stage,
+                                    std::string& out) {
+        return tgfx2_shader_artifact_path(tgfx2_legacy_shader_artifact_resolver(), shader_uuid, target, stage, out);
     }
 
     bool tgfx2_shader_artifact_path(const char* shader_uuid,
@@ -1494,13 +1521,13 @@ namespace termin {
         return tgfx2_shader_artifact_path(tgfx2_legacy_shader_artifact_resolver(), shader_uuid, backend, stage, out);
     }
 
-    static bool load_shader_artifact_for_backend(const ShaderArtifactResolver& resolver,
-                                                 const char* shader_uuid,
-                                                 tgfx::BackendType backend,
-                                                 tgfx::ShaderStage stage,
-                                                 std::vector<uint8_t>& out) {
+    static bool load_shader_artifact_for_target(const ShaderArtifactResolver& resolver,
+                                                const char* shader_uuid,
+                                                tgfx::ShaderArtifactTarget target,
+                                                tgfx::ShaderStage stage,
+                                                std::vector<uint8_t>& out) {
         std::string path;
-        if (!tgfx2_shader_artifact_path(resolver, shader_uuid, backend, stage, path)) {
+        if (!tgfx2_shader_artifact_path(resolver, shader_uuid, target, stage, path)) {
             return false;
         }
 
@@ -1519,29 +1546,33 @@ namespace termin {
                                                 tgfx::BackendType backend,
                                                 tgfx::ShaderStage stage,
                                                 std::vector<uint8_t>& out) {
-        return load_shader_artifact_for_backend(
-            tgfx2_legacy_shader_artifact_resolver(), shader_uuid, backend, stage, out);
+        return load_shader_artifact_for_target(tgfx2_legacy_shader_artifact_resolver(),
+                                               shader_uuid,
+                                               tgfx::shader_artifact_target_for_backend(backend),
+                                               stage,
+                                               out);
     }
 
-    bool tgfx2_load_or_compile_shader_artifact_for_backend(const ShaderArtifactResolver& resolver,
-                                                           ::tc_shader* shader,
-                                                           tgfx::BackendType backend,
-                                                           tgfx::ShaderStage stage,
-                                                           std::vector<uint8_t>& out) {
+    bool tgfx2_load_or_compile_shader_artifact_for_target(const ShaderArtifactResolver& resolver,
+                                                          ::tc_shader* shader,
+                                                          tgfx::ShaderArtifactTarget target,
+                                                          tgfx::ShaderStage stage,
+                                                          std::vector<uint8_t>& out) {
         if (!shader) {
             tc_log(TC_LOG_ERROR, "tgfx2_load_or_compile_shader_artifact_for_backend: shader is NULL");
             return false;
         }
 
         std::string path_text;
-        if (!tgfx2_shader_artifact_path(resolver, shader->uuid, backend, stage, path_text)) {
+        if (!tgfx2_shader_artifact_path(resolver, shader->uuid, target, stage, path_text)) {
             return false;
         }
         const std::filesystem::path artifact_path(path_text);
+        const tgfx::BackendType backend = backend_for_shader_artifact_target(target);
 
         const bool dev_compile = resolver.dev_compile_enabled();
         if (!dev_compile) {
-            if (!load_shader_artifact_for_backend(resolver, shader->uuid, backend, stage, out)) {
+            if (!load_shader_artifact_for_target(resolver, shader->uuid, target, stage, out)) {
                 return false;
             }
             return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
@@ -1587,7 +1618,7 @@ namespace termin {
         out.clear();
         if (!compile_shader_artifact(resolver,
                                      shader,
-                                     backend,
+                                     target,
                                      stage,
                                      artifact_path,
                                      *compiler,
@@ -1601,6 +1632,15 @@ namespace termin {
         return apply_shader_resource_layout_sidecar(resolver, shader, artifact_path);
     }
 
+    bool tgfx2_load_or_compile_shader_artifact_for_backend(const ShaderArtifactResolver& resolver,
+                                                           ::tc_shader* shader,
+                                                           tgfx::BackendType backend,
+                                                           tgfx::ShaderStage stage,
+                                                           std::vector<uint8_t>& out) {
+        return tgfx2_load_or_compile_shader_artifact_for_target(
+            resolver, shader, tgfx::shader_artifact_target_for_backend(backend), stage, out);
+    }
+
     bool tgfx2_load_or_compile_shader_artifact_for_backend(::tc_shader* shader,
                                                            tgfx::BackendType backend,
                                                            tgfx::ShaderStage stage,
@@ -1609,15 +1649,16 @@ namespace termin {
             tgfx2_legacy_shader_artifact_resolver(), shader, backend, stage, out);
     }
 
-    bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(const ShaderArtifactResolver& resolver,
-                                                                        const tgfx::EngineShaderStageSource& shader,
-                                                                        tgfx::BackendType backend,
-                                                                        std::vector<uint8_t>& out) {
+    bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_target(const ShaderArtifactResolver& resolver,
+                                                                       const tgfx::EngineShaderStageSource& shader,
+                                                                       tgfx::ShaderArtifactTarget target,
+                                                                       std::vector<uint8_t>& out) {
         std::string path_text;
-        if (!tgfx2_shader_artifact_path(resolver, shader.uuid, backend, shader.stage, path_text)) {
+        if (!tgfx2_shader_artifact_path(resolver, shader.uuid, target, shader.stage, path_text)) {
             return false;
         }
         const std::filesystem::path artifact_path(path_text);
+        const tgfx::BackendType backend = backend_for_shader_artifact_target(target);
 
         tc_shader_language language = TC_SHADER_LANGUAGE_UNSPECIFIED;
         if (!shader_language_from_name(shader.language, language)) {
@@ -1630,7 +1671,7 @@ namespace termin {
 
         const bool dev_compile = resolver.dev_compile_enabled();
         if (!dev_compile) {
-            return load_shader_artifact_for_backend(resolver, shader.uuid, backend, shader.stage, out);
+            return load_shader_artifact_for_target(resolver, shader.uuid, target, shader.stage, out);
         }
 
         const std::string source_filename = builtin_source_filename(shader.source_resource_path);
@@ -1680,6 +1721,7 @@ namespace termin {
         const EngineShaderStageCompileRequest compile_request{shader,
                                                               language,
                                                               backend,
+                                                              target,
                                                               source,
                                                               source_hash,
                                                               artifact_path,
@@ -1690,6 +1732,14 @@ namespace termin {
             return false;
         }
         return read_binary_file(artifact_path, out);
+    }
+
+    bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(const ShaderArtifactResolver& resolver,
+                                                                        const tgfx::EngineShaderStageSource& shader,
+                                                                        tgfx::BackendType backend,
+                                                                        std::vector<uint8_t>& out) {
+        return tgfx2_load_or_compile_engine_shader_stage_artifact_for_target(
+            resolver, shader, tgfx::shader_artifact_target_for_backend(backend), out);
     }
 
     bool tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(const tgfx::EngineShaderStageSource& shader,

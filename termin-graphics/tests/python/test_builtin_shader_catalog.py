@@ -81,3 +81,16 @@ def test_builtin_shader_webgpu_artifact_name_uses_wgsl_extension() -> None:
         module.artifact_name("termin-engine-example", "webgpu", "compute")
         == "termin-engine-example.comp.wgsl"
     )
+
+
+def test_builtin_shader_constrained_gl_artifact_names_are_distinct() -> None:
+    module = _catalog_module()
+
+    assert (
+        module.artifact_name("termin-engine-example", "opengl330", "vertex")
+        == "termin-engine-example.vert.glsl"
+    )
+    assert (
+        module.artifact_name("termin-engine-example", "webgl2", "fragment")
+        == "termin-engine-example.frag.glsl"
+    )

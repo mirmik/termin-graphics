@@ -204,10 +204,42 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL)
         PRIVATE SDL_MAIN_HANDLED)
     termin_copy_sdl2_runtime(termin_window_sdl_window_system_lifecycle)
 
+    add_executable(termin_window_opengl33_tier
+        tests/test_opengl33_tier.cpp)
+    target_link_libraries(termin_window_opengl33_tier PRIVATE termin_window)
+    target_compile_definitions(termin_window_opengl33_tier
+        PRIVATE
+            SDL_MAIN_HANDLED
+            TGFX2_OPENGL33_SHADER_ROOT="${CMAKE_BINARY_DIR}/share/termin"
+            TGFX2_OPENGL33_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf")
+    if(TARGET termin_builtin_shader_artifacts)
+        add_dependencies(termin_window_opengl33_tier termin_builtin_shader_artifacts)
+    endif()
+    termin_copy_sdl2_runtime(termin_window_opengl33_tier)
+
 endif()
 
 if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
    AND TERMIN_WINDOW_BUILD_WINDOW_TESTS)
+
+    add_test(NAME termin_window_opengl33_tier
+        COMMAND termin_window_opengl33_tier)
+    set(_termin_opengl33_test_environment
+        "TERMIN_BACKEND=opengl"
+        "TERMIN_OPENGL_TIER=opengl33")
+    if(UNIX AND NOT APPLE)
+        # Mesa otherwise returns its highest core version even for a 3.3
+        # request. Constrain the CI context so the smoke proves that no 4.x
+        # entry point or GLSL version leaked into the advertised tier.
+        list(APPEND _termin_opengl33_test_environment
+            "MESA_GL_VERSION_OVERRIDE=3.3"
+            "MESA_GLSL_VERSION_OVERRIDE=330")
+    endif()
+    set_tests_properties(termin_window_opengl33_tier PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT "${_termin_opengl33_test_environment}"
+        SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "SDL_InitSubSystem failed|No available video device|Could not initialize OpenGL")
 
     add_test(NAME termin_window_backend_triangle
         COMMAND termin_window_backend_triangle)
@@ -284,6 +316,9 @@ if(TERMIN_WINDOW_BUILD_TESTS AND TERMIN_WINDOW_HAS_SDL
             "termin:capability:window"
             "termin:capability:opengl")
         termin_add_test_labels(termin_window_sdl_window_system_lifecycle
+            "termin:capability:window"
+            "termin:capability:opengl")
+        termin_add_test_labels(termin_window_opengl33_tier
             "termin:capability:window"
             "termin:capability:opengl")
         if(TGFX2_ENABLE_VULKAN)

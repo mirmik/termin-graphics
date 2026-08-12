@@ -23,7 +23,7 @@ namespace tgfx::gl {
     GLenum to_gl_blend_factor(BlendFactor f);
     GLenum to_gl_blend_op(BlendOp op);
     GLenum to_gl_cull_mode(CullMode mode);
-    GLenum to_gl_front_face(FrontFace face);
+    GLenum to_gl_front_face(FrontFace face, bool invert_native_winding);
     GLenum to_gl_polygon_mode(PolygonMode mode);
     GLenum to_gl_topology(PrimitiveTopology topo);
     GLenum to_gl_filter(FilterMode mode);

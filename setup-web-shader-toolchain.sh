@@ -25,7 +25,8 @@ NAGA_CRATE="$(read_lock naga_cli.crate)"
 
 NAGA_DIR="$TOOLCHAIN_ROOT/naga-$NAGA_VERSION"
 
-SLANGC_PATH="$("$SCRIPT_DIR/setup-slang-toolchain.sh" --print-path)"
+SLANGC_PATH="$(python3 "$SCRIPT_DIR/scripts/install_slang_toolchain.py" \
+    --install-root "$TOOLCHAIN_ROOT" --no-configure --print-path)"
 
 if [[ ! -x "$NAGA_DIR/bin/naga" ]]; then
     cargo install "$NAGA_CRATE" --version "$NAGA_VERSION" --locked --root "$NAGA_DIR"

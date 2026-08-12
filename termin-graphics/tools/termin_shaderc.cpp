@@ -1,6 +1,7 @@
 #include "termin_shaderc/backend_patchers.hpp"
 #include "termin_shaderc/cli.hpp"
 #include "termin_shaderc/compiler_support.hpp"
+#include "termin_shaderc/glsl_cross_compiler.hpp"
 
 #ifdef TERMIN_SHADERC_HAS_SHADERC
 #include <shaderc/shaderc.hpp>
@@ -206,7 +207,7 @@ namespace termin_shaderc::internal {
     }
 
     static tgfx::BackendType backend_type_for_target(const std::string& target) {
-        if (target == "opengl")
+        if (target == "opengl" || target == "opengl330" || target == "webgl2")
             return tgfx::BackendType::OpenGL;
         if (target == "d3d11")
             return tgfx::BackendType::D3D11;
@@ -306,6 +307,44 @@ namespace termin_shaderc::internal {
                                              bool normalize_transient_resources,
                                              const std::string& target) {
         const tgfx::BackendType backend = backend_type_for_target(target);
+        if (target == "opengl330" || target == "webgl2") {
+            // Constrained GL profiles guarantee only 16 fragment texture
+            // units and do not support descriptor-style binding qualifiers.
+            // Their sidecars therefore describe a compact per-program plan;
+            // the runtime connects these symbolic names to native uniform
+            // blocks and sampler uniforms after link.
+            uint32_t next_uniform_buffer = 0;
+            uint32_t next_storage_buffer = 0;
+            uint32_t next_texture_unit = 0;
+            uint32_t next_image_unit = 0;
+            for (ShaderResourceBinding& resource : resources) {
+                resource.set = 0;
+                const tgfx::ShaderResourceKind kind = shader_resource_kind_for_layout(resource.kind);
+                switch (kind) {
+                case tgfx::ShaderResourceKind::ConstantBuffer:
+                    resource.binding = next_uniform_buffer++;
+                    break;
+                case tgfx::ShaderResourceKind::StorageBuffer:
+                    resource.binding = next_storage_buffer++;
+                    break;
+                case tgfx::ShaderResourceKind::Texture:
+                    resource.binding = next_texture_unit++;
+                    break;
+                case tgfx::ShaderResourceKind::Sampler:
+                    // Separate GLSL sampler objects share the texture-unit
+                    // namespace. Slang's combined image/sampler path normally
+                    // filters these entries before the sidecar is emitted.
+                    resource.binding = next_texture_unit++;
+                    break;
+                case tgfx::ShaderResourceKind::StorageTexture:
+                    resource.binding = next_image_unit++;
+                    break;
+                case tgfx::ShaderResourceKind::None:
+                    break;
+                }
+            }
+            return;
+        }
         for (size_t index = 0; index < resources.size(); ++index) {
             ShaderResourceBinding& resource = resources[index];
             resource.set = 0;
@@ -1081,9 +1120,9 @@ namespace termin_shaderc::internal {
         return resources;
     }
 
-    static bool assign_d3d11_program_register_placement(const CompileOptions& options,
-                                                        const std::vector<std::string>& include_dirs,
-                                                        std::vector<ShaderResourceBinding>& stage_resources) {
+    static bool assign_program_resource_placement(const CompileOptions& options,
+                                                  const std::vector<std::string>& include_dirs,
+                                                  std::vector<ShaderResourceBinding>& stage_resources) {
         constexpr uint32_t kD3D11PushConstantRegister = 13;
         if (options.program_sources.empty()) {
             return true;
@@ -1119,15 +1158,20 @@ namespace termin_shaderc::internal {
                   [](const ShaderResourceBinding& a, const ShaderResourceBinding& b) {
                       return std::tie(a.binding, a.kind, a.name) < std::tie(b.binding, b.kind, b.name);
                   });
-        assign_d3d11_register_placement(program_resources);
+        const bool is_d3d11 = options.target == "d3d11";
+        if (is_d3d11) {
+            assign_d3d11_register_placement(program_resources);
+        }
 
-        for (const ShaderResourceBinding& program_resource : program_resources) {
-            if (program_resource.d3d11_register_class == "b" &&
-                program_resource.d3d11_register_index >= kD3D11PushConstantRegister) {
-                std::cerr << "termin_shaderc: shader program requires more than " << kD3D11PushConstantRegister
-                          << " D3D11 constant-buffer registers; b" << kD3D11PushConstantRegister
-                          << " is reserved for push constants\n";
-                return false;
+        if (is_d3d11) {
+            for (const ShaderResourceBinding& program_resource : program_resources) {
+                if (program_resource.d3d11_register_class == "b" &&
+                    program_resource.d3d11_register_index >= kD3D11PushConstantRegister) {
+                    std::cerr << "termin_shaderc: shader program requires more than " << kD3D11PushConstantRegister
+                              << " D3D11 constant-buffer registers; b" << kD3D11PushConstantRegister
+                              << " is reserved for push constants\n";
+                    return false;
+                }
             }
         }
 
@@ -1141,8 +1185,12 @@ namespace termin_shaderc::internal {
                           << "' is absent from the program resource universe\n";
                 return false;
             }
-            stage_resource.d3d11_register_class = placement->d3d11_register_class;
-            stage_resource.d3d11_register_index = placement->d3d11_register_index;
+            stage_resource.set = placement->set;
+            stage_resource.binding = placement->binding;
+            if (is_d3d11) {
+                stage_resource.d3d11_register_class = placement->d3d11_register_class;
+                stage_resource.d3d11_register_index = placement->d3d11_register_index;
+            }
         }
         return true;
     }
@@ -1414,21 +1462,45 @@ namespace termin_shaderc::internal {
         std::string slang_target;
         std::vector<std::string> extra_args;
         std::string native_clip_y_up_define;
+        std::string native_clip_depth_define;
+        std::string max_shadow_samplers_define;
         std::string shader_target_vulkan_define;
         std::string d3d11_profile;
+        const bool is_cross_glsl = options.target == "opengl330" || options.target == "webgl2";
         if (options.target == "vulkan") {
             slang_target = "spirv";
             native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=0";
+            native_clip_depth_define = "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0";
+            max_shadow_samplers_define = "-DTERMIN_MAX_SHADOW_SAMPLERS=16";
             shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=1";
             extra_args = {"-profile", "spirv_1_5"};
         } else if (options.target == "opengl") {
             slang_target = "glsl";
             native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=0";
+            native_clip_depth_define = "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0";
+            max_shadow_samplers_define = "-DTERMIN_MAX_SHADOW_SAMPLERS=16";
             shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
             extra_args = {"-profile", "glsl_450"};
+        } else if (is_cross_glsl) {
+            if (options.stage == "geometry" && options.target == "webgl2") {
+                std::cerr << "termin_shaderc: WebGL2 does not support geometry shaders\n";
+                return false;
+            }
+            if (options.stage == "compute" && options.target == "webgl2") {
+                std::cerr << "termin_shaderc: WebGL2 does not support compute shaders\n";
+                return false;
+            }
+            slang_target = "spirv";
+            native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
+            native_clip_depth_define = "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=1";
+            max_shadow_samplers_define = "-DTERMIN_MAX_SHADOW_SAMPLERS=8";
+            shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
+            extra_args = {"-profile", "spirv_1_3"};
         } else if (options.target == "d3d11") {
             slang_target = "hlsl";
             native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
+            native_clip_depth_define = "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0";
+            max_shadow_samplers_define = "-DTERMIN_MAX_SHADOW_SAMPLERS=16";
             shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
             d3d11_profile = d3d11_profile_for_stage(options.stage);
             if (d3d11_profile.empty()) {
@@ -1443,6 +1515,8 @@ namespace termin_shaderc::internal {
             }
             slang_target = "wgsl";
             native_clip_y_up_define = "-DTERMIN_NATIVE_CLIP_Y_UP=1";
+            native_clip_depth_define = "-DTERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE=0";
+            max_shadow_samplers_define = "-DTERMIN_MAX_SHADOW_SAMPLERS=16";
             shader_target_vulkan_define = "-DTERMIN_SHADER_TARGET_VULKAN=0";
         } else {
             std::cerr << "termin_shaderc: unsupported target: " << options.target << "\n";
@@ -1478,7 +1552,8 @@ namespace termin_shaderc::internal {
             return false;
         }
         const bool is_d3d11 = options.target == "d3d11";
-        const std::filesystem::path slang_output_path(is_d3d11 ? options.output + ".hlsl" : options.output);
+        const std::filesystem::path slang_output_path(
+            is_d3d11 ? options.output + ".hlsl" : (is_cross_glsl ? options.output + ".spv" : options.output));
         const std::filesystem::path reflection_path(options.output + ".reflection.json");
         if (!ensure_parent_directory(slang_output_path, "Slang output") ||
             !ensure_parent_directory(reflection_path, "Slang reflection") ||
@@ -1499,6 +1574,8 @@ namespace termin_shaderc::internal {
             "-target",
             slang_target,
             native_clip_y_up_define,
+            native_clip_depth_define,
+            max_shadow_samplers_define,
             shader_target_vulkan_define,
             *matrix_layout_arg,
         };
@@ -1520,6 +1597,22 @@ namespace termin_shaderc::internal {
                       << "\n";
             return false;
         }
+        if (is_cross_glsl) {
+            std::string cross_error;
+            const GlslCrossProfile profile = options.target == "opengl330" ? GlslCrossProfile::Desktop330
+                                                                           : GlslCrossProfile::Es300;
+            if (!cross_compile_spirv_to_glsl(slang_output_path, options.output, profile, cross_error)) {
+                std::cerr << "termin_shaderc: SPIR-V cross-compilation failed for target " << options.target << ": "
+                          << cross_error << "\n";
+                std::error_code ec;
+                std::filesystem::remove(options.output, ec);
+                std::filesystem::remove(reflection_path, ec);
+                if (!std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+                    std::filesystem::remove(slang_output_path, ec);
+                }
+                return false;
+            }
+        }
         std::vector<ShaderResourceBinding> resources;
         if (!collect_resource_bindings(options, source, reflection_path, resources)) {
             std::error_code ec;
@@ -1529,6 +1622,14 @@ namespace termin_shaderc::internal {
             if (is_d3d11 && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
                 std::filesystem::remove(slang_output_path, ec);
             }
+            return false;
+        }
+        const bool constrained_gl = options.target == "opengl330" || options.target == "webgl2";
+        if (constrained_gl && !assign_program_resource_placement(options, include_dirs, resources)) {
+            std::error_code ec;
+            std::filesystem::remove(reflection_path, ec);
+            std::filesystem::remove(options.output, ec);
+            std::filesystem::remove(options.output + ".layout.json", ec);
             return false;
         }
         if (is_d3d11) {
@@ -1543,7 +1644,7 @@ namespace termin_shaderc::internal {
                 std::filesystem::remove(reflection_path, ec);
                 return false;
             }
-            if (!assign_d3d11_program_register_placement(options, include_dirs, resources)) {
+            if (!assign_program_resource_placement(options, include_dirs, resources)) {
                 std::error_code ec;
                 std::filesystem::remove(options.output, ec);
                 std::filesystem::remove(options.output + ".layout.json", ec);
@@ -1611,6 +1712,8 @@ namespace termin_shaderc::internal {
                            filter_slang_opengl_resources_for_glsl(options, resources) &&
                            patch_slang_opengl_glsl_resource_bindings(options, resources) &&
                            write_resource_layout_sidecar(options, resources);
+        } else if (is_cross_glsl) {
+            wrote_layout = write_resource_layout_sidecar(options, resources);
         } else if (options.target == "d3d11") {
             wrote_layout = write_resource_layout_sidecar(options, resources);
         } else if (options.target == "webgpu") {
@@ -1627,7 +1730,7 @@ namespace termin_shaderc::internal {
         }
         std::error_code ec;
         std::filesystem::remove(reflection_path, ec);
-        if (is_d3d11 && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
+        if ((is_d3d11 || is_cross_glsl) && !std::getenv("TERMIN_SHADERC_KEEP_INTERMEDIATE")) {
             std::filesystem::remove(slang_output_path, ec);
         }
         if (!wrote_layout && options.target == "webgpu") {

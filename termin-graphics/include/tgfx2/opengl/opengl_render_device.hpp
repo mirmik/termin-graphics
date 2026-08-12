@@ -7,9 +7,16 @@
 #include <vector>
 
 #include "tgfx2/i_render_device.hpp"
+#include "tgfx2/opengl/gl_features.hpp"
+#include "tgfx2/opengl/gl_coordinates.hpp"
+#include "tgfx2/opengl/gl_platform_operations.hpp"
 #include "tgfx2/tgfx2_api.h"
 
 namespace tgfx {
+
+    struct OpenGLDeviceCreateInfo {
+        GlFeatureTier feature_tier = GlFeatureTier::Modern;
+    };
 
     // Internal GL resource types
 
@@ -42,6 +49,7 @@ namespace tgfx {
     struct GLShaderModule {
         GLuint gl_shader = 0;
         ShaderStage stage;
+        std::string debug_name;
     };
 
     struct GLPipeline {
@@ -126,6 +134,11 @@ namespace tgfx {
         HandlePool<GLResourceSet> resource_sets_;
 
         BackendCapabilities caps_;
+        AdapterInfo adapter_info_;
+        GlFeatureTier requested_tier_ = GlFeatureTier::Modern;
+        GlFeatureSet gl_features_;
+        GlCoordinateContract gl_coordinates_;
+        std::unique_ptr<GlPlatformOperations> gl_operations_;
 
         std::map<FBOKey, GLuint> fbo_cache_;
 
@@ -177,13 +190,28 @@ namespace tgfx {
         bool ring_ubo_initialized_ = false;
 
     public:
-        OpenGLRenderDevice();
+        explicit OpenGLRenderDevice(const OpenGLDeviceCreateInfo& info = {});
         ~OpenGLRenderDevice() override;
 
         BackendType backend_type() const override {
             return BackendType::OpenGL;
         }
         BackendCapabilities capabilities() const override;
+        AdapterInfo adapter_info() const override {
+            return adapter_info_;
+        }
+        const GlFeatureSet& gl_features() const {
+            return gl_features_;
+        }
+        const GlCoordinateContract& gl_coordinates() const {
+            return gl_coordinates_;
+        }
+        GlPlatformOperations& gl_operations() {
+            return *gl_operations_;
+        }
+        const GlPlatformOperations& gl_operations() const {
+            return *gl_operations_;
+        }
         void wait_idle() override;
 
         BufferHandle create_buffer(const BufferDesc& desc) override;

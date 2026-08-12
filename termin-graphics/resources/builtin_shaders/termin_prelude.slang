@@ -13,6 +13,10 @@ public struct TerminScopeAttribute
 #define TERMIN_NATIVE_CLIP_Y_UP 0
 #endif
 
+#ifndef TERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE
+#define TERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE 0
+#endif
+
 // Only Vulkan currently exposes the native multiview view index to Slang
 // shader stages. Other backends compile multiview sources as their supported
 // mono equivalent and reject multiview execution at the render-device layer.
@@ -24,6 +28,9 @@ public float4 termin_to_native_clip(float4 clip)
 {
 #if TERMIN_NATIVE_CLIP_Y_UP
     clip.y = -clip.y;
+#endif
+#if TERMIN_NATIVE_CLIP_DEPTH_NEGATIVE_ONE_TO_ONE
+    clip.z = 2.0 * clip.z - clip.w;
 #endif
     return clip;
 }

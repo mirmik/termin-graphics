@@ -1298,14 +1298,14 @@ namespace tgfx {
         // conversion happens in termin-engine-fsq.vert.slang.
         BufferDesc vbo_desc;
         vbo_desc.size = static_cast<uint64_t>(sizeof(FSQ_VERTICES));
-        vbo_desc.usage = BufferUsage::Vertex;
+        vbo_desc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
         fsq_vbo_ = device_.create_buffer(vbo_desc);
         device_.upload_buffer(fsq_vbo_, {reinterpret_cast<const uint8_t*>(FSQ_VERTICES), sizeof(FSQ_VERTICES)});
 
         // Create IBO
         BufferDesc ibo_desc;
         ibo_desc.size = sizeof(FSQ_INDICES);
-        ibo_desc.usage = BufferUsage::Index;
+        ibo_desc.usage = BufferUsage::Index | BufferUsage::CopyDst;
         fsq_ibo_ = device_.create_buffer(ibo_desc);
         device_.upload_buffer(fsq_ibo_, {reinterpret_cast<const uint8_t*>(FSQ_INDICES), sizeof(FSQ_INDICES)});
 
@@ -1314,15 +1314,20 @@ namespace tgfx {
         ShaderDesc vs_desc;
         vs_desc.stage = fsq_shader.stage;
         vs_desc.debug_name = std::string(fsq_shader.uuid) + ":vertex";
+        vs_desc.entry_point = fsq_shader.entry_point;
         std::vector<uint8_t> shader_artifact;
-        if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_backend(
-                device_.shader_artifact_resolver(), fsq_shader, device_.backend_type(), shader_artifact)) {
+        if (!termin::tgfx2_load_or_compile_engine_shader_stage_artifact_for_target(
+                device_.shader_artifact_resolver(), fsq_shader, device_.shader_artifact_target(), shader_artifact)) {
             tc_log(TC_LOG_ERROR,
                    "RenderContext2: failed to load fullscreen quad shader artifact for backend=%s",
                    render_context_backend_name(device_.backend_type()));
             return;
         }
-        if (device_.backend_type() == BackendType::OpenGL) {
+        const ShaderArtifactTarget artifact_target = device_.shader_artifact_target();
+        if (artifact_target == ShaderArtifactTarget::OpenGL450 ||
+            artifact_target == ShaderArtifactTarget::OpenGL330 ||
+            artifact_target == ShaderArtifactTarget::WebGL2 ||
+            artifact_target == ShaderArtifactTarget::WebGPU) {
             vs_desc.source.assign(reinterpret_cast<const char*>(shader_artifact.data()), shader_artifact.size());
         } else {
             vs_desc.bytecode = std::move(shader_artifact);
