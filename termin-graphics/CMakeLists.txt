@@ -129,6 +129,7 @@ set(TGFX2_SOURCES
     src/tgfx2/builtin_shader_sources.cpp
     src/tgfx2/device_factory.cpp
     src/tgfx2/canvas2d_renderer.cpp
+    src/tgfx2/composition2d.cpp
     src/tgfx2/draw_list2d.cpp
     src/tgfx2/engine_shader_catalog.cpp
     src/tgfx2/font_atlas.cpp
@@ -164,6 +165,7 @@ if(EMSCRIPTEN)
     set(TGFX2_SOURCES
         src/tgfx2/builtin_shader_sources.cpp
         src/tgfx2/canvas2d_renderer.cpp
+        src/tgfx2/composition2d.cpp
         src/tgfx2/device_factory.cpp
         src/tgfx2/draw_list2d.cpp
         src/tgfx2/engine_shader_catalog.cpp
@@ -631,6 +633,16 @@ if(BUILD_TGFX2_TESTS)
     target_link_libraries(tgfx2_draw_list2d_test PRIVATE termin_graphics2)
     termin_set_rpath_test(tgfx2_draw_list2d_test)
     add_test(NAME tgfx2_draw_list2d_test COMMAND tgfx2_draw_list2d_test)
+
+    add_executable(tgfx2_composition2d_test tests/test_composition2d.cpp)
+    target_link_libraries(tgfx2_composition2d_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_composition2d_test)
+    add_test(NAME tgfx2_composition2d_test COMMAND tgfx2_composition2d_test)
+
+    add_executable(tgfx2_composition2d_c_test tests/test_composition2d_c.c)
+    target_link_libraries(tgfx2_composition2d_c_test PRIVATE termin_graphics2)
+    termin_set_rpath_test(tgfx2_composition2d_c_test)
+    add_test(NAME tgfx2_composition2d_c_test COMMAND tgfx2_composition2d_c_test)
 
     add_executable(tgfx2_immediate_color_contract_test tests/test_immediate_color_contract.cpp)
     target_link_libraries(tgfx2_immediate_color_contract_test PRIVATE termin_graphics2)
