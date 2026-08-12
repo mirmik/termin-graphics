@@ -6,6 +6,14 @@
 
 namespace termin::visual {
 
+    std::optional<HitResult3D> hit_test(const TcVisualScene3D& scene, termin::Ray3 world_ray) {
+        HitResult3D result{};
+        if (!tc_visual_scene3d_hit_test(scene.handle(), world_ray, &result)) {
+            return std::nullopt;
+        }
+        return result;
+    }
+
     std::optional<VisualItem3DHandle>
     TcVisualScene3D::adopt(tc_visual_item3d* item, tc_visual_item3d_deleter deleter, tc_visual_item3d* parent) {
         if (parent != nullptr && !owns_(*parent)) {

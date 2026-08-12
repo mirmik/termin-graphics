@@ -31,6 +31,10 @@ TERMIN_VISUAL_SCENE_API size_t tc_visual_scene3d_copy_item_handles(tc_visual_sce
                                                                    size_t);
 TERMIN_VISUAL_SCENE_API bool tc_visual_scene3d_destroy_item(tc_visual_scene3d_handle, tc_visual_item3d_handle);
 TERMIN_VISUAL_SCENE_API void tc_visual_scene3d_clear(tc_visual_scene3d_handle);
+// Linear nearest-hit query. Items own geometry and may omit hit_test entirely;
+// local_bounds is never used as a mandatory broad phase.
+TERMIN_VISUAL_SCENE_API bool
+tc_visual_scene3d_hit_test(tc_visual_scene3d_handle, tc_ray3 world_ray, tc_visual_hit_result3d* out_result);
 #ifdef __cplusplus
 }
 #endif

@@ -7,6 +7,8 @@
 typedef struct test_item3d {
     tc_visual_item3d item;
     int* deletes;
+    double hit_distance;
+    uint64_t hit_part;
 } test_item3d;
 
 static void delete_item(tc_visual_item3d* item) {
@@ -15,8 +17,20 @@ static void delete_item(tc_visual_item3d* item) {
     free(value);
 }
 
+static bool
+hit_item(const tc_visual_item3d* item, const tc_visual_hit_test_context3d* context, tc_visual_hit_candidate3d* out) {
+    const test_item3d* value = (const test_item3d*)item->body;
+    assert(context->world_ray.direction.x == 1.0);
+    if (value->hit_distance <= 0.0)
+        return false;
+    out->distance = value->hit_distance;
+    out->part = value->hit_part;
+    return true;
+}
+
 static const tc_visual_item3d_vtable item_vtable = {
     .type_name = "termin.visual.test.CItem3D",
+    .hit_test = hit_item,
 };
 
 static test_item3d* make_item(int* deletes) {
@@ -44,6 +58,15 @@ int main(void) {
     assert(tc_visual_item3d_set_parent_in_scene(scene, first_handle, root_handle, 2));
     assert(tc_visual_item3d_child_count_in_scene(scene, root_handle) == 2);
     assert(tc_visual_item3d_handle_eq(tc_visual_item3d_child_at_in_scene(scene, root_handle, 1), first_handle));
+
+    root->hit_distance = 5.0;
+    first->hit_distance = 2.0;
+    first->hit_part = 42;
+    second->hit_distance = 3.0;
+    tc_visual_hit_result3d hit;
+    assert(tc_visual_scene3d_hit_test(scene, (tc_ray3){.origin = {0.0, 0.0, 0.0}, .direction = {5.0, 0.0, 0.0}}, &hit));
+    assert(tc_visual_item3d_handle_eq(hit.item, first_handle));
+    assert(hit.distance == 2.0 && hit.part == 42 && hit.world_point.x == 2.0);
 
     tc_affine3d transform = tc_affine3d_translation(2.0, 3.0, 4.0);
     assert(tc_visual_item3d_set_local_transform(scene, first_handle, transform));

@@ -1,5 +1,6 @@
 #include "termin_visual_scene/tc_visual_scene3d.h"
 
+#include <math.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 
@@ -454,4 +455,123 @@ void tc_visual_scene3d_clear(tc_visual_scene3d_handle handle) {
     tc_visual_scene3d* scene = resolve_scene(handle);
     if (scene != NULL)
         clear_scene(scene);
+}
+
+static bool item_effectively_hittable(const tc_visual_item3d* item) {
+    for (const tc_visual_item3d* cursor = item; cursor != NULL; cursor = cursor->parent) {
+        if (!cursor->visible || !cursor->enabled)
+            return false;
+    }
+    return true;
+}
+
+static tc_affine3d item_world_transform(const tc_visual_item3d* item) {
+    if (item->parent == NULL)
+        return item->local_transform;
+    return tc_affine3d_mul(item_world_transform(item->parent), item->local_transform);
+}
+
+static tc_vec3 ray_point(tc_ray3 ray, double distance) {
+    return tc_vec3_add(ray.origin, tc_vec3_scale(ray.direction, distance));
+}
+
+static tc_visual_item3d* next_item_after(tc_visual_scene3d* scene, uint64_t previous_order) {
+    tc_visual_item3d* next = NULL;
+    for (uint32_t index = 0; index < scene->items.capacity; ++index) {
+        if (scene->items.states[index] != TC_SLOT_OCCUPIED)
+            continue;
+        const tc_handle local = {
+            index,
+            scene->items.generations[index],
+        };
+        tc_visual_item3d_slot* slot = slot_for(scene, local);
+        tc_visual_item3d* candidate = slot != NULL ? slot->item : NULL;
+        if (candidate != NULL && candidate->stable_order > previous_order &&
+            (next == NULL || candidate->stable_order < next->stable_order)) {
+            next = candidate;
+        }
+    }
+    return next;
+}
+
+bool tc_visual_scene3d_hit_test(tc_visual_scene3d_handle scene_handle,
+                                tc_ray3 world_ray,
+                                tc_visual_hit_result3d* out_result) {
+    if (out_result == NULL) {
+        tc_log_error("tc_visual_scene3d_hit_test: out_result is required");
+        return false;
+    }
+    *out_result = (tc_visual_hit_result3d){
+        .item = tc_visual_item3d_handle_invalid(),
+    };
+    tc_visual_scene3d* scene = resolve_scene(scene_handle);
+    const double direction_length = tc_vec3_length(world_ray.direction);
+    if (scene == NULL || !isfinite(world_ray.origin.x) || !isfinite(world_ray.origin.y) ||
+        !isfinite(world_ray.origin.z) || !isfinite(direction_length) || direction_length <= 1.0e-12) {
+        tc_log_error("tc_visual_scene3d_hit_test: finite origin and non-zero finite direction are required");
+        return false;
+    }
+    world_ray.direction = tc_vec3_scale(world_ray.direction, 1.0 / direction_length);
+
+    bool found = false;
+    const uint64_t traversal_revision = scene->order_revision;
+    const size_t count = tc_pool_count(&scene->items);
+    uint64_t previous_order = 0;
+    for (size_t visited = 0; visited < count; ++visited) {
+        tc_visual_item3d* item = next_item_after(scene, previous_order);
+        if (item == NULL) {
+            tc_log_error("tc_visual_scene3d_hit_test: inconsistent stable traversal state");
+            return false;
+        }
+        previous_order = item->stable_order;
+        if (item->vtable == NULL || item->vtable->hit_test == NULL || !item_effectively_hittable(item)) {
+            continue;
+        }
+        const tc_affine3d world_from_local = item_world_transform(item);
+        tc_affine3d local_from_world;
+        if (!tc_affine3d_try_inverse(world_from_local, 1.0e-12, &local_from_world)) {
+            tc_log_error("visual item3d '%s' has a singular world transform and is not hittable",
+                         tc_visual_item3d_type_name(item));
+            continue;
+        }
+        const tc_ray3 local_ray = {
+            .origin = tc_affine3d_transform_point(local_from_world, world_ray.origin),
+            .direction = tc_affine3d_transform_vector(local_from_world, world_ray.direction),
+        };
+        const tc_visual_hit_test_context3d context = {
+            .world_ray = world_ray,
+            .local_ray = local_ray,
+            .world_from_local = world_from_local,
+            .local_from_world = local_from_world,
+        };
+        tc_visual_hit_candidate3d candidate = {
+            .distance = NAN,
+            .part = 0,
+        };
+        const bool item_hit = item->vtable->hit_test(item, &context, &candidate);
+        if (scene->order_revision != traversal_revision) {
+            tc_log_error("tc_visual_scene3d_hit_test: scene topology mutated during item callback");
+            *out_result = (tc_visual_hit_result3d){
+                .item = tc_visual_item3d_handle_invalid(),
+            };
+            return false;
+        }
+        if (!item_hit)
+            continue;
+        if (!isfinite(candidate.distance) || candidate.distance <= 0.0) {
+            tc_log_error("visual item3d '%s' returned an invalid hit distance", tc_visual_item3d_type_name(item));
+            continue;
+        }
+        // Stable adoption order makes retaining the first exact-distance
+        // candidate the deterministic tie break.
+        if (found && candidate.distance >= out_result->distance)
+            continue;
+        found = true;
+        out_result->item = item->handle;
+        out_result->distance = candidate.distance;
+        out_result->part = candidate.part;
+        out_result->world_point = ray_point(world_ray, candidate.distance);
+        out_result->local_point = ray_point(local_ray, candidate.distance);
+    }
+    return found;
 }

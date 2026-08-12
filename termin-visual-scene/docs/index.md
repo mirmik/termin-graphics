@@ -33,6 +33,25 @@ Singular but finite transforms remain valid placement state: they can still be
 painted and inspected, while later hit-testing skips items whose world affine
 cannot map a ray into local space and records that diagnostic.
 
+Hit testing is item-owned. A host constructs a world ray from its camera and
+viewport, then the scene linearly visits every effectively visible and enabled
+item that implements `hit_test`. The scene normalizes the world direction and
+maps the ray through the exact inverse world affine. It does not renormalize
+the resulting local direction, so an item-local ray parameter remains a world
+distance even under non-uniform scale. The nearest positive finite candidate
+wins; exact ties retain stable adoption order. An optional item-provided local
+bounds callback exists for fit and inspection, never as a required broad
+phase. Item hit callbacks are synchronous borrowed calls and must not mutate
+scene topology; a detected topology mutation aborts the query with a log.
+
+`SceneInteraction3D` consumes these ready world-ray pointer events and keeps
+hovered, pressed and captured generation handles. Capture continues when the
+ray leaves an item's hit region, stale or newly ineligible handles reconcile
+before every route, and unhandled events go to a host-installed fallback such
+as camera navigation. Action identity includes the item-defined `part` token,
+allowing one ordinary item to expose gizmo axes or orientation-cube faces
+without teaching the scene either concept.
+
 Camera ownership is also outside the scene. A GUI view or another host
 supplies view/projection state, maps pointer positions to world rays and may
 install camera navigation as the generic unhandled-event fallback. This lets

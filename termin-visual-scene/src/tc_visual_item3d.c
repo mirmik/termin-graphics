@@ -200,6 +200,25 @@ TC_ITEM3D_BOOL_PROPERTY(visible)
 TC_ITEM3D_BOOL_PROPERTY(enabled)
 #undef TC_ITEM3D_BOOL_PROPERTY
 
+bool tc_visual_item3d_local_bounds_in_scene(tc_visual_scene3d_handle scene,
+                                            tc_visual_item3d_handle h,
+                                            tc_visual_bounds3d* out) {
+    tc_visual_item3d* item = resolve(scene, h);
+    if (item == NULL || out == NULL || item->vtable == NULL || item->vtable->local_bounds == NULL)
+        return false;
+    tc_visual_bounds3d bounds;
+    if (!item->vtable->local_bounds(item, &bounds))
+        return false;
+    if (!isfinite(bounds.min.x) || !isfinite(bounds.min.y) || !isfinite(bounds.min.z) || !isfinite(bounds.max.x) ||
+        !isfinite(bounds.max.y) || !isfinite(bounds.max.z) || bounds.min.x > bounds.max.x ||
+        bounds.min.y > bounds.max.y || bounds.min.z > bounds.max.z) {
+        tc_log_error("tc_visual_item3d: local_bounds returned invalid bounds");
+        return false;
+    }
+    *out = bounds;
+    return true;
+}
+
 bool tc_visual_item3d_is_valid(tc_visual_scene3d_handle scene, tc_visual_item3d_handle h) {
     return resolve(scene, h) != NULL;
 }

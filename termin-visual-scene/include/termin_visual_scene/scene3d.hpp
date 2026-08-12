@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <termin/geom/affine3.hpp>
+#include <termin/geom/ray3.hpp>
 
 #include "termin_visual_scene/export.h"
 #include "termin_visual_scene/tc_visual_scene3d.h"
@@ -15,6 +16,13 @@ namespace termin::visual {
 
     class VisualItem3D;
     using VisualItem3DHandle = tc_visual_item3d_handle;
+    using VisualBounds3D = tc_visual_bounds3d;
+    using HitTestContext3D = tc_visual_hit_test_context3d;
+    using HitCandidate3D = tc_visual_hit_candidate3d;
+    using HitResult3D = tc_visual_hit_result3d;
+
+    TERMIN_VISUAL_SCENE_API std::optional<HitResult3D> hit_test(const class TcVisualScene3D& scene,
+                                                                termin::Ray3 world_ray);
 
     // Copyable, non-owning facade over the pooled C scene handle. Creation and
     // destruction remain explicit tc_visual_scene3d_create/destroy operations,

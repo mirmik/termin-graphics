@@ -32,9 +32,42 @@ static inline bool tc_visual_item3d_handle_eq(tc_visual_item3d_handle left, tc_v
 }
 typedef void (*tc_visual_item3d_deleter)(tc_visual_item3d* item);
 
+typedef struct tc_visual_bounds3d {
+    tc_vec3 min;
+    tc_vec3 max;
+} tc_visual_bounds3d;
+
+// The host supplies a world ray. The scene normalizes it, maps it through the
+// exact inverse world affine, and deliberately leaves local_ray.direction
+// unnormalized. Consequently the same positive parameter is a world-space
+// distance on both rays, including under non-uniform scale.
+typedef struct tc_visual_hit_test_context3d {
+    tc_ray3 world_ray;
+    tc_ray3 local_ray;
+    tc_affine3d world_from_local;
+    tc_affine3d local_from_world;
+} tc_visual_hit_test_context3d;
+
+typedef struct tc_visual_hit_candidate3d {
+    double distance;
+    uint64_t part;
+} tc_visual_hit_candidate3d;
+
+typedef struct tc_visual_hit_result3d {
+    tc_visual_item3d_handle item;
+    double distance;
+    uint64_t part;
+    tc_vec3 world_point;
+    tc_vec3 local_point;
+} tc_visual_hit_result3d;
+
 typedef struct tc_visual_item3d_vtable {
     const char* type_name;
     void (*on_destroy)(tc_visual_item3d* item, tc_visual_scene3d* scene);
+    bool (*hit_test)(const tc_visual_item3d* item,
+                     const tc_visual_hit_test_context3d* context,
+                     tc_visual_hit_candidate3d* out_candidate);
+    bool (*local_bounds)(const tc_visual_item3d* item, tc_visual_bounds3d* out_bounds);
 } tc_visual_item3d_vtable;
 
 struct tc_visual_item3d {
@@ -79,6 +112,8 @@ TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_get_visible(tc_visual_scene3d_hand
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_set_visible(tc_visual_scene3d_handle, tc_visual_item3d_handle, bool);
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_get_enabled(tc_visual_scene3d_handle, tc_visual_item3d_handle, bool*);
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_set_enabled(tc_visual_scene3d_handle, tc_visual_item3d_handle, bool);
+TERMIN_VISUAL_SCENE_API bool
+tc_visual_item3d_local_bounds_in_scene(tc_visual_scene3d_handle, tc_visual_item3d_handle, tc_visual_bounds3d*);
 TERMIN_VISUAL_SCENE_API bool tc_visual_item3d_is_valid(tc_visual_scene3d_handle, tc_visual_item3d_handle);
 TERMIN_VISUAL_SCENE_API const char* tc_visual_item3d_type_name_in_scene(tc_visual_scene3d_handle,
                                                                         tc_visual_item3d_handle);
