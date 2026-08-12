@@ -48,9 +48,10 @@ an interactive frontend for the integration section:
 sdk/bin/termin_python -I examples/graphics-showcase/main.py --windowed
 ```
 
-The frontend uses `termin.window`; engine-level `termin.display` remains
-outside this profile. For automated checks, `--frames N` and `--seconds N`
-bound the window lifetime.
+The frontend opens on an overview and exposes every registry section as a tab;
+it uses `termin.window`, while engine-level `termin.display` remains outside
+this profile. For automated checks, `--frames N` and `--seconds N` bound the
+window lifetime.
 
 On Windows, build the D3D11-only product and run the same Python entry point:
 

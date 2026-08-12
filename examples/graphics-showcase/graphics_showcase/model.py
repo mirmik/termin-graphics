@@ -12,6 +12,7 @@ Cleanup = Callable[[], None]
 class SectionContent:
     """Objects and facts retained until a showcase section has rendered."""
 
+    root: Any | None = None
     cleanup: Cleanup = lambda: None
     facts: dict[str, Any] = field(default_factory=dict)
 

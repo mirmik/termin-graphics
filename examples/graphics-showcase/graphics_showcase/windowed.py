@@ -4,7 +4,7 @@ import logging
 import time
 
 import tgfx
-from termin.gui_native import tc_ui_document_create, tc_ui_document_destroy
+from termin.gui_native import Size, tc_ui_document_create, tc_ui_document_destroy
 
 from .sections import sdk_font_path, section_registry
 
@@ -18,13 +18,63 @@ class _WindowedApplication:
         self.request_repaint = request_repaint
 
 
-def _integration_section():
-    matches = [section for section in section_registry() if section.artifact]
-    if len(matches) != 1:
-        raise RuntimeError(
-            f"windowed showcase requires exactly one integration section, got {len(matches)}"
+_SECTION_TITLES = {
+    "native_ui": "Native UI",
+    "plot_2d": "Plot 2D",
+    "plot_3d": "Plot 3D",
+    "visual_scene_nodegraph": "Nodegraph",
+    "plot_nodegraph_composition": "Composition",
+}
+
+
+def _append(document, parent, child) -> None:
+    if not parent.widget.append_child(child.widget):
+        raise RuntimeError("failed to append showcase overview widget")
+
+
+def _build_overview(document):
+    overview = document.create_vstack("graphics-showcase-overview")
+    overview.widget.preferred_size = Size(1160.0, 700.0)
+    title = document.create_label("Termin graphics profile showcase")
+    subtitle = document.create_label(
+        "One installed-SDK surface: native UI, retained plots, visual scene and nodegraph composition."
+    )
+    hint = document.create_label(
+        "Choose a tab above. Every feature page is also rendered independently by the headless acceptance gate."
+    )
+    _append(document, overview, title)
+    _append(document, overview, subtitle)
+    _append(document, overview, hint)
+    for section in section_registry():
+        label = document.create_label(
+            f"{_SECTION_TITLES[section.name]} — {section.description}"
         )
-    return matches[0]
+        _append(document, overview, label)
+    return overview.widget
+
+
+def _build_tabbed_showcase(application):
+    document = application.document
+    tabs = document.create_tab_view("graphics-showcase-tabs")
+    tabs.widget.preferred_size = Size(1280.0, 820.0)
+    if not document.add_root(tabs.handle):
+        raise RuntimeError("failed to add graphics showcase tab root")
+    tabs.add_page("Overview", _build_overview(document))
+
+    contents = []
+    for section in section_registry():
+        content = section.build(application)
+        if content.root is None:
+            raise RuntimeError(f"showcase section '{section.name}' has no windowed root")
+        if not document.remove_root(content.root.handle):
+            content.cleanup()
+            raise RuntimeError(
+                f"failed to transfer showcase section '{section.name}' into its tab"
+            )
+        tabs.add_page(_SECTION_TITLES[section.name], content.root)
+        contents.append(content)
+    tabs.selected_index = 0
+    return tabs, contents
 
 
 def run_windowed_showcase(
@@ -55,7 +105,8 @@ def run_windowed_showcase(
     window_handle = None
     document = None
     adapter = None
-    content = None
+    contents = []
+    selection_connection = None
     try:
         graphics_session = WindowedGraphicsSession.create_native()
         window_manager = WindowManager(graphics_session)
@@ -72,7 +123,10 @@ def run_windowed_showcase(
             enable_text_input=True,
         )
         application = _WindowedApplication(document, adapter.request_repaint)
-        content = _integration_section().build(application)
+        tabs, contents = _build_tabbed_showcase(application)
+        selection_connection = tabs.connect_selection_changed(
+            lambda _index: adapter.request_repaint()
+        )
 
         adapter.request_repaint()
         started = time.monotonic()
@@ -100,7 +154,9 @@ def run_windowed_showcase(
         _LOG.exception("windowed graphics showcase failed")
         raise
     finally:
-        if content is not None:
+        if selection_connection is not None:
+            tabs.disconnect_selection_changed(selection_connection)
+        for content in reversed(contents):
             content.cleanup()
         if adapter is not None:
             adapter.close()

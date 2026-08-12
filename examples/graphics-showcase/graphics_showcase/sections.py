@@ -71,6 +71,7 @@ def import_profile_surface() -> dict[str, object]:
 def _native_ui(application) -> SectionContent:
     showcase = build_python_showcase(application.document)
     return SectionContent(
+        root=showcase.root,
         facts={
             "root": showcase.root.stable_id,
             "widget_groups": sorted(showcase.widgets),
@@ -90,7 +91,10 @@ def _plot_2d(application) -> SectionContent:
     plot.set_axis_labels("phase", "amplitude")
     if not application.document.add_root(plot.handle):
         raise RuntimeError("failed to add Plot2D showcase root")
-    return SectionContent(facts={"line_count": plot.line_count, "samples": 961})
+    return SectionContent(
+        root=plot.widget,
+        facts={"line_count": plot.line_count, "samples": 961},
+    )
 
 
 def _populate_plot_3d(plot: Plot3D) -> dict[str, object]:
@@ -129,7 +133,7 @@ def _plot_3d(application) -> SectionContent:
     facts = _populate_plot_3d(plot)
     if not application.document.add_root(plot.handle):
         raise RuntimeError("failed to add Plot3D showcase root")
-    return SectionContent(facts=facts)
+    return SectionContent(root=plot.widget, facts=facts)
 
 
 def _make_graph() -> tuple[Graph, GraphController, dict[str, str]]:
@@ -174,6 +178,7 @@ def _visual_scene_nodegraph(application) -> SectionContent:
         view.close()
         raise RuntimeError("failed to add visual-scene nodegraph showcase root")
     return SectionContent(
+        root=view.root,
         cleanup=view.close,
         facts={"nodes": len(graph.nodes), "edges": len(graph.edges), "visual_scene": True},
     )
@@ -209,6 +214,7 @@ def _plot_nodegraph_composition(application) -> SectionContent:
         view.close()
         raise RuntimeError("failed to add plot/nodegraph composition root")
     return SectionContent(
+        root=view.root,
         cleanup=view.close,
         facts={
             "nodes": len(graph.nodes),
