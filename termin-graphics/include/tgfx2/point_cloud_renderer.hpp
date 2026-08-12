@@ -52,10 +52,22 @@ namespace tgfx {
     struct PointCloudDrawParams {
         // Column-major view-projection matrix.
         std::array<float, 16> view_projection{
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
         };
     };
 
@@ -86,12 +98,23 @@ namespace tgfx {
         bool upload(RenderContext2& ctx, std::span<const PointCloudPoint> points);
         void clear() noexcept;
         void release(RenderContext2& ctx);
+        void release(IRenderDevice& device);
 
-        uint32_t point_count() const noexcept { return point_count_; }
-        bool empty() const noexcept { return point_count_ == 0; }
-        bool has_bounds() const noexcept { return has_bounds_; }
-        termin::Vec3f bounds_min() const noexcept { return bounds_min_; }
-        termin::Vec3f bounds_max() const noexcept { return bounds_max_; }
+        uint32_t point_count() const noexcept {
+            return point_count_;
+        }
+        bool empty() const noexcept {
+            return point_count_ == 0;
+        }
+        bool has_bounds() const noexcept {
+            return has_bounds_;
+        }
+        termin::Vec3f bounds_min() const noexcept {
+            return bounds_min_;
+        }
+        termin::Vec3f bounds_max() const noexcept {
+            return bounds_max_;
+        }
 
     private:
         friend class PointCloudRenderer;
@@ -124,6 +147,7 @@ namespace tgfx {
                   const PointCloudStyle& style,
                   const PointCloudDrawParams& params);
         void release(RenderContext2& ctx);
+        void release(IRenderDevice& device);
 
     private:
         bool ensure_resources(RenderContext2& ctx);

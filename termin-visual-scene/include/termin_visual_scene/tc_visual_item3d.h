@@ -23,7 +23,11 @@ typedef struct tc_visual_item3d_handle {
     uint32_t generation;
 } tc_visual_item3d_handle;
 static inline tc_visual_item3d_handle tc_visual_item3d_handle_invalid(void) {
-    return (tc_visual_item3d_handle){0, UINT32_MAX, 0};
+    tc_visual_item3d_handle result;
+    result.scene_id = 0;
+    result.index = UINT32_MAX;
+    result.generation = 0;
+    return result;
 }
 static inline bool tc_visual_item3d_handle_is_invalid(tc_visual_item3d_handle h) {
     return h.scene_id == 0 || h.index == UINT32_MAX || h.generation == 0;
