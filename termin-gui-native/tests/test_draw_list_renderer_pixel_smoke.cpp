@@ -1,4 +1,5 @@
 #include <termin/gui_native/color_picker.hpp>
+#include <termin/gui_native/draw_list2d_bridge.hpp>
 #include <termin/gui_native/native_document_painter.hpp>
 #include <termin/gui_native/native_widget.hpp>
 
@@ -106,6 +107,8 @@ namespace {
     class PainterProbe final : public termin::gui_native::NativeWidget {
     public:
         bool draw_commands = false;
+        bool draw_shared_composition = false;
+        bool malformed_scope = false;
         uint32_t image = 0;
         uint32_t sampling_image = 0;
         uint32_t picker_image = 0;
@@ -113,8 +116,31 @@ namespace {
         tc_ui_rect order_rect{112.0f, 72.0f, 8.0f, 8.0f};
 
         void paint(tc_ui_document_handle, tc_ui_paint_context* painter) override {
+            if (malformed_scope) {
+                tc_ui_painter_fill_rect(
+                    painter, tc_ui_rect{2.0f, 2.0f, 4.0f, 4.0f}, tc_ui_srgb_color{0.9f, 0.05f, 0.05f, 1.0f});
+                tc_ui_painter_pop_clip(painter);
+                return;
+            }
             if (order_color.a > 0.0f) {
                 tc_ui_painter_fill_rect(painter, order_rect, order_color);
+            }
+            if (draw_shared_composition) {
+                const tc_ui_uniform_transform transform{{64.25f, 40.25f}, 1.5f};
+                tc_ui_painter_push_uniform_transform(painter, transform);
+                tc_ui_painter_push_clip(painter, tc_ui_rect{0.0f, 0.0f, 8.0f, 8.0f});
+                tgfx::DrawList2DBuilder nested_builder;
+                if (!nested_builder.rect(
+                        {4.0f, 2.0f, 8.0f, 4.0f},
+                        tgfx::FillPaint{termin::srgb_to_linear(termin::SrgbColor{0.05f, 0.85f, 0.05f, 1.0f})})) {
+                    throw std::runtime_error("failed to build nested composition probe");
+                }
+                auto nested = nested_builder.freeze();
+                if (!nested || !termin::gui_native::append_draw_list2d(painter, std::move(*nested))) {
+                    throw std::runtime_error("failed to append nested composition probe");
+                }
+                tc_ui_painter_pop_clip(painter);
+                tc_ui_painter_pop_transform(painter);
             }
             if (!draw_commands) {
                 return;
@@ -150,10 +176,8 @@ namespace {
                                        tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f},
                                        TC_UI_TEXTURE_SAMPLING_LINEAR,
                                        false);
-            tc_ui_painter_draw_icon(painter,
-                                    "add",
-                                    tc_ui_rect{64.0f, 72.0f, 16.0f, 16.0f},
-                                    tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
+            tc_ui_painter_draw_icon(
+                painter, "add", tc_ui_rect{64.0f, 72.0f, 16.0f, 16.0f}, tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
             tc_ui_painter_draw_text(
                 painter, "Native", tc_ui_point{72.0f, 30.0f}, 20.0f, tc_ui_srgb_color{1.0f, 1.0f, 1.0f, 1.0f});
             if (picker_image != 0) {
@@ -267,6 +291,13 @@ namespace {
         identity_first.probe->order_color = tc_ui_srgb_color{0.05f, 0.85f, 0.05f, 1.0f};
         ProbeDocument identity_last;
         identity_last.probe->order_color = tc_ui_srgb_color{0.9f, 0.05f, 0.05f, 1.0f};
+        ProbeDocument shared_composition;
+        shared_composition.probe->draw_shared_composition = true;
+        ProbeDocument malformed;
+        malformed.probe->malformed_scope = true;
+        ProbeDocument recovered;
+        recovered.probe->order_color = tc_ui_srgb_color{0.05f, 0.85f, 0.05f, 1.0f};
+        recovered.probe->order_rect = tc_ui_rect{2.0f, 2.0f, 4.0f, 4.0f};
 
         const termin::SrgbColor picker_srgb{0x92 / 255.0f, 0x30 / 255.0f, 0x30 / 255.0f, 1.0f};
         auto picker_model = std::make_shared<termin::gui_native::ColorPickerModel>(picker_srgb, true);
@@ -285,6 +316,9 @@ namespace {
             {identity_last.document, 0, 20, metrics},
             {termin::gui_native::TcDocument{}, -100, 0, metrics},
             {commands.document, 100, 1, metrics},
+            {shared_composition.document, 50, 0, metrics},
+            {malformed.document, -20, 0, metrics},
+            {recovered.document, -10, 0, metrics},
             {early.document, -1, 100, metrics},
             {identity_first.document, 0, 10, metrics},
         };
@@ -315,6 +349,9 @@ namespace {
         const bool icon_center_ok = read_ok && pixel_at(pixels, 72, 80)[0] > 0.8f;
         const bool icon_corner_ok = read_ok && looks_black(pixel_at(pixels, 66, 74));
         const bool ordering_ok = read_ok && looks_red(pixel_at(pixels, 116, 76));
+        const bool nested_transform_clip_inside_ok = read_ok && looks_green(pixel_at(pixels, 72, 46));
+        const bool nested_transform_clip_outside_ok = read_ok && looks_black(pixel_at(pixels, 78, 46));
+        const bool malformed_batch_recovery_ok = read_ok && looks_green(pixel_at(pixels, 3, 3));
         constexpr float picker_left = 90.0f;
         constexpr float picker_top = 40.0f;
         constexpr float picker_width = 28.0f;
@@ -394,12 +431,13 @@ namespace {
 
         if (painted != std::size(submissions) - 1 || !read_ok || !image_ok || !nested_clip_inside_ok ||
             !authored_gray_ok || !nested_clip_outside_ok || !rounded_center_ok || !rounded_corner_ok || !circle_ok ||
-            !picker_texture_ok || !icon_center_ok || !icon_corner_ok || !text_ok || !scaled_geometry_ok) {
+            !picker_texture_ok || !icon_center_ok || !icon_corner_ok || !text_ok || !scaled_geometry_ok ||
+            !nested_transform_clip_inside_ok || !nested_transform_clip_outside_ok || !malformed_batch_recovery_ok) {
             std::fprintf(stderr,
                          "UI renderer %s pixel smoke failed: read=%d image=%d authored_gray=%d clip_in=%d clip_out=%d "
                          "round_center=%d round_corner=%d circle=%d picker=%d icon_center=%d icon_corner=%d "
                          "picker_rgb=(%.3f,%.3f,%.3f) "
-                         "text=%d scaled=%d signal=%zu y=[%u,%u]\n",
+                         "text=%d scaled=%d nested_shared=(%d,%d) recovery=%d signal=%zu y=[%u,%u]\n",
                          tgfx::backend_name(backend),
                          read_ok,
                          image_ok,
@@ -417,6 +455,9 @@ namespace {
                          picker_pixel[2],
                          text_ok,
                          scaled_geometry_ok,
+                         nested_transform_clip_inside_ok,
+                         nested_transform_clip_outside_ok,
+                         malformed_batch_recovery_ok,
                          text_signal,
                          text_min_y,
                          text_max_y);
