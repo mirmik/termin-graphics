@@ -52,6 +52,15 @@ as camera navigation. Action identity includes the item-defined `part` token,
 allowing one ordinary item to expose gizmo axes or orientation-cube faces
 without teaching the scene either concept.
 
+Interactive behavior is registered externally per item. Target handlers
+receive ordered enter/leave/down/move/up/cancel events. The pressed `part` and
+hit record are retained with capture, so a controller can continue an axis or
+handle drag after the pointer leaves its geometry. Hiding, disabling,
+destroying, replacing or explicitly cancelling a scene target produces the
+same deterministic leave/cancel lifecycle before state is discarded. These
+handlers are controllers owned by the host or tool; they are not methods on
+`VisualItem3D` and do not add editor semantics to the scene.
+
 Camera ownership is also outside the scene. A GUI view or another host
 supplies view/projection state, maps pointer positions to world rays and may
 install camera navigation as the generic unhandled-event fallback. This lets

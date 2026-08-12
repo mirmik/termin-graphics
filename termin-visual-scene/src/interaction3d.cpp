@@ -28,26 +28,72 @@ namespace termin::visual {
         return {handle.scene_id, handle.index, handle.generation};
     }
 
-    VisualItem3DHandle SceneInteraction3D::handle_(const std::unordered_map<PointerId3D, VisualItem3DHandle>& values,
-                                                   PointerId3D pointer) {
-        const auto found = values.find(pointer);
-        return found != values.end() ? found->second : tc_visual_item3d_handle_invalid();
-    }
-
     VisualItem3DHandle SceneInteraction3D::hit_handle_(const std::unordered_map<PointerId3D, HitResult3D>& values,
                                                        PointerId3D pointer) {
         const auto found = values.find(pointer);
         return found != values.end() ? found->second.item : tc_visual_item3d_handle_invalid();
     }
 
-    void SceneInteraction3D::reconcile_(const TcVisualScene3D& scene) {
+    std::optional<HitResult3D> SceneInteraction3D::hit_(
+        const std::unordered_map<PointerId3D, HitResult3D>& values, PointerId3D pointer) {
+        const auto found = values.find(pointer);
+        return found != values.end() ? std::optional<HitResult3D>{found->second} : std::nullopt;
+    }
+
+    bool SceneInteraction3D::dispatch_target_(const TargetPointerEvent3D& event) {
+        const auto handler = target_pointer_handlers_.find(key_(event.target));
+        if (handler == target_pointer_handlers_.end())
+            return false;
+        try {
+            handler->second(event);
+        } catch (const std::exception& error) {
+            tc::Log::error("SceneInteraction3D target pointer callback failed: %s", error.what());
+            return true;
+        } catch (...) {
+            tc::Log::error("SceneInteraction3D target pointer callback failed with an unknown exception");
+            return true;
+        }
+        return false;
+    }
+
+    void SceneInteraction3D::reconcile_(const TcVisualScene3D& scene,
+                                        const PointerEvent3D& event,
+                                        PointerDispatch3D& result) {
         const auto invalid = [&](VisualItem3DHandle handle) {
             const auto* item = scene.resolve(handle);
             return item == nullptr || !scene.effective_visible(*item) || !scene.effective_enabled(*item);
         };
-        std::erase_if(hovered_, [&](const auto& pair) { return invalid(pair.second.item); });
-        std::erase_if(pressed_, [&](const auto& pair) { return invalid(pair.second.item); });
-        std::erase_if(captured_, [&](const auto& pair) { return invalid(pair.second); });
+        const auto hovered = hovered_.find(event.pointer);
+        if (hovered != hovered_.end() && invalid(hovered->second.item)) {
+            result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Leave,
+                                                        event,
+                                                        hovered->second.item,
+                                                        hovered->second.part,
+                                                        std::nullopt,
+                                                        false});
+            hovered_.erase(hovered);
+        }
+        const auto captured = captured_.find(event.pointer);
+        if (captured != captured_.end() && invalid(captured->second.item)) {
+            result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Cancel,
+                                                        event,
+                                                        captured->second.item,
+                                                        captured->second.part,
+                                                        std::nullopt,
+                                                        true});
+            captured_.erase(captured);
+            pressed_.erase(event.pointer);
+        } else {
+            std::erase_if(pressed_, [&](const auto& pair) {
+                return pair.first == event.pointer && invalid(pair.second.item);
+            });
+        }
+        // Handlers intentionally survive until invalid targets have received
+        // their final leave/cancel notification above.
+        std::erase_if(target_pointer_handlers_, [&](const auto& pair) {
+            return scene.resolve(VisualItem3DHandle{pair.first.scene_id, pair.first.index, pair.first.generation}) ==
+                   nullptr;
+        });
         std::erase_if(action_handlers_, [&](const auto& pair) {
             return scene.resolve(VisualItem3DHandle{pair.first.scene_id, pair.first.index, pair.first.generation}) ==
                    nullptr;
@@ -55,32 +101,83 @@ namespace termin::visual {
     }
 
     PointerDispatch3D SceneInteraction3D::route(const TcVisualScene3D& scene, const PointerEvent3D& event) {
-        reconcile_(scene);
         PointerDispatch3D result;
         result.event = event;
-        result.hit = hit_test(scene, event.world_ray);
-        if (result.hit) {
-            hovered_[event.pointer] = *result.hit;
-        } else {
-            hovered_.erase(event.pointer);
+        last_events_[event.pointer] = event;
+        reconcile_(scene, event, result);
+        if (event.kind != PointerEventKind3D::Cancel)
+            result.hit = hit_test(scene, event.world_ray);
+        const auto previous_hover = hit_(hovered_, event.pointer);
+        const bool same_hover = event.kind != PointerEventKind3D::Cancel && previous_hover && result.hit &&
+                                same_handle(previous_hover->item, result.hit->item) &&
+                                previous_hover->part == result.hit->part;
+        if (event.kind != PointerEventKind3D::Cancel && !same_hover) {
+            if (previous_hover) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Leave,
+                                                            event,
+                                                            previous_hover->item,
+                                                            previous_hover->part,
+                                                            result.hit,
+                                                            false});
+            }
+            if (result.hit) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Enter,
+                                                            event,
+                                                            result.hit->item,
+                                                            result.hit->part,
+                                                            result.hit,
+                                                            false});
+            }
+        }
+        // Cancel needs the previous hover below in order to deliver its final
+        // Leave notification. Other event kinds publish the newly hit target.
+        if (event.kind != PointerEventKind3D::Cancel) {
+            if (result.hit)
+                hovered_[event.pointer] = *result.hit;
+            else
+                hovered_.erase(event.pointer);
         }
 
         ActionHandler action_handler;
         if (event.kind == PointerEventKind3D::Down) {
             if (result.hit) {
                 pressed_[event.pointer] = *result.hit;
-                captured_[event.pointer] = result.hit->item;
+                captured_[event.pointer] = *result.hit;
                 result.target = result.hit->item;
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Down,
+                                                            event,
+                                                            result.hit->item,
+                                                            result.hit->part,
+                                                            result.hit,
+                                                            true});
             }
         } else if (event.kind == PointerEventKind3D::Move) {
-            result.target = handle_(captured_, event.pointer);
-            if (!valid_handle(result.target) && result.hit) {
+            const auto capture = hit_(captured_, event.pointer);
+            result.target = capture ? capture->item : tc_visual_item3d_handle_invalid();
+            if (!valid_handle(result.target) && result.hit)
                 result.target = result.hit->item;
+            const auto target_hit = capture ? capture : result.hit;
+            if (target_hit) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Move,
+                                                            event,
+                                                            target_hit->item,
+                                                            target_hit->part,
+                                                            result.hit,
+                                                            capture.has_value()});
             }
         } else if (event.kind == PointerEventKind3D::Up) {
-            result.target = handle_(captured_, event.pointer);
-            if (!valid_handle(result.target) && result.hit) {
+            const auto capture = hit_(captured_, event.pointer);
+            result.target = capture ? capture->item : tc_visual_item3d_handle_invalid();
+            if (!valid_handle(result.target) && result.hit)
                 result.target = result.hit->item;
+            const auto target_hit = capture ? capture : result.hit;
+            if (target_hit) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Up,
+                                                            event,
+                                                            target_hit->item,
+                                                            target_hit->part,
+                                                            result.hit,
+                                                            capture.has_value()});
             }
             const auto pressed = pressed_.find(event.pointer);
             if (pressed != pressed_.end() && result.hit && same_handle(pressed->second.item, result.hit->item) &&
@@ -94,9 +191,28 @@ namespace termin::visual {
             pressed_.erase(event.pointer);
             captured_.erase(event.pointer);
         } else {
-            result.target = handle_(captured_, event.pointer);
+            const auto capture = hit_(captured_, event.pointer);
+            result.target = capture ? capture->item : tc_visual_item3d_handle_invalid();
             if (!valid_handle(result.target)) {
                 result.target = hit_handle_(pressed_, event.pointer);
+            }
+            const auto target_hit = capture ? capture : hit_(pressed_, event.pointer);
+            if (target_hit) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Cancel,
+                                                            event,
+                                                            target_hit->item,
+                                                            target_hit->part,
+                                                            result.hit,
+                                                            capture.has_value()});
+            }
+            const auto hover = hit_(hovered_, event.pointer);
+            if (hover) {
+                result.callback_failed |= dispatch_target_({TargetPointerEventKind3D::Leave,
+                                                            event,
+                                                            hover->item,
+                                                            hover->part,
+                                                            std::nullopt,
+                                                            false});
             }
             hovered_.erase(event.pointer);
             pressed_.erase(event.pointer);
@@ -105,7 +221,7 @@ namespace termin::visual {
 
         result.hovered = hit_handle_(hovered_, event.pointer);
         result.pressed = hit_handle_(pressed_, event.pointer);
-        result.captured = handle_(captured_, event.pointer);
+        result.captured = hit_handle_(captured_, event.pointer);
         result.used_fallback = !valid_handle(result.target);
         if (result.action && action_handler) {
             try {
@@ -132,12 +248,15 @@ namespace termin::visual {
         return result;
     }
 
-    bool SceneInteraction3D::capture(const TcVisualScene3D& scene, PointerId3D pointer, VisualItem3DHandle target) {
+    bool SceneInteraction3D::capture(const TcVisualScene3D& scene,
+                                     PointerId3D pointer,
+                                     VisualItem3DHandle target,
+                                     std::uint64_t part) {
         const auto* item = scene.resolve(target);
         if (item == nullptr || !scene.effective_visible(*item) || !scene.effective_enabled(*item)) {
             return false;
         }
-        captured_[pointer] = target;
+        captured_[pointer] = HitResult3D{target, 0.0, part, {}, {}};
         return true;
     }
 
@@ -149,6 +268,35 @@ namespace termin::visual {
         hovered_.clear();
         pressed_.clear();
         captured_.clear();
+        last_events_.clear();
+    }
+
+    bool SceneInteraction3D::cancel_all(const TcVisualScene3D& scene) {
+        bool callback_failed = false;
+        const auto events = last_events_;
+        FallbackHandler fallback = std::move(fallback_handler_);
+        fallback_handler_ = {};
+        for (const auto& [pointer, previous] : events) {
+            if (!hovered_.contains(pointer) && !pressed_.contains(pointer) && !captured_.contains(pointer))
+                continue;
+            PointerEvent3D cancel = previous;
+            cancel.kind = PointerEventKind3D::Cancel;
+            callback_failed |= route(scene, cancel).callback_failed;
+        }
+        fallback_handler_ = std::move(fallback);
+        cancel_all();
+        return callback_failed;
+    }
+
+    void SceneInteraction3D::set_target_pointer_handler(VisualItem3DHandle item, TargetPointerHandler handler) {
+        if (handler)
+            target_pointer_handlers_[key_(item)] = std::move(handler);
+        else
+            target_pointer_handlers_.erase(key_(item));
+    }
+
+    void SceneInteraction3D::clear_target_pointer_handler(VisualItem3DHandle item) {
+        target_pointer_handlers_.erase(key_(item));
     }
 
     void SceneInteraction3D::set_action_handler(VisualItem3DHandle item, ActionHandler handler) {
@@ -176,7 +324,19 @@ namespace termin::visual {
     }
 
     VisualItem3DHandle SceneInteraction3D::captured(PointerId3D pointer) const {
-        return handle_(captured_, pointer);
+        return hit_handle_(captured_, pointer);
+    }
+
+    std::optional<HitResult3D> SceneInteraction3D::hovered_hit(PointerId3D pointer) const {
+        return hit_(hovered_, pointer);
+    }
+
+    std::optional<HitResult3D> SceneInteraction3D::pressed_hit(PointerId3D pointer) const {
+        return hit_(pressed_, pointer);
+    }
+
+    std::optional<HitResult3D> SceneInteraction3D::captured_hit(PointerId3D pointer) const {
+        return hit_(captured_, pointer);
     }
 
 } // namespace termin::visual

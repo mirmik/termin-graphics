@@ -230,6 +230,9 @@ namespace termin::gui_native {
     void SceneView3D::set_scene(termin::visual::TcVisualScene3D scene_value) {
         if (tc_visual_scene3d_handle_eq(scene_, scene_value.handle()))
             return;
+        if (scene().valid()) {
+            interaction_.cancel_all(scene());
+        }
         if ((scene_pointer_active_ || fallback_pointer_active_) && tc_ui_document_is_valid(document())) {
             if (tc_widget_handle_eq(tc_ui_document_pointer_capture(document()), handle())) {
                 tc_ui_document_release_pointer_capture(document(), handle());

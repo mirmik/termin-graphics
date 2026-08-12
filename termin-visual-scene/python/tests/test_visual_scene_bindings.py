@@ -244,19 +244,35 @@ def test_scene3d_interaction_routes_capture_actions_and_callback_failures():
     )
     interaction = SceneInteraction3D()
     actions = []
+    target_events = []
     fallbacks = []
     interaction.set_action_handler(item, actions.append)
+    interaction.set_target_pointer_handler(item, target_events.append)
     interaction.set_fallback_handler(fallbacks.append)
 
     down = interaction.route(scene, 3, PointerEventKind3D.Down, _x_ray(), button=1)
     assert down.target == item
     assert down.captured == item
     assert interaction.captured(scene, 3) == item
+    assert interaction.captured_hit(scene, 3).part == 99
+    assert [event.kind.name for event in target_events] == ["Enter", "Down"]
+    assert target_events[-1].target == item
+    assert target_events[-1].captured
+    assert target_events[-1].part == 99
+    move = interaction.route(scene, 3, PointerEventKind3D.Move, _x_ray(y=20.0), button=1)
+    assert move.target == item
+    assert target_events[-1].kind.name == "Move"
+    assert target_events[-1].part == 99
+    assert target_events[-1].current_hit is None
     up = interaction.route(scene, 3, PointerEventKind3D.Up, _x_ray(), button=1)
     assert up.action.part == 99
     assert actions[0].target == item
     assert not up.callback_failed
     assert interaction.captured(scene, 3) is None
+
+    interaction.route(scene, 8, PointerEventKind3D.Down, _x_ray(), button=1)
+    assert interaction.cancel_scene(scene) is False
+    assert any(event.kind.name == "Cancel" and event.part == 99 for event in target_events)
 
     miss = interaction.route(scene, 4, PointerEventKind3D.Move, _x_ray(y=20.0))
     assert miss.used_fallback
@@ -269,5 +285,12 @@ def test_scene3d_interaction_routes_capture_actions_and_callback_failures():
     interaction.route(scene, 5, PointerEventKind3D.Down, _x_ray())
     failed = interaction.route(scene, 5, PointerEventKind3D.Up, _x_ray())
     assert failed.callback_failed
+
+    def fail_target(_event):
+        raise RuntimeError("python target event failed")
+
+    interaction.set_target_pointer_handler(item, fail_target)
+    target_failed = interaction.route(scene, 6, PointerEventKind3D.Down, _x_ray())
+    assert target_failed.callback_failed
 
     tc_visual_scene3d_destroy(scene)

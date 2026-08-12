@@ -79,6 +79,11 @@ namespace termin::visual::python {
             ActionEvent3D event{};
         };
 
+        struct TargetPointerEventRef3D {
+            TcVisualScene3D scene;
+            TargetPointerEvent3D event{};
+        };
+
         struct PointerDispatchRef3D {
             TcVisualScene3D scene;
             PointerDispatch3D dispatch{};
@@ -516,6 +521,14 @@ namespace termin::visual::python {
             .value("Up", PointerEventKind3D::Up)
             .value("Cancel", PointerEventKind3D::Cancel);
 
+        nb::enum_<TargetPointerEventKind3D>(m, "TargetPointerEventKind3D")
+            .value("Enter", TargetPointerEventKind3D::Enter)
+            .value("Leave", TargetPointerEventKind3D::Leave)
+            .value("Down", TargetPointerEventKind3D::Down)
+            .value("Move", TargetPointerEventKind3D::Move)
+            .value("Up", TargetPointerEventKind3D::Up)
+            .value("Cancel", TargetPointerEventKind3D::Cancel);
+
         nb::class_<PointerEvent3D>(m, "PointerEvent3D")
             .def(nb::init<>())
             .def_rw("pointer", &PointerEvent3D::pointer)
@@ -529,6 +542,21 @@ namespace termin::visual::python {
             .def_prop_ro("pointer", [](const ActionEventRef3D& self) { return self.event.pointer; })
             .def_prop_ro("part", [](const ActionEventRef3D& self) { return self.event.part; })
             .def_prop_ro("action", [](const ActionEventRef3D& self) { return self.event.action; });
+
+        nb::class_<TargetPointerEventRef3D>(m, "TargetPointerEvent3D")
+            .def_prop_ro("kind", [](const TargetPointerEventRef3D& self) { return self.event.kind; })
+            .def_prop_ro("pointer_event",
+                         [](const TargetPointerEventRef3D& self) { return self.event.pointer_event; })
+            .def_prop_ro("target",
+                         [](const TargetPointerEventRef3D& self) {
+                             return optional_item(self.scene, self.event.target);
+                         })
+            .def_prop_ro("part", [](const TargetPointerEventRef3D& self) { return self.event.part; })
+            .def_prop_ro("current_hit",
+                         [](const TargetPointerEventRef3D& self) {
+                             return optional_hit(self.scene, self.event.current_hit);
+                         })
+            .def_prop_ro("captured", [](const TargetPointerEventRef3D& self) { return self.event.captured; });
 
         nb::class_<PointerDispatchRef3D>(m, "PointerDispatch3D")
             .def_prop_ro("event", [](const PointerDispatchRef3D& self) { return self.dispatch.event; })
@@ -690,15 +718,46 @@ namespace termin::visual::python {
                  [](PythonSceneInteraction3D& self,
                     TcVisualScene3D scene,
                     PointerId3D pointer,
-                    const VisualItemRef3D& target) {
+                    const VisualItemRef3D& target,
+                    std::uint64_t part) {
                      if (!same_scene(scene, target.owner())) {
                          return false;
                      }
-                     return self.interaction.capture(scene, pointer, target.handle);
-                 })
+                     return self.interaction.capture(scene, pointer, target.handle, part);
+                 },
+                 nb::arg("scene"),
+                 nb::arg("pointer"),
+                 nb::arg("target"),
+                 nb::arg("part") = 0)
             .def("release",
                  [](PythonSceneInteraction3D& self, PointerId3D pointer) { self.interaction.release(pointer); })
             .def("cancel_all", [](PythonSceneInteraction3D& self) { self.interaction.cancel_all(); })
+            .def(
+                "cancel_scene",
+                [](PythonSceneInteraction3D& self, TcVisualScene3D scene) {
+                    if (!scene.valid()) {
+                        stale_reference("TcVisualScene3D has been destroyed");
+                    }
+                    return self.interaction.cancel_all(scene);
+                },
+                nb::arg("scene"))
+            .def(
+                "set_target_pointer_handler",
+                [](PythonSceneInteraction3D& self, const VisualItemRef3D& item, nb::object callback) {
+                    require_callable_or_none(callback, "target pointer handler");
+                    if (callback.is_none()) {
+                        self.interaction.clear_target_pointer_handler(item.handle);
+                        return;
+                    }
+                    const auto scene = item.owner();
+                    self.interaction.set_target_pointer_handler(
+                        item.handle, [scene, callback = std::move(callback)](const TargetPointerEvent3D& event) {
+                            nb::gil_scoped_acquire gil;
+                            callback(TargetPointerEventRef3D{scene, event});
+                        });
+                },
+                nb::arg("item"),
+                nb::arg("callback").none())
             .def(
                 "set_action_handler",
                 [](PythonSceneInteraction3D& self, const VisualItemRef3D& item, nb::object callback) {
@@ -741,7 +800,19 @@ namespace termin::visual::python {
                  })
             .def("captured", [](const PythonSceneInteraction3D& self, TcVisualScene3D scene, PointerId3D pointer) {
                 return optional_item(scene, self.interaction.captured(pointer));
-            });
+            })
+            .def("hovered_hit",
+                 [](const PythonSceneInteraction3D& self, TcVisualScene3D scene, PointerId3D pointer) {
+                     return optional_hit(scene, self.interaction.hovered_hit(pointer));
+                 })
+            .def("pressed_hit",
+                 [](const PythonSceneInteraction3D& self, TcVisualScene3D scene, PointerId3D pointer) {
+                     return optional_hit(scene, self.interaction.pressed_hit(pointer));
+                 })
+            .def("captured_hit",
+                 [](const PythonSceneInteraction3D& self, TcVisualScene3D scene, PointerId3D pointer) {
+                     return optional_hit(scene, self.interaction.captured_hit(pointer));
+                 });
     }
 
 } // namespace termin::visual::python

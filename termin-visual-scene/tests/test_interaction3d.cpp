@@ -3,10 +3,12 @@
 #endif
 
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 #include "termin_visual_scene/interaction3d.hpp"
 #include "termin_visual_scene/visual_item3d.hpp"
@@ -75,6 +77,8 @@ int main() {
     using termin::visual::PointerEvent3D;
     using termin::visual::PointerEventKind3D;
     using termin::visual::SceneInteraction3D;
+    using termin::visual::TargetPointerEvent3D;
+    using termin::visual::TargetPointerEventKind3D;
     using termin::visual::TcVisualScene3D;
 
     const auto scene_handle = tc_visual_scene3d_create();
@@ -143,6 +147,10 @@ int main() {
     SceneInteraction3D interaction;
     int actions = 0;
     int fallbacks = 0;
+    std::vector<TargetPointerEvent3D> target_events;
+    interaction.set_target_pointer_handler(*near_handle, [&](const auto& event) {
+        target_events.push_back(event);
+    });
     interaction.set_action_handler(*near_handle, [&](const auto& action) {
         ++actions;
         assert(action.part == 30);
@@ -153,17 +161,29 @@ int main() {
     assert(tc_visual_item3d_handle_eq(down.target, *near_handle));
     assert(tc_visual_item3d_handle_eq(down.pressed, *near_handle));
     assert(tc_visual_item3d_handle_eq(down.captured, *near_handle));
+    assert(target_events.size() == 2);
+    assert(target_events[0].kind == TargetPointerEventKind3D::Enter);
+    assert(target_events[1].kind == TargetPointerEventKind3D::Down);
+    assert(target_events[1].part == 30 && target_events[1].captured);
+    assert(interaction.captured_hit(7)->part == 30);
 
     near_ptr->hittable = false;
     auto move = interaction.route(scene, PointerEvent3D{7, PointerEventKind3D::Move, ray(), 1});
     assert(tc_visual_item3d_handle_eq(move.target, *near_handle));
     assert(!move.hit || !tc_visual_item3d_handle_eq(move.hit->item, *near_handle));
+    assert(target_events[target_events.size() - 2].kind == TargetPointerEventKind3D::Leave);
+    assert(target_events.back().kind == TargetPointerEventKind3D::Move);
+    assert(target_events.back().part == 30 && target_events.back().captured);
+    assert(!target_events.back().current_hit ||
+           !tc_visual_item3d_handle_eq(target_events.back().current_hit->item, *near_handle));
     near_ptr->hittable = true;
 
     auto up = interaction.route(scene, PointerEvent3D{7, PointerEventKind3D::Up, ray(), 1});
     assert(up.action);
     assert(actions == 1);
     assert(tc_visual_item3d_handle_is_invalid(up.captured));
+    assert(target_events.back().kind == TargetPointerEventKind3D::Up);
+    assert(target_events.back().part == 30);
 
     interaction.set_action_handler(*near_handle, [](const auto&) { throw std::runtime_error("expected action"); });
     interaction.route(scene, PointerEvent3D{12, PointerEventKind3D::Down, ray(), 1});
@@ -188,12 +208,44 @@ int main() {
 
     assert(near_ptr->detach());
     parent_ptr->set_enabled(false);
-    assert(interaction.capture(scene, 10, *near_handle));
+    assert(interaction.capture(scene, 10, *near_handle, 77));
     assert(parent_ptr->append_child(*near_ptr));
     move = interaction.route(scene, PointerEvent3D{10, PointerEventKind3D::Move, ray(), 0});
     assert(tc_visual_item3d_handle_is_invalid(move.captured));
     assert(!tc_visual_item3d_handle_eq(move.target, *near_handle));
+    assert(target_events.back().kind == TargetPointerEventKind3D::Cancel);
+    assert(target_events.back().part == 77);
     parent_ptr->set_enabled(true);
+
+    // Scene-wide cancellation preserves the captured part and emits one
+    // controller cancellation before state is cleared.
+    interaction.route(scene, PointerEvent3D{20, PointerEventKind3D::Down, ray(), 2});
+    assert(interaction.captured_hit(20)->part == 30);
+    const std::size_t events_before_cancel_all = target_events.size();
+    assert(!interaction.cancel_all(scene));
+    const auto cancel_event = std::find_if(target_events.begin() + events_before_cancel_all,
+                                           target_events.end(),
+                                           [](const auto& event) {
+                                               return event.kind == TargetPointerEventKind3D::Cancel &&
+                                                      event.pointer_event.pointer == 20;
+                                           });
+    assert(cancel_event != target_events.end());
+    assert(cancel_event->part == 30);
+    const auto leave_event = std::find_if(cancel_event,
+                                          target_events.end(),
+                                          [](const auto& event) {
+                                              return event.kind == TargetPointerEventKind3D::Leave &&
+                                                     event.pointer_event.pointer == 20;
+                                          });
+    assert(leave_event != target_events.end());
+    assert(tc_visual_item3d_handle_is_invalid(interaction.captured(20)));
+
+    interaction.set_target_pointer_handler(*near_handle, [](const auto&) {
+        throw std::runtime_error("expected target event failure");
+    });
+    auto failed_target = interaction.route(scene, PointerEvent3D{21, PointerEventKind3D::Down, ray(), 1});
+    assert(failed_target.callback_failed);
+    interaction.set_target_pointer_handler(*near_handle, {});
 
     interaction.set_fallback_handler([](const auto&) { throw std::runtime_error("expected"); });
     near_ptr->hittable = false;
