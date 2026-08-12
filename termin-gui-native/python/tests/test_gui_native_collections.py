@@ -1208,28 +1208,6 @@ def test_native_viewport3d_stale_surface_and_destroy_release_are_safe():
     assert weak_surface() is None
 
 
-def test_display_is_the_viewport_surface_and_input_protocol():
-    from termin.display import Display
-
-    surface_methods = (
-        "is_valid",
-        "get_tgfx_color_tex_id",
-        "framebuffer_size",
-        "resize",
-    )
-    input_methods = (
-        "dispatch_pointer_move",
-        "dispatch_pointer_button",
-        "dispatch_wheel",
-        "dispatch_key",
-        "dispatch_text",
-    )
-    for method_name in surface_methods:
-        assert callable(getattr(Display, method_name))
-    for method_name in input_methods:
-        assert callable(getattr(Display, method_name))
-
-
 def test_native_scene_view_transform_forwarding_and_embedding():
     scene = tc_visual_scene_create()
     node = scene.create_rect(

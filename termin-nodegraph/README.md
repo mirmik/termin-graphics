@@ -45,6 +45,11 @@ graph2 = load_graph_json("graph.json")
 
 ## Interactive native example
 
+The installed-SDK acceptance coverage, including Plot2D and Plot3D node body
+composition, lives in the
+[`graphics` profile showcase](../examples/graphics-showcase/README.md). The
+example below remains the larger interactive parameter-editor tutorial.
+
 After building the SDK, launch the current native projection directly:
 
 ```bash

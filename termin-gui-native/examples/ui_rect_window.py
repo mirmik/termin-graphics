@@ -9,7 +9,7 @@ import sys
 import time
 
 import tgfx
-from termin.display.window import WindowedGraphicsSession, quit_sdl
+from termin.window import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     tc_ui_document_create,
     DrawList,
@@ -72,6 +72,11 @@ def main() -> int:
         return 77
 
     document = None
+    runtime = None
+    window = None
+    context = None
+    color_target = None
+    renderer = None
     try:
         runtime = WindowedGraphicsSession.create_native()
         window = runtime.create_window("termin-gui-native Python rectangle example", 800, 600)
@@ -84,7 +89,6 @@ def main() -> int:
         paint_context = PaintContext(draw_list)
         renderer = DrawListRenderer()
 
-        color_target = None
         target_width = 0
         target_height = 0
 
@@ -121,12 +125,6 @@ def main() -> int:
             if max_seconds > 0.0 and time.monotonic() - start >= max_seconds:
                 break
 
-        renderer.release_gpu()
-        if color_target is not None:
-            context.destroy_texture(color_target)
-        window.close()
-        runtime.close()
-        quit_sdl()
         return 0
     except Exception as exc:
         print(f"termin-gui-native Python rectangle example failed: {exc}", file=sys.stderr)
@@ -138,6 +136,27 @@ def main() -> int:
             return 77
         return 1
     finally:
+        if renderer is not None:
+            try:
+                renderer.release_gpu()
+            except Exception as exc:
+                print(f"termin-gui-native Python rectangle example GPU cleanup failed: {exc}", file=sys.stderr)
+        if color_target is not None and context is not None:
+            try:
+                context.destroy_texture(color_target)
+            except Exception as exc:
+                print(f"termin-gui-native Python rectangle example texture cleanup failed: {exc}", file=sys.stderr)
+        if window is not None:
+            try:
+                window.close()
+            except Exception as exc:
+                print(f"termin-gui-native Python rectangle example window cleanup failed: {exc}", file=sys.stderr)
+        if runtime is not None:
+            try:
+                runtime.close()
+            except Exception as exc:
+                print(f"termin-gui-native Python rectangle example runtime cleanup failed: {exc}", file=sys.stderr)
+        quit_sdl()
         if document is not None:
             tc_ui_document_destroy(document)
 

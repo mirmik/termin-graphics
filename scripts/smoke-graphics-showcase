@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Run the graphics showcase against an already installed SDK product."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+EXPECTED_SECTIONS = {
+    "native_ui",
+    "plot_2d",
+    "plot_3d",
+    "visual_scene_nodegraph",
+    "plot_nodegraph_composition",
+}
+FORBIDDEN_MODULES = ("termin.display", "termin.engine", "termin.runtime")
+
+
+class SmokeError(RuntimeError):
+    pass
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _arguments(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--sdk-root",
+        type=Path,
+        default=_repo_root() / "sdk",
+        help="installed SDK root (default: repository sdk/)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="preserve report and PNG in this directory",
+    )
+    return parser.parse_args(argv)
+
+
+def _isolated_environment(sdk_root: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PYTHONHOME": str(sdk_root / "__forbidden_python_home__"),
+            "PYTHONPATH": str(sdk_root / "__forbidden_python_path__"),
+            "PYTHONUSERBASE": str(sdk_root / "__forbidden_user_base__"),
+            "PYTHONNOUSERSITE": "1",
+        }
+    )
+    return environment
+
+
+def _run(command: list[str], *, environment: dict[str, str]) -> str:
+    result = subprocess.run(
+        command,
+        cwd=_repo_root(),
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        raise SmokeError(
+            f"command failed with exit code {result.returncode}: {' '.join(command)}"
+        )
+    return result.stdout
+
+
+def _verify_profile_boundary(python: Path, environment: dict[str, str]) -> None:
+    probe = (
+        "import importlib.util, json, sys; "
+        f"names={FORBIDDEN_MODULES!r}; "
+        "print(json.dumps({'isolated': bool(sys.flags.isolated), "
+        "'forbidden': {name: importlib.util.find_spec(name) is not None "
+        "for name in names}}))"
+    )
+    output = _run([str(python), "-I", "-c", probe], environment=environment)
+    try:
+        result = json.loads(output.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError) as error:
+        raise SmokeError("profile-boundary probe returned invalid JSON") from error
+    if result.get("isolated") is not True:
+        raise SmokeError("bundled Python did not enter isolated mode")
+    present = sorted(name for name, found in result["forbidden"].items() if found)
+    if present:
+        raise SmokeError(
+            "installed graphics SDK contains forbidden full-profile modules: "
+            + ", ".join(present)
+        )
+
+
+def _verify_report(report_path: Path, artifact_path: Path, sdk_root: Path) -> None:
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SmokeError(f"showcase report is invalid: {error}") from error
+    if report.get("status") != "passed":
+        raise SmokeError(f"showcase status is not passed: {report.get('status')!r}")
+    if report.get("runtime", {}).get("isolated") is not True:
+        raise SmokeError("showcase report does not confirm isolated Python")
+    executable = Path(str(report.get("runtime", {}).get("executable", ""))).resolve()
+    if executable != (sdk_root / "bin" / executable.name).resolve():
+        raise SmokeError(f"showcase used Python outside the selected SDK: {executable}")
+
+    sections = report.get("sections", [])
+    names = {section.get("name") for section in sections}
+    if names != EXPECTED_SECTIONS:
+        raise SmokeError(
+            f"showcase section registry mismatch: expected={sorted(EXPECTED_SECTIONS)} "
+            f"actual={sorted(str(name) for name in names)}"
+        )
+    failed = [section.get("name") for section in sections if section.get("status") != "passed"]
+    if failed:
+        raise SmokeError("showcase reported failed sections: " + ", ".join(failed))
+    empty = [
+        section.get("name")
+        for section in sections
+        if int(section.get("frame", {}).get("changed_pixels", 0)) < 256
+    ]
+    if empty:
+        raise SmokeError("showcase produced clear sections: " + ", ".join(empty))
+    if not artifact_path.is_file() or artifact_path.stat().st_size < 1024:
+        raise SmokeError(f"showcase PNG is missing or empty: {artifact_path}")
+
+
+def _smoke(sdk_root: Path, output_dir: Path) -> None:
+    sdk_root = sdk_root.resolve()
+    python = sdk_root / "bin" / ("termin_python.exe" if os.name == "nt" else "termin_python")
+    showcase = _repo_root() / "examples" / "graphics-showcase" / "main.py"
+    if not python.is_file():
+        raise SmokeError(f"bundled Python was not found: {python}")
+    if not showcase.is_file():
+        raise SmokeError(f"graphics showcase was not found: {showcase}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report = output_dir / "graphics-showcase.json"
+    artifact = output_dir / "graphics-showcase.png"
+    environment = _isolated_environment(sdk_root)
+    _verify_profile_boundary(python, environment)
+    _run(
+        [
+            str(python),
+            "-I",
+            str(showcase),
+            "--headless",
+            "--output",
+            str(artifact),
+            "--report",
+            str(report),
+        ],
+        environment=environment,
+    )
+    _verify_report(report, artifact, sdk_root)
+    print(f"graphics showcase installed-SDK smoke passed: {report}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _arguments(argv)
+    try:
+        if args.output_dir is not None:
+            _smoke(args.sdk_root, args.output_dir.resolve())
+        else:
+            with tempfile.TemporaryDirectory(prefix="termin-graphics-showcase-") as temp:
+                _smoke(args.sdk_root, Path(temp))
+        return 0
+    except Exception as error:
+        print(f"graphics showcase installed-SDK smoke failed: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

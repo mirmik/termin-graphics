@@ -9,7 +9,7 @@ import time
 
 import tgfx
 from tcbase._geom_native import LinearColor
-from termin.display.window import WindowedGraphicsSession, quit_sdl
+from termin.window import WindowedGraphicsSession, quit_sdl
 from termin.gui_native import (
     DrawList,
     DrawListRenderer,
@@ -31,6 +31,13 @@ def _example_seconds() -> float:
 def _font_path() -> Path | None:
     configured = os.environ.get("TERMIN_UI_FONT")
     candidates = [Path(configured)] if configured else []
+    configured_sdk = os.environ.get("TERMIN_SDK")
+    sdk_root = (
+        Path(configured_sdk).resolve()
+        if configured_sdk
+        else Path(sys.executable).resolve().parent.parent
+    )
+    candidates.append(sdk_root / "share" / "termin" / "fonts" / "DroidSans.ttf")
     candidates.append(
         Path.cwd()
         / "termin-thirdparty"
@@ -47,6 +54,11 @@ def main() -> int:
         return 77
 
     document = None
+    runtime = None
+    window = None
+    context = None
+    color_target = None
+    renderer = None
     try:
         runtime = WindowedGraphicsSession.create_native()
         window = runtime.create_window("termin-gui-native Python showcase", 800, 600)
@@ -62,7 +74,6 @@ def main() -> int:
             raise RuntimeError("native UI showcase font was not found")
         renderer.bind_text_measurer(document)
 
-        color_target = None
         target_size = (0, 0)
         max_seconds = _example_seconds()
         start = time.monotonic()
@@ -93,12 +104,6 @@ def main() -> int:
             if max_seconds > 0.0 and time.monotonic() - start >= max_seconds:
                 break
 
-        renderer.release_gpu()
-        if color_target is not None:
-            context.destroy_texture(color_target)
-        window.close()
-        runtime.close()
-        quit_sdl()
         return 0
     except Exception as exc:
         print(f"termin-gui-native Python showcase failed: {exc}", file=sys.stderr)
@@ -110,6 +115,27 @@ def main() -> int:
             return 77
         return 1
     finally:
+        if renderer is not None:
+            try:
+                renderer.release_gpu()
+            except Exception as exc:
+                print(f"termin-gui-native Python showcase GPU cleanup failed: {exc}", file=sys.stderr)
+        if color_target is not None and context is not None:
+            try:
+                context.destroy_texture(color_target)
+            except Exception as exc:
+                print(f"termin-gui-native Python showcase texture cleanup failed: {exc}", file=sys.stderr)
+        if window is not None:
+            try:
+                window.close()
+            except Exception as exc:
+                print(f"termin-gui-native Python showcase window cleanup failed: {exc}", file=sys.stderr)
+        if runtime is not None:
+            try:
+                runtime.close()
+            except Exception as exc:
+                print(f"termin-gui-native Python showcase runtime cleanup failed: {exc}", file=sys.stderr)
+        quit_sdl()
         if document is not None:
             tc_ui_document_destroy(document)
 

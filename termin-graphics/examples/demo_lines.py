@@ -1,21 +1,20 @@
 """3D thick line mesh demo for tgfx2.
 
 Run:
-    TERMIN_BACKEND=opengl python3 examples/demo_lines.py
-    TERMIN_BACKEND=vulkan python3 examples/demo_lines.py
+    TERMIN_BACKEND=opengl sdk/bin/termin_python termin-graphics/examples/demo_lines.py
+    TERMIN_BACKEND=vulkan sdk/bin/termin_python termin-graphics/examples/demo_lines.py
 """
 
 from __future__ import annotations
 
-import ctypes
 import math
+import os
+import time
 
 import numpy as np
-import sdl2
 
-from tcbase import MouseButton
 from tcbase._geom_native import LinearColor
-from termin.display.window import WindowedGraphicsSession, quit_sdl
+from termin.window import WindowedGraphicsSession, quit_sdl
 from termin.geombase import OrbitCamera
 from tgfx import (
     CULL_NONE,
@@ -48,12 +47,6 @@ void main() {
 }
 """
 
-_SDL_BUTTON_MAP = {
-    1: MouseButton.LEFT,
-    2: MouseButton.MIDDLE,
-    3: MouseButton.RIGHT,
-}
-
 _FRAG_SRC = """#version 450 core
 #ifdef VULKAN
 layout(push_constant) uniform PCBlock {
@@ -70,6 +63,13 @@ void main() {
     frag_color = U_COLOR;
 }
 """
+
+
+def _example_seconds() -> float:
+    try:
+        return max(float(os.environ.get("TERMIN_GRAPHICS_EXAMPLE_SECONDS", "0")), 0.0)
+    except ValueError:
+        return 0.0
 
 
 class RenderTarget:
@@ -163,42 +163,6 @@ def _push_state(ctx, camera: OrbitCamera, aspect: float,
     ctx.set_push_constants(np.ascontiguousarray(pc, dtype=np.uint8))
 
 
-def _dispatch(event: sdl2.SDL_Event, window,
-              camera: OrbitCamera, drag: dict[str, float | str]) -> None:
-    etype = event.type
-    if etype == sdl2.SDL_QUIT:
-        window.set_should_close(True)
-    elif etype == sdl2.SDL_WINDOWEVENT:
-        if event.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
-            window.set_should_close(True)
-    elif etype == sdl2.SDL_MOUSEBUTTONDOWN:
-        button = _SDL_BUTTON_MAP.get(int(event.button.button), MouseButton.OTHER)
-        if button == MouseButton.MIDDLE:
-            drag["mode"] = "orbit"
-        elif button == MouseButton.RIGHT:
-            drag["mode"] = "pan"
-        drag["x"] = float(event.button.x)
-        drag["y"] = float(event.button.y)
-    elif etype == sdl2.SDL_MOUSEBUTTONUP:
-        drag["mode"] = ""
-    elif etype == sdl2.SDL_MOUSEMOTION:
-        mode = str(drag["mode"])
-        if mode:
-            x = float(event.motion.x)
-            y = float(event.motion.y)
-            dx = x - float(drag["x"])
-            dy = y - float(drag["y"])
-            if mode == "orbit":
-                camera.orbit(-dx * 0.006, dy * 0.006)
-            elif mode == "pan":
-                camera.pan(-dx, dy)
-            drag["x"] = x
-            drag["y"] = y
-    elif etype == sdl2.SDL_MOUSEWHEEL:
-        factor = max(0.15, 1.0 - float(event.wheel.y) * 0.10)
-        camera.zoom(factor)
-
-
 def main() -> None:
     configure_default_shader_runtime("examples")
     runtime = WindowedGraphicsSession.create_native()
@@ -212,17 +176,15 @@ def main() -> None:
     camera.distance = 5.2
     camera.fitted_radius = 2.2
     scene = _make_scene()
-    event = sdl2.SDL_Event()
-    drag: dict[str, float | str] = {"mode": "", "x": 0.0, "y": 0.0}
-
+    max_seconds = _example_seconds()
+    started = time.monotonic()
     try:
         while not window.should_close():
-            while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
-                _dispatch(event, window, camera, drag)
+            window.poll_events()
 
             width, height = window.framebuffer_size()
             if width <= 0 or height <= 0:
-                sdl2.SDL_Delay(16)
+                time.sleep(0.016)
                 continue
 
             target.ensure_size(width, height)
@@ -254,7 +216,9 @@ def main() -> None:
             ctx.context.end_pass()
             ctx.context.end_frame()
             window.present(target.color)
-            sdl2.SDL_Delay(16)
+            if max_seconds > 0.0 and time.monotonic() - started >= max_seconds:
+                break
+            time.sleep(0.016)
     finally:
         target.destroy()
         window.close()

@@ -2,6 +2,12 @@
 
 Canonical native retained UI document and widget toolkit for Termin.
 
+The maintained cross-package executable example is the
+[`graphics` profile showcase](../examples/graphics-showcase/README.md). It runs
+the Python-built control tree, Plot2D/Plot3D and nodegraph composition through
+the installed SDK without an engine-level display dependency. Package-local
+window examples remain focused tutorials for SDL-enabled builds.
+
 The maintained public C++/Python widget and signal inventory is
 [`docs/python-widget-parity.md`](docs/python-widget-parity.md). Python factories
 return typed wrappers; common widget state is available through `.widget`.

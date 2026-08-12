@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import ctypes
 import math
+import os
+import time
 
-import sdl2
-
-from tcbase import MouseButton
 from tcbase._geom_native import LinearColor
-from termin.display.window import WindowedGraphicsSession, quit_sdl
-from termin.geombase import OrbitCamera
+from termin.window import WindowedGraphicsSession, quit_sdl
+from termin.geombase import OrbitCamera, Vec3
 from tgfx import (
     CULL_NONE,
     LineCapStyle,
@@ -23,12 +21,12 @@ from tgfx import (
     configure_default_shader_runtime,
 )
 
-_SDL_BUTTON_MAP = {
-    1: MouseButton.LEFT,
-    2: MouseButton.MIDDLE,
-    3: MouseButton.RIGHT,
-}
 
+def _example_seconds() -> float:
+    try:
+        return max(float(os.environ.get("TERMIN_GRAPHICS_EXAMPLE_SECONDS", "0")), 0.0)
+    except ValueError:
+        return 0.0
 
 class RenderTarget:
     def __init__(self, ctx: Tgfx2Context, width: int, height: int) -> None:
@@ -69,7 +67,7 @@ class GpuLine:
         self.points = [LinePoint3(x, y, z) for x, y, z in points]
         self.style = ScreenSpaceLineStyle()
         self.style.width_px = width_px
-        self.style.color = color
+        self.style.color = LinearColor(*color)
         self.style.cap = cap
         self.style.round_segments = 16
 
@@ -138,42 +136,6 @@ def _make_scene() -> list[GpuLine]:
     ] + angle_lines + [center_marker]
 
 
-def _dispatch(event: sdl2.SDL_Event, window,
-              camera: OrbitCamera, drag: dict[str, float | str]) -> None:
-    etype = event.type
-    if etype == sdl2.SDL_QUIT:
-        window.set_should_close(True)
-    elif etype == sdl2.SDL_WINDOWEVENT:
-        if event.window.event == sdl2.SDL_WINDOWEVENT_CLOSE:
-            window.set_should_close(True)
-    elif etype == sdl2.SDL_MOUSEBUTTONDOWN:
-        button = _SDL_BUTTON_MAP.get(int(event.button.button), MouseButton.OTHER)
-        if button == MouseButton.MIDDLE:
-            drag["mode"] = "orbit"
-        elif button == MouseButton.RIGHT:
-            drag["mode"] = "pan"
-        drag["x"] = float(event.button.x)
-        drag["y"] = float(event.button.y)
-    elif etype == sdl2.SDL_MOUSEBUTTONUP:
-        drag["mode"] = ""
-    elif etype == sdl2.SDL_MOUSEMOTION:
-        mode = str(drag["mode"])
-        if mode:
-            x = float(event.motion.x)
-            y = float(event.motion.y)
-            dx = x - float(drag["x"])
-            dy = y - float(drag["y"])
-            if mode == "orbit":
-                camera.orbit(-dx * 0.006, dy * 0.006)
-            elif mode == "pan":
-                camera.pan(-dx, dy)
-            drag["x"] = x
-            drag["y"] = y
-    elif etype == sdl2.SDL_MOUSEWHEEL:
-        factor = max(0.15, 1.0 - float(event.wheel.y) * 0.10)
-        camera.zoom(factor)
-
-
 def main() -> None:
     configure_default_shader_runtime("examples")
     runtime = WindowedGraphicsSession.create_native()
@@ -184,21 +146,19 @@ def main() -> None:
     renderer = ScreenSpaceLineRenderer()
 
     camera = OrbitCamera()
-    camera.target = (0.0, 0.0, 0.35)
+    camera.target = Vec3(0.0, 0.0, 0.35)
     camera.distance = 6.0
     camera.fitted_radius = 2.7
     scene = _make_scene()
-    event = sdl2.SDL_Event()
-    drag: dict[str, float | str] = {"mode": "", "x": 0.0, "y": 0.0}
-
+    max_seconds = _example_seconds()
+    started = time.monotonic()
     try:
         while not window.should_close():
-            while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
-                _dispatch(event, window, camera, drag)
+            window.poll_events()
 
             width, height = window.framebuffer_size()
             if width <= 0 or height <= 0:
-                sdl2.SDL_Delay(16)
+                time.sleep(0.016)
                 continue
 
             target.ensure_size(width, height)
@@ -228,11 +188,12 @@ def main() -> None:
             ctx.context.end_pass()
             ctx.context.end_frame()
             window.present(target.color)
-            sdl2.SDL_Delay(16)
+            if max_seconds > 0.0 and time.monotonic() - started >= max_seconds:
+                break
+            time.sleep(0.016)
     finally:
         renderer.release(ctx.context)
         target.destroy()
-        window.close()
         window.close()
         runtime.close()
         quit_sdl()

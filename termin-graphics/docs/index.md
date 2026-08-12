@@ -13,12 +13,22 @@
 
 ## Examples
 
+The cross-package acceptance point for the installed `graphics` SDK is the
+[graphics profile showcase](../../examples/graphics-showcase/README.md). It
+provides the required headless native UI, visual-scene/nodegraph and 2D/3D plot
+coverage. The focused examples below remain as interactive low-level line
+renderer tutorials and use the optional `termin-window` host.
+
 - `examples/demo_lines.py` - 3D visual стенд для `tgfx::build_line_mesh`
   с общей `termin.geombase.OrbitCamera`.
 - `examples/demo_lines_gpu.py` - visual стенд для GPU-expanded
   screen-space линий через `ScreenSpaceLineRenderer`.
 - `examples/demo_lines_billboard.py` - visual стенд для GPU-expanded
   billboard линий с шириной в world units через `WorldSpaceLineRenderer`.
+
+Set `TERMIN_GRAPHICS_EXAMPLE_SECONDS` to a positive value for a bounded window
+smoke. These tutorials require an SDL-enabled `graphics` or `full` SDK; they do
+not use PySDL2 or the engine-level `termin-display` package.
 
 ## Границы
 
