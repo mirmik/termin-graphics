@@ -891,6 +891,50 @@ static void test_nested_subtree_transforms_map_hit_and_bubbling_coordinates() {
     tc_ui_document_destroy(document);
 }
 
+static void test_pointer_capture_uses_current_composed_placement() {
+    const tc_ui_document_handle document = tc_ui_document_create();
+    RouteWidget root;
+    RouteWidget child;
+    std::vector<tc_ui_point> child_points;
+    const tc_widget_handle root_handle = adopt_route_widget(document, root, 1);
+    const tc_widget_handle child_handle = adopt_route_widget(document, child, 2);
+    child.handled_pointer = TC_UI_POINTER_MOVE;
+    child.pointer_points = &child_points;
+    assert(tc_widget_append_child(&root.widget, &child.widget));
+    assert(tc_ui_document_add_root(document, root_handle));
+    assert(tc_ui_document_set_pointer_capture(document, child_handle));
+
+    assert(tc_widget_set_subtree_transform(&root.widget, {{10.5f, 20.25f}, 1.5f}));
+    assert(tc_widget_set_subtree_transform(&child.widget, {{2.0f, 4.0f}, 0.5f}));
+    tc_ui_pointer_event event{};
+    event.type = TC_UI_POINTER_MOVE;
+    event.x = 19.5f;
+    event.y = 30.75f;
+    assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_HANDLED);
+    assert(child_points.size() == 1);
+    assert(child_points.back().x == 8.0f && child_points.back().y == 6.0f);
+
+    assert(tc_widget_set_subtree_transform(&root.widget, {{40.0f, 8.0f}, 2.0f}));
+    assert(tc_widget_set_subtree_transform(&child.widget, {{-3.0f, 5.0f}, 0.25f}));
+    event.x = 38.0f;
+    event.y = 21.0f;
+    assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_HANDLED);
+    assert(child_points.size() == 2);
+    assert(child_points.back().x == 8.0f && child_points.back().y == 6.0f);
+
+    tc_widget_set_bounds(&child.widget, {1.0f, 2.0f, 10.0f, 12.0f});
+    const tc_ui_rect bounds = tc_widget_bounds_in_document(&child.widget);
+    assert(bounds.x == 34.5f && bounds.y == 19.0f);
+    assert(bounds.width == 5.0f && bounds.height == 6.0f);
+
+    const tc_ui_uniform_transform singular{{0.0f, 0.0f}, std::numeric_limits<float>::denorm_min()};
+    assert(tc_widget_set_subtree_transform(&child.widget, singular));
+    assert(tc_ui_document_dispatch_pointer_event(document, &event) == TC_UI_EVENT_IGNORED);
+    assert(child_points.size() == 2);
+
+    tc_ui_document_destroy(document);
+}
+
 static void test_state_setters_survive_lifecycle_callback_destroy() {
     {
         tc_ui_document_handle document = tc_ui_document_create();
@@ -1370,6 +1414,7 @@ int main() {
     test_pointer_routing_hover_pressed_and_bubbling();
     test_routing_snapshot_survives_destroyed_target();
     test_nested_subtree_transforms_map_hit_and_bubbling_coordinates();
+    test_pointer_capture_uses_current_composed_placement();
     test_keyboard_bubbling_focus_events_and_tab_traversal();
     test_state_setters_survive_lifecycle_callback_destroy();
     test_overlay_paint_hit_order_and_tooltip_transparency();

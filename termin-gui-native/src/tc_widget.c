@@ -452,33 +452,113 @@ bool tc_widget_set_subtree_transform(tc_widget* widget, tc_ui_uniform_transform 
 }
 
 tc_ui_uniform_transform tc_ui_internal_widget_accumulated_transform(const tc_widget* widget) {
+    tgfx2_composition_state2d state;
+    tc_ui_uniform_transform result = tc_ui_uniform_transform_identity();
     if (!widget) {
-        return tc_ui_uniform_transform_identity();
+        return result;
     }
-    return tc_ui_uniform_transform_compose(tc_ui_internal_widget_accumulated_transform(widget->parent),
-                                           widget->subtree_transform);
+    if (!tc_ui_internal_widget_composition_state(widget, &state)) {
+        tc_log_error("[termin-gui-native] cannot evaluate accumulated widget placement");
+        return result;
+    }
+    result.translation = (tc_ui_point){state.local_to_world.tx, state.local_to_world.ty};
+    result.scale = state.local_to_world.m00;
+    return result;
+}
+
+static tgfx2_composition_layer2d widget_composition_layer(const tc_widget* widget) {
+    const tc_ui_uniform_transform transform = tc_widget_subtree_transform(widget);
+    tgfx2_composition_layer2d layer = tgfx2_composition_layer2d_identity();
+    layer.transform = tc_affine2f_new(transform.scale,
+                                     0.0f,
+                                     0.0f,
+                                     transform.scale,
+                                     transform.translation.x,
+                                     transform.translation.y);
+    return layer;
+}
+
+bool tc_ui_internal_widget_composition_state(const tc_widget* widget, tgfx2_composition_state2d* out_state) {
+    tgfx2_composition_state2d parent_state;
+    tgfx2_composition_layer2d layer;
+    if (!out_state) {
+        tc_log_error("[termin-gui-native] cannot evaluate widget placement without output storage");
+        return false;
+    }
+    if (!widget) {
+        *out_state = tgfx2_composition_state2d_identity();
+        return true;
+    }
+    if (!tc_ui_internal_widget_composition_state(widget->parent, &parent_state)) {
+        return false;
+    }
+    layer = widget_composition_layer(widget);
+    if (!tgfx2_composition_state2d_push(&parent_state, &layer, out_state)) {
+        tc_log_error("[termin-gui-native] failed to compose widget placement");
+        return false;
+    }
+    return true;
+}
+
+bool tc_ui_internal_widget_map_point_from_parent(const tc_widget* widget,
+                                                 tc_ui_point parent_point,
+                                                 tc_ui_point* out_widget_point) {
+    tgfx2_composition_state2d state = tgfx2_composition_state2d_identity();
+    tgfx2_composition_layer2d layer;
+    tc_vec2f local;
+    if (!widget || !out_widget_point) {
+        return false;
+    }
+    layer = widget_composition_layer(widget);
+    if (!tgfx2_composition_state2d_push(&state, &layer, &state) ||
+        !tgfx2_composition_state2d_map_point_from_world(
+            &state, TC_VEC2F(parent_point.x, parent_point.y), &local)) {
+        tc_log_error("[termin-gui-native] cannot map parent point through widget placement");
+        return false;
+    }
+    *out_widget_point = (tc_ui_point){local.x, local.y};
+    return true;
 }
 
 bool tc_ui_internal_widget_map_point_from_document(const tc_widget* widget,
                                                    tc_ui_point document_point,
                                                    tc_ui_point* out_widget_point) {
-    tc_ui_uniform_transform inverse;
-    if (!widget || !out_widget_point ||
-        !tc_ui_uniform_transform_inverse(tc_ui_internal_widget_accumulated_transform(widget), &inverse)) {
+    tgfx2_composition_state2d state;
+    tc_vec2f local;
+    if (!widget || !out_widget_point || !tc_ui_internal_widget_composition_state(widget, &state) ||
+        !tgfx2_composition_state2d_map_point_from_world(
+            &state, TC_VEC2F(document_point.x, document_point.y), &local)) {
         return false;
     }
-    *out_widget_point = tc_ui_uniform_transform_map_point(inverse, document_point);
+    *out_widget_point = (tc_ui_point){local.x, local.y};
     return true;
 }
 
 tc_ui_point tc_ui_internal_widget_map_point_to_document(const tc_widget* widget, tc_ui_point widget_point) {
-    return tc_ui_uniform_transform_map_point(tc_ui_internal_widget_accumulated_transform(widget), widget_point);
+    tgfx2_composition_state2d state;
+    tc_vec2f world;
+    if (!widget || !tc_ui_internal_widget_composition_state(widget, &state) ||
+        !tgfx2_composition_state2d_map_point_to_world(&state, TC_VEC2F(widget_point.x, widget_point.y), &world)) {
+        tc_log_error("[termin-gui-native] cannot map widget point to document placement");
+        return (tc_ui_point){0.0f, 0.0f};
+    }
+    return (tc_ui_point){world.x, world.y};
+}
+
+static tc_ui_rect widget_rect_to_document(const tc_widget* widget, tc_ui_rect rect) {
+    tgfx2_composition_state2d state;
+    tc_bounds2f world;
+    if (!widget || !tc_ui_internal_widget_composition_state(widget, &state) ||
+        !tgfx2_composition_state2d_map_bounds_to_world(
+            &state, TC_BOUNDS2F(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height), &world)) {
+        tc_log_error("[termin-gui-native] cannot map widget bounds to document placement");
+        return (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    return (tc_ui_rect){world.x0, world.y0, world.x1 - world.x0, world.y1 - world.y0};
 }
 
 tc_ui_rect tc_ui_internal_widget_bounds_in_document(const tc_widget* widget) {
-    return widget
-               ? tc_ui_uniform_transform_map_rect(tc_ui_internal_widget_accumulated_transform(widget), widget->bounds)
-               : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    return widget ? widget_rect_to_document(widget, widget->bounds) : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
 bool tc_widget_map_point_from_document(const tc_widget* widget,
@@ -492,8 +572,7 @@ tc_ui_point tc_widget_map_point_to_document(const tc_widget* widget, tc_ui_point
 }
 
 tc_ui_rect tc_widget_map_rect_to_document(const tc_widget* widget, tc_ui_rect widget_rect) {
-    return widget ? tc_ui_uniform_transform_map_rect(tc_ui_internal_widget_accumulated_transform(widget), widget_rect)
-                  : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    return widget ? widget_rect_to_document(widget, widget_rect) : (tc_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
 tc_ui_rect tc_widget_bounds_in_document(const tc_widget* widget) {

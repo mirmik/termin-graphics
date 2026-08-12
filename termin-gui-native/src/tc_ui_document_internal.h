@@ -3,6 +3,8 @@
 
 #include <termin/gui_native/tc_ui_document.h>
 
+#include <tgfx2/composition2d.h>
+
 #include <stddef.h>
 
 #if defined(_WIN32)
@@ -119,6 +121,11 @@ TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_interactive(const tc_widge
 TC_UI_INTERNAL bool tc_ui_internal_widget_effectively_enabled(const tc_widget* widget);
 TC_UI_INTERNAL bool tc_ui_internal_widget_is_descendant_of(const tc_widget* widget, const tc_widget* ancestor);
 TC_UI_INTERNAL tc_ui_uniform_transform tc_ui_internal_widget_accumulated_transform(const tc_widget* widget);
+TC_UI_INTERNAL bool tc_ui_internal_widget_composition_state(const tc_widget* widget,
+                                                             tgfx2_composition_state2d* out_state);
+TC_UI_INTERNAL bool tc_ui_internal_widget_map_point_from_parent(const tc_widget* widget,
+                                                                tc_ui_point parent_point,
+                                                                tc_ui_point* out_widget_point);
 TC_UI_INTERNAL bool tc_ui_internal_widget_map_point_from_document(const tc_widget* widget,
                                                                   tc_ui_point document_point,
                                                                   tc_ui_point* out_widget_point);
