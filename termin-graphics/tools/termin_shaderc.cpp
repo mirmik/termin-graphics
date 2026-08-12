@@ -956,7 +956,7 @@ namespace termin_shaderc::internal {
                 append_unique_resource(resources, std::move(binding));
             }
             static const std::regex texture_register_re(
-                R"((Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+                R"(\b(Sampler(?:(?:[123]D|Cube)(?:Array|Shadow)?|State|ComparisonState)|(?:RW)?Texture(?:1D|2D|3D|Cube|Buffer)[A-Za-z0-9_<>, \t]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*([tu])([0-9]+)\s*,\s*space([0-9]+)\s*\))");
             for (std::sregex_iterator it(source.begin(), source.end(), texture_register_re), end; it != end; ++it) {
                 const std::smatch& match = *it;
                 ShaderResourceBinding binding;
@@ -970,7 +970,7 @@ namespace termin_shaderc::internal {
                 append_unique_resource(resources, std::move(binding));
             }
             static const std::regex bare_resource_re(
-                R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*(Sampler[0-9A-Za-z_]*|Texture[A-Za-z0-9_<>, \t]*|RWTexture[A-Za-z0-9_<>, \t]*|StructuredBuffer\s*<[^>]+>|RWStructuredBuffer\s*<[^>]+>|ByteAddressBuffer|RWByteAddressBuffer|SamplerState|SamplerComparisonState)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\]\s*)*(?::\s*register\s*\(\s*([tus])([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
+                R"REGEX((?:\[\[\s*(?:TerminScope|Scope)\s*\(\s*"([^"]+)"\s*\)\s*\]\]\s*)?(?:(?:public|extern|static|uniform)\s+)*\b(Sampler(?:(?:[123]D|Cube)(?:Array|Shadow)?|State|ComparisonState)|(?:RW)?Texture(?:1D|2D|3D|Cube|Buffer)[A-Za-z0-9_<>, \t]*|StructuredBuffer\s*<[^>]+>|RWStructuredBuffer\s*<[^>]+>|ByteAddressBuffer|RWByteAddressBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\]\s*)*(?::\s*register\s*\(\s*([tus])([0-9]+)\s*,\s*space([0-9]+)\s*\))?\s*;)REGEX");
             for (std::sregex_iterator it(source.begin(), source.end(), bare_resource_re), end; it != end; ++it) {
                 const std::smatch& match = *it;
                 ShaderResourceBinding binding;
@@ -1178,11 +1178,20 @@ namespace termin_shaderc::internal {
         for (ShaderResourceBinding& stage_resource : stage_resources) {
             const auto placement = std::find_if(
                 program_resources.begin(), program_resources.end(), [&](const ShaderResourceBinding& candidate) {
-                    return candidate.name == stage_resource.name && candidate.kind == stage_resource.kind;
+                    return candidate.name == stage_resource.name &&
+                           shader_resource_kind_for_layout(candidate.kind) ==
+                               shader_resource_kind_for_layout(stage_resource.kind);
                 });
             if (placement == program_resources.end()) {
                 std::cerr << "termin_shaderc: stage resource '" << stage_resource.name
-                          << "' is absent from the program resource universe\n";
+                          << "' (kind '" << stage_resource.kind
+                          << "') is absent from the program resource universe";
+                if (!program_resources.empty()) {
+                    std::cerr << "; available:";
+                    for (const ShaderResourceBinding& resource : program_resources)
+                        std::cerr << " '" << resource.name << "' (" << resource.kind << ")";
+                }
+                std::cerr << "\n";
                 return false;
             }
             stage_resource.set = placement->set;

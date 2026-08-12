@@ -11,6 +11,12 @@ offscreen color/depth textures, built-in packet renderers and
 `SceneInteraction3D`; it releases those GPU resources through the canonical
 `RenderPreparedWidget` lifecycle.
 
+Textured `StaticMeshItem3D` packets carry immutable CPU RGBA8 sRGB data rather
+than a device handle. `SceneView3D` uploads one cached texture per shared
+snapshot on its current render device and releases stale entries after item
+replacement/destruction or during widget/device teardown. This keeps a visual
+scene portable across hosts and preserves the Python ownership boundary.
+
 ```cpp
 auto scene_handle = tc_visual_scene3d_create();
 termin::visual::TcVisualScene3D scene{scene_handle};

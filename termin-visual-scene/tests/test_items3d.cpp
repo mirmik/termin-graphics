@@ -35,10 +35,12 @@ namespace {
     }
 
     std::shared_ptr<termin::Mesh3> make_mesh(float extent = 1.0f) {
-        return std::make_shared<termin::Mesh3>(
+        auto mesh = std::make_shared<termin::Mesh3>(
             std::vector<termin::Vec3f>{{0.0f, -extent, -extent}, {0.0f, extent, -extent}, {0.0f, 0.0f, extent}},
             std::vector<std::uint32_t>{0, 1, 2},
             "visual-scene-test");
+        mesh->uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {0.5f, 1.0f}};
+        return mesh;
     }
 
     std::shared_ptr<termin::visual::PointCloudData3D> make_cloud(float x = 0.0f) {
@@ -58,6 +60,7 @@ namespace {
         termin::Affine3d world_from_local = termin::Affine3d::identity();
         bool enabled = false;
         std::shared_ptr<const void> resource;
+        std::shared_ptr<const termin::visual::BaseColorTextureData3D> base_color_texture;
     };
 
     class PacketSink final : public termin::visual::ScenePaintSink3D {
@@ -82,6 +85,7 @@ namespace {
                 const auto& packet =
                     *static_cast<const termin::visual::StaticMeshDrawPacket3D*>(submission.packet.payload);
                 record.resource = packet.mesh;
+                record.base_color_texture = packet.base_color_texture;
             } else if (record.protocol == termin::visual::PointCloudDrawProtocol3D) {
                 assert(submission.packet.payload_size == sizeof(termin::visual::PointCloudDrawPacket3D));
                 const auto& packet =
@@ -207,6 +211,20 @@ int main() {
     assert(!sink.published[0].enabled);
     assert(sink.published[1].protocol == termin::visual::StaticMeshDrawProtocol3D);
     assert(sink.published[2].protocol == termin::visual::PointCloudDrawProtocol3D);
+
+    auto texture = std::make_shared<termin::visual::BaseColorTextureData3D>();
+    texture->width = 2;
+    texture->height = 1;
+    texture->rgba8 = {255, 0, 0, 255, 0, 255, 0, 255};
+    std::weak_ptr<const termin::visual::BaseColorTextureData3D> texture_lifetime = texture;
+    mesh_ptr->set_base_color_texture(texture);
+    texture.reset();
+    assert(!texture_lifetime.expired());
+    assert(termin::visual::paint(scene, view, sink));
+    mesh_ptr->clear_base_color_texture();
+    assert(!texture_lifetime.expired());
+    assert(termin::visual::paint(scene, view, sink));
+    assert(texture_lifetime.expired());
 
     group_ptr->set_visible(false);
     assert(termin::visual::paint(scene, view, sink));

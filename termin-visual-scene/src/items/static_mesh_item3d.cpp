@@ -35,6 +35,17 @@ namespace termin::visual {
             }
         }
 
+        void require_texture(const std::shared_ptr<const BaseColorTextureData3D>& texture) {
+            const std::uint64_t expected = texture
+                                               ? static_cast<std::uint64_t>(texture->width) * texture->height * 4u
+                                               : 0u;
+            if (!texture || texture->width == 0 || texture->height == 0 ||
+                expected != texture->rgba8.size()) {
+                tc::Log::error("StaticMeshItem3D rejected invalid base-color texture replacement");
+                throw std::invalid_argument("StaticMeshItem3D requires a non-empty RGBA8 base-color texture");
+            }
+        }
+
     } // namespace
 
     StaticMeshItem3D::StaticMeshItem3D(std::shared_ptr<const termin::Mesh3> mesh,
@@ -48,12 +59,25 @@ namespace termin::visual {
 
     void StaticMeshItem3D::set_mesh(std::shared_ptr<const termin::Mesh3> mesh) {
         require_mesh(mesh);
+        if (base_color_texture_ && !mesh->has_uvs()) {
+            tc::Log::error("StaticMeshItem3D rejected a mesh without UVs while a base-color texture is set");
+            throw std::invalid_argument("StaticMeshItem3D textured mesh requires one UV per vertex");
+        }
         mesh_ = std::move(mesh);
     }
 
     void StaticMeshItem3D::set_tint(termin::LinearColor tint) {
         require_tint(tint);
         tint_ = tint;
+    }
+
+    void StaticMeshItem3D::set_base_color_texture(std::shared_ptr<const BaseColorTextureData3D> texture) {
+        require_texture(texture);
+        if (!mesh_->has_uvs()) {
+            tc::Log::error("StaticMeshItem3D rejected a base-color texture for a mesh without UVs");
+            throw std::invalid_argument("StaticMeshItem3D textured mesh requires one UV per vertex");
+        }
+        base_color_texture_ = std::move(texture);
     }
 
     std::optional<VisualBounds3D> StaticMeshItem3D::local_bounds() const {
@@ -68,7 +92,7 @@ namespace termin::visual {
     }
 
     bool StaticMeshItem3D::paint(GraphicItemPaintContext3D& context) const {
-        const StaticMeshDrawPacket3D packet{mesh_, tint_, depth_test_};
+        const StaticMeshDrawPacket3D packet{mesh_, base_color_texture_, tint_, depth_test_};
         return context.submit(StaticMeshDrawProtocol3D, &packet, sizeof(packet));
     }
 

@@ -1905,10 +1905,12 @@ def test_constrained_gl_program_resources_share_one_binding_universe(
         "import termin_prelude;\n"
         "struct FrameData { float4x4 view_projection; };\n"
         "struct DrawData { float4x4 model; };\n"
+        "struct TexturedPush { float4 tint; };\n"
         "[[TerminScope(\"frame\")]] ConstantBuffer<FrameData> per_frame;\n"
         "[[TerminScope(\"draw\")]] ConstantBuffer<DrawData> draw_data;\n"
+        "[[TerminScope(\"draw\")]] ConstantBuffer<TexturedPush> textured_push;\n"
         "[shader(\"vertex\")] float4 vs_main(float3 position : POSITION) : SV_Position {\n"
-        "  return mul(per_frame.view_projection, mul(draw_data.model, float4(position, 1.0)));\n"
+        "  return mul(per_frame.view_projection, mul(draw_data.model, float4(position, 1.0))) + textured_push.tint * 0.0;\n"
         "}\n",
         encoding="utf-8",
     )
@@ -1960,8 +1962,8 @@ def test_constrained_gl_program_resources_share_one_binding_universe(
         for resource in layout["resources"]
         if resource["kind"] == "constant_buffer"
     }
-    assert set(bindings) == {"per_frame", "draw_data", "material"}
-    assert len(set(bindings.values())) == 3
+    assert set(bindings) == {"per_frame", "draw_data", "textured_push", "material"}
+    assert len(set(bindings.values())) == 4
 
 
 def test_termin_shaderc_rejects_split_slang_texture_resources_for_vulkan(tmp_path: Path) -> None:

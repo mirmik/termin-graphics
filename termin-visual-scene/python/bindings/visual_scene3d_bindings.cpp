@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -277,6 +278,32 @@ namespace termin::visual::python {
             return std::make_shared<termin::Mesh3>(mesh);
         }
 
+        std::shared_ptr<const BaseColorTextureData3D>
+        base_color_texture_snapshot(std::uint32_t width, std::uint32_t height, nb::object rgba8) {
+            const std::uint64_t expected = static_cast<std::uint64_t>(width) * height * 4u;
+            if (width == 0 || height == 0 || expected > std::numeric_limits<std::size_t>::max()) {
+                throw nb::value_error("base-color texture dimensions must be non-zero and representable");
+            }
+            Py_buffer view{};
+            if (PyObject_GetBuffer(rgba8.ptr(), &view, PyBUF_CONTIG_RO) != 0)
+                throw nb::python_error();
+            try {
+                if (static_cast<std::uint64_t>(view.len) != expected) {
+                    throw nb::value_error("base-color RGBA8 byte length does not match width * height * 4");
+                }
+                auto texture = std::make_shared<BaseColorTextureData3D>();
+                texture->width = width;
+                texture->height = height;
+                const auto* begin = static_cast<const std::uint8_t*>(view.buf);
+                texture->rgba8.assign(begin, begin + view.len);
+                PyBuffer_Release(&view);
+                return texture;
+            } catch (...) {
+                PyBuffer_Release(&view);
+                throw;
+            }
+        }
+
         nb::object bounds_value(const VisualItemRef3D& ref, bool world) {
             VisualBounds3D bounds{};
             if (!tc_visual_item3d_local_bounds_in_scene(ref.owner().handle(), ref.handle, &bounds)) {
@@ -470,12 +497,37 @@ namespace termin::visual::python {
                          [](const StaticMeshItemRef3D& self) {
                              return require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D").tint();
                          })
+            .def_prop_ro("has_base_color_texture",
+                         [](const StaticMeshItemRef3D& self) {
+                             return static_cast<bool>(
+                                 require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D")
+                                     .base_color_texture());
+                         })
             .def("set_mesh",
                  [](const StaticMeshItemRef3D& self, const termin::Mesh3& mesh) {
                      require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D").set_mesh(mesh_snapshot(mesh));
                  })
             .def("set_tint", [](const StaticMeshItemRef3D& self, termin::SrgbColor tint) {
                 require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D").set_tint(linear_color(tint, "tint"));
+            })
+            .def("set_base_color_factor",
+                 [](const StaticMeshItemRef3D& self, termin::LinearColor factor) {
+                     require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D").set_tint(factor);
+                 },
+                 nb::arg("factor"))
+            .def("set_base_color_texture_rgba8",
+                 [](const StaticMeshItemRef3D& self,
+                    std::uint32_t width,
+                    std::uint32_t height,
+                    nb::object rgba8) {
+                     require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D")
+                         .set_base_color_texture(base_color_texture_snapshot(width, height, rgba8));
+                 },
+                 nb::arg("width"),
+                 nb::arg("height"),
+                 nb::arg("rgba8"))
+            .def("clear_base_color_texture", [](const StaticMeshItemRef3D& self) {
+                require_item<StaticMeshItem3D>(self, "termin.visual.StaticMesh3D").clear_base_color_texture();
             });
 
         nb::class_<PointCloudItemRef3D, VisualItemRef3D>(m, "PointCloudItemRef3D")

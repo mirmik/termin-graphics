@@ -33,8 +33,18 @@ namespace termin::visual {
         bool depth_test = true;
     };
 
+    // Immutable, renderer-neutral sRGB texel snapshot. GPU textures belong to
+    // the presentation host because one scene may be painted by multiple
+    // devices or backends.
+    struct BaseColorTextureData3D {
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::vector<std::uint8_t> rgba8;
+    };
+
     struct StaticMeshDrawPacket3D {
         std::shared_ptr<const termin::Mesh3> mesh;
+        std::shared_ptr<const BaseColorTextureData3D> base_color_texture;
         termin::LinearColor tint{1.0f, 1.0f, 1.0f, 1.0f};
         bool depth_test = true;
     };

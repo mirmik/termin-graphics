@@ -98,7 +98,8 @@ item contract:
   optional part token per triangle, suitable for tool handles and orientation
   geometry;
 - `StaticMeshItem3D` owns a shared CPU `Mesh3` for reconstruction and preview
-  surfaces;
+  surfaces. It may additionally own an immutable RGBA8 sRGB base-color
+  texture snapshot; `tint` is multiplied as its linear base-color factor;
 - `PointCloudItem3D` owns shared point data, draw style and a local-space pick
   radius. Point hits report `point_index + 1` as their part token.
 

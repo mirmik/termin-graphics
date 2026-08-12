@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-#include <termin_visual_scene/items/primitive_item3d.hpp>
+#include <termin_visual_scene/items/static_mesh_item3d.hpp>
 #include <tgfx2/device_factory.hpp>
 
 namespace {
@@ -18,16 +18,25 @@ namespace {
         return result;
     }
 
-    std::shared_ptr<termin::visual::PrimitiveGeometry3D> triangle() {
-        auto geometry = std::make_shared<termin::visual::PrimitiveGeometry3D>();
-        geometry->vertices = {
-            {{-0.7f, -0.7f, 0.5f}, {1.0f, 0.1f, 0.1f, 1.0f}},
-            {{0.7f, -0.7f, 0.5f}, {0.1f, 1.0f, 0.1f, 1.0f}},
-            {{0.0f, 0.7f, 0.5f}, {0.1f, 0.1f, 1.0f, 1.0f}},
-        };
-        geometry->triangles = {0, 1, 2};
-        geometry->triangle_parts = {7};
-        return geometry;
+    std::shared_ptr<termin::Mesh3> textured_quad() {
+        auto mesh = std::make_shared<termin::Mesh3>(
+            std::vector<termin::Vec3f>{{-0.9f, -0.9f, 0.5f},
+                                       {0.9f, -0.9f, 0.5f},
+                                       {0.9f, 0.9f, 0.5f},
+                                       {-0.9f, 0.9f, 0.5f}},
+            std::vector<std::uint32_t>{0, 1, 2, 0, 2, 3},
+            "scene-view3d-textured-quad");
+        mesh->uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
+        return mesh;
+    }
+
+    std::shared_ptr<termin::visual::BaseColorTextureData3D> two_color_texture(bool swapped = false) {
+        auto texture = std::make_shared<termin::visual::BaseColorTextureData3D>();
+        texture->width = 2;
+        texture->height = 1;
+        texture->rgba8 = swapped ? std::vector<std::uint8_t>{0, 255, 0, 255, 255, 0, 0, 255}
+                                 : std::vector<std::uint8_t>{255, 0, 0, 255, 0, 255, 0, 255};
+        return texture;
     }
 
     tgfx::BackendType backend() {
@@ -49,7 +58,10 @@ int main() {
 
     const tc_visual_scene3d_handle scene_handle = tc_visual_scene3d_create();
     termin::visual::TcVisualScene3D scene{scene_handle};
-    const auto item = scene.adopt(std::make_unique<termin::visual::PrimitiveItem3D>(triangle()));
+    auto static_mesh = std::make_unique<termin::visual::StaticMeshItem3D>(textured_quad());
+    auto* static_mesh_ptr = static_mesh.get();
+    static_mesh_ptr->set_base_color_texture(two_color_texture());
+    const auto item = scene.adopt(std::move(static_mesh));
     if (!item) {
         std::fprintf(stderr, "failed to create SceneView3D smoke item\n");
         return 1;
@@ -79,7 +91,7 @@ int main() {
                 return termin::gui_native::SceneView3DCamera{identity, identity, {0.0, 0.0, 0.0}};
             });
         view->interaction().set_action_handler(*item, [&](const termin::visual::ActionEvent3D& action) {
-            if (action.part == 7)
+            if (action.part == 1)
                 ++actions;
         });
 
@@ -97,11 +109,44 @@ int main() {
             std::fprintf(stderr, "SceneView3D triangle was not visible in headless readback\n");
             return 1;
         }
+        const auto pixel = [&](int x, int y, int channel) {
+            return pixels[(static_cast<std::size_t>(y) * 64 + x) * 4 + channel];
+        };
+        if (pixel(16, 32, 0) <= pixel(16, 32, 1) + 0.2f ||
+            pixel(48, 32, 1) <= pixel(48, 32, 0) + 0.2f) {
+            std::fprintf(stderr, "SceneView3D base-color texture was not spatially distinguishable\n");
+            return 1;
+        }
+
+        static_mesh_ptr->set_base_color_texture(two_color_texture(true));
+        view->invalidate_scene();
+        if (!composition.render_frame()) {
+            std::fprintf(stderr, "SceneView3D did not render a replacement base-color texture\n");
+            return 1;
+        }
+        const std::vector<float> replaced = composition.read_frame_rgba_float();
+        const auto replaced_pixel = [&](int x, int y, int channel) {
+            return replaced[(static_cast<std::size_t>(y) * 64 + x) * 4 + channel];
+        };
+        if (replaced_pixel(16, 32, 1) <= replaced_pixel(16, 32, 0) + 0.2f ||
+            replaced_pixel(48, 32, 0) <= replaced_pixel(48, 32, 1) + 0.2f) {
+            std::fprintf(stderr, "SceneView3D retained a stale base-color texture after replacement\n");
+            return 1;
+        }
 
         composition.push_pointer(tc_ui_pointer_event{TC_UI_POINTER_DOWN, 32.0f, 32.0f, 0, 1, 0});
         composition.push_pointer(tc_ui_pointer_event{TC_UI_POINTER_UP, 32.0f, 32.0f, 0, 1, 0});
         if (composition.pump_input() != 2 || actions != 1) {
             std::fprintf(stderr, "SceneView3D did not route the headless click to its item\n");
+            return 1;
+        }
+        if (!scene.destroy(*item)) {
+            std::fprintf(stderr, "failed to destroy SceneView3D textured item\n");
+            return 1;
+        }
+        view->invalidate_scene();
+        if (!composition.render_frame()) {
+            std::fprintf(stderr, "SceneView3D did not release a destroyed textured item\n");
             return 1;
         }
         composition.close();

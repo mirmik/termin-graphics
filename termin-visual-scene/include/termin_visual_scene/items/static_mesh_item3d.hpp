@@ -19,6 +19,13 @@ namespace termin::visual {
             return tint_;
         }
         void set_tint(termin::LinearColor tint);
+        const std::shared_ptr<const BaseColorTextureData3D>& base_color_texture() const noexcept {
+            return base_color_texture_;
+        }
+        void set_base_color_texture(std::shared_ptr<const BaseColorTextureData3D> texture);
+        void clear_base_color_texture() noexcept {
+            base_color_texture_.reset();
+        }
         bool depth_test() const noexcept {
             return depth_test_;
         }
@@ -32,6 +39,7 @@ namespace termin::visual {
 
     private:
         std::shared_ptr<const termin::Mesh3> mesh_;
+        std::shared_ptr<const BaseColorTextureData3D> base_color_texture_;
         termin::LinearColor tint_{1.0f, 1.0f, 1.0f, 1.0f};
         bool depth_test_ = true;
     };

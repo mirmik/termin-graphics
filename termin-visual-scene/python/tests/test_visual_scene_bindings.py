@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from tcbase._geom_native import Affine3d, Ray3, SrgbColor, Vec3
+from tcbase._geom_native import Affine3d, LinearColor, Ray3, SrgbColor, Vec3
 from tgfx import PointCloudStyle
 from tmesh import Mesh3
 
@@ -121,13 +121,18 @@ def test_text_accepts_optional_literal_coverage_gamma():
     tc_visual_scene_destroy(scene)
 
 
-def _triangle_mesh(x=0.0):
+def _triangle_mesh(x=0.0, *, textured=False):
     return Mesh3(
         vertices=np.asarray(
             [[x, -1.0, -1.0], [x, 1.0, -1.0], [x, 0.0, 1.0]],
             dtype=np.float32,
         ),
         triangles=np.asarray([[0, 1, 2]], dtype=np.uint32),
+        uvs=(
+            np.asarray([[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]], dtype=np.float32)
+            if textured
+            else None
+        ),
         name="binding-triangle",
     )
 
@@ -218,6 +223,29 @@ def test_scene3d_builtins_copy_resources_and_choose_nearest_hit():
     cloud.pick_radius = 0.5
     cloud.set_points([(7.0, 0.0, 0.0)])
 
+    tc_visual_scene3d_destroy(scene)
+
+
+def test_static_mesh_base_color_texture_is_owned_and_replaceable():
+    scene = tc_visual_scene3d_create()
+    mesh = scene.create_static_mesh(_triangle_mesh(0.0, textured=True))
+    authored = bytearray([255, 0, 0, 255, 0, 255, 0, 255])
+    mesh.set_base_color_texture_rgba8(2, 1, authored)
+    mesh.set_base_color_factor(LinearColor(0.25, 0.5, 0.75, 1.0))
+    authored[:] = bytes(len(authored))
+    assert mesh.has_base_color_texture
+
+    with pytest.raises(ValueError, match="byte length"):
+        mesh.set_base_color_texture_rgba8(2, 2, b"short")
+    assert mesh.has_base_color_texture
+
+    with pytest.raises(ValueError, match="requires one UV"):
+        mesh.set_mesh(_triangle_mesh())
+    assert mesh.has_base_color_texture
+
+    mesh.clear_base_color_texture()
+    assert not mesh.has_base_color_texture
+    mesh.set_mesh(_triangle_mesh())
     tc_visual_scene3d_destroy(scene)
 
 
