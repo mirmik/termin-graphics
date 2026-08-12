@@ -8,6 +8,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include <geom/tc_affine2.h>
 #include <tcbase/input_enums.hpp>
 #include <termin/gui_native/draw_list2d_bridge.hpp>
 #include <termin_visual_scene/scene_render2d.hpp>
@@ -39,11 +40,20 @@ namespace termin::gui_native {
     } // namespace
 
     tc_ui_point SceneTransform::world_to_screen(tc_ui_point point) const {
-        return {origin_x + point.x * zoom, origin_y + point.y * zoom};
+        const tc_affine2f affine = tc_affine2f_new(zoom, 0.0f, 0.0f, zoom, origin_x, origin_y);
+        const tc_vec2f mapped = tc_affine2f_transform_point(affine, TC_VEC2F(point.x, point.y));
+        return {mapped.x, mapped.y};
     }
 
     tc_ui_point SceneTransform::screen_to_world(tc_ui_point point) const {
-        return {(point.x - origin_x) / zoom, (point.y - origin_y) / zoom};
+        const tc_affine2f affine = tc_affine2f_new(zoom, 0.0f, 0.0f, zoom, origin_x, origin_y);
+        tc_affine2f inverse;
+        if (!tc_affine2f_try_inverse(affine, 1.0e-8f, &inverse)) {
+            tc_log_error("[termin-gui-native] SceneTransform cannot invert invalid camera placement");
+            return {};
+        }
+        const tc_vec2f mapped = tc_affine2f_transform_point(inverse, TC_VEC2F(point.x, point.y));
+        return {mapped.x, mapped.y};
     }
 
     SceneView::SceneView(termin::visual::TcVisualScene scene)

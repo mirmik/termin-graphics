@@ -191,9 +191,11 @@ namespace {
             adopt<RectItem2D>(scene, nullptr, termin::Rect2f{0.0f, 0.0f, 10.0f, 10.0f}, fill(0.3f, 0.2f, 0.2f));
         assert(!view->set_widget_portal(conflicting_item->handle(), button_handle));
 
+        assert(tc_ui_document_set_pointer_capture(document.get(), button_handle));
         item->set_local_transform(termin::Affine2f::rotation(0.25f));
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
         assert(button->parent_widget() == nullptr);
+        assert(tc_widget_handle_is_invalid(tc_ui_document_pointer_capture(document.get())));
         item->set_local_transform(termin::Affine2f::translation({15.0f, 12.0f}));
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
         assert(button->parent_widget() == view->c_widget());

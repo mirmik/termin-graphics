@@ -169,6 +169,9 @@ void bind_gui_native_widgets(nb::module_& m) {
             "bounds",
             [](const WidgetRef& self) { return tc_widget_bounds(self.resolve_checked()); },
             [](const WidgetRef& self, tc_ui_rect value) { tc_widget_set_bounds(self.resolve_checked(), value); })
+        .def_prop_ro(
+            "bounds_in_document",
+            [](const WidgetRef& self) { return tc_widget_bounds_in_document(self.resolve_checked()); })
         .def_prop_rw(
             "subtree_transform",
             [](const WidgetRef& self) { return tc_widget_subtree_transform(self.resolve_checked()); },

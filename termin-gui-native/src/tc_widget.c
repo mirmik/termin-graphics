@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <geom/tc_affine2.h>
 #include <tcbase/tc_log.h>
 
 tc_widget_handle tc_widget_handle_invalid_value(void) {
@@ -382,16 +383,28 @@ tc_ui_uniform_transform tc_ui_uniform_transform_identity(void) {
     return transform;
 }
 
+static tc_affine2f uniform_transform_affine(tc_ui_uniform_transform transform) {
+    return tc_affine2f_new(transform.scale,
+                           0.0f,
+                           0.0f,
+                           transform.scale,
+                           transform.translation.x,
+                           transform.translation.y);
+}
+
+static tc_ui_uniform_transform uniform_transform_from_affine(tc_affine2f affine) {
+    tc_ui_uniform_transform transform = {{affine.tx, affine.ty}, affine.m00};
+    return transform;
+}
+
 bool tc_ui_uniform_transform_is_valid(const tc_ui_uniform_transform* transform) {
     return transform && isfinite(transform->translation.x) && isfinite(transform->translation.y) &&
            isfinite(transform->scale) && transform->scale > 0.0f;
 }
 
 tc_ui_uniform_transform tc_ui_uniform_transform_compose(tc_ui_uniform_transform outer, tc_ui_uniform_transform inner) {
-    tc_ui_uniform_transform result;
-    result.translation.x = outer.translation.x + inner.translation.x * outer.scale;
-    result.translation.y = outer.translation.y + inner.translation.y * outer.scale;
-    result.scale = outer.scale * inner.scale;
+    const tc_ui_uniform_transform result = uniform_transform_from_affine(
+        tc_affine2f_mul(uniform_transform_affine(outer), uniform_transform_affine(inner)));
     if (!tc_ui_uniform_transform_is_valid(&result)) {
         tc_log_error("[termin-gui-native] uniform transform composition overflowed");
     }
@@ -399,33 +412,31 @@ tc_ui_uniform_transform tc_ui_uniform_transform_compose(tc_ui_uniform_transform 
 }
 
 bool tc_ui_uniform_transform_inverse(tc_ui_uniform_transform transform, tc_ui_uniform_transform* out_inverse) {
+    tc_affine2f inverse;
     if (!out_inverse || !tc_ui_uniform_transform_is_valid(&transform)) {
         tc_log_error("[termin-gui-native] cannot invert invalid uniform transform");
         return false;
     }
-    out_inverse->scale = 1.0f / transform.scale;
-    out_inverse->translation.x = -transform.translation.x * out_inverse->scale;
-    out_inverse->translation.y = -transform.translation.y * out_inverse->scale;
-    if (!tc_ui_uniform_transform_is_valid(out_inverse)) {
+    if (!tc_affine2f_try_inverse(uniform_transform_affine(transform), 1.0e-8f, &inverse)) {
         tc_log_error("[termin-gui-native] uniform transform inverse overflowed");
         *out_inverse = tc_ui_uniform_transform_identity();
         return false;
     }
+    *out_inverse = uniform_transform_from_affine(inverse);
     return true;
 }
 
 tc_ui_point tc_ui_uniform_transform_map_point(tc_ui_uniform_transform transform, tc_ui_point point) {
-    tc_ui_point result = {
-        transform.translation.x + point.x * transform.scale,
-        transform.translation.y + point.y * transform.scale,
-    };
-    return result;
+    const tc_vec2f result =
+        tc_affine2f_transform_point(uniform_transform_affine(transform), TC_VEC2F(point.x, point.y));
+    return (tc_ui_point){result.x, result.y};
 }
 
 tc_ui_rect tc_ui_uniform_transform_map_rect(tc_ui_uniform_transform transform, tc_ui_rect rect) {
-    tc_ui_point origin = tc_ui_uniform_transform_map_point(transform, (tc_ui_point){rect.x, rect.y});
-    tc_ui_rect result = {origin.x, origin.y, rect.width * transform.scale, rect.height * transform.scale};
-    return result;
+    const tc_bounds2f result = tc_affine2f_transform_bounds(
+        uniform_transform_affine(transform),
+        TC_BOUNDS2F(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height));
+    return (tc_ui_rect){result.x0, result.y0, result.x1 - result.x0, result.y1 - result.y0};
 }
 
 tc_ui_uniform_transform tc_widget_subtree_transform(const tc_widget* widget) {
@@ -469,12 +480,7 @@ tc_ui_uniform_transform tc_ui_internal_widget_accumulated_transform(const tc_wid
 static tgfx2_composition_layer2d widget_composition_layer(const tc_widget* widget) {
     const tc_ui_uniform_transform transform = tc_widget_subtree_transform(widget);
     tgfx2_composition_layer2d layer = tgfx2_composition_layer2d_identity();
-    layer.transform = tc_affine2f_new(transform.scale,
-                                     0.0f,
-                                     0.0f,
-                                     transform.scale,
-                                     transform.translation.x,
-                                     transform.translation.y);
+    layer.transform = uniform_transform_affine(transform);
     return layer;
 }
 
