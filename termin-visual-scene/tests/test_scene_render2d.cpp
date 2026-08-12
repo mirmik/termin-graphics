@@ -60,6 +60,18 @@ namespace {
         }
     };
 
+    class LayerSink final : public ScenePaintLayerSink2D {
+    public:
+        std::vector<GraphicItemHandle> items;
+        std::vector<tgfx::DrawList2D> draw_lists;
+
+        bool append_item_layer(const tc_graphic_item& item, tgfx::DrawList2D draw_list) override {
+            items.push_back(item.handle);
+            draw_lists.push_back(std::move(draw_list));
+            return true;
+        }
+    };
+
 } // namespace
 
 int main() {
@@ -76,6 +88,7 @@ int main() {
     rect->set_clip(GeometricClip2D{box(30.0f), tgfx::FillRule::EvenOdd});
     rect->set_z_order(7);
     assert(scene.adopt(std::move(rect), root_ptr));
+    const GraphicItemHandle adopted_rect_handle = root_ptr->child_at(0)->handle;
     assert(scene.adopt(std::make_unique<PathItem2D>(box(8.0f), tgfx::FillPaint{}, std::nullopt), root_ptr));
     assert(scene.adopt(std::make_unique<TextItem2D>("direct",
                                                     "font://ui",
@@ -126,6 +139,14 @@ int main() {
     }
     assert(active_clips == 0);
     assert(saw_path && saw_text && saw_image && saw_custom && saw_nested_clips);
+
+    LayerSink layer_sink;
+    assert(scene.paint_layers(layer_sink, resolver));
+    assert(layer_sink.items.size() == scene.size());
+    assert(layer_sink.items.front().index == root_ptr->handle().index);
+    assert(layer_sink.items.back().index == adopted_rect_handle.index);
+    assert(layer_sink.draw_lists.size() == layer_sink.items.size());
+    assert(resolver.calls == 6);
 
     const auto failing_scene_handle = tc_visual_scene_create();
     TcVisualScene failing_scene{failing_scene_handle};

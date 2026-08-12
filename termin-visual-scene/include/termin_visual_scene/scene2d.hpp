@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -23,6 +24,7 @@ namespace termin::visual {
 
     class GraphicItem2D;
     class SceneRenderResourceResolver2D;
+    class ScenePaintLayerSink2D;
     class TcVisualScene;
     using GraphicItemHandle = tc_graphic_item_handle;
 
@@ -33,6 +35,19 @@ namespace termin::visual {
         tgfx::Path2f path;
         tgfx::FillRule rule = tgfx::FillRule::NonZero;
     };
+
+    // Receives balanced, self-contained draw lists for individual item paint
+    // slots in canonical scene order. Cross-tree composition adapters can
+    // append foreign semantic content after a slot without teaching the scene
+    // about that content's ownership or paint vocabulary.
+    class TERMIN_VISUAL_SCENE_API ScenePaintLayerSink2D {
+    public:
+        virtual ~ScenePaintLayerSink2D() = default;
+        virtual bool append_item_layer(const tc_graphic_item& item, tgfx::DrawList2D draw_list) = 0;
+    };
+
+    using SceneHitLayerVisitor2D =
+        std::function<bool(const tc_graphic_item& item, termin::Vec2f local_point, bool item_hit)>;
 
     enum class GraphicItemDiagnostic2D : std::uint32_t {
         None = 0,
@@ -74,6 +89,16 @@ namespace termin::visual {
         // Appends this scene immediately to the caller's current draw-list build.
         // No render snapshot or retained command copy is created by the scene.
         bool paint(tgfx::DrawList2DBuilder& builder, SceneRenderResourceResolver2D& resolver) const;
+        // Emits one balanced layer per item. The sink is called after the
+        // item's own paint and before its ordered children, matching the
+        // ordinary painter traversal exactly.
+        bool paint_layers(ScenePaintLayerSink2D& sink, SceneRenderResourceResolver2D& resolver) const;
+
+        // Visits eligible layers in reverse painter order. Children are
+        // visited before their parent's own paint slot. Returning true from
+        // the visitor stops traversal. Clip, visibility, enabled state and
+        // exact inverse affine mapping match ordinary scene hit testing.
+        bool visit_hit_layers(termin::Vec2f world_point, const SceneHitLayerVisitor2D& visitor) const;
 
         std::size_t size() const;
         bool contains(GraphicItemHandle handle) const;
@@ -100,6 +125,9 @@ namespace termin::visual {
                          tgfx::CompositionEvaluator2D& composition,
                          tgfx::DrawList2DBuilder& builder,
                          SceneRenderResourceResolver2D& resolver) const;
+        bool paint_layer_item_(const tc_graphic_item& item,
+                               ScenePaintLayerSink2D& sink,
+                               SceneRenderResourceResolver2D& resolver) const;
         bool subtree_bounds_(const tc_graphic_item& item,
                              tgfx::CompositionEvaluator2D& composition,
                              std::optional<termin::Bounds2f>& out_bounds) const;

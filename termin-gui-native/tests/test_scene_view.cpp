@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <termin/gui_native/tc_document.hpp>
 #include <termin/gui_native/widgets.hpp>
 
@@ -22,6 +25,16 @@ namespace {
             const auto* command = tc_ui_draw_list_command_at(draw_list, index);
             if (command && command->type == type)
                 result.push_back(command);
+        }
+        return result;
+    }
+
+    std::vector<std::size_t> command_indices(const tc_ui_draw_list* draw_list, tc_ui_draw_command_type type) {
+        std::vector<std::size_t> result;
+        for (std::size_t index = 0; index < tc_ui_draw_list_command_count(draw_list); ++index) {
+            const auto* command = tc_ui_draw_list_command_at(draw_list, index);
+            if (command && command->type == type)
+                result.push_back(index);
         }
         return result;
     }
@@ -215,11 +228,59 @@ namespace {
         tc_visual_scene_destroy(scene_handle);
     }
 
+    void test_widget_portal_uses_scene_paint_and_hit_order() {
+        const auto document_handle = tc_ui_document_create();
+        TcDocument document(document_handle);
+        const auto scene_handle = tc_visual_scene_create();
+        TcVisualScene scene{scene_handle};
+        auto* source =
+            adopt<RectItem2D>(scene, nullptr, termin::Rect2f{0.0f, 0.0f, 120.0f, 40.0f}, fill(0.1f, 0.2f, 0.3f));
+        auto* front =
+            adopt<RectItem2D>(scene, nullptr, termin::Rect2f{0.0f, 0.0f, 120.0f, 40.0f}, fill(0.8f, 0.2f, 0.1f));
+        source->set_z_order(0);
+        front->set_z_order(1);
+
+        auto* button = new Button("Portal layer");
+        const auto button_handle = document.adopt(button);
+        auto* view = new SceneView(scene);
+        const auto view_handle = document.adopt(view);
+        assert(view->set_widget_portal(source->handle(), button_handle));
+        assert(document.add_root(*view));
+        document.layout_roots({0.0f, 0.0f, 300.0f, 180.0f});
+
+        auto* draw_list = tc_ui_draw_list_create();
+        auto* context = tc_ui_paint_context_create(draw_list);
+        document.paint_roots(context);
+        const auto canvas = command_indices(draw_list, TC_UI_DRAW_CANVAS2D_LIST);
+        const auto text = command_indices(draw_list, TC_UI_DRAW_TEXT);
+        assert(canvas.size() == 2);
+        assert(text.size() == 1);
+        assert(canvas[0] < text[0] && text[0] < canvas[1]);
+
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), view_handle));
+        front->set_enabled(false);
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), button_handle));
+
+        front->set_enabled(true);
+        front->set_z_order(-1);
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), button_handle));
+        front->set_z_order(0);
+        assert(tc_widget_handle_eq(document.hit_test(20.0f, 20.0f), view_handle));
+
+        tc_ui_paint_context_destroy(context);
+        tc_ui_draw_list_destroy(draw_list);
+        assert(tc_ui_document_destroy_widget(document.get(), view_handle));
+        assert(tc_ui_document_destroy_widget(document.get(), button_handle));
+        tc_ui_document_destroy(document_handle);
+        tc_visual_scene_destroy(scene_handle);
+    }
+
 } // namespace
 
 int main() {
     test_scene_uses_generation_handles_and_canonical_hit_testing();
     test_view_transform_forwarding_pan_zoom_and_draw_list_bridge();
     test_widget_portal_has_separate_document_lifetime();
+    test_widget_portal_uses_scene_paint_and_hit_order();
     return EXIT_SUCCESS;
 }

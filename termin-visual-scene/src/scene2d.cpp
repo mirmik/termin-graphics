@@ -332,6 +332,92 @@ namespace termin::visual {
         return composition.end_batch();
     }
 
+    bool TcVisualScene::paint_layer_item_(const tc_graphic_item& item,
+                                          ScenePaintLayerSink2D& sink,
+                                          SceneRenderResourceResolver2D& resolver) const {
+        tgfx::DrawList2DBuilder builder;
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch(&builder);
+        if (!detail::push_ancestry(composition, item)) {
+            composition.abort_batch();
+            return false;
+        }
+        const std::size_t ancestry_depth = composition.depth();
+        bool painted = true;
+        if (composition.drawable()) {
+            if (item.vtable == nullptr || item.vtable->paint == nullptr) {
+                tc::Log::error("graphic item '%s' has no paint method", tc_graphic_item_type_name(&item));
+                painted = false;
+            } else {
+                tc_graphic_item_draw_sink draw_sink{
+                    .builder = &builder,
+                    .resolver = &resolver,
+                    .composition = &composition,
+                };
+                painted = item.vtable->paint(&item, &draw_sink);
+            }
+        }
+        if (!painted) {
+            if (composition.active()) {
+                composition.abort_batch();
+            }
+            return false;
+        }
+        if (!composition.active() || composition.depth() != ancestry_depth) {
+            if (composition.active()) {
+                composition.abort_batch();
+            }
+            tc::Log::error("graphic item '%s' disturbed its composition scopes", tc_graphic_item_type_name(&item));
+            return false;
+        }
+        while (composition.depth() != 0) {
+            if (!composition.pop()) {
+                return false;
+            }
+        }
+        if (!composition.end_batch()) {
+            return false;
+        }
+        auto draw_list = builder.freeze();
+        return draw_list.has_value() && sink.append_item_layer(item, std::move(*draw_list));
+    }
+
+    bool TcVisualScene::paint_layers(ScenePaintLayerSink2D& sink, SceneRenderResourceResolver2D& resolver) const {
+        const std::uint64_t revision = tc_visual_scene_order_revision(handle_);
+        if (revision == 0) {
+            tc::Log::error("TcVisualScene::paint_layers rejected stale scene");
+            return false;
+        }
+        if (revision != cached_order_revision_) {
+            rebuild_order_cache_();
+            cached_order_revision_ = revision;
+        }
+
+        std::function<bool(const OrderedItem&, bool)> visit;
+        visit = [&](const OrderedItem& ordered, bool ancestors_drawable) {
+            const tc_graphic_item& item = *ordered.item;
+            const bool drawable = ancestors_drawable && item.visible && item.opacity > 0.0f;
+            if (!drawable) {
+                return true;
+            }
+            if (!paint_layer_item_(item, sink, resolver)) {
+                return false;
+            }
+            for (const OrderedItem& child : ordered.children) {
+                if (!visit(child, drawable)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (const OrderedItem& root : ordered_roots_) {
+            if (!visit(root, true)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     std::size_t TcVisualScene::size() const {
         return tc_visual_scene_item_count(handle_);
     }

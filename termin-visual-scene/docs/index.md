@@ -71,6 +71,13 @@ scopes. The item paint vtable emits canonical draw commands and nested local
 clip scopes through `GraphicItemPaintContext2D`; the scene renderer never
 branches on its concrete type.
 
+Cross-tree compositors can instead call `paint_layers`. It emits one balanced,
+self-contained `DrawList2D` for each item's own paint slot in the identical
+tree order. A sink may interleave foreign content between these layers without
+adding that foreign semantic type to visual-scene. `visit_hit_layers` exposes
+the exact reverse traversal with evaluated clips and local point mapping, so
+paint and input adapters share one stacking contract.
+
 Text, image and custom-batch items resolve their runtime resources
 synchronously during this traversal. The scene does not create a detached
 render snapshot, retain a render context or defer item callbacks. A host may

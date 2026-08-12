@@ -325,8 +325,9 @@ The current foundation includes:
   domain IDs belong to the node graph or other scene owner. Embedded native
   widgets remain generation-checked canonical document children. The reusable
   `WidgetSceneProjectionBridge` stores only item/widget handles, reconciles
-  stale owners, and provides explicit after-scene ordering, host clipping and
-  portal-first input policies. It accepts exact source local bounds and world
+  stale owners, and interleaves each portal at its source item's canonical
+  tree-local paint slot with matching reverse-order hit testing and host
+  clipping. It accepts exact source local bounds and world
   affine placement; rotation, shear and non-uniform widget projection are
   rejected instead of approximated by a stretched AABB. `SceneView` is its
   first adapter and retains only camera/view policy. Plot annotations

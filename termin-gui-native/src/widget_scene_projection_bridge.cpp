@@ -73,8 +73,7 @@ namespace termin::gui_native {
 
     bool WidgetSceneProjectionBridge::set_projection(tc_graphic_item_handle source, tc_widget_handle target) {
         if (tc_graphic_item_handle_is_invalid(source) || tc_widget_handle_is_invalid(target) || !resolver_ ||
-            !resolver_(source) ||
-            (tc_ui_document_is_valid(document_) && !tc_ui_document_is_alive(document_, target))) {
+            !resolver_(source) || (tc_ui_document_is_valid(document_) && !tc_ui_document_is_alive(document_, target))) {
             tc_log_error("[termin-gui-native] projection bridge rejected stale source or target handle");
             return false;
         }
@@ -85,8 +84,8 @@ namespace termin::gui_native {
             tc_log_error("[termin-gui-native] one widget cannot belong to conflicting scene projections");
             return false;
         }
-        auto found = std::find_if(entries_.begin(), entries_.end(),
-                                  [&](const Entry& entry) { return same_source(entry.source, source); });
+        auto found = std::find_if(
+            entries_.begin(), entries_.end(), [&](const Entry& entry) { return same_source(entry.source, source); });
         if (found != entries_.end()) {
             if (!tc_widget_handle_eq(found->target, target)) {
                 detach_target(found->target);
@@ -99,8 +98,8 @@ namespace termin::gui_native {
     }
 
     bool WidgetSceneProjectionBridge::clear_projection(tc_graphic_item_handle source) {
-        const auto found = std::find_if(entries_.begin(), entries_.end(),
-                                        [&](const Entry& entry) { return same_source(entry.source, source); });
+        const auto found = std::find_if(
+            entries_.begin(), entries_.end(), [&](const Entry& entry) { return same_source(entry.source, source); });
         if (found == entries_.end())
             return false;
         detach_target(found->target);
@@ -161,7 +160,8 @@ namespace termin::gui_native {
             tc_ui_uniform_transform uniform;
             if (!finite_bounds(source->local_bounds) ||
                 !uniform_placement(tc_affine2f_mul(camera_, source->local_to_world), uniform)) {
-                tc_log_error("[termin-gui-native] widget projection rejects rotation, shear, non-uniform or invalid placement");
+                tc_log_error(
+                    "[termin-gui-native] widget projection rejects rotation, shear, non-uniform or invalid placement");
                 detach_target(entry.target);
                 next.push_back(entry);
                 continue;
@@ -203,57 +203,43 @@ namespace termin::gui_native {
         }
     }
 
-    void WidgetSceneProjectionBridge::paint(tc_ui_paint_context* context) {
+    void WidgetSceneProjectionBridge::paint_source(tc_graphic_item_handle source_handle, tc_ui_paint_context* context) {
         if (!tc_ui_document_is_valid(document_) || tc_widget_handle_is_invalid(host_))
             return;
         tc_widget* host = tc_ui_document_resolve_widget(document_, host_);
         if (!host || !resolver_ || !context)
             return;
-        auto sorted = entries_;
-        std::stable_sort(sorted.begin(), sorted.end(), [&](const Entry& left, const Entry& right) {
-            const auto a = resolver_(left.source);
-            const auto b = resolver_(right.source);
-            if (!a || !b)
-                return b.has_value();
-            if (a->z_order != b->z_order)
-                return a->z_order < b->z_order;
-            return a->stable_order < b->stable_order;
+        const auto entry = std::find_if(entries_.begin(), entries_.end(), [&](const Entry& candidate) {
+            return same_source(candidate.source, source_handle);
         });
-        tc_ui_painter_push_clip(context, host->bounds);
-        for (const Entry& entry : sorted) {
-            const auto source = resolver_(entry.source);
-            tc_widget* widget = tc_ui_document_resolve_widget(document_, entry.target);
-            if (source && source->visible && widget && widget->parent == host)
-                detail::paint_widget(widget, document_, context);
+        if (entry == entries_.end())
+            return;
+        const auto source = resolver_(entry->source);
+        tc_widget* widget = tc_ui_document_resolve_widget(document_, entry->target);
+        if (source && source->visible && widget && widget->parent == host) {
+            tc_ui_painter_push_clip(context, host->bounds);
+            detail::paint_widget(widget, document_, context);
+            tc_ui_painter_pop_clip(context);
         }
-        tc_ui_painter_pop_clip(context);
     }
 
-    tc_widget_handle WidgetSceneProjectionBridge::hit_test(float parent_x, float parent_y) const {
+    tc_widget_handle WidgetSceneProjectionBridge::hit_test_source(tc_graphic_item_handle source_handle,
+                                                                  float parent_x,
+                                                                  float parent_y) const {
         if (!tc_ui_document_is_valid(document_) || tc_widget_handle_is_invalid(host_))
             return tc_widget_handle_invalid();
         tc_widget* host = tc_ui_document_resolve_widget(document_, host_);
         if (!host || !resolver_ || !detail::rect_contains(host->bounds, parent_x, parent_y))
             return tc_widget_handle_invalid();
-        auto sorted = entries_;
-        std::stable_sort(sorted.begin(), sorted.end(), [&](const Entry& left, const Entry& right) {
-            const auto a = resolver_(left.source);
-            const auto b = resolver_(right.source);
-            if (!a || !b)
-                return a.has_value();
-            if (a->z_order != b->z_order)
-                return a->z_order > b->z_order;
-            return a->stable_order > b->stable_order;
+        const auto entry = std::find_if(entries_.begin(), entries_.end(), [&](const Entry& candidate) {
+            return same_source(candidate.source, source_handle);
         });
-        for (const Entry& entry : sorted) {
-            const auto source = resolver_(entry.source);
-            tc_widget* widget = tc_ui_document_resolve_widget(document_, entry.target);
-            if (source && source->visible && source->enabled && widget && widget->parent == host) {
-                const tc_widget_handle hit = detail::hit_test_widget(widget, document_, parent_x, parent_y);
-                if (!tc_widget_handle_is_invalid(hit))
-                    return hit;
-            }
-        }
+        if (entry == entries_.end())
+            return tc_widget_handle_invalid();
+        const auto source = resolver_(entry->source);
+        tc_widget* widget = tc_ui_document_resolve_widget(document_, entry->target);
+        if (source && source->visible && source->enabled && widget && widget->parent == host)
+            return detail::hit_test_widget(widget, document_, parent_x, parent_y);
         return tc_widget_handle_invalid();
     }
 

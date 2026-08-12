@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -12,7 +11,7 @@
 namespace termin::gui_native {
 
     enum class WidgetSceneProjectionOrder {
-        AfterSourceScene,
+        AtSourcePaintSlot,
     };
 
     enum class WidgetSceneProjectionClip {
@@ -20,20 +19,18 @@ namespace termin::gui_native {
     };
 
     enum class WidgetSceneProjectionInput {
-        PortalFirst,
+        ScenePaintOrder,
     };
 
     struct WidgetSceneProjectionPolicy {
-        WidgetSceneProjectionOrder order = WidgetSceneProjectionOrder::AfterSourceScene;
+        WidgetSceneProjectionOrder order = WidgetSceneProjectionOrder::AtSourcePaintSlot;
         WidgetSceneProjectionClip clip = WidgetSceneProjectionClip::HostBounds;
-        WidgetSceneProjectionInput input = WidgetSceneProjectionInput::PortalFirst;
+        WidgetSceneProjectionInput input = WidgetSceneProjectionInput::ScenePaintOrder;
     };
 
     struct WidgetSceneProjectionSource {
         tc_bounds2f local_bounds{};
         tc_affine2f local_to_world = tc_affine2f_identity();
-        std::int64_t z_order = 0;
-        std::uint64_t stable_order = 0;
         bool visible = true;
         bool enabled = true;
     };
@@ -42,8 +39,7 @@ namespace termin::gui_native {
     // handles. The source and target owners retain their normal lifetimes.
     class WidgetSceneProjectionBridge {
     public:
-        using SourceResolver =
-            std::function<std::optional<WidgetSceneProjectionSource>(tc_graphic_item_handle)>;
+        using SourceResolver = std::function<std::optional<WidgetSceneProjectionSource>(tc_graphic_item_handle)>;
 
         explicit WidgetSceneProjectionBridge(SourceResolver resolver = {});
         ~WidgetSceneProjectionBridge();
@@ -64,8 +60,8 @@ namespace termin::gui_native {
 
         void reconcile();
         void layout();
-        void paint(tc_ui_paint_context* context);
-        tc_widget_handle hit_test(float parent_x, float parent_y) const;
+        void paint_source(tc_graphic_item_handle source, tc_ui_paint_context* context);
+        tc_widget_handle hit_test_source(tc_graphic_item_handle source, float parent_x, float parent_y) const;
         void detach_all();
 
     private:

@@ -15,6 +15,35 @@
 
 namespace termin::gui_native {
     namespace {
+        class SceneViewLayerSink final : public termin::visual::ScenePaintLayerSink2D {
+        public:
+            SceneViewLayerSink(tc_ui_paint_context* context,
+                               WidgetSceneProjectionBridge& projections,
+                               termin::Affine2f camera)
+                : context_(context),
+                  projections_(projections),
+                  camera_(camera) {}
+
+            bool append_item_layer(const tc_graphic_item& item, tgfx::DrawList2D draw_list) override {
+                if (!draw_list.empty()) {
+                    tgfx::DrawList2DBuilder builder;
+                    if (!builder.push_transform(camera_) || !builder.append(draw_list) || !builder.pop_transform())
+                        return false;
+                    auto placed = builder.freeze();
+                    if (!placed || !append_draw_list2d(context_, std::move(*placed)))
+                        return false;
+                }
+                projections_.paint_source(item.handle, context_);
+                return true;
+            }
+
+        private:
+            tc_ui_paint_context* context_ = nullptr;
+            WidgetSceneProjectionBridge& projections_;
+            termin::Affine2f camera_ = termin::Affine2f::identity();
+        };
+    } // namespace
+    namespace {
 
         using termin::visual::GraphicItemHandle;
 
@@ -59,24 +88,22 @@ namespace termin::gui_native {
     SceneView::SceneView(termin::visual::TcVisualScene scene)
         : NativeWidget("SceneView"),
           scene_(scene.handle()) {
-        projections_.set_source_resolver([this](GraphicItemHandle handle)
-                                             -> std::optional<WidgetSceneProjectionSource> {
-            const auto current_scene = this->scene();
-            const tc_graphic_item* item = current_scene.resolve(handle);
-            if (!item)
-                return std::nullopt;
-            const auto local_bounds = current_scene.local_bounds(*item);
-            if (!local_bounds)
-                return std::nullopt;
-            return WidgetSceneProjectionSource{
-                {local_bounds->x0, local_bounds->y0, local_bounds->x1, local_bounds->y1},
-                current_scene.world_transform(*item),
-                item->z_order,
-                item->stable_order,
-                current_scene.effective_visible(*item),
-                current_scene.effective_enabled(*item),
-            };
-        });
+        projections_.set_source_resolver(
+            [this](GraphicItemHandle handle) -> std::optional<WidgetSceneProjectionSource> {
+                const auto current_scene = this->scene();
+                const tc_graphic_item* item = current_scene.resolve(handle);
+                if (!item)
+                    return std::nullopt;
+                const auto local_bounds = current_scene.local_bounds(*item);
+                if (!local_bounds)
+                    return std::nullopt;
+                return WidgetSceneProjectionSource{
+                    {local_bounds->x0, local_bounds->y0, local_bounds->x1, local_bounds->y1},
+                    current_scene.world_transform(*item),
+                    current_scene.effective_visible(*item),
+                    current_scene.effective_enabled(*item),
+                };
+            });
         set_style_role(TC_UI_STYLE_PANEL);
         set_focusable(true);
         set_preferred_size({480.0f, 320.0f});
@@ -261,7 +288,6 @@ namespace termin::gui_native {
         }
 
         UiSceneResources resources;
-        tgfx::DrawList2DBuilder builder;
         const auto current = transform();
         const termin::Affine2f camera{
             current.zoom,
@@ -273,15 +299,19 @@ namespace termin::gui_native {
         };
         const auto current_scene = scene();
         if (current_scene.valid()) {
-            const bool built =
-                builder.push_transform(camera) && current_scene.paint(builder, resources) && builder.pop_transform();
-            auto draw_list = built ? builder.freeze() : std::nullopt;
-            if (!draw_list || !append_draw_list2d(context, std::move(*draw_list))) {
-                tc_log_error("[termin-gui-native] SceneView failed to paint visual scene");
+            if (projections_.size() != 0) {
+                SceneViewLayerSink sink(context, projections_, camera);
+                if (!current_scene.paint_layers(sink, resources))
+                    tc_log_error("[termin-gui-native] SceneView failed to paint interleaved visual scene");
+            } else {
+                tgfx::DrawList2DBuilder builder;
+                const bool built = builder.push_transform(camera) && current_scene.paint(builder, resources) &&
+                                   builder.pop_transform();
+                auto draw_list = built ? builder.freeze() : std::nullopt;
+                if (!draw_list || !append_draw_list2d(context, std::move(*draw_list)))
+                    tc_log_error("[termin-gui-native] SceneView failed to paint visual scene");
             }
         }
-
-        projections_.paint(context);
         tc_ui_painter_pop_clip(context);
     }
 
@@ -391,9 +421,20 @@ namespace termin::gui_native {
             return tc_widget_handle_invalid();
         }
         projections_.bind_target(document, handle());
-        const auto portal = projections_.hit_test(x, y);
-        if (!tc_widget_handle_is_invalid(portal))
-            return portal;
+        const auto current_scene = scene();
+        if (current_scene.valid() && projections_.size() != 0) {
+            tc_widget_handle result = tc_widget_handle_invalid();
+            const tc_ui_point world = screen_to_world({x, y});
+            current_scene.visit_hit_layers({world.x, world.y},
+                                           [&](const tc_graphic_item& item, termin::Vec2f, bool item_hit) {
+                                               result = projections_.hit_test_source(item.handle, x, y);
+                                               if (!tc_widget_handle_is_invalid(result))
+                                                   return true;
+                                               return item_hit;
+                                           });
+            if (!tc_widget_handle_is_invalid(result))
+                return result;
+        }
         return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
 

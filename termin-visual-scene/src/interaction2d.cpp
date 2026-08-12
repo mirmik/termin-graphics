@@ -20,67 +20,84 @@ namespace termin::visual {
 
     } // namespace
 
-    std::optional<GraphicItemHandle> hit_test(const TcVisualScene& scene, termin::Vec2f world_point) {
+    bool TcVisualScene::visit_hit_layers(termin::Vec2f world_point, const SceneHitLayerVisitor2D& visitor) const {
         if (!std::isfinite(world_point.x) || !std::isfinite(world_point.y)) {
             tc::Log::error("TcVisualScene hit_test rejected non-finite point");
-            return std::nullopt;
+            return false;
+        }
+        if (!visitor) {
+            tc::Log::error("TcVisualScene hit-layer traversal requires a visitor");
+            return false;
         }
 
         tgfx::CompositionEvaluator2D composition;
         composition.begin_batch();
-        std::function<std::optional<GraphicItemHandle>(tc_graphic_item&, bool)> visit;
-        visit = [&](tc_graphic_item& item, bool parent_enabled) -> std::optional<GraphicItemHandle> {
+        std::function<bool(tc_graphic_item&, bool)> visit;
+        visit = [&](tc_graphic_item& item, bool parent_enabled) -> bool {
             const bool enabled = parent_enabled && item.enabled;
             tgfx::CompositionLayer2D layer;
             if (!detail::composition_layer(item, layer) || !composition.push(layer)) {
-                return std::nullopt;
+                return false;
             }
 
-            std::optional<GraphicItemHandle> result;
+            bool stopped = false;
             if (enabled && composition.drawable() && composition.clips_contain(world_point)) {
                 if (!composition.state().invertible) {
                     tc::Log::error("graphic item '%s' has a singular world transform and is not hittable",
                                    tc_graphic_item_type_name(&item));
                 } else {
-                    auto children = scene.sorted_children_(&item);
+                    auto children = sorted_children_(&item);
                     for (auto iterator = children.rbegin(); iterator != children.rend(); ++iterator) {
-                        result = visit(**iterator, enabled);
-                        if (result) {
+                        stopped = visit(**iterator, enabled);
+                        if (stopped) {
                             break;
                         }
                     }
 
-                    if (!result && item.vtable != nullptr && item.vtable->hit_test != nullptr) {
+                    if (!stopped) {
                         termin::Vec2f local{};
-                        if (composition.map_point_from_world(world_point, local) &&
-                            item.vtable->hit_test(&item, local, 0.0f)) {
-                            result = item.handle;
+                        if (composition.map_point_from_world(world_point, local)) {
+                            const bool item_hit = item.vtable != nullptr && item.vtable->hit_test != nullptr &&
+                                                  item.vtable->hit_test(&item, local, 0.0f);
+                            stopped = visitor(item, local, item_hit);
                         }
                     }
                 }
             }
             if (!composition.active() || !composition.pop()) {
-                return std::nullopt;
+                return false;
             }
-            return result;
+            return stopped;
         };
 
-        auto roots = scene.sorted_roots_();
+        auto roots = sorted_roots_();
         for (auto iterator = roots.rbegin(); iterator != roots.rend(); ++iterator) {
-            if (auto result = visit(**iterator, true)) {
+            if (visit(**iterator, true)) {
                 if (!composition.end_batch()) {
-                    return std::nullopt;
+                    return false;
                 }
-                return result;
+                return true;
             }
             if (!composition.active()) {
-                return std::nullopt;
+                return false;
             }
         }
         if (!composition.end_batch()) {
-            return std::nullopt;
+            return false;
         }
-        return std::nullopt;
+        return false;
+    }
+
+    std::optional<GraphicItemHandle> hit_test(const TcVisualScene& scene, termin::Vec2f world_point) {
+        std::optional<GraphicItemHandle> result;
+        scene.visit_hit_layers(world_point, [&](const tc_graphic_item& item, termin::Vec2f, bool item_hit) {
+            if (!item_hit) {
+                return false;
+            }
+            result = item.handle;
+            return true;
+        });
+        return result;
     }
 
     std::size_t SceneInteraction2D::HandleHash::operator()(const HandleKey& value) const noexcept {
