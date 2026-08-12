@@ -74,4 +74,23 @@ namespace tgfx {
         return "";
     }
 
+    // termin_shaderc and runtime-package manifests use the public artifact
+    // target keys. The modern desktop GL profile is explicit in device
+    // diagnostics, but retains the established `opengl` compiler/package key.
+    inline constexpr const char* shader_artifact_compiler_target_name(ShaderArtifactTarget target) {
+        switch (target) {
+        case ShaderArtifactTarget::OpenGL450:
+            return "opengl";
+        case ShaderArtifactTarget::Vulkan:
+        case ShaderArtifactTarget::OpenGL330:
+        case ShaderArtifactTarget::WebGL2:
+        case ShaderArtifactTarget::D3D11:
+        case ShaderArtifactTarget::WebGPU:
+            return shader_artifact_target_name(target);
+        case ShaderArtifactTarget::None:
+            return "";
+        }
+        return "";
+    }
+
 } // namespace tgfx

@@ -21,7 +21,9 @@ the next use instead of reusing a shader compiled from the previous root.
 Artifact identity is selected with `tgfx::ShaderArtifactTarget`, independently
 from `BackendType`. This matters for the GL family: modern desktop OpenGL keeps
 the compatible `shaders/opengl/` layout, while OpenGL 3.3 and WebGL2 use the
-distinct `shaders/opengl330/` and `shaders/webgl2/` roots. A render device may
+distinct `shaders/opengl330/` and `shaders/webgl2/` roots. The modern desktop
+profile is reported as `opengl450`, while its compiler/package key and retained
+artifact root remain `opengl`. A render device may
 therefore report the OpenGL backend while selecting the exact offline shader
 profile through its capabilities. Generation of those constrained artifacts is
 a separate build-pipeline concern; the runtime must never rewrite modern GLSL

@@ -260,6 +260,10 @@ TEST_CASE("tgfx2 shader artifact paths are backend aware") {
           tgfx::ShaderArtifactTarget::OpenGL450);
     CHECK(std::string(tgfx::shader_artifact_target_name(tgfx::ShaderArtifactTarget::OpenGL450)) == "opengl450");
     CHECK(std::string(tgfx::shader_artifact_target_directory(tgfx::ShaderArtifactTarget::OpenGL450)) == "opengl");
+    CHECK(std::string(tgfx::shader_artifact_compiler_target_name(tgfx::ShaderArtifactTarget::OpenGL450)) ==
+          "opengl");
+    CHECK(std::string(tgfx::shader_artifact_compiler_target_name(tgfx::ShaderArtifactTarget::OpenGL330)) ==
+          "opengl330");
 
     CHECK(termin::tgfx2_shader_artifact_path(
         "shader-uuid", tgfx::ShaderArtifactTarget::OpenGL330, tgfx::ShaderStage::Fragment, path));
