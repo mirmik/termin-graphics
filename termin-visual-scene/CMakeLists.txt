@@ -45,6 +45,7 @@ add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/tc_builtin_items2d.cpp
     src/graphic_item2d.cpp
     src/native_graphic_item2d.cpp
+    src/native_visual_item3d.cpp
     src/graphic_item_paint_context2d.cpp
     src/items/group_item2d.cpp
     src/items/rect_item2d.cpp
@@ -56,6 +57,10 @@ add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/items/image_item2d.cpp
     src/items/hit_region_item2d.cpp
     src/items/custom_batch_item2d.cpp
+    src/items/group_item3d.cpp
+    src/items/primitive_item3d.cpp
+    src/items/static_mesh_item3d.cpp
+    src/items/point_cloud_item3d.cpp
     src/scene2d.cpp
     src/interaction2d.cpp
     src/interaction3d.cpp
@@ -71,6 +76,7 @@ endif()
 add_library(termin_visual_scene::termin_visual_scene ALIAS termin_visual_scene)
 target_compile_definitions(termin_visual_scene PRIVATE
     TERMIN_VISUAL_SCENE_EXPORTS)
+target_compile_features(termin_visual_scene PUBLIC cxx_std_20)
 target_include_directories(termin_visual_scene PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
@@ -97,6 +103,14 @@ if(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES)
         termin_window::termin_window)
     termin_set_rpath_tool(termin_visual_scene_draggable_example)
     install(TARGETS termin_visual_scene_draggable_example
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    add_executable(termin_visual_scene3d_builtin_example
+        examples/builtin_items3d.cpp)
+    target_link_libraries(termin_visual_scene3d_builtin_example PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_tool(termin_visual_scene3d_builtin_example)
+    install(TARGETS termin_visual_scene3d_builtin_example
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -182,6 +196,14 @@ if(TERMIN_BUILD_TESTS)
     add_test(NAME termin_visual_scene3d_paint_test
         COMMAND termin_visual_scene3d_paint_test)
 
+    add_executable(termin_visual_scene3d_items_test
+        tests/test_items3d.cpp)
+    target_link_libraries(termin_visual_scene3d_items_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene3d_items_test)
+    add_test(NAME termin_visual_scene3d_items_test
+        COMMAND termin_visual_scene3d_items_test)
+
     if(TARGET termin_visual_scene_draggable_example)
         add_test(NAME termin_visual_scene_draggable_example_smoke
             COMMAND termin_visual_scene_draggable_example --headless-smoke)
@@ -231,6 +253,16 @@ if(TERMIN_BUILD_TESTS)
                     termin_visual_scene_draggable_example_missing_shader_smoke
                     "termin:capability:d3d11")
             endif()
+        endif()
+    endif()
+
+    if(TARGET termin_visual_scene3d_builtin_example)
+        add_test(NAME termin_visual_scene3d_builtin_example_smoke
+            COMMAND termin_visual_scene3d_builtin_example --headless-smoke)
+        if(COMMAND termin_set_test_build_target)
+            termin_set_test_build_target(
+                termin_visual_scene3d_builtin_example_smoke
+                termin_visual_scene3d_builtin_example)
         endif()
     endif()
 endif()

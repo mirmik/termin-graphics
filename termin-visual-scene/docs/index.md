@@ -79,6 +79,33 @@ The C++ `ScenePaintSink3D` in `paint3d.hpp` is the adapter seam for an external
 render-engine integration remain outside this package; `termin-visual-scene`
 does not depend on `tc_scene` or `termin-render`.
 
+### Built-in 3D items
+
+The native C++ layer provides four ordinary implementations of the same public
+item contract:
+
+- `GroupItem3D` is empty placement/topology;
+- `PrimitiveItem3D` owns a shared colored indexed-triangle batch with an
+  optional part token per triangle, suitable for tool handles and orientation
+  geometry;
+- `StaticMeshItem3D` owns a shared CPU `Mesh3` for reconstruction and preview
+  surfaces;
+- `PointCloudItem3D` owns shared point data, draw style and a local-space pick
+  radius. Point hits report `point_index + 1` as their part token.
+
+These classes derive from `NativeVisualItem3D`, which translates C++ virtual
+callbacks to the C item vtable and logs exceptions before they cross the ABI.
+The scene contains no dispatch for any built-in type.
+
+Geometry resources passed to an item are immutable shared resources. Callers
+must not mutate the original object after sharing it. Replacing a resource
+validates the complete replacement before changing the item; completed paint
+batches may retain their own `shared_ptr` after the item is replaced or
+destroyed. Built-in draw packet structures therefore contain non-trivial C++
+objects: a protocol adapter must cast the borrowed packet to its declared type
+and copy-construct the packet or its resource handle. It must never preserve or
+byte-copy the raw payload storage after `submit` returns.
+
 The module is deliberately modeled after the native widget object model:
 
 - every implementation embeds one `tc_graphic_item` C base;
