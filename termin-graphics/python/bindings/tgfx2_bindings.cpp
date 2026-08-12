@@ -461,7 +461,7 @@ namespace tgfx_bindings {
                 "texture_sample_count",
                 [](tgfx::IRenderDevice& self, tgfx::TextureHandle h) { return self.texture_desc(h).sample_count; },
                 nb::arg("texture"))
-            // Thin tcgui-only hosts need to read whole
+            // Thin UI hosts need to read whole
             // render targets back to the CPU without dragging in the editor
             // runtime. Delegates to IRenderDevice::read_texture_rgba_float
             // with backend-normalized top-left row order. Caller supplies a

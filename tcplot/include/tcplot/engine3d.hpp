@@ -2,7 +2,7 @@
 //
 // Port of tcplot/tcplot/engine3d.py. Owns data, camera, GPU meshes
 // and input state. Renders through a tgfx::RenderContext2 supplied
-// by the host. Has no dependency on tcgui — host provides:
+// by the host. Has no dependency on a UI toolkit — host provides:
 //   - viewport rect (pixel coords)
 //   - RenderContext2 pointer at render time
 //   - FontAtlas pointer at render time (for billboard tick labels)

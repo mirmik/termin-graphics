@@ -25,7 +25,7 @@
 //   - Same GlyphInfo shape, same call pattern; renderer unchanged.
 //
 // Measurement uses typographic advance (stbtt_GetGlyphHMetrics), not
-// ink-bbox width — kept from the previous design. Layouts in tcgui /
+// ink-bbox width — kept from the previous design. UI layouts /
 // tcplot that expect space glyphs to occupy real width keep working.
 #pragma once
 

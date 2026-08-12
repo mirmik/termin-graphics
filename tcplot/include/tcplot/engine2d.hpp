@@ -1,7 +1,7 @@
 // engine2d.hpp - Host-agnostic 2D plot engine for tcplot.
 //
 // Port of tcplot/tcplot/engine2d.py. Renders straight through a
-// tgfx::RenderContext2 without any tcgui dependency. Shared
+// tgfx::RenderContext2 without any UI-toolkit dependency. Shared
 // tgfx::Canvas2DRenderer handles plot chrome and labels; large line
 // series use a dedicated persistent-VBO path. One key behavioural
 // improvement over the Python version: every line series emits a

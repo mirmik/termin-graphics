@@ -1,10 +1,9 @@
-"""tcplot - lightweight plotting library for tcgui (native C++ core).
+"""Toolkit-neutral plotting engines and retained chart primitives.
 
-Public API surface kept stable across the Python-to-C++ port. All heavy
-lifting (engines, camera math, mesh building) lives in the C++
-``tcplot`` library bound via ``_tcplot_native``.  This module re-exports
-those symbols plus the widget adapters ``Plot2D`` / ``Plot3D`` that
-host the engines inside a tcgui Widget.
+All rendering, camera math and mesh building lives in the native ``tcplot``
+library bound through :mod:`tcplot._tcplot_native`. Ready-made Termin UI
+widgets are provided by the optional :mod:`tcplot_gui_native` package; the
+core package deliberately does not import a UI toolkit.
 """
 from termin_nanobind.runtime import preload_sdk_libs
 
@@ -41,13 +40,7 @@ from tcplot._tcplot_native import (
 # call per index.
 DEFAULT_COLORS = list(default_colors())
 
-# Widget adapters — tcgui.Widget subclasses, Python-only.
-from tcplot.plot2d import Plot2D
-from tcplot.plot3d import Plot3D
-
 __all__ = [
-    "Plot2D",
-    "Plot3D",
     "PlotEngine2D",
     "PlotEngine3D",
     "RetainedChart3D",

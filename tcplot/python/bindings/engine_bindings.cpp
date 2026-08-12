@@ -345,10 +345,8 @@ namespace tcplot_bindings {
                 nb::arg("size") = 4.0,
                 nb::arg("label") = std::string())
 
-            // Surface takes flat X/Y/Z arrays plus explicit rows/cols.
-            // The Python wrapper in tcplot/plot3d.py accepts 2D numpy
-            // arrays, ravels them to 1D, and reads rows/cols from .shape
-            // — that keeps ndarray-shape manipulation out of C++.
+            // Surface takes contiguous flat X/Y/Z arrays plus explicit rows/cols.
+            // Toolkit adapters may accept richer shapes at their own boundary.
             .def(
                 "surface",
                 [](tcplot::PlotEngine3D& self,

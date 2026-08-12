@@ -303,8 +303,8 @@ void main() {
         }
 
         ctx2->set_viewport(dst.x, dst.y, dst.width, dst.height);
-        // The debugger widget may be called with an active tcgui clip
-        // rect. Make sure our fullscreen-quad draw is controlled by the
+        // The debugger widget may be called with an active UI clip rect. Make
+        // sure our fullscreen-quad draw is controlled by the
         // preview viewport instead of an inherited text/widget scissor.
         ctx2->clear_scissor();
         ctx2->set_depth_test(false);

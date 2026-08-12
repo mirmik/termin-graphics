@@ -97,10 +97,6 @@
       "distribution": "termin-shader-runtime"
     },
     {
-      "path": "termin-gui",
-      "distribution": "tcgui"
-    },
-    {
       "path": "termin-window",
       "distribution": "termin-window",
       "native_extensions": [

@@ -449,15 +449,7 @@
       "id": "tcplot-tests-python",
       "module": "tcplot",
       "executor": "pytest",
-      "roots": ["tcplot/tests/python"],
-      "excluded_roots": ["tcplot/tests/python/test_examples_color_contract.py"]
-    },
-    {
-      "id": "tcplot-window-tests-python",
-      "module": "tcplot",
-      "executor": "pytest",
-      "roots": ["tcplot/tests/python/test_examples_color_contract.py"],
-      "required_capabilities": ["window"]
+      "roots": ["tcplot/tests/python"]
     },
     {
       "id": "termin-animation-tests",
@@ -643,12 +635,6 @@
       "module": "termin-gui-native",
       "executor": "pytest",
       "roots": ["termin-gui-native/python/tests"]
-    },
-    {
-      "id": "termin-gui-python-tests",
-      "module": "termin-gui",
-      "executor": "pytest",
-      "roots": ["termin-gui/python/tests"]
     },
     {
       "id": "termin-inspect-tests",

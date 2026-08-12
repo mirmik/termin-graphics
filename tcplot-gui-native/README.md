@@ -5,6 +5,10 @@
 clean: neither the UI core knows about plotting nor `tcplot` knows about
 widgets.
 
+Python consumers import `Plot2D` and `Plot3D` from `tcplot_gui_native`, not
+from `tcplot`. The core package intentionally contains only engines, retained
+chart primitives, data types and camera math.
+
 The widget runtime type is `termin.gui.Plot2D`. It owns a `TcVisualScene`, a
 plot projection, grid and retained line-series items, then appends that retained
 scene directly to the UI draw list. No intermediate render texture or

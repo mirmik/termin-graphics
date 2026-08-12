@@ -1,6 +1,6 @@
 # termin-gui-native
 
-Native UI document implementation under active `termin-gui` migration.
+Canonical native retained UI document and widget toolkit for Termin.
 
 The maintained public C++/Python widget and signal inventory is
 [`docs/python-widget-parity.md`](docs/python-widget-parity.md). Python factories
@@ -407,7 +407,6 @@ The manual scenario is:
    aligned with its scene item and the purple right-edge item remains clipped
    by the view.
 
-This module does not replace the existing Python `termin-gui` package yet. It
-is the native implementation under active parity work; ownership, handle,
-polyglot widget, input, overlay and theme/style contracts are already exercised
-through C, C++ and Python tests.
+This module is Termin's canonical retained UI toolkit. Its ownership, handle,
+polyglot widget, input, overlay and theme/style contracts are exercised through
+C, C++ and Python tests.

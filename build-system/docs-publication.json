@@ -25,12 +25,6 @@
       "site_path": "termin-collision"
     },
     {
-      "module": "termin-gui",
-      "root": "termin-gui/docs",
-      "config": "termin-gui/mkdocs.yml",
-      "site_path": "termin-gui"
-    },
-    {
       "module": "termin-inspect",
       "root": "termin-inspect/docs",
       "config": "termin-inspect/mkdocs.yml",

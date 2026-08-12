@@ -10,7 +10,7 @@ scene-neutral `termin_render_core`. Retained plot annotations использую
 - [Module Map](../../docs/modules.md#tcplot)
 - [C# Retained Chart Composition](../../docs/architecture/2026-07-30-csharp-retained-chart-composition.md)
 - [termin-graphics](../../termin-graphics/docs/index.md)
-- [termin-gui](../../termin-gui/docs/index.md)
+- [tcplot-gui-native](../../tcplot-gui-native/README.md)
 
 Текущий `PlotEngine2D` пока остаётся native composer, но его grid/layout и
 series rendering уже вынесены в публичные retained parts и общие utilities.
@@ -23,7 +23,6 @@ series rendering уже вынесены в публичные retained parts и
 - Implementation в `src/`.
 - Python bindings в `python/bindings/`.
 - Python package в `python/tcplot/`.
-- Examples в `examples/`.
 
 ## C++ API
 
@@ -141,16 +140,11 @@ Python package:
 import tcplot
 ```
 
-Examples запускаются bundled Python с checkout overlay из корня репозитория:
-
-```bash
-./run-python.sh tcplot/examples/demo_sin.py
-# Windows:
-.\run-python.ps1 tcplot\examples\demo_sin.py
-```
-
-Перед первым запуском или после изменения состава SDK нужно выполнить
-`setup-sdk-python-env.sh` (на Windows — `setup-sdk-python-env.ps1`).
+Пакет экспортирует toolkit-neutral `PlotEngine2D`, `PlotEngine3D` и
+`RetainedChart3D`; он не импортирует и не реэкспортирует UI widgets. Python
+адаптеры `Plot2D` и `Plot3D` принадлежат отдельному пакету
+`tcplot_gui_native`. Примеры их создания и встраивания в native UI document
+приведены в [README моста](../../tcplot-gui-native/README.md).
 
 `PlotEngine2D.create_data_marker()` returns a value-only
 `PlotAnnotationHandle`. Marker updates, snapshots, destruction, snapping and
@@ -164,13 +158,3 @@ caller.
 composition and synthetic input without duplicating plot margin or DPI math.
 No Python annotation or graphic-item wrapper owns the engine, layer or native
 item.
-
-The `Plot2D` widget forwards the marker API without exposing its engine.
-Run the interactive retained-marker example with:
-
-```bash
-sdk/bin/termin_python tcplot/examples/demo_marker.py
-```
-
-Its anchor snaps to the plotted curve while dragging, and the callout close
-button destroys the annotation through its generation handle.

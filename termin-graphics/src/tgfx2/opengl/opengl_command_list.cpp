@@ -639,7 +639,7 @@ namespace tgfx {
     // --- Dynamic state ---
 
     // Caller contract for set_viewport/set_scissor is top-left origin
-    // pixel coords (matches Vulkan and tcgui). GL's glViewport / glScissor
+    // pixel coords (matches Vulkan and native UI). GL's glViewport / glScissor
     // still use bottom-left origin in window coordinates — glClipControl
     // changes the clip→window mapping only, not the viewport/scissor
     // origin. We flip the y here using the framebuffer height recorded

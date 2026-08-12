@@ -19,13 +19,15 @@
   screen-space линий через `ScreenSpaceLineRenderer`.
 - `examples/demo_lines_billboard.py` - visual стенд для GPU-expanded
   billboard линий с шириной в world units через `WorldSpaceLineRenderer`.
-- `examples/demo_sdf_text.py` - SDF text rendering через tcgui widgets.
 
 ## Границы
 
 В этот модуль должны попадать GPU abstractions и utilities, которые не знают о frame graph, editor UI или конкретной application domain.
 
-Если код знает про frame graph/debugger/render pipeline, он обычно относится к [termin-render](../../docs/modules.md#termin-render). Если код знает про widget tree, layout или events, он относится к [termin-gui](../../termin-gui/docs/index.md).
+Если код знает про frame graph/debugger/render pipeline, он обычно относится к
+[termin-render](../../docs/modules.md#termin-render). Если код знает про widget
+tree, layout или events, он относится к
+[termin-gui-native](../../termin-gui-native/README.md).
 
 ## Application Graphics Host
 
