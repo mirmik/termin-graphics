@@ -39,6 +39,8 @@ endif()
 add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/tc_graphic_item.c
     src/tc_visual_scene.c
+    src/tc_visual_item3d.c
+    src/tc_visual_scene3d.c
     src/tc_visual_scene_item2d.cpp
     src/tc_builtin_items2d.cpp
     src/graphic_item2d.cpp
@@ -56,6 +58,8 @@ add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/items/custom_batch_item2d.cpp
     src/scene2d.cpp
     src/interaction2d.cpp
+    src/scene3d.cpp
+    src/visual_item3d.cpp
 )
 if(MSVC)
     set_source_files_properties(src/tc_visual_scene.c PROPERTIES
@@ -143,6 +147,22 @@ if(TERMIN_BUILD_TESTS)
     termin_set_rpath_test(termin_visual_scene_interaction_test)
     add_test(NAME termin_visual_scene_interaction_test
         COMMAND termin_visual_scene_interaction_test)
+
+    add_executable(termin_visual_scene3d_storage_test
+        tests/test_scene3d_storage.cpp)
+    target_link_libraries(termin_visual_scene3d_storage_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene3d_storage_test)
+    add_test(NAME termin_visual_scene3d_storage_test
+        COMMAND termin_visual_scene3d_storage_test)
+
+    add_executable(termin_visual_scene3d_c_api_test
+        tests/test_scene3d_c_api.c)
+    target_link_libraries(termin_visual_scene3d_c_api_test PRIVATE
+        termin_visual_scene)
+    termin_set_rpath_test(termin_visual_scene3d_c_api_test)
+    add_test(NAME termin_visual_scene3d_c_api_test
+        COMMAND termin_visual_scene3d_c_api_test)
 
     if(TARGET termin_visual_scene_draggable_example)
         add_test(NAME termin_visual_scene_draggable_example_smoke

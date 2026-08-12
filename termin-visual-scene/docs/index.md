@@ -1,9 +1,43 @@
 # Termin Visual Scene
 
-`termin-visual-scene` is a small retained 2D object tree. It owns graphic
-items, composes their affine transforms, paints them into the canonical
-`tgfx::DrawList2DBuilder`, performs geometric hit testing and provides
-optional pointer/selection/drag controllers.
+`termin-visual-scene` provides small retained visual object trees. The mature
+2D path owns graphic items, composes their affine transforms, paints them into
+the canonical `tgfx::DrawList2DBuilder`, performs geometric hit testing and
+provides optional pointer/selection/drag controllers. `VisualScene3D` follows
+the same deliberately small model for embedded 3D tools and previews; it is
+not an ECS or a replacement for `tc_scene`.
+
+## VisualScene3D direction
+
+VisualScene3D is intended for a handful of heterogeneous visual items such as
+plot parts, reconstruction meshes, point clouds, editor handles and an
+orientation cube. Concrete items own their paint and ray-hit behavior. The
+scene performs a linear traversal, asks every eligible item for a candidate
+when interaction needs one and chooses the nearest valid candidate. It does
+not maintain a BVH, require item AABBs as a broad phase, use a GPU ID pass or
+know about gizmos and other concrete item types.
+
+The 3D storage is dimension-specific rather than adding conditional 3D fields
+to the existing 2D item ABI. It retains the established ownership model:
+creator-supplied deleters, one scene owner, generation-checked external
+handles, pointer-based parent/child topology and deterministic replacement.
+
+Local placement is stored as exact double-precision `Affine3d`. In
+particular, parent rotation composed with non-uniform child scale must not be
+projected back into a TRS value. Concrete items and applications may expose
+convenient position/rotation/scale properties, but those are adapters above
+the scene's exact affine composition contract.
+
+Public transform setters reject non-finite coefficients and log the failure.
+Singular but finite transforms remain valid placement state: they can still be
+painted and inspected, while later hit-testing skips items whose world affine
+cannot map a ray into local space and records that diagnostic.
+
+Camera ownership is also outside the scene. A GUI view or another host
+supplies view/projection state, maps pointer positions to world rays and may
+install camera navigation as the generic unhandled-event fallback. This lets
+one VisualScene3D be displayed by multiple views and lets a small 3D scene be
+embedded as an ordinary native GUI widget.
 
 The module is deliberately modeled after the native widget object model:
 
