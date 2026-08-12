@@ -188,27 +188,6 @@ if ($Clean -and (Test-Path $BuildDir)) {
     Remove-Item -Recurse -Force $BuildDir
 }
 
-$requiredSubmodules = if ($Profile -eq "graphics") {
-    @(
-        "termin-thirdparty/recastnavigation",
-        "termin-thirdparty/eigen",
-        "termin-thirdparty/zlib",
-        "termin-thirdparty/libpng",
-        "termin-thirdparty/libjpeg-turbo",
-        "termin-thirdparty/libwebp"
-    )
-} else {
-    @(
-        "termin-thirdparty/manifold",
-        "termin-thirdparty/clipper2",
-        "termin-thirdparty/recastnavigation"
-    )
-}
-if ($TerminEnableVulkan -eq "ON") {
-    $requiredSubmodules += "termin-thirdparty/vulkan-memory-allocator"
-}
-& (Join-Path $ScriptDir "scripts\Ensure-ThirdpartySubmodules.ps1") -RepoRoot $ScriptDir -RequiredPaths $requiredSubmodules
-
 $cmakeArgs = @()
 if ($CmakeGeneratorName -and -not (Test-Path (Join-Path $BuildDir "CMakeCache.txt"))) {
     $cmakeArgs += @("-G", $CmakeGeneratorName)
