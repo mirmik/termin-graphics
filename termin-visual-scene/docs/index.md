@@ -65,10 +65,11 @@ Traversal orders roots and siblings by z-order and stable order. That ordered
 tree is cached until adopt/replace/destroy/reparent/z-order changes the scene's
 order revision; content, geometry and data mutations do not rebuild it.
 Identity transforms and unit opacity do not emit redundant state commands.
-Traversal then pushes any effective transform, opacity or geometric clip and
-calls the item paint vtable. The item emits canonical draw commands through
-`GraphicItemPaintContext2D`; the scene renderer never branches on its concrete
-type.
+Traversal feeds each item's affine transform, opacity, visibility and geometric
+clip into `tgfx::CompositionEvaluator2D`, which owns the balanced draw-list
+scopes. The item paint vtable emits canonical draw commands and nested local
+clip scopes through `GraphicItemPaintContext2D`; the scene renderer never
+branches on its concrete type.
 
 Text, image and custom-batch items resolve their runtime resources
 synchronously during this traversal. The scene does not create a detached
@@ -77,10 +78,12 @@ freeze or execute the builder according to the surrounding render pipeline.
 
 ## Hit testing and interaction
 
-`hit_test` traverses the same live visual tree front-to-back. It composes the
-exact affine hierarchy, rejects singular inverse transforms, checks inherited
-geometric clips and calls the item's hit-test vtable in local coordinates.
-Children win over their parent at the same visual level.
+`local_bounds`, `world_bounds` and `hit_test` use the same shared composition
+evaluator as painting. Bounds preserve arbitrary-affine projection. Hit testing
+traverses the live tree front-to-back, rejects singular inverse transforms,
+checks every inherited geometric clip as a path rather than an AABB, and calls
+the item's hit-test vtable in evaluator-mapped local coordinates. Children win
+over their parent at the same visual level.
 
 `SceneInteraction2D` stores hover, press and capture as generation handles.
 `SelectionController2D` and `DragController2D` are optional policies rather

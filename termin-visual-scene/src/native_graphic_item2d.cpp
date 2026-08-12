@@ -9,8 +9,7 @@ namespace termin::visual {
         .local_bounds = dispatch_local_bounds,
         .hit_test = dispatch_hit_test,
         .paint = dispatch_paint,
-        .push_clip = dispatch_push_clip,
-        .clip_contains = dispatch_clip_contains,
+        .composition_clip = dispatch_composition_clip,
         .on_destroy = dispatch_on_destroy,
     };
 
@@ -49,30 +48,24 @@ namespace termin::visual {
         return self->paint(context);
     }
 
-    bool NativeGraphicItem2D::dispatch_push_clip(const tc_graphic_item* item,
-                                                 tc_graphic_item_draw_sink* sink,
-                                                 bool* out_pushed) {
+    bool NativeGraphicItem2D::dispatch_composition_clip(const tc_graphic_item* item,
+                                                        tc_graphic_item_clip2d_view* out_clip) {
         const auto* self = from_c(item);
-        if (self == nullptr || sink == nullptr || sink->builder == nullptr || out_pushed == nullptr) {
+        if (self == nullptr || out_clip == nullptr) {
             return false;
         }
-        *out_pushed = false;
         const auto& clip = self->clip();
         if (!clip)
-            return true;
-        if (!sink->builder->push_clip(clip->path, clip->rule)) {
             return false;
-        }
-        *out_pushed = true;
+        static_assert(sizeof(tgfx::Path2Verb) == sizeof(std::uint8_t));
+        *out_clip = {
+            reinterpret_cast<const std::uint8_t*>(clip->path.verbs().data()),
+            clip->path.verbs().size(),
+            clip->path.points().data(),
+            clip->path.points().size(),
+            static_cast<std::uint8_t>(clip->rule),
+        };
         return true;
-    }
-
-    bool NativeGraphicItem2D::dispatch_clip_contains(const tc_graphic_item* item, tc_vec2f local_point) {
-        const auto* self = from_c(item);
-        if (self == nullptr)
-            return false;
-        const auto& clip = self->clip();
-        return !clip || clip->path.flatten().contains(local_point, clip->rule);
     }
 
     void NativeGraphicItem2D::dispatch_on_destroy(tc_graphic_item* item, tc_visual_scene* scene) {

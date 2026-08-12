@@ -73,7 +73,20 @@ int main() {
     assert(near(scene.effective_opacity(*child_ptr->c_item()), 0.125f));
     assert(scene.effective_visible(*child_ptr->c_item()));
     assert_bounds(scene.local_bounds(*child_ptr->c_item()), 0.0f, 0.0f, 8.0f, 6.0f);
-    assert(scene.local_bounds(*root_ptr->c_item()));
+    const auto expected_root_bounds = child_transform.transform_bounds({0.0f, 0.0f, 8.0f, 6.0f});
+    assert_bounds(scene.local_bounds(*root_ptr->c_item()),
+                  expected_root_bounds.x0,
+                  expected_root_bounds.y0,
+                  expected_root_bounds.x1,
+                  expected_root_bounds.y1);
+    // World projection is evaluated from the source geometry through the
+    // accumulated affine in one step, not by re-projecting the local AABB.
+    const auto expected_world_bounds = expected_world.transform_bounds({0.0f, 0.0f, 8.0f, 6.0f});
+    assert_bounds(scene.world_bounds(*root_ptr->c_item()),
+                  expected_world_bounds.x0,
+                  expected_world_bounds.y0,
+                  expected_world_bounds.x1,
+                  expected_world_bounds.y1);
 
     const auto ellipse = scene.adopt(std::make_unique<EllipseItem2D>(
         termin::Rect2f{1.0f, 2.0f, 5.0f, 7.0f}, tgfx::FillPaint{}, tgfx::StrokePaint{{}, 2.0f}));
@@ -111,6 +124,7 @@ int main() {
 
     replaced->local_transform = termin::Affine2f::scaling(0.0f, 1.0f);
     assert(scene.diagnostics(*replaced) == GraphicItemDiagnostic2D::SingularWorldTransform);
+    assert(scene.world_bounds(*replaced));
 
     assert(scene.destroy(*root));
     assert(!scene.contains(child_handle));

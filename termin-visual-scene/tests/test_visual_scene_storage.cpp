@@ -28,8 +28,7 @@ namespace {
         .local_bounds = nullptr,
         .hit_test = nullptr,
         .paint = nullptr,
-        .push_clip = nullptr,
-        .clip_contains = nullptr,
+        .composition_clip = nullptr,
         .on_destroy = on_destroy,
     };
 

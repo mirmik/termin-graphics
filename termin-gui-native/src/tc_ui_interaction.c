@@ -26,15 +26,13 @@ void tc_widget_paint_subtree(tc_widget* widget, tc_ui_document_handle document, 
 
 tc_widget_handle
 tc_widget_hit_test_subtree(tc_widget* widget, tc_ui_document_handle document, float parent_x, float parent_y) {
-    tc_ui_uniform_transform inverse;
     tc_ui_point local;
     tc_widget_handle hit;
     tc_widget* hit_widget;
     if (!widget || !tc_widget_is_visible(widget) || !widget->vtable || !widget->vtable->hit_test ||
-        !tc_ui_uniform_transform_inverse(tc_widget_subtree_transform(widget), &inverse)) {
+        !tc_ui_internal_widget_map_point_from_parent(widget, (tc_ui_point){parent_x, parent_y}, &local)) {
         return tc_widget_handle_invalid();
     }
-    local = tc_ui_uniform_transform_map_point(inverse, (tc_ui_point){parent_x, parent_y});
     hit = widget->vtable->hit_test(widget, document, local.x, local.y);
     if (tc_widget_handle_is_invalid(hit)) {
         return hit;
@@ -252,12 +250,10 @@ static tc_widget_handle hit_test_entry(
         return tc_widget_handle_invalid();
     }
     if (allow_root_hit) {
-        tc_ui_uniform_transform inverse;
         tc_ui_point local;
-        if (!tc_ui_uniform_transform_inverse(tc_widget_subtree_transform(widget), &inverse)) {
+        if (!tc_ui_internal_widget_map_point_from_parent(widget, (tc_ui_point){x, y}, &local)) {
             return tc_widget_handle_invalid();
         }
-        local = tc_ui_uniform_transform_map_point(inverse, (tc_ui_point){x, y});
         hit = widget->vtable->hit_test(widget, document->handle, local.x, local.y);
     } else {
         hit = tc_widget_hit_test_subtree(widget, document->handle, x, y);

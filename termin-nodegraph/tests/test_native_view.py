@@ -206,6 +206,11 @@ def test_native_node_graph_parameter_rows_use_editor_sized_layout():
     assert enabled.height == pytest.approx(18.0)
     assert samples.height == pytest.approx(28.0)
     assert quality.height == pytest.approx(28.0)
+    enabled_document = native.param_widgets[(node.id, "enabled")].widget.bounds_in_document
+    samples_document = native.param_widgets[(node.id, "samples")].widget.bounds_in_document
+    quality_document = native.param_widgets[(node.id, "quality")].widget.bounds_in_document
+    assert samples_document.y - enabled_document.y == pytest.approx(25.0)
+    assert quality_document.y - samples_document.y == pytest.approx(30.0)
     samples_before_zoom = Rect(samples.x, samples.y, samples.width, samples.height)
 
     native.view.set_zoom(2.0, Point(0.0, 0.0))
@@ -216,8 +221,11 @@ def test_native_node_graph_parameter_rows_use_editor_sized_layout():
     assert samples_after_zoom.width == pytest.approx(samples_before_zoom.width)
     assert samples_after_zoom.height == pytest.approx(samples_before_zoom.height)
     assert native.param_widgets[(node.id, "samples")].widget.subtree_transform.scale == pytest.approx(2.0)
-    assert samples.y - enabled.y == pytest.approx(25.0)
-    assert quality.y - samples.y == pytest.approx(30.0)
+    enabled_document = native.param_widgets[(node.id, "enabled")].widget.bounds_in_document
+    samples_document = native.param_widgets[(node.id, "samples")].widget.bounds_in_document
+    quality_document = native.param_widgets[(node.id, "quality")].widget.bounds_in_document
+    assert samples_document.y - enabled_document.y == pytest.approx(50.0)
+    assert quality_document.y - samples_document.y == pytest.approx(60.0)
     assert native._node_height(node) == pytest.approx(153.0)
 
     native.close()

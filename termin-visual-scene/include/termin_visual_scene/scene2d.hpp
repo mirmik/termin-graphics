@@ -15,6 +15,10 @@
 #include "termin_visual_scene/export.h"
 #include "termin_visual_scene/tc_visual_scene.h"
 
+namespace tgfx {
+    class CompositionEvaluator2D;
+}
+
 namespace termin::visual {
 
     class GraphicItem2D;
@@ -93,9 +97,12 @@ namespace termin::visual {
         void rebuild_order_cache_() const;
         OrderedItem build_ordered_item_(tc_graphic_item* item) const;
         bool paint_item_(const OrderedItem& ordered,
+                         tgfx::CompositionEvaluator2D& composition,
                          tgfx::DrawList2DBuilder& builder,
                          SceneRenderResourceResolver2D& resolver) const;
-        std::optional<termin::Bounds2f> subtree_bounds_(const tc_graphic_item& item) const;
+        bool subtree_bounds_(const tc_graphic_item& item,
+                             tgfx::CompositionEvaluator2D& composition,
+                             std::optional<termin::Bounds2f>& out_bounds) const;
 
         tc_visual_scene_handle handle_ = tc_visual_scene_handle_invalid();
         mutable std::uint64_t cached_order_revision_ = 0;

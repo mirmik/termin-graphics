@@ -23,8 +23,7 @@ namespace termin::visual {
         static bool dispatch_local_bounds(const tc_graphic_item* item, tc_bounds2f* out_bounds);
         static bool dispatch_hit_test(const tc_graphic_item* item, tc_vec2f point, float tolerance);
         static bool dispatch_paint(const tc_graphic_item* item, tc_graphic_item_draw_sink* sink);
-        static bool dispatch_push_clip(const tc_graphic_item* item, tc_graphic_item_draw_sink* sink, bool* out_pushed);
-        static bool dispatch_clip_contains(const tc_graphic_item* item, tc_vec2f local_point);
+        static bool dispatch_composition_clip(const tc_graphic_item* item, tc_graphic_item_clip2d_view* out_clip);
         static void dispatch_on_destroy(tc_graphic_item* item, tc_visual_scene* scene);
     };
 

@@ -323,10 +323,14 @@ The current foundation includes:
   conversion), forwards raw input with world coordinates and exposes explicit
   invalidation after external scene mutations. Selection, dragging and stable
   domain IDs belong to the node graph or other scene owner. Embedded native
-  widgets remain generation-checked canonical document children in a
-  temporary portal table keyed by graphic-item handles and detach without
-  implicit destruction. Plot annotations intentionally remain owned by
-  `tcplot`;
+  widgets remain generation-checked canonical document children. The reusable
+  `WidgetSceneProjectionBridge` stores only item/widget handles, reconciles
+  stale owners, and provides explicit after-scene ordering, host clipping and
+  portal-first input policies. It accepts exact source local bounds and world
+  affine placement; rotation, shear and non-uniform widget projection are
+  rejected instead of approximated by a stretched AABB. `SceneView` is its
+  first adapter and retains only camera/view policy. Plot annotations
+  intentionally remain owned by `tcplot`;
 - `UiDrawListRenderer` can flush the command list through
   `tgfx::Canvas2DRenderer`;
 - `TERMIN_GUI_NATIVE_BUILD_EXAMPLES=ON` builds native window examples on the

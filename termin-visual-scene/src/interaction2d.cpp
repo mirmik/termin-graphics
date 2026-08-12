@@ -1,5 +1,7 @@
 #include "termin_visual_scene/interaction2d.hpp"
 
+#include "scene_composition2d_internal.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -24,48 +26,59 @@ namespace termin::visual {
             return std::nullopt;
         }
 
-        std::function<std::optional<GraphicItemHandle>(tc_graphic_item&, termin::Affine2f, bool, bool, float)> visit;
-        visit = [&](tc_graphic_item& item,
-                    termin::Affine2f parent_world,
-                    bool parent_visible,
-                    bool parent_enabled,
-                    float parent_opacity) -> std::optional<GraphicItemHandle> {
-            const auto world = parent_world * item.local_transform;
-            const bool visible = parent_visible && item.visible;
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch();
+        std::function<std::optional<GraphicItemHandle>(tc_graphic_item&, bool)> visit;
+        visit = [&](tc_graphic_item& item, bool parent_enabled) -> std::optional<GraphicItemHandle> {
             const bool enabled = parent_enabled && item.enabled;
-            const float opacity = parent_opacity * item.opacity;
-            if (!visible || !enabled || opacity <= 0.0f) {
-                return std::nullopt;
-            }
-            termin::Affine2f inverse{};
-            if (!world.try_inverse(inverse)) {
-                return std::nullopt;
-            }
-            const auto local = inverse.transform_point(world_point);
-            if (item.vtable != nullptr && item.vtable->clip_contains != nullptr &&
-                !item.vtable->clip_contains(&item, local)) {
+            tgfx::CompositionLayer2D layer;
+            if (!detail::composition_layer(item, layer) || !composition.push(layer)) {
                 return std::nullopt;
             }
 
-            auto children = scene.sorted_children_(&item);
-            for (auto iterator = children.rbegin(); iterator != children.rend(); ++iterator) {
-                if (auto result = visit(**iterator, world, visible, enabled, opacity)) {
-                    return result;
+            std::optional<GraphicItemHandle> result;
+            if (enabled && composition.drawable() && composition.clips_contain(world_point)) {
+                if (!composition.state().invertible) {
+                    tc::Log::error("graphic item '%s' has a singular world transform and is not hittable",
+                                   tc_graphic_item_type_name(&item));
+                } else {
+                    auto children = scene.sorted_children_(&item);
+                    for (auto iterator = children.rbegin(); iterator != children.rend(); ++iterator) {
+                        result = visit(**iterator, enabled);
+                        if (result) {
+                            break;
+                        }
+                    }
+
+                    if (!result && item.vtable != nullptr && item.vtable->hit_test != nullptr) {
+                        termin::Vec2f local{};
+                        if (composition.map_point_from_world(world_point, local) &&
+                            item.vtable->hit_test(&item, local, 0.0f)) {
+                            result = item.handle;
+                        }
+                    }
                 }
             }
-
-            if (item.vtable == nullptr || item.vtable->hit_test == nullptr) {
+            if (!composition.active() || !composition.pop()) {
                 return std::nullopt;
             }
-            return item.vtable->hit_test(&item, local, 0.0f) ? std::optional<GraphicItemHandle>(item.handle)
-                                                             : std::nullopt;
+            return result;
         };
 
         auto roots = scene.sorted_roots_();
         for (auto iterator = roots.rbegin(); iterator != roots.rend(); ++iterator) {
-            if (auto result = visit(**iterator, termin::Affine2f::identity(), true, true, 1.0f)) {
+            if (auto result = visit(**iterator, true)) {
+                if (!composition.end_batch()) {
+                    return std::nullopt;
+                }
                 return result;
             }
+            if (!composition.active()) {
+                return std::nullopt;
+            }
+        }
+        if (!composition.end_batch()) {
+            return std::nullopt;
         }
         return std::nullopt;
     }

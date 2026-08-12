@@ -1,6 +1,7 @@
 #include "termin_visual_scene/scene2d.hpp"
 
 #include "graphic_item_draw_sink_internal.hpp"
+#include "scene_composition2d_internal.hpp"
 #include "termin_visual_scene/graphic_item2d.hpp"
 #include "termin_visual_scene/scene_render2d.hpp"
 
@@ -28,9 +29,13 @@ namespace termin::visual {
             return left->stable_order < right->stable_order;
         }
 
-        bool is_identity(const termin::Affine2f& value) {
-            return value.m00 == 1.0f && value.m01 == 0.0f && value.m10 == 0.0f && value.m11 == 1.0f &&
-                   value.tx == 0.0f && value.ty == 0.0f;
+        bool close_composition_query(tgfx::CompositionEvaluator2D& composition) {
+            while (composition.active() && composition.depth() != 0) {
+                if (!composition.pop()) {
+                    return false;
+                }
+            }
+            return composition.active() && composition.end_batch();
         }
 
     } // namespace
@@ -110,15 +115,19 @@ namespace termin::visual {
     }
 
     termin::Affine2f TcVisualScene::world_transform(const tc_graphic_item& item) const {
-        termin::Affine2f result = termin::Affine2f::identity();
-        std::vector<const tc_graphic_item*> ancestry;
-        const tc_graphic_item* cursor = &item;
-        while (cursor != nullptr) {
-            ancestry.push_back(cursor);
-            cursor = cursor->parent;
+        if (!owns_(item)) {
+            tc::Log::error("TcVisualScene::world_transform rejected a foreign item");
+            return termin::Affine2f::identity();
         }
-        for (auto iterator = ancestry.rbegin(); iterator != ancestry.rend(); ++iterator) {
-            result = result * (*iterator)->local_transform;
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch();
+        if (!detail::push_ancestry(composition, item, false)) {
+            composition.abort_batch();
+            return termin::Affine2f::identity();
+        }
+        const termin::Affine2f result = composition.state().local_to_world;
+        if (!close_composition_query(composition)) {
+            return termin::Affine2f::identity();
         }
         return result;
     }
@@ -153,36 +162,85 @@ namespace termin::visual {
         return result;
     }
 
-    std::optional<termin::Bounds2f> TcVisualScene::subtree_bounds_(const tc_graphic_item& item) const {
+    bool TcVisualScene::subtree_bounds_(const tc_graphic_item& item,
+                                        tgfx::CompositionEvaluator2D& composition,
+                                        std::optional<termin::Bounds2f>& out_bounds) const {
         std::optional<termin::Bounds2f> result;
         termin::Bounds2f own{};
         if (item.vtable != nullptr && item.vtable->local_bounds != nullptr && item.vtable->local_bounds(&item, &own)) {
-            result = own;
+            termin::Bounds2f mapped{};
+            if (!composition.map_bounds_to_world(own, mapped)) {
+                return false;
+            }
+            result = mapped;
         }
         for (std::size_t index = 0; index < item.child_count; ++index) {
             const auto* child = item.children[index];
-            const auto child_bounds = subtree_bounds_(*child);
+            tgfx::CompositionLayer2D layer;
+            if (!detail::composition_layer(*child, layer, false) || !composition.push(layer)) {
+                return false;
+            }
+            std::optional<termin::Bounds2f> child_bounds;
+            const bool child_ok = subtree_bounds_(*child, composition, child_bounds);
+            if (!composition.pop()) {
+                return false;
+            }
+            if (!child_ok)
+                return false;
             if (!child_bounds)
                 continue;
-            const auto transformed = child->local_transform.transform_bounds(*child_bounds);
-            result = result ? std::optional<termin::Bounds2f>(merged(*result, transformed))
-                            : std::optional<termin::Bounds2f>(transformed);
+            result = result ? std::optional<termin::Bounds2f>(merged(*result, *child_bounds)) : child_bounds;
+        }
+        out_bounds = result;
+        return true;
+    }
+
+    std::optional<termin::Bounds2f> TcVisualScene::local_bounds(const tc_graphic_item& item) const {
+        if (!owns_(item)) {
+            return std::nullopt;
+        }
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch();
+        std::optional<termin::Bounds2f> result;
+        const bool evaluated = subtree_bounds_(item, composition, result);
+        if (!close_composition_query(composition) || !evaluated) {
+            return std::nullopt;
         }
         return result;
     }
 
-    std::optional<termin::Bounds2f> TcVisualScene::local_bounds(const tc_graphic_item& item) const {
-        return owns_(item) ? subtree_bounds_(item) : std::nullopt;
-    }
-
     std::optional<termin::Bounds2f> TcVisualScene::world_bounds(const tc_graphic_item& item) const {
-        const auto bounds = local_bounds(item);
-        return bounds ? std::optional<termin::Bounds2f>(world_transform(item).transform_bounds(*bounds)) : std::nullopt;
+        if (!owns_(item)) {
+            return std::nullopt;
+        }
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch();
+        if (!detail::push_ancestry(composition, item, false)) {
+            composition.abort_batch();
+            return std::nullopt;
+        }
+        std::optional<termin::Bounds2f> result;
+        const bool evaluated = subtree_bounds_(item, composition, result);
+        if (!close_composition_query(composition) || !evaluated) {
+            return std::nullopt;
+        }
+        return result;
     }
 
     GraphicItemDiagnostic2D TcVisualScene::diagnostics(const tc_graphic_item& item) const {
-        return std::abs(world_transform(item).determinant()) <= 1e-8f ? GraphicItemDiagnostic2D::SingularWorldTransform
-                                                                      : GraphicItemDiagnostic2D::None;
+        if (!owns_(item)) {
+            return GraphicItemDiagnostic2D::None;
+        }
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch();
+        if (!detail::push_ancestry(composition, item, false)) {
+            composition.abort_batch();
+            return GraphicItemDiagnostic2D::SingularWorldTransform;
+        }
+        const auto result = composition.state().invertible ? GraphicItemDiagnostic2D::None
+                                                           : GraphicItemDiagnostic2D::SingularWorldTransform;
+        close_composition_query(composition);
+        return result;
     }
 
     std::vector<tc_graphic_item*> TcVisualScene::sorted_children_(const tc_graphic_item* parent) const {
@@ -199,53 +257,38 @@ namespace termin::visual {
     }
 
     bool TcVisualScene::paint_item_(const OrderedItem& ordered,
+                                    tgfx::CompositionEvaluator2D& composition,
                                     tgfx::DrawList2DBuilder& builder,
                                     SceneRenderResourceResolver2D& resolver) const {
         const tc_graphic_item& item = *ordered.item;
-        if (!item.visible || item.opacity <= 0.0f) {
-            return true;
-        }
-        if (item.vtable == nullptr || item.vtable->paint == nullptr) {
-            tc::Log::error("graphic item '%s' has no paint method", tc_graphic_item_type_name(&item));
+        tgfx::CompositionLayer2D layer;
+        if (!detail::composition_layer(item, layer) || !composition.push(layer)) {
             return false;
         }
 
-        const bool transform_pushed = !is_identity(item.local_transform);
-        if (transform_pushed && !builder.push_transform(item.local_transform)) {
-            return false;
+        bool painted = true;
+        if (composition.drawable()) {
+            if (item.vtable == nullptr || item.vtable->paint == nullptr) {
+                tc::Log::error("graphic item '%s' has no paint method", tc_graphic_item_type_name(&item));
+                painted = false;
+            } else {
+                tc_graphic_item_draw_sink sink{
+                    .builder = &builder,
+                    .resolver = &resolver,
+                    .composition = &composition,
+                };
+                painted = item.vtable->paint(&item, &sink);
+            }
         }
-        const bool opacity_pushed = item.opacity != 1.0f;
-        if (opacity_pushed && !builder.push_opacity(item.opacity)) {
-            if (transform_pushed)
-                builder.pop_transform();
-            return false;
-        }
-        tc_graphic_item_draw_sink sink{
-            .builder = &builder,
-            .resolver = &resolver,
-        };
-        bool clip_pushed = false;
-        if (item.vtable->push_clip != nullptr && !item.vtable->push_clip(&item, &sink, &clip_pushed)) {
-            if (opacity_pushed)
-                builder.pop_opacity();
-            if (transform_pushed)
-                builder.pop_transform();
-            return false;
-        }
-
-        bool painted = item.vtable->paint(&item, &sink);
-        if (painted) {
+        if (painted && composition.drawable()) {
             for (const OrderedItem& child : ordered.children) {
-                if (!paint_item_(child, builder, resolver)) {
+                if (!paint_item_(child, composition, builder, resolver)) {
                     painted = false;
                     break;
                 }
             }
         }
-        const bool clip_popped = !clip_pushed || builder.pop_clip();
-        const bool opacity_popped = !opacity_pushed || builder.pop_opacity();
-        const bool transform_popped = !transform_pushed || builder.pop_transform();
-        return painted && clip_popped && opacity_popped && transform_popped;
+        return painted && composition.pop();
     }
 
     TcVisualScene::OrderedItem TcVisualScene::build_ordered_item_(tc_graphic_item* item) const {
@@ -278,12 +321,15 @@ namespace termin::visual {
             rebuild_order_cache_();
             cached_order_revision_ = revision;
         }
+        tgfx::CompositionEvaluator2D composition;
+        composition.begin_batch(&builder);
         for (const OrderedItem& root : ordered_roots_) {
-            if (!paint_item_(root, builder, resolver)) {
+            if (!paint_item_(root, composition, builder, resolver)) {
+                composition.abort_batch();
                 return false;
             }
         }
-        return true;
+        return composition.end_batch();
     }
 
     std::size_t TcVisualScene::size() const {
