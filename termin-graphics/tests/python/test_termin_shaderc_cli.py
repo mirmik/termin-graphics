@@ -2224,3 +2224,42 @@ def test_termin_shaderc_propagates_slangc_failure(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "slangc failed with exit code 7" in result.stderr
+
+
+def test_termin_shaderc_rejects_missing_slang_entry_before_invoking_compiler(
+    tmp_path: Path,
+) -> None:
+    shader = tmp_path / "test.slang"
+    shader.write_text(
+        '[shader("fragment")] float4 fs_main() : SV_Target0 { return 1; }\n',
+        encoding="utf-8",
+    )
+    fake_slangc = tmp_path / "must-not-run.py"
+    fake_slangc.write_text("#!/usr/bin/env python3\nraise SystemExit(99)\n", encoding="utf-8")
+    fake_slangc.chmod(0o755)
+
+    result = _run_shaderc(
+        [
+            "compile",
+            "--language",
+            "slang",
+            "--target",
+            "vulkan",
+            "--stage",
+            "fragment",
+            "--entry",
+            "missing_entry",
+            "--input",
+            str(shader),
+            "--output",
+            str(tmp_path / "out.spv"),
+            "--slangc",
+            str(fake_slangc),
+        ]
+    )
+
+    assert result.returncode == 1
+    assert "Slang entry point 'missing_entry' is not defined" in result.stderr
+    assert "exit code 139" not in result.stderr
+    assert "Segmentation fault" not in result.stderr
+    assert not (tmp_path / "out.spv").exists()

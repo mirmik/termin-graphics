@@ -1532,6 +1532,15 @@ namespace termin_shaderc::internal {
             return false;
         }
 
+        std::string source;
+        if (!read_file(options.input, source)) {
+            return false;
+        }
+        if (!entry_function_body(source, options.entry)) {
+            std::cerr << "termin_shaderc: Slang entry point '" << options.entry
+                      << "' is not defined in input source: " << options.input << "\n";
+            return false;
+        }
         auto slangc = resolve_slangc(options, argv0);
         if (!slangc) {
             return false;
@@ -1554,10 +1563,6 @@ namespace termin_shaderc::internal {
         if (!matrix_layout_arg) {
             std::cerr << "termin_shaderc: unsupported matrix layout: " << options.matrix_layout
                       << " (expected column or row)\n";
-            return false;
-        }
-        std::string source;
-        if (!read_file(options.input, source)) {
             return false;
         }
         const bool is_d3d11 = options.target == "d3d11";
