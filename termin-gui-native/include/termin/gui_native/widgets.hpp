@@ -37,6 +37,7 @@
 #include <termin/gui_native/rich_text_model.hpp>
 #include <termin/gui_native/rich_text_view.hpp>
 #include <termin/gui_native/scene_view.hpp>
+#include <termin/gui_native/scene_view3d.hpp>
 #include <termin/gui_native/scroll_area.hpp>
 #include <termin/gui_native/selection_model.hpp>
 #include <termin/gui_native/separator.hpp>

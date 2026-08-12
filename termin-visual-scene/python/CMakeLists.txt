@@ -3,6 +3,7 @@ find_package(nanobind CONFIG REQUIRED)
 
 nanobind_add_module(_visual_scene_native NB_SHARED
     bindings/visual_scene_bindings.cpp
+    bindings/visual_scene3d_bindings.cpp
 )
 target_link_libraries(_visual_scene_native PRIVATE
     termin_visual_scene

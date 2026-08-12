@@ -49,10 +49,7 @@ namespace tgfx {
         constexpr const char* kShaderUuid = "termin-engine-point-cloud";
         constexpr const char* kDrawResource = "point_cloud_draw";
 
-        VertexAttributeDesc vertex_attr(uint32_t location,
-                                        VertexFormat format,
-                                        size_t offset,
-                                        const char* semantic) {
+        VertexAttributeDesc vertex_attr(uint32_t location, VertexFormat format, size_t offset, const char* semantic) {
             return {location, format, static_cast<uint32_t>(offset), intern_vertex_semantic(semantic)};
         }
 
@@ -73,25 +70,23 @@ namespace tgfx {
                 vertex_attr(1, VertexFormat::Float3, offsetof(PointCloudPoint, position), "position0");
             layout.attributes[1] =
                 vertex_attr(2, VertexFormat::Float, offsetof(PointCloudPoint, size_scale), "texcoord1");
-            layout.attributes[2] =
-                vertex_attr(3, VertexFormat::Float4, offsetof(PointCloudPoint, color), "color0");
+            layout.attributes[2] = vertex_attr(3, VertexFormat::Float4, offsetof(PointCloudPoint, color), "color0");
             return layout;
         }
 
         bool finite_point(const PointCloudPoint& point) {
             return std::isfinite(point.position.x) && std::isfinite(point.position.y) &&
                    std::isfinite(point.position.z) && std::isfinite(point.size_scale) && point.size_scale >= 0.0f &&
-                   std::isfinite(point.color.r) && std::isfinite(point.color.g) &&
-                   std::isfinite(point.color.b) && std::isfinite(point.color.a);
+                   std::isfinite(point.color.r) && std::isfinite(point.color.g) && std::isfinite(point.color.b) &&
+                   std::isfinite(point.color.a);
         }
 
         bool finite_draw_params(const PointCloudStyle& style, const PointCloudDrawParams& params) {
             const bool finite_tint = std::isfinite(style.tint.r) && std::isfinite(style.tint.g) &&
                                      std::isfinite(style.tint.b) && std::isfinite(style.tint.a);
-            const bool finite_matrix = std::all_of(
-                params.view_projection.begin(), params.view_projection.end(), [](float value) {
-                    return std::isfinite(value);
-                });
+            const bool finite_matrix = std::all_of(params.view_projection.begin(),
+                                                   params.view_projection.end(),
+                                                   [](float value) { return std::isfinite(value); });
             return std::isfinite(style.size_px) && finite_tint && finite_matrix;
         }
 
@@ -167,7 +162,10 @@ namespace tgfx {
     }
 
     void PointCloud::release(RenderContext2& ctx) {
-        IRenderDevice& device = ctx.device();
+        release(ctx.device());
+    }
+
+    void PointCloud::release(IRenderDevice& device) {
         if (device_ && device_ != &device) {
             tc::Log::error("PointCloud::release: cloud belongs to a different render device");
             return;
@@ -263,7 +261,10 @@ namespace tgfx {
     }
 
     void PointCloudRenderer::release(RenderContext2& ctx) {
-        IRenderDevice& device = ctx.device();
+        release(ctx.device());
+    }
+
+    void PointCloudRenderer::release(IRenderDevice& device) {
         if (device_ && device_ != &device) {
             tc::Log::error("PointCloudRenderer::release: renderer belongs to a different render device");
             return;

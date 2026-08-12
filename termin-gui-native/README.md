@@ -90,6 +90,10 @@ the core offscreen Python module does not load `termin-window` or SDL.
 
 The current foundation includes:
 
+- [`SceneView3D`](docs/scene-view3d.md) embeds a borrowed item-oriented
+  `VisualScene3D` with widget-owned offscreen rendering, world-ray input and an
+  optional camera-controller fallback;
+
 - `tc_ui_document` is implemented in C and adopts widget objects while owning
   handle slots and generations;
 - C++ and Python expose the same copyable, non-owning `TcDocument` handle

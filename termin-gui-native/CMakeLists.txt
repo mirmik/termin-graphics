@@ -76,6 +76,7 @@ add_library(termin_gui_native SHARED
     src/splitter.cpp
     src/scroll_area.cpp
     src/scene_view.cpp
+    src/scene_view3d.cpp
     src/widget_scene_projection_bridge.cpp
     src/tab_view.cpp
     src/panel.cpp
@@ -380,6 +381,9 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
     termin_gui_native_add_test(termin_gui_native_scene_view_test
         tests/test_scene_view.cpp
     )
+    termin_gui_native_add_test(termin_gui_native_scene_view3d_test
+        tests/test_scene_view3d.cpp
+    )
     termin_gui_native_add_test(
         termin_gui_native_visual_scene_example_smoke
         tests/test_visual_scene_composition_example.cpp
@@ -434,6 +438,23 @@ if(TERMIN_GUI_NATIVE_BUILD_TESTS)
             TERMIN_GUI_NATIVE_TEST_SHADERC="${_termin_gui_native_offscreen_test_shaderc}"
     )
     set_tests_properties(termin_gui_native_offscreen_composition_test PROPERTIES
+        TIMEOUT 30
+        SKIP_RETURN_CODE 77
+        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")
+    termin_gui_native_add_test(termin_gui_native_scene_view3d_offscreen_test
+        tests/test_scene_view3d_offscreen.cpp
+    )
+    target_link_libraries(termin_gui_native_scene_view3d_offscreen_test
+        PRIVATE termin_gui_native_offscreen)
+    if(TARGET termin_shaderc)
+        add_dependencies(termin_gui_native_scene_view3d_offscreen_test termin_shaderc)
+    endif()
+    target_compile_definitions(termin_gui_native_scene_view3d_offscreen_test
+        PRIVATE
+            TERMIN_GUI_NATIVE_TEST_FONT="${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/recastnavigation/RecastDemo/Bin/DroidSans.ttf"
+            TERMIN_GUI_NATIVE_TEST_SHADERC="${_termin_gui_native_offscreen_test_shaderc}"
+    )
+    set_tests_properties(termin_gui_native_scene_view3d_offscreen_test PROPERTIES
         TIMEOUT 30
         SKIP_RETURN_CODE 77
         ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")

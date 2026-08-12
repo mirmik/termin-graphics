@@ -18,6 +18,10 @@
 
 namespace nb = nanobind;
 
+namespace termin::visual::python {
+    void bind_visual_scene3d(nb::module_& m);
+}
+
 namespace {
 
     using termin::visual::GraphicItem2D;
@@ -160,7 +164,7 @@ namespace {
 } // namespace
 
 NB_MODULE(_visual_scene_native, m) {
-    m.doc() = "Direct retained 2D visual scene bindings";
+    m.doc() = "Direct retained 2D and 3D visual scene bindings";
 
     nb::class_<GraphicItemHandle>(m, "GraphicItemHandle")
         .def_prop_ro("scene_id", [](GraphicItemHandle value) { return value.scene_id; })
@@ -457,4 +461,6 @@ NB_MODULE(_visual_scene_native, m) {
             },
             nb::arg("x"),
             nb::arg("y"));
+
+    termin::visual::python::bind_visual_scene3d(m);
 }

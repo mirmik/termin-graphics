@@ -8,16 +8,10 @@
 #include <utility>
 
 #include <termin/gui_native/native_widget.hpp>
+#include <termin/gui_native/render_surface_size.hpp>
 #include <termin/gui_native/signal.hpp>
 
 namespace termin::gui_native {
-
-    struct ViewportSurfaceSize {
-        int width = 0;
-        int height = 0;
-
-        friend bool operator==(const ViewportSurfaceSize&, const ViewportSurfaceSize&) = default;
-    };
 
     class ViewportSurfaceHost {
     public:
