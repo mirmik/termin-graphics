@@ -207,6 +207,22 @@ invalidates the reference. GUI-native does not define a second graphic-item
 reference or scene wrapper: `SceneView` accepts the same shared
 `TcVisualScene` directly.
 
+Python 3D bindings follow the identical explicit-lifetime model.
+`tc_visual_scene3d_create` returns the canonical `TcVisualScene3D` facade and
+`tc_visual_scene3d_destroy` invalidates every `VisualItemRef3D` derived from
+it. Generic topology, exact `Affine3d` placement, bounds and ray hits operate
+through generation handles. Primitive, static-mesh and point-cloud factories
+return typed refs with their concrete mutation surface; Python input is copied
+into an immutable native resource snapshot so later mutation of an authored
+`Mesh3` or input container cannot desynchronize paint, bounds and hit testing.
+
+`SceneInteraction3D` accepts caller-projected `Ray3` pointer events and returns
+dispatch records containing live item refs. Python action and fallback callback
+exceptions cross no native boundary: the C++ interaction layer logs them and
+sets `PointerDispatch3D.callback_failed`. Arbitrary Python-owned item bodies are
+intentionally not exposed; their callback threading, lifetime and failure
+contract remains separate future work.
+
 The public C boundary in `tc_visual_scene_item2d.h` exposes common
 generation-handle operations for topology, transforms, presentation, bounds
 and clips. `tc_builtin_items2d.h` provides concrete factories and mutations
