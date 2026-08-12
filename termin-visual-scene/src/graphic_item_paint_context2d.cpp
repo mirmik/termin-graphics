@@ -96,11 +96,23 @@ namespace termin::visual {
     }
 
     bool GraphicItemPaintContext2D::push_clip_rect(termin::Rect2f rect) {
-        return sink_ != nullptr && sink_->builder != nullptr && sink_->builder->push_clip_rect(rect);
+        if (sink_ == nullptr || sink_->composition == nullptr) {
+            return false;
+        }
+        tgfx::Path2f path;
+        if (!path.move_to({rect.x, rect.y}) || !path.line_to({rect.x + rect.width, rect.y}) ||
+            !path.line_to({rect.x + rect.width, rect.y + rect.height}) ||
+            !path.line_to({rect.x, rect.y + rect.height}) || !path.close()) {
+            tc::Log::error("graphic item rejected invalid local clip rectangle");
+            return false;
+        }
+        tgfx::CompositionLayer2D layer;
+        layer.clip = tgfx::CompositionClip2D{std::move(path), tgfx::FillRule::NonZero};
+        return sink_->composition->push(layer);
     }
 
     bool GraphicItemPaintContext2D::pop_clip() {
-        return sink_ != nullptr && sink_->builder != nullptr && sink_->builder->pop_clip();
+        return sink_ != nullptr && sink_->composition != nullptr && sink_->composition->pop();
     }
 
 } // namespace termin::visual

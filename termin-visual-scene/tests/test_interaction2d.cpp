@@ -23,6 +23,16 @@ namespace {
         return path;
     }
 
+    tgfx::Path2f diamond(float center, float radius) {
+        tgfx::Path2f path;
+        assert(path.move_to({center, center - radius}));
+        assert(path.line_to({center + radius, center}));
+        assert(path.line_to({center, center + radius}));
+        assert(path.line_to({center - radius, center}));
+        assert(path.close());
+        return path;
+    }
+
     bool same(GraphicItemHandle a, GraphicItemHandle b) {
         return a.scene_id == b.scene_id && a.index == b.index && a.generation == b.generation;
     }
@@ -52,14 +62,15 @@ int main() {
     const auto child = scene.adopt(std::move(child_object), parent_ptr);
     assert(child);
     child_ptr->set_local_transform(termin::Affine2f::rotation(0.35f) * termin::Affine2f::scaling(1.5f, 0.75f));
-    child_ptr->set_clip(GeometricClip2D{box(0.0f, 0.0f, 15.0f, 20.0f), tgfx::FillRule::EvenOdd});
+    child_ptr->set_clip(GeometricClip2D{diamond(10.0f, 8.0f), tgfx::FillRule::EvenOdd});
     child_ptr->set_z_order(3);
 
     const auto inside_world = scene.world_transform(*child_ptr->c_item()).transform_point({10.0f, 10.0f});
     const auto picked = hit_test(scene, inside_world);
     assert(picked && same(*picked, *child)); // deepest target beats its parent
 
-    const auto clipped_world = scene.world_transform(*child_ptr->c_item()).transform_point({18.0f, 10.0f});
+    // Inside both the ellipse and clip AABB, but outside the diamond itself.
+    const auto clipped_world = scene.world_transform(*child_ptr->c_item()).transform_point({3.0f, 5.0f});
     const auto clipped_pick = hit_test(scene, clipped_world);
     assert(!clipped_pick || !same(*clipped_pick, *child));
 

@@ -35,13 +35,25 @@ static inline bool tc_graphic_item_handle_is_invalid(tc_graphic_item_handle hand
 
 typedef void (*tc_graphic_item_deleter)(tc_graphic_item* item);
 
+// Non-owning view returned by an item's composition_clip callback. Verb values
+// match tgfx::Path2Verb and fill_rule matches tgfx::FillRule. The storage only
+// has to remain valid for the duration of the callback's caller.
+typedef struct tc_graphic_item_clip2d_view {
+    const uint8_t* verbs;
+    size_t verb_count;
+    const tc_vec2f* points;
+    size_t point_count;
+    uint8_t fill_rule;
+} tc_graphic_item_clip2d_view;
+
 typedef struct tc_graphic_item_vtable {
     const char* type_name;
     bool (*local_bounds)(const tc_graphic_item* item, tc_bounds2f* out_bounds);
     bool (*hit_test)(const tc_graphic_item* item, tc_vec2f local_point, float tolerance);
     bool (*paint)(const tc_graphic_item* item, tc_graphic_item_draw_sink* sink);
-    bool (*push_clip)(const tc_graphic_item* item, tc_graphic_item_draw_sink* sink, bool* out_pushed);
-    bool (*clip_contains)(const tc_graphic_item* item, tc_vec2f local_point);
+    // Returns true and fills out_clip when the item has a geometric clip.
+    // Returns false when it has no clip.
+    bool (*composition_clip)(const tc_graphic_item* item, tc_graphic_item_clip2d_view* out_clip);
     void (*on_destroy)(tc_graphic_item* item, tc_visual_scene* scene);
 } tc_graphic_item_vtable;
 
