@@ -76,6 +76,7 @@ add_library(termin_gui_native SHARED
     src/splitter.cpp
     src/scroll_area.cpp
     src/scene_view.cpp
+    src/widget_scene_projection_bridge.cpp
     src/tab_view.cpp
     src/panel.cpp
     src/button.cpp

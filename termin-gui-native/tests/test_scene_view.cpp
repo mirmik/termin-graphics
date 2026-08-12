@@ -143,13 +143,15 @@ namespace {
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
 
         assert(button->parent_widget() == view->c_widget());
-        assert(button->bounds().x == 15.0f);
-        assert(button->bounds().y == 12.0f);
+        assert(button->bounds().x == 0.0f);
+        assert(button->bounds().y == 0.0f);
+        assert(tc_widget_subtree_transform(button->c_widget()).translation.x == 25.0f);
+        assert(tc_widget_subtree_transform(button->c_widget()).translation.y == 32.0f);
         assert(tc_widget_handle_eq(document.hit_test(30.0f, 40.0f), button_handle));
 
         view->set_zoom(2.0f, {10.0f, 20.0f});
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
-        assert(button->bounds().x == 15.0f);
+        assert(button->bounds().x == 0.0f);
         assert(button->bounds().width == 100.0f);
         assert(tc_widget_subtree_transform(button->c_widget()).scale == 2.0f);
         assert(tc_widget_handle_eq(document.hit_test(50.0f, 60.0f), button_handle));
@@ -185,6 +187,17 @@ namespace {
         assert(view->set_widget_portal(item->handle(), button_handle));
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
 
+        auto* conflicting_item =
+            adopt<RectItem2D>(scene, nullptr, termin::Rect2f{0.0f, 0.0f, 10.0f, 10.0f}, fill(0.3f, 0.2f, 0.2f));
+        assert(!view->set_widget_portal(conflicting_item->handle(), button_handle));
+
+        item->set_local_transform(termin::Affine2f::rotation(0.25f));
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
+        assert(button->parent_widget() == nullptr);
+        item->set_local_transform(termin::Affine2f::translation({15.0f, 12.0f}));
+        document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
+        assert(button->parent_widget() == view->c_widget());
+
         assert(scene.destroy(item->handle()));
         document.layout_roots({10.0f, 20.0f, 300.0f, 200.0f});
         assert(button->parent_widget() == nullptr);
@@ -195,6 +208,7 @@ namespace {
         assert(tc_ui_document_is_alive(document.get(), button_handle));
         assert(tc_ui_document_destroy_widget(document.get(), button_handle));
         assert(tc_ui_document_destroy_widget(document.get(), replacement_handle));
+        assert(scene.destroy(conflicting_item->handle()));
         tc_ui_document_destroy(document_handle);
         tc_visual_scene_destroy(scene_handle);
     }

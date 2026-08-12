@@ -17,14 +17,6 @@ namespace termin::gui_native {
 
         using termin::visual::GraphicItemHandle;
 
-        bool same_handle(GraphicItemHandle left, GraphicItemHandle right) {
-            return left.scene_id == right.scene_id && left.index == right.index && left.generation == right.generation;
-        }
-
-        bool same_widget(tc_widget_handle left, tc_widget_handle right) {
-            return tc_widget_handle_eq(left, right);
-        }
-
         class UiSceneResources final : public termin::visual::SceneRenderResourceResolver2D {
         public:
             std::optional<tgfx::FontHandle> resolve_font(std::string_view uri) override {
@@ -57,6 +49,24 @@ namespace termin::gui_native {
     SceneView::SceneView(termin::visual::TcVisualScene scene)
         : NativeWidget("SceneView"),
           scene_(scene.handle()) {
+        projections_.set_source_resolver([this](GraphicItemHandle handle)
+                                             -> std::optional<WidgetSceneProjectionSource> {
+            const auto current_scene = this->scene();
+            const tc_graphic_item* item = current_scene.resolve(handle);
+            if (!item)
+                return std::nullopt;
+            const auto local_bounds = current_scene.local_bounds(*item);
+            if (!local_bounds)
+                return std::nullopt;
+            return WidgetSceneProjectionSource{
+                {local_bounds->x0, local_bounds->y0, local_bounds->x1, local_bounds->y1},
+                current_scene.world_transform(*item),
+                item->z_order,
+                item->stable_order,
+                current_scene.effective_visible(*item),
+                current_scene.effective_enabled(*item),
+            };
+        });
         set_style_role(TC_UI_STYLE_PANEL);
         set_focusable(true);
         set_preferred_size({480.0f, 320.0f});
@@ -166,61 +176,23 @@ namespace termin::gui_native {
     }
 
     bool SceneView::set_widget_portal(GraphicItemHandle item, tc_widget_handle widget) {
-        if (!scene().resolve(item) || tc_widget_handle_is_invalid(widget)) {
-            tc_log_error("[termin-gui-native] SceneView rejected stale portal association");
-            return false;
-        }
-        const auto duplicate_widget = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
-            return same_widget(portal.widget, widget) && !same_handle(portal.item, item);
-        });
-        if (duplicate_widget != portals_.end()) {
-            tc_log_error("[termin-gui-native] one widget cannot belong to two scene portals");
-            return false;
-        }
-        auto found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
-            return same_handle(portal.item, item);
-        });
-        if (found != portals_.end()) {
-            if (!same_widget(found->widget, widget)) {
-                const tc_widget_handle previous = found->widget;
-                release_portal_widget(previous);
-                found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
-                    return same_handle(portal.item, item);
-                });
-            }
-            if (found != portals_.end()) {
-                found->widget = widget;
-            } else {
-                portals_.push_back({item, widget});
-            }
-        } else {
-            portals_.push_back({item, widget});
-        }
-        invalidate_scene();
-        return true;
+        const bool result = projections_.set_projection(item, widget);
+        if (result)
+            invalidate_scene();
+        return result;
     }
 
     bool SceneView::clear_widget_portal(GraphicItemHandle item) {
-        const auto found = std::find_if(portals_.begin(), portals_.end(), [&](const WidgetPortal& portal) {
-            return same_handle(portal.item, item);
-        });
-        if (found == portals_.end())
-            return false;
-        const tc_widget_handle widget = found->widget;
-        release_portal_widget(widget);
-        std::erase_if(portals_, [&](const WidgetPortal& portal) { return same_handle(portal.item, item); });
-        invalidate_scene();
-        return true;
+        const bool result = projections_.clear_projection(item);
+        if (result)
+            invalidate_scene();
+        return result;
     }
 
     void SceneView::clear_widget_portals() {
-        if (portals_.empty())
+        if (projections_.size() == 0)
             return;
-        const std::vector<WidgetPortal> retired = std::move(portals_);
-        portals_.clear();
-        for (const auto& portal : retired) {
-            release_portal_widget(portal.widget);
-        }
+        projections_.clear();
         invalidate_scene();
     }
 
@@ -229,116 +201,9 @@ namespace termin::gui_native {
         if (tc_ui_document_handle_is_invalid(document))
             return;
         const SceneTransform current = transform();
-        const tc_ui_uniform_transform camera{{current.origin_x, current.origin_y}, current.zoom};
-        for (const auto& portal : portals_) {
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget()) {
-                tc_widget_set_subtree_transform(widget, camera);
-            }
-        }
-    }
-
-    void SceneView::release_portal_widget(tc_widget_handle handle) {
-        const tc_ui_document_handle document = c_widget()->document;
-        if (tc_ui_document_handle_is_invalid(document))
-            return;
-        tc_widget* widget = tc_ui_document_resolve_widget(document, handle);
-        if (widget && widget->parent == c_widget()) {
-            tc_widget_detach(widget);
-            widget = tc_ui_document_resolve_widget(document, handle);
-            if (widget) {
-                tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
-            }
-        }
-    }
-
-    void SceneView::reconcile_portals(tc_ui_document_handle document) {
-        std::vector<WidgetPortal> next;
-        next.reserve(portals_.size());
-        for (const auto& portal : portals_) {
-            if (!scene().resolve(portal.item))
-                continue;
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (!widget) {
-                tc_log_error("[termin-gui-native] SceneView detached stale widget portal");
-                continue;
-            }
-            if (widget->parent && widget->parent != c_widget()) {
-                tc_log_error("[termin-gui-native] SceneView cannot steal portal widget");
-                continue;
-            }
-            if (!widget->parent && !tc_widget_append_child(c_widget(), widget)) {
-                tc_log_error("[termin-gui-native] SceneView failed to attach portal widget");
-                continue;
-            }
-            next.push_back(portal);
-        }
-        for (const auto& previous : portals_) {
-            const bool retained = std::any_of(next.begin(), next.end(), [&](const WidgetPortal& portal) {
-                return same_widget(portal.widget, previous.widget);
-            });
-            if (retained)
-                continue;
-            tc_widget* widget = tc_ui_document_resolve_widget(document, previous.widget);
-            if (widget && widget->parent == c_widget()) {
-                tc_widget_detach(widget);
-                widget = tc_ui_document_resolve_widget(document, previous.widget);
-                if (widget) {
-                    tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
-                }
-            }
-        }
-        portals_ = std::move(next);
-    }
-
-    void SceneView::layout_portals(tc_ui_document_handle document) {
-        for (const auto& portal : portals_) {
-            const auto* item = scene().resolve(portal.item);
-            if (!item || !scene().effective_visible(*item)) {
-                continue;
-            }
-            const auto world = scene().world_bounds(*item);
-            if (!world)
-                continue;
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (!widget || widget->parent != c_widget())
-                continue;
-            const SceneTransform current = transform();
-            detail::layout_widget(widget,
-                                  document,
-                                  {
-                                      world->x0,
-                                      world->y0,
-                                      std::max(1.0f, world->x1 - world->x0),
-                                      std::max(1.0f, world->y1 - world->y0),
-                                  });
-            tc_widget_set_subtree_transform(
-                widget, tc_ui_uniform_transform{{current.origin_x, current.origin_y}, current.zoom});
-        }
-    }
-
-    void SceneView::paint_portals(tc_ui_document_handle document, tc_ui_paint_context* context) {
-        auto sorted = portals_;
-        std::stable_sort(sorted.begin(), sorted.end(), [&](const WidgetPortal& left, const WidgetPortal& right) {
-            const auto* a = scene().resolve(left.item);
-            const auto* b = scene().resolve(right.item);
-            if (!a || !b)
-                return b != nullptr;
-            if (a->z_order != b->z_order) {
-                return a->z_order < b->z_order;
-            }
-            return a->stable_order < b->stable_order;
-        });
-        for (const auto& portal : sorted) {
-            const auto* item = scene().resolve(portal.item);
-            if (!item || !scene().effective_visible(*item)) {
-                continue;
-            }
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget()) {
-                detail::paint_widget(widget, document, context);
-            }
-        }
+        projections_.bind_target(document, handle());
+        projections_.set_camera(
+            tc_affine2f_new(current.zoom, 0.0f, 0.0f, current.zoom, current.origin_x, current.origin_y));
     }
 
     tc_ui_size SceneView::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
@@ -347,12 +212,13 @@ namespace termin::gui_native {
 
     void SceneView::layout(tc_ui_document_handle document, tc_ui_rect rect) {
         NativeWidget::layout(document, rect);
-        reconcile_portals(document);
-        layout_portals(document);
+        projections_.bind_target(document, handle());
+        sync_portal_transforms();
     }
 
     void SceneView::paint(tc_ui_document_handle document, tc_ui_paint_context* context) {
-        reconcile_portals(document);
+        projections_.bind_target(document, handle());
+        projections_.reconcile();
         tc_ui_painter_fill_rect(context, bounds(), to_tc_ui_srgb(background_));
         tc_ui_painter_push_clip(context, bounds());
         if (show_grid_ && grid_step_ > 0.0f) {
@@ -405,7 +271,7 @@ namespace termin::gui_native {
             }
         }
 
-        paint_portals(document, context);
+        projections_.paint(context);
         tc_ui_painter_pop_clip(context);
     }
 
@@ -510,55 +376,20 @@ namespace termin::gui_native {
         return TC_UI_EVENT_IGNORED;
     }
 
-    tc_widget_handle SceneView::hit_test_portals(tc_ui_document_handle document, float x, float y) const {
-        auto sorted = portals_;
-        std::stable_sort(sorted.begin(), sorted.end(), [&](const WidgetPortal& left, const WidgetPortal& right) {
-            const auto* a = scene().resolve(left.item);
-            const auto* b = scene().resolve(right.item);
-            if (!a || !b)
-                return a != nullptr;
-            if (a->z_order != b->z_order) {
-                return a->z_order > b->z_order;
-            }
-            return a->stable_order > b->stable_order;
-        });
-        for (const auto& portal : sorted) {
-            const auto* item = scene().resolve(portal.item);
-            if (!item || !scene().effective_visible(*item) || !scene().effective_enabled(*item)) {
-                continue;
-            }
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget()) {
-                const auto hit = detail::hit_test_widget(widget, document, x, y);
-                if (!tc_widget_handle_is_invalid(hit))
-                    return hit;
-            }
-        }
-        return tc_widget_handle_invalid();
-    }
-
     tc_widget_handle SceneView::hit_test(tc_ui_document_handle document, float x, float y) {
         if (!visible() || !detail::rect_contains(bounds(), x, y)) {
             return tc_widget_handle_invalid();
         }
-        const auto portal = hit_test_portals(document, x, y);
+        projections_.bind_target(document, handle());
+        const auto portal = projections_.hit_test(x, y);
         if (!tc_widget_handle_is_invalid(portal))
             return portal;
         return mouse_transparent() ? tc_widget_handle_invalid() : handle();
     }
 
     void SceneView::on_destroy(tc_ui_document_handle document) {
-        for (const auto& portal : portals_) {
-            tc_widget* widget = tc_ui_document_resolve_widget(document, portal.widget);
-            if (widget && widget->parent == c_widget()) {
-                tc_widget_detach(widget);
-                widget = tc_ui_document_resolve_widget(document, portal.widget);
-                if (widget) {
-                    tc_widget_set_subtree_transform(widget, tc_ui_uniform_transform_identity());
-                }
-            }
-        }
-        portals_.clear();
+        projections_.bind_target(document, handle());
+        projections_.clear();
         pointer_handler_ = {};
         key_handler_ = {};
         text_handler_ = {};

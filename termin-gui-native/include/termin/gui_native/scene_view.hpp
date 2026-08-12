@@ -6,6 +6,7 @@
 
 #include <termin/gui_native/native_widget.hpp>
 #include <termin/gui_native/signal.hpp>
+#include <termin/gui_native/widget_scene_projection_bridge.hpp>
 #include <termin/gui_native/widget_types.hpp>
 #include <termin_visual_scene/scene2d.hpp>
 
@@ -27,11 +28,6 @@ namespace termin::gui_native {
         using TextHandler = std::function<bool(SceneView&, const tc_ui_text_event&)>;
 
     private:
-        struct WidgetPortal {
-            termin::visual::GraphicItemHandle item = tc_graphic_item_handle_invalid();
-            tc_widget_handle widget = tc_widget_handle_invalid();
-        };
-
         tc_visual_scene_handle scene_ = tc_visual_scene_handle_invalid();
         float zoom_ = 1.0f;
         float min_zoom_ = 0.1f;
@@ -46,7 +42,7 @@ namespace termin::gui_native {
         bool panning_ = false;
         tc_ui_point pan_start_{};
         tc_ui_point pan_start_offset_{};
-        std::vector<WidgetPortal> portals_;
+        WidgetSceneProjectionBridge projections_;
         PointerHandler pointer_handler_;
         KeyHandler key_handler_;
         TextHandler text_handler_;
@@ -123,12 +119,7 @@ namespace termin::gui_native {
         void on_destroy(tc_ui_document_handle document) override;
 
     private:
-        void reconcile_portals(tc_ui_document_handle document);
         void sync_portal_transforms();
-        void release_portal_widget(tc_widget_handle widget);
-        void layout_portals(tc_ui_document_handle document);
-        void paint_portals(tc_ui_document_handle document, tc_ui_paint_context* context);
-        tc_widget_handle hit_test_portals(tc_ui_document_handle document, float x, float y) const;
         void emit_transform_changed();
     };
 
