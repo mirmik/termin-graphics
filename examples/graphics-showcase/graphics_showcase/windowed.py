@@ -13,15 +13,22 @@ _LOG = logging.getLogger("graphics_showcase.windowed")
 
 
 class _WindowedApplication:
-    def __init__(self, document, request_repaint) -> None:
+    def __init__(self, document, request_repaint, graphics=None) -> None:
         self.document = document
         self.request_repaint = request_repaint
+        self.graphics = graphics
 
 
 _SECTION_TITLES = {
     "native_ui": "Native UI",
-    "plot_2d": "Plot 2D",
-    "plot_3d": "Plot 3D",
+    "graphics_lines": "Graphics Lines",
+    "tcplot_sine": "Sine",
+    "tcplot_scatter": "Scatter",
+    "tcplot_multi": "Multi Plot",
+    "tcplot_marker": "Marker",
+    "tcplot_helix": "3D Helix",
+    "tcplot_surface": "3D Surface",
+    "visual_scene_gallery": "Visual Scene",
     "visual_scene_nodegraph": "Nodegraph",
     "plot_nodegraph_composition": "Composition",
 }
@@ -122,7 +129,11 @@ def run_windowed_showcase(
             font_size=15,
             enable_text_input=True,
         )
-        application = _WindowedApplication(document, adapter.request_repaint)
+        application = _WindowedApplication(
+            document,
+            adapter.request_repaint,
+            graphics_session.graphics,
+        )
         tabs, contents = _build_tabbed_showcase(application)
         selection_connection = tabs.connect_selection_changed(
             lambda _index: adapter.request_repaint()

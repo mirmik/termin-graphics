@@ -157,6 +157,26 @@ same actions as a polling queue for hosts that do not use callbacks. Python
 callback exceptions are logged at the native boundary and propagated to the
 caller.
 
+## Python examples
+
+The native bridge restores the complete plotting gallery that previously
+belonged to the removed `tcgui` adapter. Every entry point uses the installed
+graphics SDK, `termin.window`, and `termin-gui-native`:
+
+```bash
+sdk/bin/termin_python tcplot/examples/demo_sin.py
+sdk/bin/termin_python tcplot/examples/demo_scatter.py
+sdk/bin/termin_python tcplot/examples/demo_multi.py
+sdk/bin/termin_python tcplot/examples/demo_marker.py
+sdk/bin/termin_python tcplot/examples/demo_3d_helix.py
+sdk/bin/termin_python tcplot/examples/demo_3d_surface.py
+```
+
+The examples cover multiple line families, retained scatter, side-by-side
+plots, draggable marker annotations, 3D line/scatter composition, surface
+colormaps, a screen-space colorbar, wireframe overlay, shading and axis scale.
+Set `TCPLOT_EXAMPLE_SECONDS` to a positive value to bound a window smoke.
+
 `annotation_anchor_pixel()` exposes the current projected anchor for overlay
 composition and synthetic input without duplicating plot margin or DPI math.
 No Python annotation or graphic-item wrapper owns the engine, layer or native

@@ -7,8 +7,9 @@ widgets.
 
 The runnable installed-SDK example is the
 [`graphics` profile showcase](../examples/graphics-showcase/README.md). It
-renders both widgets independently and embeds them into nodegraph bodies; this
-README keeps the smaller API snippets close to the bridge itself.
+contains the six restored plotting scenarios, renders both widgets
+independently, and embeds them into nodegraph bodies; this README keeps the
+smaller API snippets close to the bridge itself.
 
 Python consumers import `Plot2D` and `Plot3D` from `tcplot_gui_native`, not
 from `tcplot`. The core package intentionally contains only engines, retained

@@ -11,6 +11,8 @@
 
 #include <tcbase/tc_log.hpp>
 #include <tcplot/plot_grid_item2d.hpp>
+#include <tcplot/plot_annotations2d.hpp>
+#include <tcplot/plot_data.hpp>
 #include <tcplot/plot_layout2d.hpp>
 #include <tcplot/styles.hpp>
 #include <termin/gui_native/draw_list2d_bridge.hpp>
@@ -44,7 +46,7 @@ namespace tcplot::gui_native {
         class UiSceneResources final : public termin::visual::SceneRenderResourceResolver2D {
         public:
             std::optional<tgfx::FontHandle> resolve_font(std::string_view uri) override {
-                if (uri == "ui://default-font") {
+                if (uri == "ui://default-font" || uri == kPlotDefaultFontResource2D) {
                     return tgfx::FontHandle{std::numeric_limits<std::uint32_t>::max()};
                 }
                 return std::nullopt;
@@ -75,6 +77,9 @@ namespace tcplot::gui_native {
         PlotProjection2D projection;
         termin::visual::GraphicItemHandle grid_handle = tc_graphic_item_handle_invalid();
         std::vector<termin::visual::GraphicItemHandle> line_handles;
+        std::vector<termin::visual::GraphicItemHandle> scatter_handles;
+        PlotData data;
+        PlotAnnotationLayer2D annotations;
         PlotFrame2D frame;
         PlotTicks2D ticks;
         PlotRange2D range{0.0, 1.0, 0.0, 1.0};
@@ -135,7 +140,7 @@ namespace tcplot::gui_native {
           impl_(std::make_unique<Impl>()) {
         set_style_role(TC_UI_STYLE_PANEL);
         set_preferred_size({preferred_width, preferred_height});
-        set_mouse_transparent(true);
+        set_mouse_transparent(false);
         update_chart_layout();
     }
 
@@ -225,6 +230,7 @@ namespace tcplot::gui_native {
             return std::numeric_limits<std::size_t>::max();
         }
         impl_->line_handles.push_back(*handle);
+        impl_->data.add_line({}, {}, {}, style.color, style.thickness_px);
         if (auto* line = resolve_plot_line_series_item2d(impl_->scene, *handle)) {
             line->set_z_order(10 + static_cast<std::int64_t>(impl_->line_handles.size()));
         }
@@ -242,6 +248,8 @@ namespace tcplot::gui_native {
             !line->set_data(std::vector<double>(x.begin(), x.end()), std::vector<double>(y.begin(), y.end()))) {
             return false;
         }
+        impl_->data.lines[index].x.assign(x.begin(), x.end());
+        impl_->data.lines[index].y.assign(y.begin(), y.end());
         if (impl_->auto_fit) {
             update_auto_range();
         }
@@ -259,6 +267,8 @@ namespace tcplot::gui_native {
         if (line == nullptr || !line->append(x, y)) {
             return false;
         }
+        impl_->data.lines[index].x.insert(impl_->data.lines[index].x.end(), x.begin(), x.end());
+        impl_->data.lines[index].y.insert(impl_->data.lines[index].y.end(), y.begin(), y.end());
         if (impl_->auto_fit) {
             update_auto_range();
         }
@@ -272,11 +282,101 @@ namespace tcplot::gui_native {
             impl_->scene.destroy(handle);
         }
         impl_->line_handles.clear();
+        impl_->data.lines.clear();
         if (impl_->auto_fit) {
             update_auto_range();
         }
         update_chart_layout();
         invalidate_chart();
+    }
+
+    std::size_t Plot2D::scatter_count() const noexcept {
+        return impl_->scatter_handles.size();
+    }
+
+    std::size_t Plot2D::add_scatter(PlotScatterSeriesStyle2D style) {
+        const auto handle = adopt_plot_scatter_series_item2d(impl_->scene, impl_->projection, {}, {}, style);
+        if (!handle) {
+            tc::Log::error("[Plot2D] failed to add scatter series");
+            return std::numeric_limits<std::size_t>::max();
+        }
+        impl_->scatter_handles.push_back(*handle);
+        impl_->data.add_scatter({}, {}, {}, style.color, style.diameter_px);
+        if (auto* scatter = resolve_plot_scatter_series_item2d(impl_->scene, *handle)) {
+            scatter->set_z_order(100 + static_cast<std::int64_t>(impl_->scatter_handles.size()));
+        }
+        invalidate_chart();
+        return impl_->scatter_handles.size() - 1;
+    }
+
+    bool Plot2D::set_scatter_data(std::size_t index, std::span<const double> x, std::span<const double> y) {
+        if (index >= impl_->scatter_handles.size()) {
+            tc::Log::error("[Plot2D] scatter index is out of range");
+            return false;
+        }
+        auto* scatter = resolve_plot_scatter_series_item2d(impl_->scene, impl_->scatter_handles[index]);
+        if (scatter == nullptr ||
+            !scatter->set_data(std::vector<double>(x.begin(), x.end()), std::vector<double>(y.begin(), y.end()))) {
+            return false;
+        }
+        impl_->data.scatters[index].x.assign(x.begin(), x.end());
+        impl_->data.scatters[index].y.assign(y.begin(), y.end());
+        if (impl_->auto_fit) {
+            update_auto_range();
+        }
+        update_chart_layout();
+        invalidate_chart();
+        return true;
+    }
+
+    void Plot2D::clear_scatters() {
+        for (const auto handle : impl_->scatter_handles) {
+            impl_->scene.destroy(handle);
+        }
+        impl_->scatter_handles.clear();
+        impl_->data.scatters.clear();
+        if (impl_->auto_fit) {
+            update_auto_range();
+        }
+        update_chart_layout();
+        invalidate_chart();
+    }
+
+    PlotAnnotationHandle Plot2D::create_data_marker(double x,
+                                                    double y,
+                                                    std::string text,
+                                                    std::size_t snap_line_index) {
+        PlotDataMarker2D marker;
+        marker.data_position = {x, y};
+        marker.text = std::move(text);
+        const auto handle = impl_->annotations.create_data_marker(std::move(marker));
+        if (!handle) {
+            tc::Log::error("[Plot2D] failed to create data marker");
+            return {};
+        }
+        if (snap_line_index < impl_->data.lines.size()) {
+            impl_->annotations.set_snap_hook(*handle, [this, snap_line_index](const PlotPoint2D& candidate) {
+                const auto& line = impl_->data.lines[snap_line_index];
+                if (line.x.empty()) {
+                    return candidate;
+                }
+                std::size_t nearest = 0;
+                double distance = std::numeric_limits<double>::infinity();
+                for (std::size_t index = 0; index < line.x.size(); ++index) {
+                    const double dx = line.x[index] - candidate.x;
+                    const double dy = line.y[index] - candidate.y;
+                    const double squared = dx * dx + dy * dy;
+                    if (squared < distance) {
+                        distance = squared;
+                        nearest = index;
+                    }
+                }
+                return PlotPoint2D{line.x[nearest], line.y[nearest]};
+            });
+        }
+        impl_->annotations.project(impl_->frame, impl_->data);
+        invalidate_chart();
+        return *handle;
     }
 
     tc_ui_size Plot2D::measure(tc_ui_document_handle, tc_ui_constraints constraints) {
@@ -320,6 +420,24 @@ namespace tcplot::gui_native {
         auto draw_list = built ? builder.freeze() : std::nullopt;
         if (!draw_list || !termin::gui_native::append_draw_list2d(context, std::move(*draw_list))) {
             tc::Log::error("[Plot2D] failed to paint retained chart items");
+        }
+
+        impl_->annotations.project(impl_->frame, impl_->data);
+        for (const auto phase : {PlotAnnotationPhase2D::Underlay,
+                                 PlotAnnotationPhase2D::Overlay,
+                                 PlotAnnotationPhase2D::Chrome}) {
+            for (const auto clip : {PlotAnnotationClip2D::PlotArea, PlotAnnotationClip2D::Viewport}) {
+                tgfx::DrawList2DBuilder annotation_builder;
+                const auto& annotation_scene = impl_->annotations.visual_scene(phase, clip);
+                const bool annotation_built = annotation_builder.push_transform(translation) &&
+                                              annotation_scene.paint(annotation_builder, resources) &&
+                                              annotation_builder.pop_transform();
+                auto annotation_list = annotation_built ? annotation_builder.freeze() : std::nullopt;
+                if (annotation_list &&
+                    !termin::gui_native::append_draw_list2d(context, std::move(*annotation_list))) {
+                    tc::Log::error("[Plot2D] failed to paint retained annotations");
+                }
+            }
         }
 
         const tc_ui_srgb_color axis = ui_color(styles::axis_color());
@@ -387,6 +505,49 @@ namespace tcplot::gui_native {
         tc_ui_painter_pop_clip(context);
     }
 
+    tc_ui_event_result Plot2D::pointer_event(tc_ui_document_handle document, const tc_ui_pointer_event* event) {
+        if (event == nullptr) {
+            return TC_UI_EVENT_IGNORED;
+        }
+        termin::visual::PointerEventKind2D kind;
+        switch (event->type) {
+        case TC_UI_POINTER_MOVE:
+            kind = termin::visual::PointerEventKind2D::Move;
+            break;
+        case TC_UI_POINTER_DOWN:
+            kind = termin::visual::PointerEventKind2D::Down;
+            break;
+        case TC_UI_POINTER_UP:
+            kind = termin::visual::PointerEventKind2D::Up;
+            break;
+        case TC_UI_POINTER_CANCEL:
+            kind = termin::visual::PointerEventKind2D::Cancel;
+            break;
+        default:
+            return TC_UI_EVENT_IGNORED;
+        }
+        const tc_ui_rect widget_bounds = bounds();
+        impl_->annotations.project(impl_->frame, impl_->data);
+        const bool handled = impl_->annotations.route_pointer(
+            impl_->frame,
+            termin::visual::PointerEvent2D{
+                1,
+                kind,
+                {event->x - widget_bounds.x, event->y - widget_bounds.y},
+                static_cast<std::uint32_t>(std::max(event->button, 0)),
+            });
+        if (!handled) {
+            return TC_UI_EVENT_IGNORED;
+        }
+        if (event->type == TC_UI_POINTER_DOWN) {
+            termin::gui_native::TcDocument(document).set_pointer_capture(*this);
+        } else if (event->type == TC_UI_POINTER_UP || event->type == TC_UI_POINTER_CANCEL) {
+            termin::gui_native::TcDocument(document).release_pointer_capture(*this);
+        }
+        invalidate_chart();
+        return TC_UI_EVENT_HANDLED;
+    }
+
     void Plot2D::update_chart_layout() {
         if (!impl_ || !impl_->projection.valid()) {
             return;
@@ -429,6 +590,24 @@ namespace tcplot::gui_native {
             }
             const auto x = line->x();
             const auto y = line->y();
+            for (std::size_t index = 0; index < x.size(); ++index) {
+                if (!std::isfinite(x[index]) || !std::isfinite(y[index])) {
+                    continue;
+                }
+                x_min = std::min(x_min, x[index]);
+                x_max = std::max(x_max, x[index]);
+                y_min = std::min(y_min, y[index]);
+                y_max = std::max(y_max, y[index]);
+                has_data = true;
+            }
+        }
+        for (const auto handle : impl_->scatter_handles) {
+            const auto* scatter = resolve_plot_scatter_series_item2d(impl_->scene, handle);
+            if (scatter == nullptr) {
+                continue;
+            }
+            const auto x = scatter->x();
+            const auto y = scatter->y();
             for (std::size_t index = 0; index < x.size(); ++index) {
                 if (!std::isfinite(x[index]) || !std::isfinite(y[index])) {
                     continue;

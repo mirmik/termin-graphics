@@ -29,10 +29,24 @@ with its name and makes the process fail.
 | Section | Product surface |
 |---|---|
 | `native_ui` | Retained controls, collections, text, models and layout |
-| `plot_2d` | Retained Plot2D lines, append/update path, axes and labels |
-| `plot_3d` | Plot3D line, scatter, shaded surface and colormap |
+| `graphics_lines` | Mesh-expanded line caps, joins, widths and 3D polylines |
+| `tcplot_sine` | Sine, cosine and damped-sine line families |
+| `tcplot_scatter` | Three clustered scatter series and a trend line |
+| `tcplot_multi` | Polynomial and damped-oscillation plots side by side |
+| `tcplot_marker` | Draggable retained marker with nearest-sample snapping |
+| `tcplot_helix` | Double helix and deterministic 3D scatter |
+| `tcplot_surface` | Sinc surface, Viridis colorbar, wireframe and z scaling |
+| `visual_scene_gallery` | Retained shapes, hierarchy, transforms, opacity, z-order and hit regions |
 | `visual_scene_nodegraph` | Visual-scene primitives, nodegraph model and projection |
 | `plot_nodegraph_composition` | Plot2D and Plot3D embedded as node-body widgets |
+
+The remaining profile packages are exercised as supporting parts of those
+pages rather than represented by artificial empty tabs: `termin-mesh` builds
+the expanded line geometry, `termin-shader-runtime` compiles its shaders,
+`termin-image` writes the acceptance PNG, and `termin-base`, `termin-dispatch`,
+`termin-inspect`, `termin-assets`, `termin-tween`, the build tools and the
+nanobind SDK are verified by the isolated import boundary. `termin-window` is
+the optional interactive host described below.
 
 The JSON report records the exact imported graphics-profile packages, every
 declared section, framebuffer coverage metrics and the final artifact path.

@@ -241,6 +241,18 @@ namespace tcplot::gui_native {
         return changed;
     }
 
+    bool Plot3D::set_colorbar(tc_plot_item3d_handle surface, const char* label) {
+        const bool changed = tc_retained_chart3d_set_colorbar(chart(), surface, label, nullptr) != 0;
+        if (changed)
+            invalidate();
+        return changed;
+    }
+
+    void Plot3D::clear_colorbar() {
+        tc_retained_chart3d_clear_colorbar(chart());
+        invalidate();
+    }
+
     void Plot3D::fit_camera() {
         tc_retained_chart3d_fit_camera(chart());
         invalidate();

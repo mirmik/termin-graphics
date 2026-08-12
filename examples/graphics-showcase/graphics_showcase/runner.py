@@ -50,6 +50,7 @@ def _render_section(section, config: ShowcaseConfig, font_path: Path) -> dict[st
         height=config.height,
         font_path=str(font_path),
         continuous_rendering=False,
+        application_graphics_domain=True,
     )
     content = None
     try:
