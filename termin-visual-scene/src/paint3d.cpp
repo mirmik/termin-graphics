@@ -66,7 +66,9 @@ namespace termin::visual {
     }
 
     termin::Affine3d GraphicItemPaintContext3D::world_from_local() const noexcept {
-        return tc_visual_item_paint_context3d_world_from_local(context_);
+        termin::Affine3d result = termin::Affine3d::identity();
+        tc_visual_item_paint_context3d_get_world_from_local(context_, &result);
+        return result;
     }
 
     bool GraphicItemPaintContext3D::effective_visible() const noexcept {

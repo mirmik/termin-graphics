@@ -69,7 +69,10 @@ add_library(termin_visual_scene ${_TERMIN_VISUAL_SCENE_LIBRARY_TYPE}
     src/visual_item3d.cpp
 )
 if(MSVC)
-    set_source_files_properties(src/tc_visual_scene.c PROPERTIES
+    set_source_files_properties(
+        src/tc_visual_scene.c
+        src/tc_visual_scene3d.c
+        PROPERTIES
         COMPILE_OPTIONS "/experimental:c11atomics"
     )
 endif()

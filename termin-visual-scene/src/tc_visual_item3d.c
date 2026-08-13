@@ -160,7 +160,7 @@ const tc_visual_item3d* tc_visual_item3d_child_at_const(const tc_visual_item3d* 
 }
 
 static tc_visual_item3d* resolve(tc_visual_scene3d_handle scene, tc_visual_item3d_handle h) {
-    return tc_visual_scene3d_resolve_item((tc_visual_scene3d_handle)scene, h);
+    return tc_visual_scene3d_resolve_item(scene, h);
 }
 
 bool tc_visual_item3d_get_local_transform(tc_visual_scene3d_handle scene, tc_visual_item3d_handle h, tc_affine3d* out) {

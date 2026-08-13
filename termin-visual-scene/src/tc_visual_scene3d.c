@@ -602,8 +602,14 @@ tc_visual_item3d_handle tc_visual_item_paint_context3d_item(const tc_visual_item
     return context != NULL ? context->item : tc_visual_item3d_handle_invalid();
 }
 
-tc_affine3d tc_visual_item_paint_context3d_world_from_local(const tc_visual_item_paint_context3d* context) {
-    return context != NULL ? context->world_from_local : tc_affine3d_identity();
+bool tc_visual_item_paint_context3d_get_world_from_local(const tc_visual_item_paint_context3d* context,
+                                                         tc_affine3d* out_world_from_local) {
+    if (context == NULL || out_world_from_local == NULL) {
+        tc_log_error("tc_visual_item_paint_context3d_get_world_from_local called with null argument");
+        return false;
+    }
+    *out_world_from_local = context->world_from_local;
+    return true;
 }
 
 bool tc_visual_item_paint_context3d_effective_visible(const tc_visual_item_paint_context3d* context) {
