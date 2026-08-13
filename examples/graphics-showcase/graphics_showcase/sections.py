@@ -37,7 +37,6 @@ _REQUIRED_IMPORTS = (
     ("termin-base", "tcbase"),
     ("termin-dispatch", "termin.dispatch"),
     ("termin-image", "termin.image"),
-    ("termin-assets", "termin_assets"),
     ("termin-tween", "termin.tween"),
     ("termin-mesh", "tmesh"),
     ("termin-graphics", "tgfx"),

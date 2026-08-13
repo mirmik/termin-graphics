@@ -45,7 +45,7 @@ The remaining profile packages are exercised as supporting parts of those
 pages rather than represented by artificial empty tabs: `termin-mesh` builds
 the expanded line geometry, `termin-shader-runtime` compiles its shaders,
 `termin-image` writes the acceptance PNG, and `termin-base`, `termin-dispatch`,
-`termin-inspect`, `termin-assets`, `termin-tween`, the build tools and the
+`termin-inspect`, `termin-tween`, the build tools and the
 nanobind SDK are verified by the isolated import boundary. `termin-window` is
 the optional interactive host described below.
 
