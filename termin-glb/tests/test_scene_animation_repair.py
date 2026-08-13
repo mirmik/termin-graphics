@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
-from termin.animation.asset import AnimationClipAsset
+from termin.default_assets.animation.asset import AnimationClipAsset
 from termin.glb.asset import GLBAsset
 from termin.glb.scene_animation_repair import repair_glb_animation_player_clip_refs
-from termin.skeleton.asset import SkeletonAsset
+from termin.default_assets.skeleton.asset import SkeletonAsset
 from termin_assets import AssetRegistry, AssetRuntimeManager, set_resource_manager_factory
 
 

@@ -449,6 +449,12 @@
       "roots": ["termin-animation/tests"]
     },
     {
+      "id": "termin-components-animation-tests",
+      "module": "termin-components-animation",
+      "executor": "pytest",
+      "roots": ["termin-components/termin-components-animation/tests"]
+    },
+    {
       "id": "termin-audio-tests",
       "module": "termin-audio",
       "executor": "pytest",

@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from termin_assets import Asset
     from termin.glb.loader import GLBSceneData
     from termin.default_assets.mesh.asset import MeshAsset
-    from termin.skeleton.asset import SkeletonAsset
-    from termin.animation.asset import AnimationClipAsset
+    from termin.default_assets.animation.asset import AnimationClipAsset
+    from termin.default_assets.skeleton.asset import SkeletonAsset
 
 
 class GLBResourceManager(Protocol):

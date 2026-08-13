@@ -1,3 +1,4 @@
+#include "resources/tc_skeleton_registry.h"
 #include <tcbase/tc_log.hpp>
 #include <termin/skeleton/skeleton_instance.hpp>
 

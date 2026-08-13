@@ -315,7 +315,13 @@
       "path": "termin-skeleton",
       "distribution": "termin-skeleton",
       "native_extensions": [
-        {"extension": "termin.skeleton._skeleton_native", "target": "_skeleton_native"},
+        {"extension": "termin.skeleton._skeleton_native", "target": "_skeleton_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-skeleton",
+      "distribution": "termin-components-skeleton",
+      "native_extensions": [
         {"extension": "termin.skeleton._components_skeleton_native", "target": "_components_skeleton_native"}
       ]
     },
@@ -323,7 +329,13 @@
       "path": "termin-animation",
       "distribution": "termin-animation",
       "native_extensions": [
-        {"extension": "termin.animation._animation_native", "target": "_animation_native"},
+        {"extension": "termin.animation._animation_native", "target": "_animation_native"}
+      ]
+    },
+    {
+      "path": "termin-components/termin-components-animation",
+      "distribution": "termin-components-animation",
+      "native_extensions": [
         {"extension": "termin.animation._components_animation_native", "target": "_components_animation_native"}
       ]
     },

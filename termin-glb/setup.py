@@ -21,6 +21,8 @@ setup(
         "termin-scene",
         "termin-default-assets",
         "termin-components-render",
+        "termin-components-animation",
+        "termin-components-skeleton",
         "tmesh",
         "tgfx",
         "termin-materials",

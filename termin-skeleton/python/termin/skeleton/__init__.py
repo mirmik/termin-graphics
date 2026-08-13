@@ -11,18 +11,8 @@ from termin.skeleton._skeleton_native import (
 )
 
 
-def __getattr__(name: str):
-    if name == "SkeletonAsset":
-        from termin.skeleton.asset import SkeletonAsset
-
-        globals()["SkeletonAsset"] = SkeletonAsset
-        return SkeletonAsset
-    raise AttributeError(f"module 'termin.skeleton' has no attribute {name!r}")
-
-
 __all__ = [
     "TcSkeleton",
     "SkeletonInstance",
     "tc_skeleton_get_all_info",
-    "SkeletonAsset",
 ]

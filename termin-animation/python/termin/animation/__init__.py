@@ -10,19 +10,9 @@ from termin.animation.clip import clip_from_fbx, clip_from_glb
 from termin.animation.clip_io import load_animation_clip, save_animation_clip
 
 
-def __getattr__(name: str):
-    if name == "AnimationClipAsset":
-        from termin.animation.asset import AnimationClipAsset
-
-        globals()["AnimationClipAsset"] = AnimationClipAsset
-        return AnimationClipAsset
-    raise AttributeError(f"module 'termin.animation' has no attribute {name!r}")
-
-
 __all__ = [
     "TcAnimationClip",
     "tc_animation_get_all_info",
-    "AnimationClipAsset",
     "clip_from_fbx",
     "clip_from_glb",
     "channel_data_from_fbx",
