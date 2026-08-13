@@ -300,61 +300,7 @@ namespace {
                 [](const termin::SkeletonInstance& si) { return si._skeleton; },
                 [](termin::SkeletonInstance& si, tc_skeleton* skel) { si.set_skeleton(skel); },
                 nb::rv_policy::reference)
-            .def_prop_rw(
-                "bone_entities",
-                [](const termin::SkeletonInstance& si) {
-                    nb::list result;
-                    for (const termin::Entity& e : si.bone_entities()) {
-                        if (e.valid()) {
-                            result.append(nb::cast(e));
-                        } else {
-                            result.append(nb::none());
-                        }
-                    }
-                    return result;
-                },
-                [](termin::SkeletonInstance& si, nb::list entities) {
-                    std::vector<termin::Entity> vec;
-                    for (auto item : entities) {
-                        if (!item.is_none()) {
-                            vec.push_back(nb::cast<termin::Entity>(item));
-                        }
-                    }
-                    si.set_bone_entities(std::move(vec));
-                })
-            .def_prop_rw(
-                "skeleton_root",
-                [](const termin::SkeletonInstance& si) -> nb::object {
-                    termin::Entity root = si.skeleton_root();
-                    if (root.valid())
-                        return nb::cast(root);
-                    return nb::none();
-                },
-                [](termin::SkeletonInstance& si, nb::object root_obj) {
-                    if (root_obj.is_none()) {
-                        si.set_skeleton_root(termin::Entity());
-                    } else {
-                        si.set_skeleton_root(nb::cast<termin::Entity>(root_obj));
-                    }
-                })
-            .def(
-                "get_bone_entity",
-                [](const termin::SkeletonInstance& si, int index) -> nb::object {
-                    termin::Entity e = si.get_bone_entity(index);
-                    if (e.valid())
-                        return nb::cast(e);
-                    return nb::none();
-                },
-                nb::arg("bone_index"))
-            .def(
-                "get_bone_entity_by_name",
-                [](const termin::SkeletonInstance& si, const std::string& name) -> nb::object {
-                    termin::Entity e = si.get_bone_entity_by_name(name);
-                    if (e.valid())
-                        return nb::cast(e);
-                    return nb::none();
-                },
-                nb::arg("bone_name"))
+            .def("reset_to_bind_pose", &termin::SkeletonInstance::reset_to_bind_pose)
             .def(
                 "set_bone_transform",
                 [](termin::SkeletonInstance& si,
@@ -423,9 +369,7 @@ namespace {
                 },
                 nb::arg("bone_index"))
             .def("__repr__", [](const termin::SkeletonInstance& si) {
-                bool has_entities = !si.bone_entities().empty();
-                return "<SkeletonInstance bones=" + std::to_string(si.bone_count()) +
-                       " has_entities=" + (has_entities ? "True" : "False") + ">";
+                return "<SkeletonInstance bones=" + std::to_string(si.bone_count()) + ">";
             });
     }
 

@@ -15,12 +15,6 @@ if(COMMAND termin_require_package)
 else()
     find_package(termin_base REQUIRED)
 endif()
-if(COMMAND termin_require_package)
-    termin_require_package(termin_scene termin_scene::termin_scene)
-else()
-    find_package(termin_scene REQUIRED)
-endif()
-
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 include(TerminRpath)
 
@@ -47,6 +41,13 @@ if(TERMIN_SKELETON_BUILD_TESTS)
     )
     target_link_libraries(termin_skeleton_data_test PRIVATE termin_skeleton)
     add_test(NAME termin_skeleton_data_test COMMAND termin_skeleton_data_test)
+
+    add_executable(termin_skeleton_instance_test tests/test_skeleton_instance.cpp)
+    target_include_directories(termin_skeleton_instance_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../termin-thirdparty/guard
+    )
+    target_link_libraries(termin_skeleton_instance_test PRIVATE termin_skeleton)
+    add_test(NAME termin_skeleton_instance_test COMMAND termin_skeleton_instance_test)
 endif()
 
 target_include_directories(termin_skeleton PUBLIC
@@ -56,7 +57,6 @@ target_include_directories(termin_skeleton PUBLIC
 
 target_link_libraries(termin_skeleton PUBLIC
     tcbase::termin_base
-    termin_scene::termin_scene
 )
 
 set_target_properties(termin_skeleton PROPERTIES
@@ -151,4 +151,6 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/termin_skeleton
 )
 
-termin_label_tests_in_directory("termin-skeleton")
+if(COMMAND termin_label_tests_in_directory)
+    termin_label_tests_in_directory("termin-skeleton")
+endif()
