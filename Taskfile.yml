@@ -19,7 +19,22 @@ tasks:
     platforms: [linux]
     cmds:
       - ./scripts/build/sdk.sh {{.CLI_ARGS}}
+      - task: test:render-core
       - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk
+
+  test:render-core:
+    internal: true
+    platforms: [linux]
+    cmds:
+      - >-
+        cmake -S termin-render-core -B build/test/render-core
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_PREFIX_PATH="$PWD/sdk"
+        -DTERMIN_RENDER_CORE_BUILD_TESTS=ON
+      - cmake --build build/test/render-core --parallel
+      - >-
+        LD_LIBRARY_PATH="$PWD/sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        ctest --test-dir build/test/render-core --output-on-failure
 
   smoke:
     desc: Verify the existing installed Graphics SDK after relocation

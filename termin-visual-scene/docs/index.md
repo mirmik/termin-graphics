@@ -86,7 +86,7 @@ ancestors skip their subtree. Disabled items still paint with
 The C++ `ScenePaintSink3D` in `paint3d.hpp` is the adapter seam for an external
 `RenderItemSource` or immediate-renderer collector. Camera projection and
 render-engine integration remain outside this package; `termin-visual-scene`
-does not depend on `tc_scene` or `termin-render`.
+does not depend on `tc_scene` or `termin-render-core`.
 
 ### Built-in 3D items
 

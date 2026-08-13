@@ -72,7 +72,7 @@ target_link_libraries(termin_window
 get_target_property(_termin_window_public_dependencies
     termin_window INTERFACE_LINK_LIBRARIES)
 foreach(_termin_window_forbidden_dependency
-        termin_scene:: termin_input:: termin_render:: termin_materials::)
+        termin_scene:: termin_input:: termin_render_core:: termin_materials::)
     string(FIND
         "${_termin_window_public_dependencies}"
         "${_termin_window_forbidden_dependency}"

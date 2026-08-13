@@ -493,11 +493,11 @@
       ]
     },
     {
-      "id": "termin-render-tests-native",
-      "module": "termin-render",
+      "id": "termin-render-core-tests-native",
+      "module": "termin-render-core",
       "executor": "ctest",
       "roots": [
-        "termin-render/tests"
+        "termin-render-core/tests"
       ]
     },
     {
@@ -594,14 +594,6 @@
       "executor": "pytest",
       "roots": [
         "termin-nodegraph/tests"
-      ]
-    },
-    {
-      "id": "termin-render-tests",
-      "module": "termin-render",
-      "executor": "pytest",
-      "roots": [
-        "termin-render/tests"
       ]
     },
     {

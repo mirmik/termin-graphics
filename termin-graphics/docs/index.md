@@ -35,7 +35,7 @@ not use PySDL2 or the engine-level `termin-display` package.
 В этот модуль должны попадать GPU abstractions и utilities, которые не знают о frame graph, editor UI или конкретной application domain.
 
 Если код знает про frame graph/debugger/render pipeline, он обычно относится к
-[termin-render](../../docs/modules.md#termin-render). Если код знает про widget
+[termin-render-core](../../termin-render-core/docs/index.md). Если код знает про widget
 tree, layout или events, он относится к
 [termin-gui-native](../../termin-gui-native/README.md).
 

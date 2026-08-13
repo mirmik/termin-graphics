@@ -15,7 +15,7 @@
     "termin-gui-native/docs",
     "termin-mesh/docs",
     "termin-nodegraph/docs",
-    "termin-render/docs",
+    "termin-render-core/docs",
     "termin-skeleton/docs",
     "termin-tween/docs",
     "termin-visual-scene/docs",

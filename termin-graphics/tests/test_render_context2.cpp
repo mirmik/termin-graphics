@@ -109,7 +109,7 @@ void main() {
 static std::filesystem::path make_fsq_artifact_root() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     std::filesystem::path root =
-        std::filesystem::temp_directory_path() / ("termin-render-context2-fsq-" + std::to_string(stamp));
+        std::filesystem::temp_directory_path() / ("termin-render-core-context2-fsq-" + std::to_string(stamp));
     std::filesystem::path shader_dir = root / "shaders" / "opengl";
     std::filesystem::create_directories(shader_dir);
     std::ofstream out(shader_dir / "termin-engine-fsq.vert.glsl", std::ios::binary);

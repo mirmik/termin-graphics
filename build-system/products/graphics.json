@@ -83,18 +83,13 @@
       "python_distribution": "termin-shader-runtime"
     },
     {
-      "path": "termin-render",
+      "path": "termin-render-core",
       "role": "runtime",
       "internal_dependencies": ["termin-graphics", "termin-materials"],
       "external_dependencies": ["termin-base", "termin-inspect"],
-      "inactive_dependencies": ["termin-nanobind-sdk"],
+      "inactive_dependencies": [],
       "native_targets": ["termin_render_core"],
-      "inactive_native_targets": [
-        "termin_render",
-        "termin_render_project_surface_test_plugin",
-        "_render_framework_native",
-        "_render_native"
-      ],
+      "inactive_native_targets": [],
       "python_distribution": null
     },
     {
@@ -259,8 +254,7 @@
     "termin-materials-tests-native",
     "termin-materials-tests",
     "termin-shader-runtime-tests",
-    "termin-render-tests-native",
-    "termin-render-tests",
+    "termin-render-core-tests-native",
     "termin-window-tests-native",
     "termin-window-tests-python",
     "termin-gui-native-tests",

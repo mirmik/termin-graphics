@@ -5,8 +5,8 @@
   "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
     {
-      "id": "termin-render",
-      "path": "termin-render",
+      "id": "termin-render-core",
+      "path": "termin-render-core",
       "kinds": ["native-library", "documentation"]
     },
     {

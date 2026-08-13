@@ -283,7 +283,7 @@ namespace tgfx {
         // It papers over an ownership inconsistency: during Phase 2, render
         // targets are owned by the legacy FBOPool, and tgfx2 passes borrow
         // them for the duration of a single frame via register_external_texture
-        // (see termin-render/src/tgfx2_bridge.cpp::wrap_fbo_color_as_tgfx2).
+        // (see termin-render-core/src/tgfx2_bridge.cpp::wrap_fbo_color_as_tgfx2).
         // At end-of-frame those borrows are released; the fbo_cache_ entries
         // built around them are no longer safe because legacy code is free
         // to mutate the underlying GL attachment state between frames without

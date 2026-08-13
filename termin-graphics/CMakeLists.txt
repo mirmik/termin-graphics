@@ -368,7 +368,7 @@ if(TGFX2_ENABLE_WEBGL2)
 endif()
 
 if(TGFX2_ENABLE_VULKAN)
-    # PRIVATE on purpose: downstream consumers (termin-render,
+    # PRIVATE on purpose: downstream consumers (termin-render-core,
     # termin-engine, termin-app) only touch tgfx2 through IRenderDevice
     # and never include tgfx2/vulkan/* headers. Keeping the Vulkan
     # target and TGFX2_HAS_VULKAN internal stops the SDK install from
