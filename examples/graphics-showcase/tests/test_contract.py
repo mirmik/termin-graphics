@@ -85,7 +85,7 @@ def test_graphics_showcase_cli_requires_isolated_product_artifacts() -> None:
     assert "graphics_showcase.cli import main" in main_source
     assert "sys.path.insert(0, str(_SHOWCASE_ROOT))" in main_source
     assert '"isolated": bool(sys.flags.isolated)' in runner_source
-    assert "sdk/bin/termin_python -I" in readme
+    assert "composed-sdk/bin/termin_python -I" in readme
 
 
 def test_graphics_showcase_windowed_frontend_uses_the_profile_host() -> None:

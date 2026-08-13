@@ -1,22 +1,21 @@
 # Graphics SDK showcase
 
-This is the cross-package acceptance example for the Termin Graphics SDK.
-It deliberately uses the installed SDK as a product: run it with the
-bundled isolated Python and do not add the repository to `PYTHONPATH`.
+This is the cross-package acceptance example for the composed Termin Core +
+Graphics SDK. The repository gate creates that composition in a temporary
+directory and runs it with bundled isolated Python, without adding the source
+checkout to `PYTHONPATH`:
 
 ```bash
-task build -- --core-sdk /absolute/path/to/termin-core/sdk --no-sdl
-sdk/bin/termin_python -I examples/graphics-showcase/main.py \
-  --headless \
-  --output /tmp/termin-graphics-showcase.png \
-  --report /tmp/termin-graphics-showcase.json
+TERMIN_SLANGC=/absolute/path/to/slangc task test -- \
+  --core-sdk /absolute/path/to/termin-core/sdk --no-sdl
 ```
 
-After building the SDK, the repository gate performs the same run with poisoned
-ambient Python paths and validates the profile boundary, report and artifact:
+After building the Graphics layer, the same installed-consumer gate can be
+rerun with poisoned ambient Python paths:
 
 ```bash
-scripts/smoke-graphics-showcase
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- \
+  --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
 The headless path is the required contract and works without `termin-window`,
@@ -61,7 +60,15 @@ an interactive frontend for the integration section:
 
 ```bash
 task build -- --core-sdk /absolute/path/to/termin-core/sdk --sdl
-sdk/bin/termin_python -I examples/graphics-showcase/main.py --windowed
+```
+
+The resulting `sdk/` directory is a Graphics layer, not a directly runnable
+prefix. Compose it over the recorded Core SDK before launching the windowed
+showcase:
+
+```bash
+/absolute/path/to/composed-sdk/bin/termin_python -I \
+  examples/graphics-showcase/main.py --windowed
 ```
 
 The frontend opens on an overview and exposes every registry section as a tab;

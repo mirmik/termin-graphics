@@ -21,17 +21,22 @@ task build -- --core-sdk /absolute/path/to/termin-core/sdk
 
 `termin-graphics` is one product, so there is no `--profile graphics` switch.
 Vulkan, OpenGL, and SDL remain optional backend features (`--no-vulkan`,
-`--no-opengl`, `--no-sdl`). The output is a composed SDK in `sdk/`; its
-`sdk-inputs.json` records the exact Core input identity.
+`--no-opengl`, `--no-sdl`). The output in `sdk/` is a thin Graphics layer: it
+contains no Core runtime, libraries, headers, or CMake packages. Its
+`sdk-inputs.json` records the exact Core input identity. A distributable or
+runnable SDK is formed by composing this layer over that immutable Core SDK;
+file collisions are rejected.
 
 ## Verify the installed boundary
 
-The smoke test relocates the SDK, hides this checkout, builds a native CMake
-consumer, imports the isolated Python API, compiles shaders and materials, and
-runs the headless animated/skinned GLB showcase:
+The smoke test relocates Core and Graphics independently, composes them in a
+temporary directory, hides this checkout, builds a native CMake consumer,
+imports the isolated Python API, compiles shaders and materials, and runs the
+headless animated/skinned GLB showcase:
 
 ```bash
-TERMIN_SLANGC=/absolute/path/to/slangc task smoke
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- \
+  --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
 The product boundary and extraction stages are documented in

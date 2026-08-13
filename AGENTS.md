@@ -7,8 +7,9 @@ These instructions apply to the whole `termin-graphics` repository. Nested
 
 ## Product boundary
 
-This repository is one independently distributable Graphics SDK. It consumes
-Core only through an absolute installed SDK path. Do not add sibling-checkout,
+This repository is one independently distributable Graphics SDK layer. It
+contains only Graphics-owned artifacts and is composed over a matching Core
+SDK for final distribution. It consumes Core only through an absolute installed SDK path. Do not add sibling-checkout,
 `FetchContent`, source-overlay, or environment-guessing fallbacks for Core.
 
 Graphics owns image, mesh, GPU/backends, shaders, materials, render core,
@@ -23,7 +24,7 @@ On Linux, use the public entry points:
 
 ```bash
 task build -- --core-sdk /absolute/path/to/termin-core/sdk
-TERMIN_SLANGC=/absolute/path/to/slangc task smoke
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
 `Taskfile.yml` is the only public command surface. Repository scripts are
@@ -31,8 +32,9 @@ implementation details under `scripts/`; do not add root-level command
 wrappers. There is no SDK profile switch: Graphics is the product. Backend
 flags select capabilities within the product.
 
-The installed-consumer smoke is the release boundary. It must run against a
-relocated SDK with source paths and ambient Python overlays removed.
+The installed-consumer smoke is the release boundary. It must relocate Core
+and the Graphics layer independently, compose them without file collisions,
+and run with source paths and ambient Python overlays removed.
 
 ## Engineering rules
 

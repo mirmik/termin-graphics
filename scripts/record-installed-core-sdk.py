@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage an immutable installed Core SDK as the Graphics SDK base."""
+"""Record an immutable installed Core SDK as a Graphics SDK input."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from termin_build.artifact_manifest import ArtifactManifest, SDK_MANIFEST_NAME
 from termin_build.sdk_composition import (
     load_installed_sdk_input,
-    stage_installed_sdk_input,
+    write_sdk_inputs,
 )
 
 
@@ -27,10 +27,11 @@ def main() -> int:
         expected_build_id=manifest.native_build_id,
         expected_python_abi=manifest.python_abi,
     )
-    stage_installed_sdk_input(installed, args.output)
+    args.output.mkdir(parents=True, exist_ok=True)
+    write_sdk_inputs(args.output, (installed,))
     print(
-        f"Staged Core SDK {installed.native_build_id} from "
-        f"{installed.root} into {args.output.resolve()}"
+        f"Recorded Core SDK {installed.native_build_id} from "
+        f"{installed.root} for {args.output.resolve()}"
     )
     return 0
 

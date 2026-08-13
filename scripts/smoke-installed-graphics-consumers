@@ -79,7 +79,7 @@ def _executable(build_root: Path, name: str) -> Path:
     return matches[0]
 
 
-def _verify_manifests(sdk_root: Path) -> None:
+def _verify_manifests(sdk_root: Path, core_root: Path) -> None:
     try:
         product = json.loads((sdk_root / "sdk-product.json").read_text())
         inputs = json.loads((sdk_root / "sdk-inputs.json").read_text())
@@ -87,9 +87,57 @@ def _verify_manifests(sdk_root: Path) -> None:
         raise SmokeError(f"installed SDK manifests are invalid: {error}") from error
     if product.get("profile_id") != "graphics":
         raise SmokeError(f"expected graphics product, got {product.get('profile_id')!r}")
+    if product.get("artifact_kind") != "layer":
+        raise SmokeError("Graphics artifact must declare artifact_kind=layer")
     core_inputs = [item for item in inputs.get("inputs", []) if item.get("product_id") == "core"]
     if len(core_inputs) != 1 or not core_inputs[0].get("native_build_id"):
         raise SmokeError("Graphics SDK must record exactly one identified Core SDK input")
+    core_manifest = json.loads((core_root / "termin-artifacts.json").read_text())
+    if core_inputs[0]["native_build_id"] != core_manifest.get("native_build_id"):
+        raise SmokeError("Graphics layer was built against a different Core SDK")
+
+
+def _verify_thin_layer(sdk_root: Path) -> None:
+    forbidden = [
+        sdk_root / "bin" / ("termin_python.exe" if os.name == "nt" else "termin_python"),
+        sdk_root / "include" / "tcbase",
+        sdk_root / "lib" / "cmake" / "termin_base",
+        sdk_root / "lib" / "cmake" / "termin_dispatch",
+        sdk_root / "lib" / "cmake" / "termin_inspect",
+        sdk_root / "lib" / "cmake" / "termin_python_host",
+        sdk_root / "lib" / "cmake" / "nanobind",
+    ]
+    leaked = [str(path.relative_to(sdk_root)) for path in forbidden if path.exists()]
+    leaked.extend(
+        str(path.relative_to(sdk_root))
+        for pattern in ("libpython*", "libtermin_base*", "libtermin_dispatch*", "libtermin_inspect*")
+        for path in (sdk_root / "lib").glob(pattern)
+    )
+    if leaked:
+        raise SmokeError("Graphics layer republishes Core artifacts: " + ", ".join(leaked))
+
+
+def _compose_bundle(core_root: Path, layer_root: Path, output: Path) -> None:
+    shutil.copytree(core_root, output, symlinks=True)
+    for top_name in ("bin", "include", "lib", "share"):
+        source = layer_root / top_name
+        if not source.is_dir():
+            continue
+        for path in source.rglob("*"):
+            relative = path.relative_to(source)
+            destination = output / top_name / relative
+            if path.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            if destination.exists() or destination.is_symlink():
+                raise SmokeError(
+                    f"Core/Graphics bundle collision: {top_name}/{relative.as_posix()}"
+                )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if path.is_symlink():
+                destination.symlink_to(os.readlink(path))
+            else:
+                shutil.copy2(path, destination)
 
 
 def _select_slangc(explicit: Path | None) -> Path:
@@ -105,14 +153,21 @@ def _select_slangc(explicit: Path | None) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk-root", type=Path, required=True)
+    parser.add_argument("--core-sdk", type=Path, required=True)
     parser.add_argument("--work-root", type=Path)
     parser.add_argument("--slangc", type=Path)
+    for backend in ("sdl", "vulkan", "opengl"):
+        parser.add_argument(f"--{backend}", action="store_true", help=argparse.SUPPRESS)
+        parser.add_argument(f"--no-{backend}", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     source_sdk = args.sdk_root.resolve()
+    source_core = args.core_sdk.resolve()
     launcher = "termin_python.exe" if os.name == "nt" else "termin_python"
-    if not (source_sdk / "bin" / launcher).is_file():
-        parser.error(f"Graphics SDK launcher is missing: {source_sdk / 'bin' / launcher}")
+    if not (source_core / "bin" / launcher).is_file():
+        parser.error(f"Core SDK launcher is missing: {source_core / 'bin' / launcher}")
+    if (source_sdk / "bin" / launcher).exists():
+        parser.error(f"Graphics layer must not contain Core launcher: {source_sdk / 'bin' / launcher}")
 
     temporary = None
     if args.work_root is None:
@@ -126,18 +181,23 @@ def main() -> int:
 
     try:
         slangc = _select_slangc(args.slangc)
-        relocated_sdk = work_root / "sdk"
+        relocated_core = work_root / "core-sdk"
+        relocated_layer = work_root / "graphics-sdk"
+        relocated_sdk = work_root / "bundle"
         fixture = work_root / "consumer"
         source_hidden = work_root / "source-hidden"
         artifacts = work_root / "artifacts"
-        shutil.copytree(source_sdk, relocated_sdk, symlinks=True)
+        shutil.copytree(source_core, relocated_core, symlinks=True)
+        shutil.copytree(source_sdk, relocated_layer, symlinks=True)
+        _verify_manifests(relocated_layer, relocated_core)
+        _verify_thin_layer(relocated_layer)
+        _compose_bundle(relocated_core, relocated_layer, relocated_sdk)
         shutil.copytree(FIXTURE_ROOT, fixture)
         shutil.copytree(SHOWCASE_ROOT, source_hidden / "examples" / "graphics-showcase")
         (source_hidden / "scripts").mkdir(parents=True)
         shutil.copy2(SHOWCASE_SMOKE, source_hidden / "scripts" / "smoke-graphics-showcase")
         artifacts.mkdir()
 
-        _verify_manifests(relocated_sdk)
         python = relocated_sdk / "bin" / launcher
         env = _clean_environment(relocated_sdk)
         glb_path = artifacts / "animated-skinned-triangle.glb"

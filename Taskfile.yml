@@ -9,38 +9,24 @@ tasks:
       - task --list
 
   build:
-    desc: Build the composed Graphics SDK from an installed Core SDK
+    desc: Build the thin Graphics SDK layer against an installed Core SDK
     platforms: [linux]
     cmds:
       - ./scripts/build/sdk.sh {{.CLI_ARGS}}
 
   test:
-    desc: Build and verify standalone installed Graphics consumers
+    desc: Build the Graphics layer and verify the composed SDK
     platforms: [linux]
     cmds:
       - ./scripts/build/sdk.sh {{.CLI_ARGS}}
-      - task: test:render-core
-      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk
-
-  test:render-core:
-    internal: true
-    platforms: [linux]
-    cmds:
-      - >-
-        cmake -S termin-render-core -B build/test/render-core
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_PREFIX_PATH="$PWD/sdk"
-        -DTERMIN_RENDER_CORE_BUILD_TESTS=ON
-      - cmake --build build/test/render-core --parallel
-      - >-
-        LD_LIBRARY_PATH="$PWD/sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        ctest --test-dir build/test/render-core --output-on-failure
+      - ./scripts/test/render-core.sh {{.CLI_ARGS}}
+      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk {{.CLI_ARGS}}
 
   smoke:
-    desc: Verify the existing installed Graphics SDK after relocation
+    desc: Verify Core and the existing Graphics layer after relocation
     platforms: [linux]
     cmds:
-      - ./sdk/bin/termin_python -I scripts/smoke-installed-graphics-consumers --sdk-root sdk
+      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk {{.CLI_ARGS}}
 
   toolchain:slang:
     desc: Install the pinned Slang compiler

@@ -1,0 +1,4 @@
+# Third-party Python distributions owned by the Graphics layer. Packages
+# already supplied by the required Core SDK (currently packaging) are excluded.
+numpy==2.5.1
+PyYAML==6.0.3

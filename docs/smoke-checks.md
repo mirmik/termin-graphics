@@ -10,10 +10,12 @@ task build -- --core-sdk /absolute/path/to/termin-core/sdk
 Then run the public smoke task:
 
 ```bash
-TERMIN_SLANGC=/absolute/path/to/slangc task smoke
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- \
+  --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
-The check copies the composed SDK to a temporary location and removes ambient
+The check relocates Core and the Graphics layer independently, composes them
+without file collisions in a temporary location, and removes ambient
 Core, Graphics, and Python source paths. It verifies:
 
 - `sdk-product.json`, `sdk-inputs.json`, and the exact Core identity;
@@ -25,5 +27,9 @@ Core, Graphics, and Python source paths. It verifies:
   removed;
 - a native CMake consumer using installed package configs only;
 - all headless showcase sections, including animated skinned GLB rendering.
+
+The installed-consumer gate invokes the internal
+`scripts/smoke-graphics-showcase` implementation only after constructing the
+relocated composition; that script is not a public repository entry point.
 
 Success ends with `Installed relocated Graphics consumers: OK`.

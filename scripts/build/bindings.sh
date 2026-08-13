@@ -212,12 +212,18 @@ PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRI
     --vulkan "$TERMIN_ENABLE_VULKAN" \
     --init-submodules
 
-PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" "$SCRIPT_DIR/scripts/stage-installed-core-sdk.py" \
+case "$SDK_PREFIX" in
+    /|"$SCRIPT_DIR")
+        echo "ERROR: refusing to replace unsafe SDK prefix: $SDK_PREFIX" >&2
+        exit 1
+        ;;
+esac
+rm -rf "$SDK_PREFIX"
+mkdir -p "$SDK_PREFIX"
+
+PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" "$SCRIPT_DIR/scripts/record-installed-core-sdk.py" \
     --core-sdk "$TERMIN_CORE_SDK" \
     --output "$SDK_PREFIX"
-
-PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
-    --sdk-prefix "$SDK_PREFIX"
 
 cmake_args=()
 if [[ -n "$CMAKE_GENERATOR_NAME" && ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
@@ -264,40 +270,18 @@ sync_staged_dir() {
     fi
 }
 
-sync_composed_staged_dir() {
-    local name="$1"
-    shift
+sync_staged_dir bin
+sync_staged_dir include
+sync_staged_dir share
+sync_staged_dir lib --exclude '/python*/'
 
-    if [[ ! -d "$INSTALL_STAGING_DIR/$name" ]]; then
-        return
-    fi
-    while IFS= read -r -d '' staged_path; do
-        local relative_path="${staged_path#"$INSTALL_STAGING_DIR/$name/"}"
-        if [[ -e "$SDK_PREFIX/$name/$relative_path" ]]; then
-            echo "ERROR: Core/domain SDK composition collision: $name/$relative_path" >&2
-            exit 1
-        fi
-    done < <(find "$INSTALL_STAGING_DIR/$name" \( -type f -o -type l \) -print0)
-    mkdir -p "$SDK_PREFIX/$name"
-    rsync -a "$@" "$INSTALL_STAGING_DIR/$name"/ "$SDK_PREFIX/$name"/
-}
-
-sync_composed_staged_dir bin
-sync_composed_staged_dir include
-sync_composed_staged_dir share
-sync_composed_staged_dir lib --exclude '/python*/'
-
-# The staged lib/ tree intentionally does not own the bundled CPython shared
-# library.  rsync --delete therefore removes it unless we restore the runtime
-# after synchronizing native SDK artifacts.
-PYTHONPATH="$CORE_PYTHON_SITE" \
-    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
-    --sdk-prefix "$SDK_PREFIX"
-
-PYTHONPATH="$CORE_PYTHON_SITE" \
-    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" publish-cmake-python \
-    --install-dir "$INSTALL_STAGING_DIR" \
-    --sdk-prefix "$SDK_PREFIX"
+PYTHON_LAYER_RELATIVE="$($PY_EXEC -c 'import sys, sysconfig; print("lib/python%d.%d%s/site-packages" % (sys.version_info.major, sys.version_info.minor, "t" if sysconfig.get_config_var("Py_GIL_DISABLED") else ""))')"
+if [[ ! -d "$INSTALL_STAGING_DIR/lib/python" ]]; then
+    echo "ERROR: staged Graphics Python install is missing: $INSTALL_STAGING_DIR/lib/python" >&2
+    exit 1
+fi
+mkdir -p "$SDK_PREFIX/$PYTHON_LAYER_RELATIVE"
+rsync -a --delete "$INSTALL_STAGING_DIR/lib/python"/ "$SDK_PREFIX/$PYTHON_LAYER_RELATIVE"/
 
 PYTHONPATH="$CORE_PYTHON_SITE" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
@@ -307,5 +291,5 @@ PYTHONPATH="$CORE_PYTHON_SITE" \
 
 echo ""
 echo "========================================"
-echo "  Python bindings installed to $SDK_PREFIX"
+echo "  Thin Graphics SDK layer installed to $SDK_PREFIX"
 echo "========================================"

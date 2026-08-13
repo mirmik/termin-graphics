@@ -161,8 +161,8 @@ def configure_settings(executable: Path) -> Path:
         from tcbase import Settings
     except ImportError as exc:
         raise RuntimeError(
-            "tcbase is unavailable; run this through sdk/bin/termin_python "
-            "after building or installing the Termin SDK"
+            "tcbase is unavailable; run this through the installed Core SDK's "
+            "bin/termin_python"
         ) from exc
     settings = Settings("termin")
     settings.set(SETTINGS_KEY, str(executable))

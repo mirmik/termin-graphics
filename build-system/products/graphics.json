@@ -241,7 +241,7 @@
   "python_runtime": {
     "abi": "cp314t",
     "owner": "core",
-    "inputs": ["build-system/python-runtime-lock.txt"]
+    "inputs": []
   },
   "test_suites": [
     "termin-image-tests-native",

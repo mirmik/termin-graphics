@@ -4,15 +4,15 @@
   "profiles": [
     {
       "id": "graphics",
+      "artifact_kind": "layer",
       "python_packages": null,
       "product_manifest": "graphics",
       "application_payloads": [],
-      "runtime_lock": "build-system/python-runtime-lock.txt",
+      "runtime_lock": "build-system/python-layer-lock.txt",
       "sdk_prefix": "sdk",
       "build_directory_suffix": "graphics",
       "csharp_profile": "plot-d3d11",
       "wheel_subset": [
-        "tcbase-*.whl",
         "tgfx-*.whl",
         "termin_gui_native-*.whl"
       ],

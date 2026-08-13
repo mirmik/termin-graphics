@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  CORE_REVISION: 4f973b0b81f5857944225ccc4ae3fe1106598689
+  CORE_REVISION: c53cf2c19ea806f830c8a3b17fb0da165a6124f9
 
 jobs:
   linux:
@@ -47,7 +47,7 @@ jobs:
       - name: Publish verified Linux Graphics SDK
         uses: actions/upload-artifact@v4
         with:
-          name: termin-graphics-sdk-linux-x86_64-py314t-core-4f973b0
+          name: termin-graphics-sdk-layer-linux-x86_64-py314t-core-c53cf2c
           path: sdk/
           if-no-files-found: error
           retention-days: 14
