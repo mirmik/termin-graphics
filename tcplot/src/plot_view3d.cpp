@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <tcbase/input_enums.hpp>
+#include <tcbase/tc_log.hpp>
 #include <tgfx2/descriptors.hpp>
 #include <tgfx2/enums.hpp>
 #include <tgfx2/font_atlas.hpp>
@@ -322,6 +323,10 @@ namespace tcplot {
             return tgfx::TextureHandle{};
 
         ensure_offscreen_(width, height);
+        if (!offscreen_color_ || !offscreen_depth_) {
+            tc::Log::error("PlotView3D: failed to allocate %dx%d offscreen target", width, height);
+            return {};
+        }
         engine_->set_viewport(0, 0, (float)width, (float)height);
 
         ctx_->begin_frame();
@@ -329,11 +334,11 @@ namespace tcplot {
         const SrgbColor bg = styles::bg_color();
         const termin::LinearColor clear_col = termin::srgb_to_linear(bg);
         ctx_->begin_pass(offscreen_color_, offscreen_depth_, &clear_col, 1.0f, true);
-        engine_->render(ctx_, font_);
+        const bool rendered = engine_->render(ctx_, font_);
         ctx_->end_pass();
         ctx_->end_frame();
 
-        return offscreen_color_;
+        return rendered ? offscreen_color_ : tgfx::TextureHandle{};
     }
 
     uint32_t PlotView3D::render_to_texture_id(int width, int height) {

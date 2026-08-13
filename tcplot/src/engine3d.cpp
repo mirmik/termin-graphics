@@ -762,13 +762,15 @@ namespace tcplot {
         }
     }
 
-    void PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
-        if (!ctx || vw_ <= 0 || vh_ <= 0)
-            return;
+    bool PlotEngine3D::render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
+        if (!ctx || vw_ <= 0 || vh_ <= 0) {
+            tc::Log::error("PlotEngine3D: render requires a context and a positive viewport");
+            return false;
+        }
 
         ensure_shader_(ctx->device());
         if (shader_vs_id_ == 0 || shader_fs_id_ == 0) {
-            return;
+            return false;
         }
         if (mesh_device_ != nullptr && mesh_device_ != &ctx->device()) {
             release_meshes_();
@@ -1022,6 +1024,7 @@ namespace tcplot {
         // Restore 2D state for subsequent UI rendering.
         ctx->set_depth_test(false);
         ctx->set_depth_write(false);
+        return true;
     }
 
     // ---------------------------------------------------------------------------

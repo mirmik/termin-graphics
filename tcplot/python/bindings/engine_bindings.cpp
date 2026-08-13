@@ -425,7 +425,7 @@ namespace tcplot_bindings {
             .def(
                 "render",
                 [](tcplot::PlotEngine3D& self, tgfx::RenderContext2* ctx, tgfx::FontAtlas* font) {
-                    self.render(ctx, font);
+                    return self.render(ctx, font);
                 },
                 nb::arg("ctx"),
                 nb::arg("font").none() = nb::none())

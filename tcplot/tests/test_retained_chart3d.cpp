@@ -10,6 +10,7 @@
 #include <string>
 #include <system_error>
 
+#include <tgfx2/builtin_shader_sources.hpp>
 #include <tgfx2/device_factory.hpp>
 #include <tgfx2/tc_shader_bridge.hpp>
 
@@ -29,6 +30,7 @@
 
 extern "C" {
 #include <render/tc_pass.h>
+#include <tgfx/resources/tc_shader_registry.h>
 }
 
 namespace {
@@ -587,6 +589,28 @@ int main() {
                     first_surface_payload->frame.camera.azimuth != camera.azimuth,
                 "chart-state mutation must publish values without altering older snapshots");
 
+        tgfx::set_builtin_shader_read_callback([](std::string_view path, std::string& contents) {
+            if (!path.ends_with("termin-engine-tcplot-3d.slang")) {
+                return false;
+            }
+            contents = "invalid PlotScene3D shader source";
+            return true;
+        });
+        const tc_shader_handle plot_shader = tc_shader_find("termin-engine-tcplot-3d");
+        if (tc_shader_is_valid(plot_shader)) {
+            require(tc_shader_destroy(plot_shader), "failed to invalidate the plot shader for failure testing");
+        }
+        require(tc_retained_chart3d_render(chart, 320, 240) == 0,
+                "shader preparation failure must be visible through the public render result");
+        require(snapshot(chart, surface).gpu_revision == 0 && snapshot(chart, scatter).gpu_revision == 0 &&
+                    snapshot(chart, tc_retained_chart3d_grid_part(chart)).gpu_revision == 0,
+                "failed retained render must leave every item dirty");
+
+        tgfx::set_builtin_shader_read_callback({});
+        const tc_shader_handle failed_plot_shader = tc_shader_find("termin-engine-tcplot-3d");
+        if (tc_shader_is_valid(failed_plot_shader)) {
+            require(tc_shader_destroy(failed_plot_shader), "failed to remove the rejected plot shader");
+        }
         const uint32_t first_render_texture = tc_retained_chart3d_render(chart, 320, 240);
         require(first_render_texture != 0, "initial retained render failed");
         tgfx::TextureHandle first_render_handle{};

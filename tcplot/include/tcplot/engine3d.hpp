@@ -140,7 +140,7 @@ namespace tcplot {
         // Host calls render() inside its own tgfx2 pass. The engine leaves
         // ctx in an unspecified state afterwards — host should re-assert
         // any state it relies on for subsequent draws (depth, blend, cull).
-        void render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font);
+        [[nodiscard]] bool render(tgfx::RenderContext2* ctx, tgfx::FontAtlas* font);
 
         // Release all GPU-owned resources. Safe to call after GL context
         // teardown — no GL calls issued if owner device is not set.
