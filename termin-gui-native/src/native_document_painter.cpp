@@ -157,6 +157,23 @@ namespace termin::gui_native {
         return impl_->renderer.set_default_font_path(path, default_size_px);
     }
 
+    void NativeDocumentPainter::bind_text_measurer(TcDocument document) {
+        impl_->require_open("bind_text_measurer");
+        if (!document.valid()) {
+            painter_error("cannot bind text measurement to an invalid document");
+        }
+        const tc_ui_document_handle handle = document.handle();
+        const bool already_bound = std::any_of(
+            impl_->measured_documents.begin(),
+            impl_->measured_documents.end(),
+            [handle](tc_ui_document_handle candidate) { return tc_ui_document_handle_eq(candidate, handle); });
+        if (already_bound) {
+            return;
+        }
+        impl_->renderer.bind_text_measurer(handle);
+        impl_->measured_documents.push_back(handle);
+    }
+
     std::size_t NativeDocumentPainter::prepare_documents(tgfx::RenderContext2& context,
                                                          int width,
                                                          int height,

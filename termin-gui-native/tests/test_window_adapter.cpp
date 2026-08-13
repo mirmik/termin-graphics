@@ -168,6 +168,11 @@ int main() {
             std::fprintf(stderr, "adapter did not publish initial per-window presentation metrics\n");
             return 1;
         }
+        tc_ui_text_metrics startup_text{};
+        if (!document.measure_text("startup", 7, 15.0f, startup_text) || startup_text.width <= 0.0f) {
+            std::fprintf(stderr, "adapter did not bind text measurement before the first frame\n");
+            return 1;
+        }
         window.set_should_close(true);
         if (!adapter.should_close()) {
             std::fprintf(stderr, "adapter did not expose borrowed close state\n");

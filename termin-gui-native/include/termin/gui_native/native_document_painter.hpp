@@ -44,6 +44,10 @@ namespace termin::gui_native {
 
         bool set_default_font_path(const std::string& path, int default_size_px = 14);
 
+        // Bind the configured font measurer before application code builds or
+        // lays out a document. The painter owns the binding lifetime.
+        void bind_text_measurer(TcDocument document);
+
         // Layout the submitted documents and prepare GPU-producing widgets
         // before the caller opens the UI render pass.
         std::size_t prepare_documents(tgfx::RenderContext2& context,

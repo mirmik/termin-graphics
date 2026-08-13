@@ -112,6 +112,7 @@ namespace termin::gui_native {
             if (!painter.set_default_font_path(config.font_path, config.font_size)) {
                 renderer_error("DocumentRenderer failed to load UI font: " + config.font_path);
             }
+            painter.bind_text_measurer(document);
 
             try {
                 if (!platform->set_text_input_enabled(config.enable_text_input)) {
