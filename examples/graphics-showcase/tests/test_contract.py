@@ -46,6 +46,7 @@ def test_graphics_showcase_has_one_artifact_section_and_documented_registry() ->
         "tcplot_helix",
         "tcplot_surface",
         "visual_scene_gallery",
+        "animated_skinned_glb",
         "visual_scene_nodegraph",
         "visual_scene3d_widget",
         "plot_nodegraph_composition",
@@ -131,7 +132,7 @@ def test_graphics_showcase_tabbed_frontend_builds_and_renders_every_page() -> No
                 composition.graphics,
             )
             tabs, contents = _build_tabbed_showcase(application)
-            assert tabs.page_count == 13
+            assert tabs.page_count == 14
             assert [tabs.page_title(index) for index in range(tabs.page_count)] == [
                 "Overview",
                 "Native UI",
@@ -143,6 +144,7 @@ def test_graphics_showcase_tabbed_frontend_builds_and_renders_every_page() -> No
                 "3D Helix",
                 "3D Surface",
                 "Visual Scene",
+                "Animated GLB",
                 "Nodegraph",
                 "SceneView3D",
                 "Composition",
@@ -261,7 +263,9 @@ def test_restored_tcplot_example_entry_points_are_complete() -> None:
         "demo_3d_surface.py",
     }
     assert {path.name for path in examples.glob("demo_*.py")} == expected
-    gallery = (examples / "_gallery.py").read_text(encoding="utf-8")
+    gallery = (
+        REPO_ROOT / "tcplot-gui-native" / "python" / "tcplot_gui_native" / "gallery.py"
+    ).read_text(encoding="utf-8")
     for builder in (
         "sine_plot",
         "scatter_plot",

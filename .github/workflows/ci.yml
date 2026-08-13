@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+          ref: d860ca231693ed0b1eaa52e0a6121c15c9e0966b
           submodules: recursive
       - uses: actions/setup-python@v6
         with:
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+          ref: d860ca231693ed0b1eaa52e0a6121c15c9e0966b
           submodules: recursive
       - uses: actions/setup-python@v6
         with:
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+          ref: d860ca231693ed0b1eaa52e0a6121c15c9e0966b
       - name: Build installed Android Core SDK input
         run: ./build-sdk-android.sh --ndk "$ANDROID_NDK_LATEST_HOME"
       - uses: actions/upload-artifact@v5
@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+          ref: d860ca231693ed0b1eaa52e0a6121c15c9e0966b
       - name: Cache pinned Emscripten toolchain
         uses: actions/cache@v5
         with:
@@ -101,6 +101,8 @@ jobs:
           python-version: "3.14"
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
+      - name: Setup Slang compiler
+        uses: ./.github/actions/setup-slang
       - uses: actions/download-artifact@v5
         with:
           name: core-sdk-linux
@@ -110,6 +112,14 @@ jobs:
           scripts/smoke-installed-core-source-hidden \
             --profile graphics \
             --core-sdk "${{ github.workspace }}/core-sdk"
+      - name: Build and prove the standalone Graphics SDK
+        run: |
+          ./build-sdk.sh \
+            --profile graphics \
+            --core-sdk "${{ github.workspace }}/core-sdk"
+          scripts/smoke-installed-graphics-consumers \
+            --sdk-root "${{ github.workspace }}/sdk" \
+            --slangc "$TERMIN_SLANGC"
 
   core-consumer-source-hidden-windows:
     needs: core-sdk-windows

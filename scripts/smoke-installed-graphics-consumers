@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""Prove a relocated Graphics SDK without access to the Termin checkout."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_ROOT = REPO_ROOT / "tests" / "installed-graphics-consumers"
+SHOWCASE_ROOT = REPO_ROOT / "examples" / "graphics-showcase"
+SHOWCASE_SMOKE = REPO_ROOT / "scripts" / "smoke-graphics-showcase"
+
+
+class SmokeError(RuntimeError):
+    pass
+
+
+def _run(command: list[str], *, env: dict[str, str], cwd: Path | None = None) -> None:
+    print("+", subprocess.list2cmdline(command), flush=True)
+    result = subprocess.run(command, cwd=cwd, env=env, check=False)
+    if result.returncode != 0:
+        raise SmokeError(
+            f"command failed with exit code {result.returncode}: "
+            + subprocess.list2cmdline(command)
+        )
+
+
+def _clean_environment(sdk_root: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    for name in (
+        "CMAKE_PREFIX_PATH",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONUSERBASE",
+        "TERMIN_PYTHON_OVERLAY",
+        "TERMIN_SDK",
+        "TERMIN_CORE_SDK",
+        "TERMIN_CORE_BUILD_ID",
+    ):
+        env.pop(name, None)
+    library_path_name = "PATH" if os.name == "nt" else "LD_LIBRARY_PATH"
+    paths = [sdk_root / "bin", sdk_root / "lib"]
+    if os.name == "nt" and env.get(library_path_name):
+        paths.append(Path(env[library_path_name]))
+    env[library_path_name] = os.pathsep.join(str(path) for path in paths)
+    return env
+
+
+def _configure(
+    fixture: Path, build_root: Path, sdk_root: Path, env: dict[str, str]
+) -> subprocess.CompletedProcess[bytes]:
+    command = [
+        "cmake",
+        "-S",
+        str(fixture),
+        "-B",
+        str(build_root),
+        "-DGRAPHICS_SDK_ROOT=" + str(sdk_root),
+        "-DCMAKE_PREFIX_PATH=" + str(sdk_root),
+        "-DCMAKE_BUILD_TYPE=Release",
+    ]
+    print("+", subprocess.list2cmdline(command), flush=True)
+    return subprocess.run(command, env=env, check=False)
+
+
+def _executable(build_root: Path, name: str) -> Path:
+    suffix = ".exe" if os.name == "nt" else ""
+    matches = sorted(build_root.rglob(name + suffix))
+    if len(matches) != 1:
+        raise SmokeError(f"expected one {name + suffix} in {build_root}, got {matches}")
+    return matches[0]
+
+
+def _verify_manifests(sdk_root: Path) -> None:
+    try:
+        product = json.loads((sdk_root / "sdk-product.json").read_text())
+        inputs = json.loads((sdk_root / "sdk-inputs.json").read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise SmokeError(f"installed SDK manifests are invalid: {error}") from error
+    if product.get("profile_id") != "graphics":
+        raise SmokeError(f"expected graphics product, got {product.get('profile_id')!r}")
+    core_inputs = [item for item in inputs.get("inputs", []) if item.get("product_id") == "core"]
+    if len(core_inputs) != 1 or not core_inputs[0].get("native_build_id"):
+        raise SmokeError("Graphics SDK must record exactly one identified Core SDK input")
+
+
+def _select_slangc(explicit: Path | None) -> Path:
+    candidate = explicit or (Path(os.environ["TERMIN_SLANGC"]) if os.environ.get("TERMIN_SLANGC") else None)
+    if candidate is None:
+        found = shutil.which("slangc")
+        candidate = Path(found) if found else None
+    if candidate is None or not candidate.resolve().is_file():
+        raise SmokeError("slangc is required; pass --slangc or set TERMIN_SLANGC")
+    return candidate.resolve()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sdk-root", type=Path, required=True)
+    parser.add_argument("--work-root", type=Path)
+    parser.add_argument("--slangc", type=Path)
+    args = parser.parse_args()
+
+    source_sdk = args.sdk_root.resolve()
+    launcher = "termin_python.exe" if os.name == "nt" else "termin_python"
+    if not (source_sdk / "bin" / launcher).is_file():
+        parser.error(f"Graphics SDK launcher is missing: {source_sdk / 'bin' / launcher}")
+
+    temporary = None
+    if args.work_root is None:
+        temporary = tempfile.TemporaryDirectory(prefix="termin-graphics-consumers-")
+        work_root = Path(temporary.name)
+    else:
+        work_root = args.work_root.resolve()
+        if work_root.exists():
+            parser.error(f"work root already exists: {work_root}")
+        work_root.mkdir(parents=True)
+
+    try:
+        slangc = _select_slangc(args.slangc)
+        relocated_sdk = work_root / "sdk"
+        fixture = work_root / "consumer"
+        source_hidden = work_root / "source-hidden"
+        artifacts = work_root / "artifacts"
+        shutil.copytree(source_sdk, relocated_sdk, symlinks=True)
+        shutil.copytree(FIXTURE_ROOT, fixture)
+        shutil.copytree(SHOWCASE_ROOT, source_hidden / "examples" / "graphics-showcase")
+        (source_hidden / "scripts").mkdir(parents=True)
+        shutil.copy2(SHOWCASE_SMOKE, source_hidden / "scripts" / "smoke-graphics-showcase")
+        artifacts.mkdir()
+
+        _verify_manifests(relocated_sdk)
+        python = relocated_sdk / "bin" / launcher
+        env = _clean_environment(relocated_sdk)
+        glb_path = artifacts / "animated-skinned-triangle.glb"
+        _run(
+            [str(python), "-I", str(fixture / "python_consumer.py"),
+             "--sdk-root", str(relocated_sdk), "--work-root", str(artifacts),
+             "--slangc", str(slangc)],
+            env=env,
+            cwd=work_root,
+        )
+
+        package = relocated_sdk / "lib" / "cmake" / "termin_glb"
+        hidden_package = work_root / "termin_glb-package"
+        package.rename(hidden_package)
+        try:
+            negative = _configure(fixture, work_root / "negative-build", relocated_sdk, env)
+            if negative.returncode == 0:
+                raise SmokeError(
+                    "consumer configured without installed termin_glb; a fallback is active"
+                )
+        finally:
+            hidden_package.rename(package)
+
+        build_root = work_root / "build"
+        configured = _configure(fixture, build_root, relocated_sdk, env)
+        if configured.returncode != 0:
+            raise SmokeError("installed Graphics native consumer configuration failed")
+        _run(["cmake", "--build", str(build_root), "--config", "Release"], env=env)
+        _run([str(_executable(build_root, "graphics_native_consumer")), str(glb_path)], env=env)
+
+        _run(
+            [str(source_hidden / "scripts" / "smoke-graphics-showcase"),
+             "--sdk-root", str(relocated_sdk),
+             "--output-dir", str(artifacts / "showcase")],
+            env=env,
+            cwd=source_hidden,
+        )
+        print("Installed relocated Graphics consumers: OK")
+        return 0
+    except (OSError, SmokeError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

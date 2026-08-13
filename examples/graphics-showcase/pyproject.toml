@@ -6,10 +6,13 @@ dependencies = [
     "numpy",
     "tcplot",
     "tcplot-gui-native",
+    "termin-animation",
+    "termin-glb",
     "termin-graphics-mcp",
     "termin-gui-native",
     "termin-image",
     "termin-nodegraph",
+    "termin-skeleton",
     "termin-visual-scene",
     "tgfx",
 ]

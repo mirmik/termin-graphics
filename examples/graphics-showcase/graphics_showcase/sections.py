@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
-from functools import lru_cache
 import math
 from pathlib import Path
 import sys
+import tempfile
+import uuid
 
 import numpy as np
 
@@ -29,6 +29,7 @@ from termin.visual_scene import (
 )
 
 from .model import Section, SectionContent
+from .animated_glb import write_animated_skinned_glb
 
 
 _REQUIRED_IMPORTS = (
@@ -43,6 +44,9 @@ _REQUIRED_IMPORTS = (
     ("termin-visual-scene", "termin.visual_scene"),
     ("termin-inspect", "termin.inspect"),
     ("termin-shader-runtime", "termin.shader_runtime"),
+    ("termin-skeleton", "termin.skeleton"),
+    ("termin-animation", "termin.animation"),
+    ("termin-glb", "termin.glb"),
     ("termin-gui-native", "termin.gui_native"),
     ("termin-nodegraph", "tcnodegraph"),
     ("tcplot", "tcplot"),
@@ -277,19 +281,9 @@ def _populate_plot_3d(plot: Plot3D) -> dict[str, object]:
     }
 
 
-@lru_cache(maxsize=1)
-def _tcplot_gallery_module():
-    source = Path(__file__).resolve().parents[3] / "tcplot" / "examples" / "_gallery.py"
-    spec = importlib.util.spec_from_file_location("termin_graphics_showcase_tcplot_gallery", source)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"failed to load restored tcplot gallery: {source}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _tcplot_example(application, builder_name: str, facts: dict[str, object]) -> SectionContent:
-    gallery = _tcplot_gallery_module()
+    from tcplot_gui_native import gallery
+
     builder = vars(gallery)[builder_name]
     root = builder(application.document)
     if not application.document.add_root(root.handle):
@@ -511,6 +505,102 @@ def _visual_scene_gallery(application) -> SectionContent:
             "hit_region": hit.type_name,
         },
     )
+
+
+def _animated_skinned_glb(application) -> SectionContent:
+    """Load a real GLB closure and present its sampled skeletal pose."""
+
+    from termin.animation import clip_from_glb
+    from termin.geombase import SrgbColor
+    from termin.glb import load_glb_file
+    from termin.skeleton import TcSkeleton
+
+    temporary = tempfile.TemporaryDirectory(prefix="termin-showcase-glb-")
+    glb_path = Path(temporary.name) / "animated-skinned-triangle.glb"
+    try:
+        write_animated_skinned_glb(glb_path)
+        loaded = load_glb_file(glb_path)
+        if len(loaded.meshes) != 1 or not loaded.meshes[0].is_skinned:
+            raise RuntimeError("showcase GLB did not load as one skinned mesh")
+        if len(loaded.skins) != 1 or len(loaded.animations) != 1:
+            raise RuntimeError("showcase GLB lost its skin or animation")
+
+        skeleton = TcSkeleton.create("ShowcaseArmature", str(uuid.uuid4()))
+        identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+        skeleton.set_bones([
+            {"name": "Root", "parent_index": -1, "inverse_bind_matrix": identity,
+             "bind_translation": (0, 0, 0), "bind_rotation": (0, 0, 0, 1),
+             "bind_scale": (1, 1, 1)},
+            {"name": "Tip", "parent_index": 0, "inverse_bind_matrix": identity,
+             "bind_translation": (0, 1, 0), "bind_rotation": (0, 0, 0, 1),
+             "bind_scale": (1, 1, 1)},
+        ])
+        clip = clip_from_glb(loaded.animations[0], str(uuid.uuid4()))
+        channel = loaded.animations[0].channels[0]
+        sample_time = 0.5
+        first, second = channel.pos_keys
+        alpha = (sample_time - float(first[0])) / (float(second[0]) - float(first[0]))
+        sampled_tip_x = float(first[1][0]) * (1.0 - alpha) + float(second[1][0]) * alpha
+
+        scene = tc_visual_scene_create()
+        view = application.document.create_scene_view(scene)
+        view.widget.stable_id = "graphics-showcase.animated-skinned-glb"
+        view.widget.preferred_size = Size(1160.0, 700.0)
+        view.set_scene_colors(
+            SrgbColor(0.025, 0.035, 0.055, 1.0),
+            SrgbColor(0.08, 0.12, 0.18, 0.85),
+            SrgbColor(0.24, 0.34, 0.48, 0.9),
+        )
+        view.offset = Point(170.0, 610.0)
+        scale = 390.0
+        triangle = [(-0.7 * scale, 0.0), (0.7 * scale, 0.0),
+                    (sampled_tip_x * scale, -1.2 * scale), (-0.7 * scale, 0.0)]
+        scene.create_polyline(triangle, SrgbColor(0.30, 0.78, 1.0, 1.0), 12.0, True)
+        root = (0.0, 0.0)
+        tip = (sampled_tip_x * scale, -1.0 * scale)
+        scene.create_polyline([root, tip], SrgbColor(1.0, 0.62, 0.20, 1.0), 18.0, False)
+        scene.create_ellipse((-22.0, -22.0, 44.0, 44.0),
+                             SrgbColor(1.0, 0.80, 0.25, 1.0))
+        scene.create_ellipse((tip[0] - 24.0, tip[1] - 24.0, 48.0, 48.0),
+                             SrgbColor(1.0, 0.42, 0.24, 1.0))
+        scene.create_text(
+            "Animated skinned GLB · Wave at t=0.5s",
+            (420.0, -530.0), 28.0, SrgbColor(0.92, 0.96, 1.0, 1.0),
+            (400.0, -570.0, 620.0, 50.0),
+        )
+        scene.create_text(
+            "1 mesh  ·  2 joints  ·  1 skin  ·  1 animation",
+            (420.0, -470.0), 21.0, SrgbColor(0.58, 0.78, 0.94, 1.0),
+            (400.0, -505.0, 650.0, 45.0),
+        )
+        if not application.document.add_root(view.widget.handle):
+            tc_visual_scene_destroy(scene)
+            raise RuntimeError("failed to add animated GLB showcase root")
+
+        def cleanup() -> None:
+            try:
+                tc_visual_scene_destroy(scene)
+            finally:
+                temporary.cleanup()
+
+        return SectionContent(
+            root=view.widget,
+            cleanup=cleanup,
+            facts={
+                "source": "generated GLB 2.0 binary",
+                "meshes": len(loaded.meshes),
+                "skinned": loaded.meshes[0].is_skinned,
+                "skins": len(loaded.skins),
+                "bones": skeleton.bone_count,
+                "animations": len(loaded.animations),
+                "clip_duration": clip.duration,
+                "sample_time": sample_time,
+                "sampled_tip_translation_x": sampled_tip_x,
+            },
+        )
+    except Exception:
+        temporary.cleanup()
+        raise
 
 
 def _visual_scene_nodegraph(application) -> SectionContent:
@@ -804,6 +894,12 @@ def section_registry() -> tuple[Section, ...]:
             description="Retained primitives, hierarchy, transforms, opacity and hit regions",
             capabilities=("termin-visual-scene", "retained-2d", "transforms", "hit-test"),
             build=_visual_scene_gallery,
+        ),
+        Section(
+            name="animated_skinned_glb",
+            description="Loaded GLB mesh, skeleton and sampled animation pose",
+            capabilities=("termin-glb", "termin-skeleton", "termin-animation", "skinning"),
+            build=_animated_skinned_glb,
         ),
         Section(
             name="visual_scene_nodegraph",

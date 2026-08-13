@@ -99,7 +99,10 @@ if(TERMIN_BUILD_PYTHON)
         termin_set_rpath_python(_tcplot_gui_native)
     endif()
     install(TARGETS _tcplot_gui_native DESTINATION lib/python/tcplot_gui_native)
-    install(FILES python/tcplot_gui_native/__init__.py DESTINATION lib/python/tcplot_gui_native)
+    install(FILES
+        python/tcplot_gui_native/__init__.py
+        python/tcplot_gui_native/gallery.py
+        DESTINATION lib/python/tcplot_gui_native)
 endif()
 
 install(TARGETS tcplot_gui_native

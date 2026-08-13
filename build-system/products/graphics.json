@@ -199,11 +199,14 @@
       "internal_dependencies": [
         "tcplot",
         "tcplot-gui-native",
+        "termin-animation",
+        "termin-glb",
         "termin-graphics",
         "termin-graphics-mcp",
         "termin-gui-native",
         "termin-image",
         "termin-nodegraph",
+        "termin-skeleton",
         "termin-visual-scene"
       ],
       "external_dependencies": [],
@@ -278,7 +281,10 @@
     "termin-tween-tests",
     "graphics-showcase-tests"
   ],
-  "smoke_fixtures": ["examples/graphics-showcase"],
+  "smoke_fixtures": [
+    "examples/graphics-showcase",
+    "tests/installed-graphics-consumers"
+  ],
   "resources": ["termin-graphics/resources"],
   "forbidden_dependency_roots": [
     "termin-app",

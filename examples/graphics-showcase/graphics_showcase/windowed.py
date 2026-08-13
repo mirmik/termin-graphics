@@ -29,6 +29,7 @@ _SECTION_TITLES = {
     "tcplot_helix": "3D Helix",
     "tcplot_surface": "3D Surface",
     "visual_scene_gallery": "Visual Scene",
+    "animated_skinned_glb": "Animated GLB",
     "visual_scene_nodegraph": "Nodegraph",
     "visual_scene3d_widget": "SceneView3D",
     "plot_nodegraph_composition": "Composition",

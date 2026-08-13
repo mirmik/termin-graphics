@@ -23,9 +23,10 @@ Current status:
 - stage 2 is complete: `build-system/products/graphics.json` is the canonical
   schema-2 closure and the `graphics` SDK profile projects its Python packages
   from that manifest;
-- the current monorepo can build and verify a composed Graphics SDK against an
-  installed Core SDK; stage 3 still requires source-hidden installed consumer
-  fixtures, including the animated GLB showcase.
+- stage 3 is implemented: the composed Graphics SDK is relocated outside the
+  checkout and verified through native CMake and isolated Python consumers,
+  shader/material compilation, MCP readback and an animated skinned GLB
+  showcase; removal of an installed GLB package is a mandatory negative test.
 
 ## Goal
 

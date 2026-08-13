@@ -37,6 +37,7 @@ with its name and makes the process fail.
 | `tcplot_helix` | Double helix and deterministic 3D scatter |
 | `tcplot_surface` | Sinc surface, Viridis colorbar, wireframe and z scaling |
 | `visual_scene_gallery` | Retained shapes, hierarchy, transforms, opacity, z-order and hit regions |
+| `animated_skinned_glb` | Loaded GLB mesh, two-joint skeleton and sampled animation pose |
 | `visual_scene_nodegraph` | Visual-scene primitives, nodegraph model and projection |
 | `visual_scene3d_widget` | Retained 3D items, camera provider, orbit fallback and item actions in `SceneView3D` |
 | `plot_nodegraph_composition` | Plot2D and Plot3D embedded as node-body widgets |
