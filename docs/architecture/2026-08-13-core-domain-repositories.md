@@ -4,11 +4,13 @@ Date: 2026-08-13
 
 Status: accepted and implemented for the Core boundary. `termin-core` is the
 authoritative repository; Termin contains only installed-SDK consumer metadata
-for Core. Graphics, Physics and Engine extraction remain future stages.
+for Core. Graphics extraction is in progress; Physics and Engine extraction
+remain future stages.
 
 Implementation plan:
 
 - [Termin Core repository extraction plan](../plans/2026-08-13-termin-core-repository-extraction.md)
+- [Termin Graphics repository extraction plan](../plans/2026-08-13-termin-graphics-repository-extraction.md)
 
 Earlier analysis:
 
@@ -160,14 +162,20 @@ product:
 - materials and scene-neutral render core;
 - window hosting;
 - visual scene, native GUI, node graph and plotting;
-- optional leaf format adapters such as a scene-neutral glTF document/visual
-  integration;
+- skeleton data and scene-neutral skeletal runtime;
+- animation data and scene-neutral playback runtime;
+- GLB/glTF document loading and visual presentation, including skinned and
+  animated models;
 - graphics showcase and Graphics SDK verification.
 
 `termin-assets`, engine scene components and editor integration remain outside
-this repository. glTF/GLB may be distributed with Graphics as an optional leaf
-capability, but graphics and visual-scene foundations never depend on that
-format.
+this repository. Existing skeleton, animation and GLB packages currently mix
+portable domain code with asset wrappers, Entity/component adapters and editor
+integration. Extraction must split those adapters at the repository boundary:
+the portable formats and runtimes belong to Graphics, while Termin keeps the
+`termin-assets` and engine-scene integration. GLB support is part of the
+Graphics deliverable, although lower GPU, mesh, shader and material foundations
+must remain usable without importing the GLB layer.
 
 ## Physics responsibility
 
