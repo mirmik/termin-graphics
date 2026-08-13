@@ -119,6 +119,15 @@ runtime installation and pack composition. Graphics, physics and engine own
 their product closures, build recipes, smoke tests and application payload
 rules.
 
+Domain product manifests use an explicit external-product closure. A Graphics
+module classifies each dependency as Graphics-owned, supplied by installed
+Core, or inactive in the selected product projection. Composition validates
+each input wheel set against its owning SDK before atomically publishing the
+combined wheelhouse; filename collisions and undeclared installed
+distributions are hard errors. The output runtime manifest describes the full
+installed closure, while `sdk-inputs.json` retains the exact source product and
+native build identity.
+
 ### `termin-mcp` adapters
 
 `termin-mcp` is part of the Core closure. It owns process-neutral JSON-RPC/MCP

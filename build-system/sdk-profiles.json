@@ -28,27 +28,8 @@
     },
     {
       "id": "graphics",
-      "python_packages": [
-        "termin-build-tools",
-        "termin-nanobind-sdk",
-        "termin-base",
-        "termin-dispatch",
-        "termin-image",
-        "termin-tween",
-        "termin-mesh",
-        "termin-graphics",
-        "termin-mcp",
-        "termin-graphics-mcp",
-        "termin-visual-scene",
-        "termin-inspect",
-        "termin-shader-runtime",
-        "termin-gui-native",
-        "termin-nodegraph",
-        "termin-window",
-        "tcplot",
-        "tcplot-gui-native"
-      ],
-      "product_manifest": null,
+      "python_packages": null,
+      "product_manifest": "graphics",
       "application_payloads": [],
       "runtime_lock": "build-system/python-runtime-lock.txt",
       "sdk_prefix": "sdk",
@@ -71,7 +52,7 @@
         "termin.visual_scene",
         "termin.gui_native"
       ],
-      "forbidden_artifacts_from_product": false
+      "forbidden_artifacts_from_product": true
     }
   ]
 }

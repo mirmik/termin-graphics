@@ -1,0 +1,15 @@
+[project]
+name = "termin-graphics-showcase"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy",
+    "tcplot",
+    "tcplot-gui-native",
+    "termin-graphics-mcp",
+    "termin-gui-native",
+    "termin-image",
+    "termin-nodegraph",
+    "termin-visual-scene",
+    "tgfx",
+]

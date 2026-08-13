@@ -1,0 +1,312 @@
+{
+  "schema": 2,
+  "id": "graphics",
+  "description": "Reusable Termin Graphics SDK product over an installed Core SDK.",
+  "modules": [
+    {
+      "path": "termin-image",
+      "role": "runtime",
+      "internal_dependencies": [],
+      "external_dependencies": ["termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_image", "_image_native"],
+      "python_distribution": "termin-image"
+    },
+    {
+      "path": "termin-tween",
+      "role": "runtime",
+      "internal_dependencies": [],
+      "external_dependencies": [],
+      "inactive_dependencies": [],
+      "native_targets": [],
+      "python_distribution": "termin-tween"
+    },
+    {
+      "path": "termin-mesh",
+      "role": "runtime",
+      "internal_dependencies": [],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_mesh", "_tmesh_native"],
+      "python_distribution": "tmesh"
+    },
+    {
+      "path": "termin-graphics",
+      "role": "runtime",
+      "internal_dependencies": ["termin-mesh"],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": [
+        "glad",
+        "termin_graphics",
+        "termin_graphics2",
+        "termin_graphics_binding_policy",
+        "termin_graphics_process_runner",
+        "_tgfx_native"
+      ],
+      "python_distribution": "tgfx"
+    },
+    {
+      "path": "termin-graphics-mcp",
+      "role": "runtime",
+      "internal_dependencies": ["termin-image", "termin-graphics"],
+      "external_dependencies": ["termin-mcp"],
+      "inactive_dependencies": [],
+      "native_targets": [],
+      "python_distribution": "termin-graphics-mcp"
+    },
+    {
+      "path": "termin-visual-scene",
+      "role": "runtime",
+      "internal_dependencies": ["termin-mesh", "termin-graphics", "termin-window"],
+      "external_dependencies": ["termin-base", "termin-inspect", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_visual_scene", "_visual_scene_native"],
+      "python_distribution": "termin-visual-scene"
+    },
+    {
+      "path": "termin-materials",
+      "role": "runtime",
+      "internal_dependencies": ["termin-graphics"],
+      "external_dependencies": ["termin-base", "termin-inspect", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_materials", "_materials_native"],
+      "python_distribution": "termin-materials"
+    },
+    {
+      "path": "termin-shader-runtime",
+      "role": "runtime",
+      "internal_dependencies": [],
+      "external_dependencies": ["termin-base"],
+      "inactive_dependencies": [],
+      "native_targets": [],
+      "python_distribution": "termin-shader-runtime"
+    },
+    {
+      "path": "termin-render",
+      "role": "runtime",
+      "internal_dependencies": ["termin-graphics", "termin-materials"],
+      "external_dependencies": ["termin-base", "termin-inspect"],
+      "inactive_dependencies": ["termin-lighting", "termin-nanobind-sdk", "termin-scene"],
+      "native_targets": ["termin_render_core"],
+      "inactive_native_targets": [
+        "termin_render",
+        "termin_render_project_surface_test_plugin",
+        "_render_framework_native",
+        "_render_native"
+      ],
+      "python_distribution": null
+    },
+    {
+      "path": "termin-window",
+      "role": "runtime",
+      "internal_dependencies": ["termin-graphics"],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_window", "_window_native"],
+      "python_distribution": "termin-window"
+    },
+    {
+      "path": "termin-gui-native",
+      "role": "runtime",
+      "internal_dependencies": ["termin-graphics", "termin-visual-scene", "termin-window"],
+      "external_dependencies": ["termin-base", "termin-inspect", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": [
+        "termin_gui_native",
+        "termin_gui_native_document_renderer",
+        "termin_gui_native_offscreen",
+        "termin_gui_native_window_adapter",
+        "termin_gui_native_window_input",
+        "termin_gui_native_example_support",
+        "termin_gui_native_visual_scene_example_support",
+        "_gui_native",
+        "_gui_native_window"
+      ],
+      "python_distribution": "termin-gui-native"
+    },
+    {
+      "path": "termin-nodegraph",
+      "role": "runtime",
+      "internal_dependencies": ["termin-gui-native", "termin-visual-scene"],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_nodegraph_core", "_nodegraph_native"],
+      "python_distribution": "termin-nodegraph"
+    },
+    {
+      "path": "tcplot",
+      "role": "runtime",
+      "internal_dependencies": ["termin-mesh", "termin-graphics", "termin-visual-scene"],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["tcplot", "_tcplot_native"],
+      "python_distribution": "tcplot"
+    },
+    {
+      "path": "tcplot-gui-native",
+      "role": "runtime",
+      "internal_dependencies": ["termin-gui-native", "tcplot"],
+      "external_dependencies": ["termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["tcplot_gui_native", "_tcplot_gui_native"],
+      "python_distribution": "tcplot-gui-native"
+    },
+    {
+      "path": "termin-skeleton",
+      "role": "runtime",
+      "internal_dependencies": [],
+      "external_dependencies": ["termin-base", "termin-inspect", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_skeleton", "_skeleton_native"],
+      "python_distribution": "termin-skeleton"
+    },
+    {
+      "path": "termin-animation",
+      "role": "runtime",
+      "internal_dependencies": ["termin-skeleton"],
+      "external_dependencies": ["termin-base", "termin-inspect", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_animation", "_animation_native"],
+      "python_distribution": "termin-animation"
+    },
+    {
+      "path": "termin-glb-native",
+      "role": "binding-runtime",
+      "internal_dependencies": ["termin-mesh"],
+      "external_dependencies": ["termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": [],
+      "python_distribution": "termin-glb-native"
+    },
+    {
+      "path": "termin-glb",
+      "role": "runtime",
+      "internal_dependencies": [
+        "termin-animation",
+        "termin-glb-native",
+        "termin-mesh",
+        "termin-skeleton"
+      ],
+      "external_dependencies": ["termin-base", "termin-nanobind-sdk"],
+      "inactive_dependencies": [],
+      "native_targets": ["termin_glb", "_glb_native"],
+      "python_distribution": "termin-glb"
+    },
+    {
+      "path": "examples/graphics-showcase",
+      "role": "application",
+      "internal_dependencies": [
+        "tcplot",
+        "tcplot-gui-native",
+        "termin-graphics",
+        "termin-graphics-mcp",
+        "termin-gui-native",
+        "termin-image",
+        "termin-nodegraph",
+        "termin-visual-scene"
+      ],
+      "external_dependencies": [],
+      "inactive_dependencies": [],
+      "native_targets": [],
+      "python_distribution": null
+    }
+  ],
+  "external_products": [
+    {
+      "id": "core",
+      "modules": [
+        {"path": "termin-nanobind-sdk", "python_distribution": "termin-nanobind"},
+        {"path": "termin-base", "python_distribution": "tcbase"},
+        {"path": "termin-inspect", "python_distribution": "termin-inspect"},
+        {"path": "termin-mcp", "python_distribution": "termin-mcp"}
+      ],
+      "cmake_packages": ["nanobind", "termin_base", "termin_inspect"]
+    }
+  ],
+  "cmake_packages": [
+    "termin_image",
+    "termin_mesh",
+    "termin_graphics",
+    "termin_visual_scene",
+    "termin_materials",
+    "termin_render_core",
+    "termin_window",
+    "termin_gui_native",
+    "termin_nodegraph",
+    "tcplot",
+    "tcplot_gui_native",
+    "termin_skeleton",
+    "termin_animation",
+    "termin_glb"
+  ],
+  "python_runtime": {
+    "abi": "cp314t",
+    "owner": "core",
+    "inputs": ["build-system/python-runtime-lock.txt"]
+  },
+  "test_suites": [
+    "termin-image-tests-native",
+    "termin-mesh-tests-python",
+    "termin-graphics-tests-native",
+    "termin-graphics-tests-python",
+    "tgfx2-d3d11-bound-smoke",
+    "termin-graphics-mcp-tests",
+    "termin-visual-scene-tests-native",
+    "termin-visual-scene-tests-python",
+    "termin-materials-tests-native",
+    "termin-materials-tests",
+    "termin-shader-runtime-tests",
+    "termin-render-tests-native",
+    "termin-render-tests",
+    "termin-window-tests-native",
+    "termin-window-tests-python",
+    "termin-gui-native-tests",
+    "termin-gui-native-python-tests",
+    "termin-nodegraph-tests-native",
+    "termin-nodegraph-tests",
+    "tcplot-tests-native",
+    "tcplot-tests-python",
+    "tcplot-gui-native-tests",
+    "tcplot-gui-native-tests-python",
+    "termin-skeleton-tests-native",
+    "termin-skeleton-tests",
+    "termin-animation-tests",
+    "termin-glb-native-tests",
+    "termin-glb-tests-native",
+    "termin-glb-tests",
+    "termin-tween-tests",
+    "graphics-showcase-tests"
+  ],
+  "smoke_fixtures": ["examples/graphics-showcase"],
+  "resources": ["termin-graphics/resources"],
+  "forbidden_dependency_roots": [
+    "termin-app",
+    "termin-assets",
+    "termin-bootstrap",
+    "termin-components",
+    "termin-default-assets",
+    "termin-engine",
+    "termin-glb-adapters",
+    "termin-player",
+    "termin-project",
+    "termin-project-build",
+    "termin-project-modules",
+    "termin-runtime",
+    "termin-scene"
+  ],
+  "forbidden_artifact_markers": [
+    "termin/assets",
+    "termin/bootstrap",
+    "termin/components",
+    "termin/default_assets",
+    "termin/engine",
+    "termin/glb_adapters",
+    "termin/player",
+    "termin/project",
+    "termin/scene",
+    "termin_editor",
+    "termin_launcher",
+    "termin_player"
+  ]
+}

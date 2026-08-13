@@ -16,6 +16,17 @@ Taskboard:
 - #1623 - installed Graphics consumption from Termin;
 - #1624 - duplicated-source removal and ownership cutover.
 
+Current status:
+
+- stages 0 and 1 are complete: the portable GLB/skeleton/animation closure is
+  separated from Termin-owned adapters;
+- stage 2 is complete: `build-system/products/graphics.json` is the canonical
+  schema-2 closure and the `graphics` SDK profile projects its Python packages
+  from that manifest;
+- the current monorepo can build and verify a composed Graphics SDK against an
+  installed Core SDK; stage 3 still requires source-hidden installed consumer
+  fixtures, including the animated GLB showcase.
+
 ## Goal
 
 Create an independently buildable and distributable `termin-graphics`
@@ -111,6 +122,17 @@ Exit criteria:
 - assets, engine scene/ECS and product hosts are rejected;
 - GLB, skeleton and animation are present in the validated closure;
 - repository validation detects undeclared and reversed dependencies.
+
+Implemented contract:
+
+- owned, external-product and deliberately inactive dependency edges are
+  represented separately;
+- Core remains the Python runtime owner and contributes validated immutable
+  wheels/CMake packages to the composed Graphics SDK;
+- first-party wheel sets are composed atomically, reject filename collisions
+  and are re-manifested under the resulting Graphics SDK identity;
+- installed runtime metadata includes both Graphics-owned and input-product
+  distributions while `sdk-inputs.json` preserves their product provenance.
 
 ## Stage 3: prove a standalone Graphics SDK
 
