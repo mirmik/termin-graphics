@@ -24,22 +24,11 @@ namespace tgfx::d3d11_internal {
         if (semantic.empty()) {
             return {"TEXCOORD", 0};
         }
-
-        semantic = uppercase_ascii(std::move(semantic));
-        size_t suffix_start = semantic.size();
-        while (suffix_start > 0 && std::isdigit(static_cast<unsigned char>(semantic[suffix_start - 1]))) {
-            --suffix_start;
+        D3D11InputSemantic parsed = normalize_reflected_semantic(semantic, 0);
+        if (parsed.name.empty()) {
+            parsed.name = "TEXCOORD";
         }
-        if (suffix_start == semantic.size()) {
-            return {std::move(semantic), 0};
-        }
-
-        const std::string suffix = semantic.substr(suffix_start);
-        semantic.resize(suffix_start);
-        if (semantic.empty()) {
-            return {"TEXCOORD", static_cast<UINT>(std::stoul(suffix))};
-        }
-        return {std::move(semantic), static_cast<UINT>(std::stoul(suffix))};
+        return parsed;
     }
 
     static D3D11InputSemantic d3d11_semantic_for_logical_attribute(std::string semantic) {
@@ -121,7 +110,7 @@ namespace tgfx::d3d11_internal {
             if (param.SystemValueType != D3D_NAME_UNDEFINED) {
                 continue;
             }
-            out.push_back({param.SemanticName, param.SemanticIndex});
+            out.push_back(normalize_reflected_semantic(param.SemanticName, param.SemanticIndex));
         }
         return out;
     }
@@ -163,9 +152,11 @@ namespace tgfx::d3d11_internal {
             if (FAILED(hr) || !param.SemanticName) {
                 continue;
             }
+            const D3D11InputSemantic semantic =
+                normalize_reflected_semantic(param.SemanticName, param.SemanticIndex);
             out.push_back({
-                param.SemanticName,
-                param.SemanticIndex,
+                semantic.name,
+                semantic.index,
                 param.Register,
                 param.Mask,
                 param.SystemValueType,

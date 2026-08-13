@@ -12,6 +12,8 @@
 
 #include "tgfx2_ordered_mrt_smoke.hpp"
 
+#include "../src/tgfx2/d3d11/d3d11_shader_reflection.hpp"
+
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -231,6 +233,14 @@ namespace {
 
 int main() {
     try {
+        const auto slang_texcoord = tgfx::d3d11_internal::normalize_reflected_semantic("TEXCOORD1", 0);
+        const auto d3d_texcoord = tgfx::d3d11_internal::normalize_reflected_semantic("TEXCOORD", 1);
+        if (slang_texcoord.name != "TEXCOORD" || slang_texcoord.index != 1 ||
+            d3d_texcoord.name != "TEXCOORD" || d3d_texcoord.index != 1) {
+            std::fprintf(stderr, "D3D11 smoke: reflected semantic normalization failed\n");
+            return 1;
+        }
+
         auto device = tgfx::create_device(tgfx::BackendType::D3D11);
         const auto caps = device->capabilities();
         if (caps.supports_compute) {
