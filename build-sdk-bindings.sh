@@ -62,7 +62,7 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
             echo "  --opengl          Enable desktop OpenGL targets (default)"
-            echo "  --profile=NAME    SDK graph profile: full (default), graphics, or core"
+            echo "  --profile=NAME    SDK graph profile: full (default) or graphics"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -81,27 +81,18 @@ for arg in "$@"; do
 done
 
 case "$SDK_PROFILE" in
-    full|graphics|core) ;;
-    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full, graphics, or core)"; exit 1 ;;
+    full|graphics) ;;
+    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full or graphics)"; exit 1 ;;
 esac
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
-if [[ "$SDK_PROFILE" != "core" ]]; then
-    if [[ -z "${TERMIN_CORE_SDK:-}" || -z "${TERMIN_CORE_BUILD_ID:-}" ]]; then
-        echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID" >&2
-        exit 1
-    fi
-    if [[ "$TERMIN_CORE_SDK" != /* ]]; then
-        echo "ERROR: TERMIN_CORE_SDK must be an absolute path: $TERMIN_CORE_SDK" >&2
-        exit 1
-    fi
+if [[ -z "${TERMIN_CORE_SDK:-}" || -z "${TERMIN_CORE_BUILD_ID:-}" ]]; then
+    echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID" >&2
+    exit 1
 fi
-
-if [[ "$SDK_PROFILE" == "core" ]]; then
-    # Graphics backend selection is not part of the Core product contract.
-    VULKAN_MODE="off"
-    SDL_MODE="off"
-    OPENGL_MODE="off"
+if [[ "$TERMIN_CORE_SDK" != /* ]]; then
+    echo "ERROR: TERMIN_CORE_SDK must be an absolute path: $TERMIN_CORE_SDK" >&2
+    exit 1
 fi
 
 if [[ $NO_PARALLEL -eq 1 ]]; then
@@ -192,10 +183,8 @@ echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"
 echo "SDK profile: $SDK_PROFILE"
-if [[ "$SDK_PROFILE" != "core" ]]; then
-    echo "Core SDK:    $TERMIN_CORE_SDK"
-    echo "Core ID:     $TERMIN_CORE_BUILD_ID"
-fi
+echo "Core SDK:    $TERMIN_CORE_SDK"
+echo "Core ID:     $TERMIN_CORE_BUILD_ID"
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
@@ -208,8 +197,6 @@ fi
 DOCTOR_PROFILE="sdk-bindings"
 if [[ "$SDK_PROFILE" == "graphics" ]]; then
     DOCTOR_PROFILE="sdk-bindings-graphics"
-elif [[ "$SDK_PROFILE" == "core" ]]; then
-    DOCTOR_PROFILE="sdk-bindings-core"
 fi
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
@@ -229,7 +216,7 @@ fi
 cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
-    -DCMAKE_PREFIX_PATH="$([[ "$SDK_PROFILE" == "core" ]] && echo "$SDK_PREFIX" || echo "$TERMIN_CORE_SDK")" \
+    -DCMAKE_PREFIX_PATH="$TERMIN_CORE_SDK" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
@@ -287,17 +274,10 @@ sync_composed_staged_dir() {
     rsync -a "$@" "$INSTALL_STAGING_DIR/$name"/ "$SDK_PREFIX/$name"/
 }
 
-if [[ "$SDK_PROFILE" == "core" ]]; then
-    sync_staged_dir bin
-    sync_staged_dir include
-    sync_staged_dir share
-    sync_staged_dir lib --exclude '/python*/'
-else
-    sync_composed_staged_dir bin
-    sync_composed_staged_dir include
-    sync_composed_staged_dir share
-    sync_composed_staged_dir lib --exclude '/python*/'
-fi
+sync_composed_staged_dir bin
+sync_composed_staged_dir include
+sync_composed_staged_dir share
+sync_composed_staged_dir lib --exclude '/python*/'
 
 # The staged lib/ tree intentionally does not own the bundled CPython shared
 # library.  rsync --delete therefore removes it unless we restore the runtime

@@ -2,8 +2,9 @@
 
 Date: 2026-08-13
 
-Status: accepted target architecture. The physical repository split is not yet
-complete. The first implementation step is extraction of `termin-core`.
+Status: accepted and implemented for the Core boundary. `termin-core` is the
+authoritative repository; Termin contains only installed-SDK consumer metadata
+for Core. Graphics, Physics and Engine extraction remain future stages.
 
 Implementation plan:
 
@@ -91,12 +92,10 @@ The intended first closure is:
 | Generic SDK manifest, lock and composition primitives | the domain-neutral subset of `termin-build-tools` |
 | Shared process diagnostics | `termin-mcp` transport, session and executor runtime |
 
-The machine-readable source of truth for the first closure is
-`build-system/products/core.json`. It explicitly owns module roles, internal
-dependencies, native targets, Python distributions, CMake packages, runtime
-inputs, test suites and forbidden domain dependency roots. Build profiles and
-the future extracted repository consume this product declaration rather than
-maintaining a second hand-written Core list.
+The machine-readable source of truth for this closure now lives in the
+`termin-core` repository. Termin's `build-system/packages.json` retains only
+the external package identities and native-extension metadata required to
+compose and verify a consumer SDK; it is not an ownership declaration.
 
 SDK orchestration policy is repository-owned as well. The typed mechanism in
 `termin-build-tools` loads `build-system/sdk-profiles.json` and

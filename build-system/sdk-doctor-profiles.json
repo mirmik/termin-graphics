@@ -208,26 +208,6 @@
       ]
     },
     {
-      "id": "sdk-core",
-      "submodules": [],
-      "needs_nanobind": true,
-      "needs_pip": true,
-      "needs_copy_backend": true,
-      "needs_sdk_writable": true,
-      "vulkan_submodules": [],
-      "sdl_submodules": []
-    },
-    {
-      "id": "sdk-bindings-core",
-      "submodules": [],
-      "needs_nanobind": true,
-      "needs_pip": false,
-      "needs_copy_backend": true,
-      "needs_sdk_writable": true,
-      "vulkan_submodules": [],
-      "sdl_submodules": []
-    },
-    {
       "id": "cpp-tests",
       "submodules": [
         "termin-thirdparty/manifold",

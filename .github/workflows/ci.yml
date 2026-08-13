@@ -136,7 +136,9 @@ jobs:
             "termin-base", "termin-dispatch", "termin-inspect", "termin-mcp",
             "termin-nanobind-sdk", "termin-python-host"
           )) {
-            Remove-Item $directory -Recurse -Force
+            if (Test-Path $directory) {
+              throw "Core source directory must not exist in Termin: $directory"
+            }
           }
           New-Item -ItemType Directory -Force sdk | Out-Null
           Copy-Item core-sdk\* sdk\ -Recurse -Force

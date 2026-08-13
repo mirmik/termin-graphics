@@ -2,7 +2,7 @@
   "schema": 1,
   "description": "Documentation publication inventory joined to repository module identities. Every repository-owned docs root is public or explicitly internal.",
   "inventory": {
-    "exclude_roots": ["build", "sdk", "sdk-core", "termin-thirdparty"],
+    "exclude_roots": ["build", "sdk", "termin-thirdparty"],
     "exclude_directory_names": [".git", ".venv", "__pycache__", "node_modules"]
   },
   "public_sites": [
@@ -25,12 +25,6 @@
       "site_path": "termin-collision"
     },
     {
-      "module": "termin-inspect",
-      "root": "termin-inspect/docs",
-      "config": "termin-inspect/mkdocs.yml",
-      "site_path": "termin-inspect"
-    },
-    {
       "module": "termin-scene",
       "root": "termin-scene/docs",
       "config": "termin-scene/mkdocs.yml",
@@ -48,7 +42,6 @@
     "tcplot/docs",
     "termin-animation/docs",
     "termin-audio/docs",
-    "termin-base/docs",
     "termin-build-tools/docs",
     "termin-components/docs",
     "termin-components/termin-components-animation/docs",
@@ -64,7 +57,6 @@
     "termin-csharp/docs",
     "termin-default-assets/docs",
     "termin-display/docs",
-    "termin-dispatch/docs",
     "termin-window/docs",
     "termin-engine/docs",
     "termin-framegraph-remote-client/docs",
@@ -77,7 +69,6 @@
     "termin-input/docs",
     "termin-lighting/docs",
     "termin-mesh/docs",
-    "termin-nanobind-sdk/docs",
     "termin-navmesh/docs",
     "termin-nodegraph/docs",
     "termin-physics-fem/docs",

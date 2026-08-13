@@ -45,7 +45,7 @@ function Show-Help {
     Write-Host "  --sdl             Enable SDL2 support (default)"
     Write-Host "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
     Write-Host "  --opengl          Enable desktop OpenGL targets (default)"
-    Write-Host "  --profile=NAME    SDK graph profile: full (default), graphics, or core"
+    Write-Host "  --profile=NAME    SDK graph profile: full (default) or graphics"
     Write-Host "  --help, -h        Show this help"
     Write-Host ""
     Write-Host "Environment:"
@@ -95,25 +95,16 @@ foreach ($arg in $args) {
     }
 }
 
-if ($Profile -notin @("full", "graphics", "core")) {
-    throw "Unsupported SDK profile: $Profile. Expected 'full', 'graphics', or 'core'."
+if ($Profile -notin @("full", "graphics")) {
+    throw "Unsupported SDK profile: $Profile. Expected 'full' or 'graphics'."
 }
 $env:TERMIN_SDK_PROFILE = $Profile
 
-if ($Profile -ne "core") {
-    if (-not $env:TERMIN_CORE_SDK -or -not $env:TERMIN_CORE_BUILD_ID) {
-        throw "$Profile builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID"
-    }
-    if (-not [System.IO.Path]::IsPathRooted($env:TERMIN_CORE_SDK)) {
-        throw "TERMIN_CORE_SDK must be an absolute path: $($env:TERMIN_CORE_SDK)"
-    }
+if (-not $env:TERMIN_CORE_SDK -or -not $env:TERMIN_CORE_BUILD_ID) {
+    throw "$Profile builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID"
 }
-
-if ($Profile -eq "core") {
-    # Graphics backend selection is not part of the Core product contract.
-    $VulkanMode = "off"
-    $SdlMode = "off"
-    $OpenGlMode = "off"
+if (-not [System.IO.Path]::IsPathRooted($env:TERMIN_CORE_SDK)) {
+    throw "TERMIN_CORE_SDK must be an absolute path: $($env:TERMIN_CORE_SDK)"
 }
 
 if ($NoParallel) {
@@ -148,10 +139,8 @@ $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
 # C# stage packages the D3D11 shader set even when OpenGL and Vulkan are
 # explicitly disabled, so D3D11 artifacts are part of the base Windows SDK
 # contract rather than an OpenGL side effect.
-$TerminBuildBuiltinShaderArtifacts = if ($Profile -eq "core") { "OFF" } else { "ON" }
-$TerminBuiltinShaderArtifactTargets = if ($Profile -eq "core") {
-    ""
-} elseif ($TerminEnableOpenGl -eq "ON") {
+$TerminBuildBuiltinShaderArtifacts = "ON"
+$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") {
     "d3d11;opengl330"
 } else {
     "d3d11"
@@ -186,7 +175,6 @@ if ($oldPythonPath) {
 
 $DoctorProfile = switch ($Profile) {
     "graphics" { "sdk-bindings-graphics" }
-    "core" { "sdk-bindings-core" }
     default { "sdk-bindings" }
 }
 & $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile $DoctorProfile --vulkan $TerminEnableVulkan --sdl $TerminEnableSdl --init-submodules
@@ -210,10 +198,8 @@ Write-Host "ccache:      $TerminUseCcache"
 Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"
 Write-Host "SDK profile: $Profile"
-if ($Profile -ne "core") {
-    Write-Host "Core SDK:    $($env:TERMIN_CORE_SDK)"
-    Write-Host "Core ID:     $($env:TERMIN_CORE_BUILD_ID)"
-}
+Write-Host "Core SDK:    $($env:TERMIN_CORE_SDK)"
+Write-Host "Core ID:     $($env:TERMIN_CORE_BUILD_ID)"
 Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else { 'existing/default' })"
 Write-Host "Jobs:        $BuildJobs"
 Write-Host ""
@@ -233,7 +219,7 @@ $cmakeArgs += @(
     "-B", $BuildDir,
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
-    "-DCMAKE_PREFIX_PATH=$(if ($Profile -eq 'core') { $SdkPrefix } else { $env:TERMIN_CORE_SDK })",
+    "-DCMAKE_PREFIX_PATH=$($env:TERMIN_CORE_SDK)",
     "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
     "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
     "-DTERMIN_USE_CCACHE=$TerminUseCcache",

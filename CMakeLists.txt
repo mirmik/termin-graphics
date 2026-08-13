@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 project(termin_monorepo VERSION 0.1.0 LANGUAGES C CXX)
 
-include(CMakePackageConfigHelpers)
-
 option(TERMIN_BUILD_MONOREPO "Build Termin as one CMake target graph" ON)
 option(TERMIN_PLATFORM_ANDROID "Build Termin native runtime for Android" OFF)
 option(TERMIN_PLATFORM_WEB "Build the portable Termin WebAssembly core" OFF)
@@ -20,44 +18,32 @@ option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" 
 option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
 option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
 set(TERMIN_SDK_PROFILE "full" CACHE STRING
-    "SDK target graph profile: full, graphics or core")
+    "SDK target graph profile: full or graphics")
 set(TERMIN_CORE_SDK "" CACHE PATH
     "Explicit installed Core SDK for the active target platform")
 set(TERMIN_CORE_BUILD_ID "" CACHE STRING
     "Required native_build_id of TERMIN_CORE_SDK")
 set(TERMIN_CORE_TOOLCHAIN_VERSION "" CACHE STRING
     "Required toolchain version for a cross-compiled Core SDK")
-set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics core)
+set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics)
 
 if(NOT TERMIN_SDK_PROFILE STREQUAL "full"
-   AND NOT TERMIN_SDK_PROFILE STREQUAL "graphics"
-   AND NOT TERMIN_SDK_PROFILE STREQUAL "core")
+   AND NOT TERMIN_SDK_PROFILE STREQUAL "graphics")
     message(FATAL_ERROR
         "Unsupported TERMIN_SDK_PROFILE='${TERMIN_SDK_PROFILE}'. "
-        "Expected one of: full, graphics, core")
+        "Expected one of: full, graphics")
 endif()
 
-if(TERMIN_SDK_PROFILE STREQUAL "graphics" OR TERMIN_SDK_PROFILE STREQUAL "core")
+if(TERMIN_SDK_PROFILE STREQUAL "graphics")
     if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
         message(FATAL_ERROR
             "TERMIN_SDK_PROFILE=${TERMIN_SDK_PROFILE} is a desktop SDK profile")
     endif()
-    if(TERMIN_SDK_PROFILE STREQUAL "graphics")
-        set(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(TERMIN_GUI_NATIVE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(TERMIN_RENDER_CORE_ONLY ON CACHE BOOL "" FORCE)
-        message(STATUS
-            "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
-    else()
-        set(TERMIN_RENDER_CORE_ONLY OFF CACHE BOOL "" FORCE)
-        set(TERMIN_ENABLE_OPENGL OFF CACHE BOOL
-            "OpenGL is outside the Core SDK product graph" FORCE)
-        set(TERMIN_ENABLE_VULKAN OFF CACHE BOOL
-            "Vulkan is outside the Core SDK product graph" FORCE)
-        set(TERMIN_ENABLE_SDL OFF CACHE BOOL
-            "SDL is outside the Core SDK product graph" FORCE)
-        message(STATUS "Termin: Core SDK profile enabled")
-    endif()
+    set(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(TERMIN_GUI_NATIVE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(TERMIN_RENDER_CORE_ONLY ON CACHE BOOL "" FORCE)
+    message(STATUS
+        "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
 else()
     set(TERMIN_RENDER_CORE_ONLY OFF CACHE BOOL "" FORCE)
 endif()
@@ -183,7 +169,7 @@ if(TERMIN_BUILD_PYTHON)
     include(TerminPython)
     termin_require_canonical_python(Interpreter Development)
 
-    if(TERMIN_SDK_PROFILE STREQUAL "core" OR TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
+    if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
         execute_process(
             COMMAND "${Python_EXECUTABLE}" -c "import nanobind, pathlib; print(pathlib.Path(nanobind.__file__).resolve().parent / 'cmake')"
             OUTPUT_VARIABLE TERMIN_NANOBIND_CMAKE_DIR
@@ -271,10 +257,7 @@ set(TERMIN_RENDER_PASSES_CORE_ONLY ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 set(TERMIN_ENGINE_CORE_RENDER_PIPELINE ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 set(TERMIN_COMPONENTS_RENDER_CORE_ONLY ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 
-set(TERMIN_USE_INSTALLED_CORE OFF)
-if(NOT TERMIN_SDK_PROFILE STREQUAL "core")
-    set(TERMIN_USE_INSTALLED_CORE ON)
-    if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
+if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
         message(FATAL_ERROR
             "${TERMIN_SDK_PROFILE} builds require an absolute "
             "-DTERMIN_CORE_SDK path")
@@ -374,26 +357,11 @@ if(NOT TERMIN_SDK_PROFILE STREQUAL "core")
         find_package(termin_python_host CONFIG REQUIRED NO_DEFAULT_PATH
             NO_CMAKE_FIND_ROOT_PATH)
     endif()
-    message(STATUS
-        "Termin: consuming installed Core ${TERMIN_CORE_BUILD_ID} from "
-        "${TERMIN_CORE_SDK}")
-endif()
+message(STATUS
+    "Termin: consuming installed Core ${TERMIN_CORE_BUILD_ID} from "
+    "${TERMIN_CORE_SDK}")
 
-if(TERMIN_BUILD_PYTHON AND NOT TERMIN_USE_INSTALLED_CORE)
-    add_subdirectory(termin-nanobind-sdk)
-    set(TERMIN_NANOBIND_RUNTIME_TARGET "nanobind-ft")
-    include(termin-nanobind-sdk/cmake/TerminNanobindProfile.cmake)
-    add_subdirectory(termin-python-host)
-endif()
-
-if(NOT TERMIN_USE_INSTALLED_CORE)
-    add_subdirectory(termin-base)
-endif()
-
-if(TERMIN_SDK_PROFILE STREQUAL "core")
-    add_subdirectory(termin-dispatch)
-    add_subdirectory(termin-inspect)
-elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
+if(TERMIN_SDK_PROFILE STREQUAL "graphics")
     add_subdirectory(termin-image)
     add_subdirectory(termin-mesh)
     add_subdirectory(termin-graphics)
@@ -529,26 +497,5 @@ if(TERMIN_BUILD_TESTS)
     add_dependencies(
         termin_native_tests_with_window
         ${TERMIN_NATIVE_TEST_TARGETS_WITH_WINDOW}
-    )
-endif()
-
-if(NOT TERMIN_USE_INSTALLED_CORE)
-    configure_package_config_file(
-        ${CMAKE_CURRENT_LIST_DIR}/cmake/terminConfig.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
-        INSTALL_DESTINATION lib/cmake/termin
-    )
-
-    write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion
-    )
-
-    install(
-        FILES
-            ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
-            ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
-        DESTINATION lib/cmake/termin
     )
 endif()

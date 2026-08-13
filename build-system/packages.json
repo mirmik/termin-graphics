@@ -8,11 +8,13 @@
     },
     {
       "path": "termin-nanobind-sdk",
-      "distribution": "termin-nanobind"
+      "distribution": "termin-nanobind",
+      "source": "installed-core"
     },
     {
       "path": "termin-base",
       "distribution": "tcbase",
+      "source": "installed-core",
       "native_extensions": [
         {"extension": "tcbase._tcbase_native", "target": "_tcbase_native"},
         {"extension": "tcbase._geom_native", "target": "_geom_native"}
@@ -21,6 +23,7 @@
     {
       "path": "termin-dispatch",
       "distribution": "termin-dispatch",
+      "source": "installed-core",
       "native_extensions": [
         {"extension": "termin.dispatch._dispatch_native", "target": "_dispatch_native"}
       ]
@@ -85,6 +88,7 @@
     {
       "path": "termin-inspect",
       "distribution": "termin-inspect",
+      "source": "installed-core",
       "native_extensions": [
         {"extension": "termin.inspect._inspect_native", "target": "_inspect_native"}
       ]
@@ -134,7 +138,8 @@
     },
     {
       "path": "termin-mcp",
-      "distribution": "termin-mcp"
+      "distribution": "termin-mcp",
+      "source": "installed-core"
     },
     {
       "path": "termin-prefab",
