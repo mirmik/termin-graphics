@@ -160,10 +160,14 @@ namespace {
         tc_ui_painter_fill_rect(context, tc_ui_rect{1.0f, 2.0f, 3.0f, 4.0f}, white);
         tc_ui_painter_pop_transform(context);
 
+        tc_ui_painter_push_clip(context, tc_ui_rect{22.0f, 23.0f, 0.0f, 16.0f});
+        tc_ui_painter_fill_rect(context, tc_ui_rect{22.0f, 23.0f, 8.0f, 8.0f}, white);
+        tc_ui_painter_pop_clip(context);
+
         text[0] = 'X';
         icon_id[0] = 'X';
         points[1] = tc_ui_point{99.0f, 100.0f};
-        assert(tc_ui_draw_list_command_count(draw_list) == 12);
+        assert(tc_ui_draw_list_command_count(draw_list) == 15);
         const tc_ui_draw_command* rounded = tc_ui_draw_list_command_at(draw_list, 0);
         const tc_ui_draw_command* polyline = tc_ui_draw_list_command_at(draw_list, 5);
         const tc_ui_draw_command* texture = tc_ui_draw_list_command_at(draw_list, 6);
@@ -172,6 +176,9 @@ namespace {
         const tc_ui_draw_command* push_transform = tc_ui_draw_list_command_at(draw_list, 9);
         const tc_ui_draw_command* transformed_fill = tc_ui_draw_list_command_at(draw_list, 10);
         const tc_ui_draw_command* pop_transform = tc_ui_draw_list_command_at(draw_list, 11);
+        const tc_ui_draw_command* empty_clip = tc_ui_draw_list_command_at(draw_list, 12);
+        const tc_ui_draw_command* clipped_fill = tc_ui_draw_list_command_at(draw_list, 13);
+        const tc_ui_draw_command* empty_clip_pop = tc_ui_draw_list_command_at(draw_list, 14);
         assert(rounded && rounded->type == TC_UI_DRAW_FILL_ROUNDED_RECT);
         assert(rounded->radius == 4.0f);
         assert(polyline && polyline->type == TC_UI_DRAW_POLYLINE);
@@ -188,6 +195,9 @@ namespace {
         assert(push_transform->transform.translation.x == 10.0f && push_transform->transform.scale == 2.0f);
         assert(transformed_fill && transformed_fill->type == TC_UI_DRAW_FILL_RECT);
         assert(pop_transform && pop_transform->type == TC_UI_DRAW_POP_TRANSFORM);
+        assert(empty_clip && empty_clip->type == TC_UI_DRAW_PUSH_CLIP && empty_clip->rect.width == 0.0f);
+        assert(clipped_fill && clipped_fill->type == TC_UI_DRAW_FILL_RECT);
+        assert(empty_clip_pop && empty_clip_pop->type == TC_UI_DRAW_POP_CLIP);
 
         tc_ui_draw_list_clear(draw_list);
         assert(tc_ui_draw_list_command_count(draw_list) == 0);

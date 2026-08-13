@@ -338,13 +338,20 @@ namespace termin::gui_native {
             tgfx::CompositionEvaluator2D evaluator;
             enum class ScopeKind {
                 Transform,
-                Clip
+                Clip,
+                EmptyClip,
+                SuppressedTransform,
+                SuppressedClip,
             };
             std::vector<ScopeKind> scope_stack;
+            size_t empty_clip_depth = 0;
             const size_t batch_end = batch.first_command + batch.command_count;
             const bool snap_to_pixels = batch.presentation_metrics.density_scale != 1.0f;
             bool batch_ok = true;
             size_t failed_index = batch.first_command;
+            tc_ui_draw_command_type failed_command_type = TC_UI_DRAW_FILL_RECT;
+            tc_ui_rect failed_rect{};
+            const char* failure_reason = "command lowering failed";
             try {
                 evaluator.begin_batch(&builder);
                 tgfx::CompositionLayer2D density_layer;
@@ -356,7 +363,39 @@ namespace termin::gui_native {
                     const tc_ui_draw_command* command = tc_ui_draw_list_command_at(draw_list, index);
                     if (!command) {
                         batch_ok = false;
+                        failure_reason = "command lookup failed";
                         break;
+                    }
+                    failed_command_type = command->type;
+                    failed_rect = command->rect;
+                    if (empty_clip_depth > 0) {
+                        switch (command->type) {
+                        case TC_UI_DRAW_PUSH_UNIFORM_TRANSFORM:
+                            scope_stack.push_back(ScopeKind::SuppressedTransform);
+                            break;
+                        case TC_UI_DRAW_POP_TRANSFORM:
+                            batch_ok = !scope_stack.empty() &&
+                                       scope_stack.back() == ScopeKind::SuppressedTransform;
+                            if (batch_ok)
+                                scope_stack.pop_back();
+                            break;
+                        case TC_UI_DRAW_PUSH_CLIP:
+                            scope_stack.push_back(ScopeKind::SuppressedClip);
+                            break;
+                        case TC_UI_DRAW_POP_CLIP:
+                            batch_ok = !scope_stack.empty() &&
+                                       (scope_stack.back() == ScopeKind::SuppressedClip ||
+                                        scope_stack.back() == ScopeKind::EmptyClip);
+                            if (batch_ok) {
+                                if (scope_stack.back() == ScopeKind::EmptyClip)
+                                    --empty_clip_depth;
+                                scope_stack.pop_back();
+                            }
+                            break;
+                        default:
+                            break;
+                        }
+                        continue;
                     }
                     const float scale = geometric_scale(evaluator);
                     const auto snapped_rect = [&]() {
@@ -386,8 +425,18 @@ namespace termin::gui_native {
                             scope_stack.pop_back();
                         break;
                     case TC_UI_DRAW_PUSH_CLIP: {
+                        if (!std::isfinite(command->rect.x) || !std::isfinite(command->rect.y) ||
+                            !std::isfinite(command->rect.width) || !std::isfinite(command->rect.height)) {
+                            batch_ok = false;
+                            break;
+                        }
                         const auto rect = snapped_rect();
-                        const auto path = rect ? rect_path(*rect) : std::nullopt;
+                        if (!rect) {
+                            scope_stack.push_back(ScopeKind::EmptyClip);
+                            ++empty_clip_depth;
+                            break;
+                        }
+                        const auto path = rect_path(*rect);
                         if (!path) {
                             batch_ok = false;
                             break;
@@ -605,13 +654,25 @@ namespace termin::gui_native {
                     }
                 }
 
-                failed_index = batch_end;
-                if (batch_ok && !scope_stack.empty())
+                if (batch_ok && !scope_stack.empty()) {
+                    failed_index = batch_end;
+                    failure_reason = "unclosed composition scope";
                     batch_ok = false;
-                if (batch_ok)
+                }
+                if (batch_ok) {
                     batch_ok = evaluator.pop(); // density layer
-                if (batch_ok)
+                    if (!batch_ok) {
+                        failed_index = batch_end;
+                        failure_reason = "density scope pop failed";
+                    }
+                }
+                if (batch_ok) {
                     batch_ok = evaluator.end_batch();
+                    if (!batch_ok) {
+                        failed_index = batch_end;
+                        failure_reason = "composition batch finalization failed";
+                    }
+                }
             } catch (const std::exception& error) {
                 tc_log_error("[termin-gui-native] UI draw-list lowering threw: %s", error.what());
                 batch_ok = false;
@@ -620,8 +681,15 @@ namespace termin::gui_native {
             if (!batch_ok) {
                 if (evaluator.active())
                     evaluator.abort_batch();
-                tc_log_error("[termin-gui-native] malformed UI draw-list batch near command %zu; discarding batch",
-                             failed_index);
+                tc_log_error("[termin-gui-native] malformed UI draw-list batch near command %zu "
+                             "(type=%d, rect=[%.3f, %.3f, %.3f, %.3f], reason=%s); discarding batch",
+                             failed_index,
+                             static_cast<int>(failed_command_type),
+                             failed_rect.x,
+                             failed_rect.y,
+                             failed_rect.width,
+                             failed_rect.height,
+                             failure_reason);
                 continue;
             }
 
