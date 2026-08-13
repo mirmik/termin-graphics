@@ -28,12 +28,29 @@
 #include "tcplot/plot_scene3d_render_item_source.hpp"
 #include "tcplot/retained_chart3d.h"
 
+#include "../src/plot_scene3d_chart_chrome.hpp"
+
 extern "C" {
 #include <render/tc_pass.h>
 #include <tgfx/resources/tc_shader_registry.h>
 }
 
 namespace {
+
+    void require(bool condition, const char* message);
+
+    void test_termin_clip_canvas_projection() {
+        const auto top_left = tcplot::detail::termin_clip_ndc_to_canvas(-1.0f, -1.0f, 320, 240);
+        const auto center = tcplot::detail::termin_clip_ndc_to_canvas(0.0f, 0.0f, 320, 240);
+        const auto bottom_right = tcplot::detail::termin_clip_ndc_to_canvas(1.0f, 1.0f, 320, 240);
+
+        require(top_left.x == 0.0f && top_left.y == 0.0f,
+                "TerminClip top-left must project to canvas top-left");
+        require(center.x == 160.0f && center.y == 120.0f,
+                "TerminClip center must project to canvas center");
+        require(bottom_right.x == 320.0f && bottom_right.y == 240.0f,
+                "TerminClip bottom-right must project to canvas bottom-right");
+    }
 
     struct TemporaryShaderRoot {
         std::filesystem::path path;
@@ -177,6 +194,8 @@ namespace {
 
 int main() {
     try {
+        test_termin_clip_canvas_projection();
+
         if (!tgfx::backend_is_compiled(tgfx::BackendType::Vulkan)) {
             std::printf("retained Chart3D test skipped: Vulkan unavailable\n");
             return 77;

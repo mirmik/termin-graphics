@@ -58,10 +58,9 @@ namespace tcplot {
         const termin::SrgbColor label_color{0.8f, 0.8f, 0.8f, 1.0f};
         const auto project = [&](const termin::Vec3f& world) {
             const termin::Vec3 clip = mvp.transform_point({world.x, world.y, world.z});
-            return tgfx::CanvasVec2{
-                static_cast<float>((clip.x * 0.5 + 0.5) * viewport_width),
-                static_cast<float>((1.0 - (clip.y * 0.5 + 0.5)) * viewport_height),
-            };
+            const detail::PlotScene3DCanvasPoint canvas =
+                detail::termin_clip_ndc_to_canvas(clip.x, clip.y, viewport_width, viewport_height);
+            return tgfx::CanvasVec2{canvas.x, canvas.y};
         };
 
         context.set_depth_test(false);

@@ -13,6 +13,25 @@ namespace tgfx {
 
 namespace tcplot {
 
+    namespace detail {
+
+        struct PlotScene3DCanvasPoint {
+            float x = 0.0f;
+            float y = 0.0f;
+        };
+
+        inline PlotScene3DCanvasPoint termin_clip_ndc_to_canvas(float ndc_x,
+                                                                 float ndc_y,
+                                                                 int viewport_width,
+                                                                 int viewport_height) noexcept {
+            return {
+                (ndc_x * 0.5f + 0.5f) * static_cast<float>(viewport_width),
+                (ndc_y * 0.5f + 0.5f) * static_cast<float>(viewport_height),
+            };
+        }
+
+    } // namespace detail
+
     class PlotScene3DChartChromeRenderer {
     public:
         PlotScene3DChartChromeRenderer();
