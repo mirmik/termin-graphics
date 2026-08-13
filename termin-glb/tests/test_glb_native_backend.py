@@ -6,10 +6,11 @@ import struct
 import numpy as np
 import pytest
 
-from termin.glb import GLBAsset, NativePrimitiveInfo, NativeStaticMeshDocument
+from termin.glb import NativePrimitiveInfo, NativeStaticMeshDocument
 from termin.glb import _glb_native
-from termin.glb.instantiator import instantiate_glb
 from termin.glb.native import NativeGLBSceneData
+from termin.glb_adapters.asset import GLBAsset
+from termin.glb_adapters.instantiator import instantiate_glb
 from termin.default_assets.resource_manager import DefaultResourceManager
 
 

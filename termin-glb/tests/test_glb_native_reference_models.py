@@ -7,13 +7,13 @@ import numpy as np
 import pytest
 
 from termin.glb import (
-    GLBAsset,
     GLBSceneData,
     NativeGLBSceneData,
     NativeStaticMeshDocument,
 )
 from termin.default_assets.resource_manager import DefaultResourceManager
-from termin.glb.instantiator import _plan_texture_imports
+from termin.glb_adapters.asset import GLBAsset
+from termin.glb_adapters.instantiator import _plan_texture_imports
 from termin.image import decode_rgba8
 
 

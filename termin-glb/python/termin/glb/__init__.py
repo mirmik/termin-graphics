@@ -1,7 +1,4 @@
-"""GLB/glTF importer, asset, and runtime instantiation support."""
-
-from termin.glb.asset import GLBAsset
-from termin.glb.asset_plugin import GLBAssetPlugin, GLBImportPlugin, GLBRuntimePlugin
+"""Portable GLB/glTF decoding and runtime publication support."""
 from termin.glb.loader import (
     GLBAnimationChannel,
     GLBAnimationClip,
@@ -32,13 +29,9 @@ from termin.glb.native import (
 __all__ = [
     "GLBAnimationChannel",
     "GLBAnimationClip",
-    "GLBAsset",
-    "GLBAssetPlugin",
-    "GLBImportPlugin",
     "GLBMaterialData",
     "GLBMeshData",
     "GLBNodeData",
-    "GLBRuntimePlugin",
     "GLBSceneData",
     "GLBSkinData",
     "GLBSubmeshData",

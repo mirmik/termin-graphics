@@ -622,6 +622,12 @@
       "roots": ["termin-glb/tests"]
     },
     {
+      "id": "termin-glb-adapters-tests",
+      "module": "termin-glb-adapters",
+      "executor": "pytest",
+      "roots": ["termin-glb-adapters/tests"]
+    },
+    {
       "id": "termin-graphics-tests-python",
       "module": "termin-graphics",
       "executor": "pytest",

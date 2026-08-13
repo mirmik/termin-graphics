@@ -7,7 +7,7 @@ setup(
     name="termin-glb",
     version="0.1.0",
     license="MIT",
-    description="GLB/glTF importer, asset, and runtime instantiation support for Termin",
+    description="Portable GLB/glTF decoding and runtime publication",
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.14",
@@ -16,28 +16,11 @@ setup(
     install_requires=[
         "termin-glb-native",
         "tcbase",
-        "termin-assets",
-        "termin-image",
-        "termin-scene",
-        "termin-default-assets",
-        "termin-components-render",
-        "termin-components-animation",
-        "termin-components-skeleton",
         "tmesh",
-        "tgfx",
-        "termin-materials",
         "termin-skeleton",
         "termin-animation",
         "termin-nanobind",
         "numpy",
     ],
-    entry_points={
-        "termin.asset_import_plugins": [
-            "glb = termin.glb.asset_plugin:create_import_plugin",
-        ],
-        "termin.asset_runtime_plugins": [
-            "glb = termin.glb.asset_plugin:create_runtime_plugin",
-        ],
-    },
     zip_safe=False,
 )

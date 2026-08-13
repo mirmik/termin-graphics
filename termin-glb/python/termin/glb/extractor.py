@@ -1,4 +1,3 @@
-# termin/loaders/glb_extractor.py
 """GLB extractor - extracts meshes, textures and animations from GLB files."""
 
 from __future__ import annotations

@@ -6,8 +6,8 @@ import pytest
 
 from termin.glb import loader as glb_loader_module
 from termin.default_assets.resource_manager import DefaultResourceManager
-from termin.glb.asset import GLBAsset
-from termin.glb.instantiator import _glb_mesh_to_tc_mesh, _populate_tc_skeleton_from_glb
+from termin.glb_adapters.asset import GLBAsset
+from termin.glb_adapters.instantiator import _glb_mesh_to_tc_mesh, _populate_tc_skeleton_from_glb
 from termin.glb.loader import (
     GLBAnimationChannel,
     GLBAnimationClip,

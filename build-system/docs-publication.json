@@ -63,6 +63,7 @@
     "termin-framegraph-remote/docs",
     "termin-framegraph-remote-target/docs",
     "termin-glb/docs",
+    "termin-glb-adapters/docs",
     "termin-graphics/docs",
     "termin-visual-scene/docs",
     "termin-gui-native/docs",

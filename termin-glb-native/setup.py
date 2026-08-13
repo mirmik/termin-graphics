@@ -2,7 +2,7 @@
 
 import os
 
-from setuptools import find_namespace_packages, setup
+from setuptools import setup
 from termin_build.cmake_ext import TerminCMakeBuild, TerminCMakeBuildExt
 from termin_build.setup_helpers import native_extensions_for_source
 
@@ -22,11 +22,7 @@ setup(
     author="mirmik",
     author_email="mirmikns@yandex.ru",
     python_requires=">=3.14",
-    packages=find_namespace_packages(
-        where="python",
-        include=["termin.glb", "termin.glb.*"],
-    ),
-    package_dir={"": "python"},
+    packages=[],
     install_requires=[
         "tmesh",
         "termin-nanobind",

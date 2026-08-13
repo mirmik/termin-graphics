@@ -1,4 +1,4 @@
-"""Minimal native cgltf GLB import boundary.
+"""Portable native cgltf GLB import boundary.
 
 This module intentionally does not fall back to the Python loader. The caller
 first discovers mesh identities, resolves embedded asset UUIDs, and only then

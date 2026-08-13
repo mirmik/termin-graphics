@@ -358,6 +358,10 @@
       "distribution": "termin-glb"
     },
     {
+      "path": "termin-glb-adapters",
+      "distribution": "termin-glb-adapters"
+    },
+    {
       "path": "termin-project",
       "distribution": "termin-project"
     },
