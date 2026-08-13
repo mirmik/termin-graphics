@@ -14,7 +14,101 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core-sdk-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: mirmik/termin-core
+          ref: 7bfe1fe4c7467fab645141f22dbb9d964fe7d5cb
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Build installed Core SDK input
+        run: ./build-sdk.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: sdk/
+          retention-days: 1
+
+  core-sdk-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: mirmik/termin-core
+          ref: 7bfe1fe4c7467fab645141f22dbb9d964fe7d5cb
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Build installed Core SDK input
+        shell: pwsh
+        run: .\build-sdk.ps1
+      - uses: actions/upload-artifact@v5
+        with:
+          name: core-sdk-windows
+          path: sdk/
+          retention-days: 1
+
   # ── 0. Python lint ─────────────────────────────────────────────
+  core-consumer-source-hidden-linux:
+    needs: core-sdk-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk/
+      - name: Build graphics with Core sources absent
+        run: |
+          core_build_id="$(python -c 'import json; print(json.load(open("core-sdk/termin-artifacts.json"))["native_build_id"])')"
+          scripts/smoke-installed-core-source-hidden \
+            --profile graphics \
+            --core-sdk "${{ github.workspace }}/core-sdk" \
+            --core-build-id "$core_build_id"
+
+  core-consumer-source-hidden-windows:
+    needs: core-sdk-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-windows
+          path: core-sdk/
+      - name: Build graphics with Core sources absent
+        shell: pwsh
+        run: |
+          $manifest = Get-Content core-sdk/termin-artifacts.json | ConvertFrom-Json
+          $coreSdk = (Resolve-Path core-sdk).Path
+          foreach ($directory in @(
+            "termin-base", "termin-dispatch", "termin-inspect", "termin-mcp",
+            "termin-nanobind-sdk", "termin-python-host"
+          )) {
+            Remove-Item $directory -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force sdk | Out-Null
+          Copy-Item core-sdk\* sdk\ -Recurse -Force
+          $env:TERMIN_CORE_SDK = $coreSdk
+          $env:TERMIN_CORE_BUILD_ID = $manifest.native_build_id
+          .\build-sdk-bindings.ps1 --profile=graphics --no-vulkan --no-opengl --no-sdl
+
   lint-python:
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +127,7 @@ jobs:
 
   # ── 0a. C/C++ lint ─────────────────────────────────────────────
   lint-cpp:
+    needs: core-sdk-linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -56,6 +151,21 @@ jobs:
         uses: ./.github/actions/setup-linux-build
         with:
           extra-packages: clang-tidy libclang-18-dev llvm-18-dev
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk/
+
+      - name: Select installed Core SDK input
+        run: |
+          echo "TERMIN_CORE_SDK=${{ github.workspace }}/core-sdk" >> "$GITHUB_ENV"
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("core-sdk/termin-artifacts.json").read_text())
+          print(f"TERMIN_CORE_BUILD_ID={manifest['native_build_id']}")
+          PY
 
       - name: Run C/C++ lint
         run: ./run-lint-cpp.sh
@@ -137,6 +247,7 @@ jobs:
 
   # ── 0d. D3D11 tgfx2 smoke ─────────────────────────────────────
   tgfx2-d3d11-bound-windows:
+    needs: core-sdk-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -147,6 +258,19 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-windows
+          path: core-sdk/
+
+      - name: Select installed Core SDK input
+        shell: pwsh
+        run: |
+          $manifest = Get-Content core-sdk/termin-artifacts.json | ConvertFrom-Json
+          "TERMIN_CORE_SDK=$pwd\core-sdk" | Out-File $env:GITHUB_ENV -Append
+          "TERMIN_CORE_BUILD_ID=$($manifest.native_build_id)" | Out-File $env:GITHUB_ENV -Append
+          "$pwd\core-sdk\bin" | Out-File $env:GITHUB_PATH -Append
 
       - name: Validate D3D11 bound resource path
         shell: pwsh
@@ -165,6 +289,7 @@ jobs:
 
   # ── 1. Build C++ libraries ───────────────────────────────────────
   build-cpp-libs:
+    needs: core-sdk-linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -179,6 +304,23 @@ jobs:
       - name: Install Linux build dependencies
         uses: ./.github/actions/setup-linux-build
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk/
+
+      - name: Seed and select installed Core SDK input
+        run: |
+          mkdir -p sdk
+          cp -a core-sdk/. sdk/
+          echo "TERMIN_CORE_SDK=${{ github.workspace }}/core-sdk" >> "$GITHUB_ENV"
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("core-sdk/termin-artifacts.json").read_text())
+          print(f"TERMIN_CORE_BUILD_ID={manifest['native_build_id']}")
+          PY
+
       - name: Build
         run: ./build-sdk-cpp.sh
 
@@ -190,7 +332,7 @@ jobs:
 
   # ── 2. Test C++ libraries ────────────────────────────────────────
   test-cpp-libs:
-    needs: build-cpp-libs
+    needs: [build-cpp-libs, core-sdk-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -207,6 +349,21 @@ jobs:
         with:
           name: sdk-cpp
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk/
+
+      - name: Select installed Core SDK input
+        run: |
+          echo "TERMIN_CORE_SDK=${{ github.workspace }}/core-sdk" >> "$GITHUB_ENV"
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("core-sdk/termin-artifacts.json").read_text())
+          print(f"TERMIN_CORE_BUILD_ID={manifest['native_build_id']}")
+          PY
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*
@@ -225,6 +382,7 @@ jobs:
           retention-days: 7
 
   test-cpp-windows:
+    needs: core-sdk-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -235,6 +393,21 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-windows
+          path: core-sdk/
+
+      - name: Seed and select installed Core SDK input
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force sdk | Out-Null
+          Copy-Item core-sdk\* sdk\ -Recurse -Force
+          $manifest = Get-Content core-sdk/termin-artifacts.json | ConvertFrom-Json
+          "TERMIN_CORE_SDK=$pwd\core-sdk" | Out-File $env:GITHUB_ENV -Append
+          "TERMIN_CORE_BUILD_ID=$($manifest.native_build_id)" | Out-File $env:GITHUB_ENV -Append
+          "$pwd\core-sdk\bin" | Out-File $env:GITHUB_PATH -Append
 
       - name: Build C++ SDK dependencies
         shell: pwsh
@@ -256,7 +429,7 @@ jobs:
 
   # ── 3. Build nanobind SDK + Python bindings ────────────────────
   build-bindings:
-    needs: build-cpp-libs
+    needs: [build-cpp-libs, core-sdk-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -275,6 +448,21 @@ jobs:
         with:
           name: sdk-cpp
           path: sdk/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk/
+
+      - name: Select installed Core SDK input
+        run: |
+          echo "TERMIN_CORE_SDK=${{ github.workspace }}/core-sdk" >> "$GITHUB_ENV"
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("core-sdk/termin-artifacts.json").read_text())
+          print(f"TERMIN_CORE_BUILD_ID={manifest['native_build_id']}")
+          PY
 
       - name: Restore SDK executable permissions
         run: chmod +x sdk/bin/*

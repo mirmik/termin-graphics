@@ -21,6 +21,10 @@ option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean buil
 option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
 set(TERMIN_SDK_PROFILE "full" CACHE STRING
     "SDK target graph profile: full, graphics or core")
+set(TERMIN_CORE_SDK "" CACHE PATH
+    "Explicit installed Core SDK used by desktop graphics/full profiles")
+set(TERMIN_CORE_BUILD_ID "" CACHE STRING
+    "Required native_build_id of TERMIN_CORE_SDK")
 set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics core)
 
 if(NOT TERMIN_SDK_PROFILE STREQUAL "full"
@@ -177,17 +181,19 @@ if(TERMIN_BUILD_PYTHON)
     include(TerminPython)
     termin_require_canonical_python(Interpreter Development)
 
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -c "import nanobind, pathlib; print(pathlib.Path(nanobind.__file__).resolve().parent / 'cmake')"
-        OUTPUT_VARIABLE TERMIN_NANOBIND_CMAKE_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE TERMIN_NANOBIND_CMAKE_RESULT
-    )
-    if(NOT TERMIN_NANOBIND_CMAKE_RESULT EQUAL 0 OR NOT EXISTS "${TERMIN_NANOBIND_CMAKE_DIR}/nanobind-config.cmake")
-        message(FATAL_ERROR "nanobind Python package was not found for ${Python_EXECUTABLE}. Install nanobind before configuring with TERMIN_BUILD_PYTHON=ON.")
+    if(TERMIN_SDK_PROFILE STREQUAL "core" OR TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
+        execute_process(
+            COMMAND "${Python_EXECUTABLE}" -c "import nanobind, pathlib; print(pathlib.Path(nanobind.__file__).resolve().parent / 'cmake')"
+            OUTPUT_VARIABLE TERMIN_NANOBIND_CMAKE_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE TERMIN_NANOBIND_CMAKE_RESULT
+        )
+        if(NOT TERMIN_NANOBIND_CMAKE_RESULT EQUAL 0 OR NOT EXISTS "${TERMIN_NANOBIND_CMAKE_DIR}/nanobind-config.cmake")
+            message(FATAL_ERROR "nanobind Python package was not found for ${Python_EXECUTABLE}. Install nanobind before configuring with TERMIN_BUILD_PYTHON=ON.")
+        endif()
+        file(TO_CMAKE_PATH "${TERMIN_NANOBIND_CMAKE_DIR}" TERMIN_NANOBIND_CMAKE_DIR)
+        set(nanobind_DIR "${TERMIN_NANOBIND_CMAKE_DIR}" CACHE PATH "nanobind CMake package directory" FORCE)
     endif()
-    file(TO_CMAKE_PATH "${TERMIN_NANOBIND_CMAKE_DIR}" TERMIN_NANOBIND_CMAKE_DIR)
-    set(nanobind_DIR "${TERMIN_NANOBIND_CMAKE_DIR}" CACHE PATH "nanobind CMake package directory" FORCE)
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -263,23 +269,75 @@ set(TERMIN_RENDER_PASSES_CORE_ONLY ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 set(TERMIN_ENGINE_CORE_RENDER_PIPELINE ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 set(TERMIN_COMPONENTS_RENDER_CORE_ONLY ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 
-if(TERMIN_BUILD_PYTHON)
+set(TERMIN_USE_INSTALLED_CORE OFF)
+if(NOT TERMIN_SDK_PROFILE STREQUAL "core"
+   AND NOT TERMIN_PLATFORM_ANDROID
+   AND NOT TERMIN_PLATFORM_WEB)
+    set(TERMIN_USE_INSTALLED_CORE ON)
+    if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
+        message(FATAL_ERROR
+            "Desktop ${TERMIN_SDK_PROFILE} builds require an absolute "
+            "-DTERMIN_CORE_SDK path")
+    endif()
+    if(NOT TERMIN_CORE_BUILD_ID)
+        message(FATAL_ERROR
+            "Desktop ${TERMIN_SDK_PROFILE} builds require "
+            "-DTERMIN_CORE_BUILD_ID")
+    endif()
+    set(_termin_core_artifact_manifest
+        "${TERMIN_CORE_SDK}/termin-artifacts.json")
+    if(NOT EXISTS "${_termin_core_artifact_manifest}")
+        message(FATAL_ERROR
+            "Installed Core artifact manifest is missing: "
+            "${_termin_core_artifact_manifest}")
+    endif()
+    file(READ "${_termin_core_artifact_manifest}" _termin_core_artifact_json)
+    string(REGEX MATCH
+        "\"native_build_id\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\""
+        _termin_core_build_id_match "${_termin_core_artifact_json}")
+    if(NOT CMAKE_MATCH_1 STREQUAL TERMIN_CORE_BUILD_ID)
+        message(FATAL_ERROR
+            "Installed Core build identity mismatch: expected "
+            "${TERMIN_CORE_BUILD_ID}, got ${CMAKE_MATCH_1}")
+    endif()
+    list(PREPEND CMAKE_PREFIX_PATH "${TERMIN_CORE_SDK}")
+    if(TERMIN_BUILD_PYTHON)
+        set(nanobind_DIR "${TERMIN_CORE_SDK}/lib/cmake/nanobind"
+            CACHE PATH "Installed Core nanobind package" FORCE)
+        find_package(nanobind CONFIG REQUIRED NO_DEFAULT_PATH)
+    endif()
+    find_package(termin_base CONFIG REQUIRED
+        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+    find_package(termin_dispatch CONFIG REQUIRED
+        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+    find_package(termin_inspect CONFIG REQUIRED
+        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+    if(TERMIN_BUILD_PYTHON)
+        find_package(termin_python_host CONFIG REQUIRED
+            PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+    endif()
+    message(STATUS
+        "Termin: consuming installed Core ${TERMIN_CORE_BUILD_ID} from "
+        "${TERMIN_CORE_SDK}")
+endif()
+
+if(TERMIN_BUILD_PYTHON AND NOT TERMIN_USE_INSTALLED_CORE)
     add_subdirectory(termin-nanobind-sdk)
     set(TERMIN_NANOBIND_RUNTIME_TARGET "nanobind-ft")
     include(termin-nanobind-sdk/cmake/TerminNanobindProfile.cmake)
     add_subdirectory(termin-python-host)
 endif()
 
-add_subdirectory(termin-base)
+if(NOT TERMIN_USE_INSTALLED_CORE)
+    add_subdirectory(termin-base)
+endif()
 
 if(TERMIN_SDK_PROFILE STREQUAL "core")
     add_subdirectory(termin-dispatch)
     add_subdirectory(termin-inspect)
 elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
-    add_subdirectory(termin-dispatch)
     add_subdirectory(termin-image)
     add_subdirectory(termin-mesh)
-    add_subdirectory(termin-inspect)
     add_subdirectory(termin-graphics)
     add_subdirectory(termin-materials)
     add_subdirectory(termin-render)
@@ -317,14 +375,12 @@ elseif(TERMIN_PLATFORM_WEB)
 else()
 add_subdirectory(termin-profiler-remote)
 add_subdirectory(termin-framegraph-remote)
-add_subdirectory(termin-dispatch)
 add_subdirectory(termin-image)
 add_subdirectory(termin-audio)
 add_subdirectory(termin-modules)
 add_subdirectory(termin-mesh)
 add_subdirectory(termin-glb)
 add_subdirectory(termin-csg)
-add_subdirectory(termin-inspect)
 add_subdirectory(termin-voxels)
 add_subdirectory(termin-scene)
 add_subdirectory(termin-prefab)
@@ -419,21 +475,23 @@ if(TERMIN_BUILD_TESTS)
     )
 endif()
 
-configure_package_config_file(
-    ${CMAKE_CURRENT_LIST_DIR}/cmake/terminConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
-    INSTALL_DESTINATION lib/cmake/termin
-)
-
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-install(
-    FILES
+if(NOT TERMIN_USE_INSTALLED_CORE)
+    configure_package_config_file(
+        ${CMAKE_CURRENT_LIST_DIR}/cmake/terminConfig.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
+        INSTALL_DESTINATION lib/cmake/termin
+    )
+
+    write_basic_package_version_file(
         ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
-    DESTINATION lib/cmake/termin
-)
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/terminConfig.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/terminConfigVersion.cmake
+        DESTINATION lib/cmake/termin
+    )
+endif()

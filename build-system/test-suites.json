@@ -264,6 +264,10 @@
     {
       "id": "manual",
       "description": "Explicitly recorded human verification gates."
+    },
+    {
+      "id": "core-source-overlap",
+      "description": "Temporary inventory owner for duplicated Core tests; executable only in termin-core."
     }
   ],
   "suites": [
@@ -395,7 +399,7 @@
     },
     {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
     {"id": "termin-audio-tests-native", "module": "termin-audio", "executor": "ctest", "roots": ["termin-audio/tests"]},
-    {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"]},
+    {"id": "termin-base-tests-native", "module": "termin-base", "executor": "ctest", "roots": ["termin-base/tests"], "profiles": ["core-source-overlap"]},
     {"id": "termin-bootstrap-tests-native", "module": "termin-bootstrap", "executor": "ctest", "roots": ["termin-bootstrap/tests"]},
     {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
     {"id": "termin-components-collision-tests-native", "module": "termin-components-collision", "executor": "ctest", "roots": ["termin-components/termin-components-collision/tests"]},
@@ -407,7 +411,7 @@
     {"id": "termin-components-ui-tests-native", "module": "termin-components-ui", "executor": "ctest", "roots": ["termin-components/termin-components-ui/tests"]},
     {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
     {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
-    {"id": "termin-dispatch-tests-native", "module": "termin-dispatch", "executor": "ctest", "roots": ["termin-dispatch/tests"]},
+    {"id": "termin-dispatch-tests-native", "module": "termin-dispatch", "executor": "ctest", "roots": ["termin-dispatch/tests"], "profiles": ["core-source-overlap"]},
     {"id": "termin-window-tests-native", "module": "termin-window", "executor": "ctest", "roots": ["termin-window/tests"]},
     {"id": "termin-window-tests-python", "module": "termin-window", "executor": "pytest", "roots": ["termin-window/python/tests"]},
     {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
@@ -430,7 +434,7 @@
     {"id": "termin-profiler-remote-tests-native", "module": "termin-profiler-remote", "executor": "ctest", "roots": ["termin-profiler-remote/tests"]},
     {"id": "termin-profiler-tests-native", "module": "termin-profiler", "executor": "ctest", "roots": ["termin-profiler/tests"]},
     {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
-    {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"]},
+    {"id": "termin-inspect-tests-native", "module": "termin-inspect", "executor": "ctest", "roots": ["termin-inspect/tests"], "profiles": ["core-source-overlap"]},
     {"id": "termin-materials-tests-native", "module": "termin-materials", "executor": "ctest", "roots": ["termin-materials/tests"]},
     {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
     {"id": "termin-navmesh-tests-native", "module": "termin-navmesh", "executor": "ctest", "roots": ["termin-navmesh/tests"]},
@@ -503,13 +507,15 @@
       "id": "termin-base-tests-python",
       "module": "termin-base",
       "executor": "pytest",
-      "roots": ["termin-base/tests/python"]
+      "roots": ["termin-base/tests/python"],
+      "profiles": ["core-source-overlap"]
     },
     {
       "id": "termin-dispatch-tests-python",
       "module": "termin-dispatch",
       "executor": "pytest",
-      "roots": ["termin-dispatch/tests/python"]
+      "roots": ["termin-dispatch/tests/python"],
+      "profiles": ["core-source-overlap"]
     },
     {
       "id": "termin-bootstrap-tests",
@@ -654,7 +660,8 @@
       "id": "termin-inspect-tests",
       "module": "termin-inspect",
       "executor": "pytest",
-      "roots": ["termin-inspect/tests"]
+      "roots": ["termin-inspect/tests"],
+      "profiles": ["core-source-overlap"]
     },
     {
       "id": "termin-materials-tests",
@@ -666,7 +673,8 @@
       "id": "termin-mcp-tests",
       "module": "termin-mcp",
       "executor": "pytest",
-      "roots": ["termin-mcp/tests"]
+      "roots": ["termin-mcp/tests"],
+      "profiles": ["core-source-overlap"]
     },
     {
       "id": "termin-graphics-mcp-tests",
@@ -696,7 +704,8 @@
       "id": "termin-nanobind-tests",
       "module": "termin-nanobind-sdk",
       "executor": "pytest",
-      "roots": ["termin-nanobind-sdk/tests"]
+      "roots": ["termin-nanobind-sdk/tests"],
+      "profiles": ["core-source-overlap"]
     },
     {
       "id": "termin-pga-tests",

@@ -478,7 +478,7 @@ if(NOT ANDROID AND NOT EMSCRIPTEN)
     # the built-in artifacts required by that shared library. Binding policy
     # lives in its own shared library so both targets use the same mapping.
     target_link_libraries(termin_shaderc PRIVATE
-        termin_base
+        tcbase::termin_base
         termin_graphics
         termin_graphics_binding_policy
         termin_graphics_process_runner

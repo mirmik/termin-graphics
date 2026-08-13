@@ -86,6 +86,17 @@ case "$SDK_PROFILE" in
 esac
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
+if [[ "$SDK_PROFILE" != "core" ]]; then
+    if [[ -z "${TERMIN_CORE_SDK:-}" || -z "${TERMIN_CORE_BUILD_ID:-}" ]]; then
+        echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID" >&2
+        exit 1
+    fi
+    if [[ "$TERMIN_CORE_SDK" != /* ]]; then
+        echo "ERROR: TERMIN_CORE_SDK must be an absolute path: $TERMIN_CORE_SDK" >&2
+        exit 1
+    fi
+fi
+
 if [[ "$SDK_PROFILE" == "core" ]]; then
     # Graphics backend selection is not part of the Core product contract.
     VULKAN_MODE="off"
@@ -181,6 +192,10 @@ echo "ccache:      $TERMIN_USE_CCACHE"
 echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"
 echo "SDK profile: $SDK_PROFILE"
+if [[ "$SDK_PROFILE" != "core" ]]; then
+    echo "Core SDK:    $TERMIN_CORE_SDK"
+    echo "Core ID:     $TERMIN_CORE_BUILD_ID"
+fi
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
@@ -214,13 +229,15 @@ fi
 cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
-    -DCMAKE_PREFIX_PATH="$SDK_PREFIX" \
+    -DCMAKE_PREFIX_PATH="$([[ "$SDK_PROFILE" == "core" ]] && echo "$SDK_PREFIX" || echo "$TERMIN_CORE_SDK")" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
     -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
     -DTERMIN_SDK_PROFILE="$SDK_PROFILE" \
+    -DTERMIN_CORE_SDK="${TERMIN_CORE_SDK:-}" \
+    -DTERMIN_CORE_BUILD_ID="${TERMIN_CORE_BUILD_ID:-}" \
     -DTERMIN_BUILD_PYTHON=ON \
     -DTERMIN_BUILD_TESTS=OFF \
     -DTERMIN_ENABLE_VULKAN="$TERMIN_ENABLE_VULKAN" \
@@ -252,10 +269,35 @@ sync_staged_dir() {
     fi
 }
 
-sync_staged_dir bin
-sync_staged_dir include
-sync_staged_dir share
-sync_staged_dir lib --exclude '/python*/'
+sync_composed_staged_dir() {
+    local name="$1"
+    shift
+
+    if [[ ! -d "$INSTALL_STAGING_DIR/$name" ]]; then
+        return
+    fi
+    while IFS= read -r -d '' staged_path; do
+        local relative_path="${staged_path#"$INSTALL_STAGING_DIR/$name/"}"
+        if [[ -e "$SDK_PREFIX/$name/$relative_path" ]]; then
+            echo "ERROR: Core/domain SDK composition collision: $name/$relative_path" >&2
+            exit 1
+        fi
+    done < <(find "$INSTALL_STAGING_DIR/$name" \( -type f -o -type l \) -print0)
+    mkdir -p "$SDK_PREFIX/$name"
+    rsync -a "$@" "$INSTALL_STAGING_DIR/$name"/ "$SDK_PREFIX/$name"/
+}
+
+if [[ "$SDK_PROFILE" == "core" ]]; then
+    sync_staged_dir bin
+    sync_staged_dir include
+    sync_staged_dir share
+    sync_staged_dir lib --exclude '/python*/'
+else
+    sync_composed_staged_dir bin
+    sync_composed_staged_dir include
+    sync_composed_staged_dir share
+    sync_composed_staged_dir lib --exclude '/python*/'
+fi
 
 # The staged lib/ tree intentionally does not own the bundled CPython shared
 # library.  rsync --delete therefore removes it unless we restore the runtime

@@ -100,6 +100,15 @@ if ($Profile -notin @("full", "graphics", "core")) {
 }
 $env:TERMIN_SDK_PROFILE = $Profile
 
+if ($Profile -ne "core") {
+    if (-not $env:TERMIN_CORE_SDK -or -not $env:TERMIN_CORE_BUILD_ID) {
+        throw "$Profile builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID"
+    }
+    if (-not [System.IO.Path]::IsPathRooted($env:TERMIN_CORE_SDK)) {
+        throw "TERMIN_CORE_SDK must be an absolute path: $($env:TERMIN_CORE_SDK)"
+    }
+}
+
 if ($Profile -eq "core") {
     # Graphics backend selection is not part of the Core product contract.
     $VulkanMode = "off"
@@ -201,6 +210,10 @@ Write-Host "ccache:      $TerminUseCcache"
 Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"
 Write-Host "SDK profile: $Profile"
+if ($Profile -ne "core") {
+    Write-Host "Core SDK:    $($env:TERMIN_CORE_SDK)"
+    Write-Host "Core ID:     $($env:TERMIN_CORE_BUILD_ID)"
+}
 Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else { 'existing/default' })"
 Write-Host "Jobs:        $BuildJobs"
 Write-Host ""
@@ -220,13 +233,15 @@ $cmakeArgs += @(
     "-B", $BuildDir,
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DCMAKE_INSTALL_PREFIX=$SdkPrefix",
-    "-DCMAKE_PREFIX_PATH=$SdkPrefix",
+    "-DCMAKE_PREFIX_PATH=$(if ($Profile -eq 'core') { $SdkPrefix } else { $env:TERMIN_CORE_SDK })",
     "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
     "-DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON",
     "-DTERMIN_USE_CCACHE=$TerminUseCcache",
     "-DTERMIN_ENABLE_UNITY_BUILD=$TerminEnableUnityBuild",
     "-DTERMIN_ENABLE_PCH=$TerminEnablePch",
     "-DTERMIN_SDK_PROFILE=$Profile",
+    "-DTERMIN_CORE_SDK=$(if ($env:TERMIN_CORE_SDK) { $env:TERMIN_CORE_SDK } else { '' })",
+    "-DTERMIN_CORE_BUILD_ID=$(if ($env:TERMIN_CORE_BUILD_ID) { $env:TERMIN_CORE_BUILD_ID } else { '' })",
     "-DTERMIN_BUILD_PYTHON=ON",
     "-DTERMIN_BUILD_TESTS=OFF",
     "-DTERMIN_ENABLE_VULKAN=$TerminEnableVulkan",

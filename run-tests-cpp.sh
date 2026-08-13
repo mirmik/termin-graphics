@@ -153,7 +153,13 @@ echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""
 
-PY_EXEC="$(command -v python3 || command -v python || true)"
+PY_EXEC="${PYTHON_BIN:-}"
+if [[ -z "$PY_EXEC" && -x "$SCRIPT_DIR/build/python-runtime/build-env/bin/python" ]]; then
+    PY_EXEC="$SCRIPT_DIR/build/python-runtime/build-env/bin/python"
+fi
+if [[ -z "$PY_EXEC" ]]; then
+    PY_EXEC="$(command -v python3 || command -v python || true)"
+fi
 if [[ -z "$PY_EXEC" ]]; then
     echo "ERROR: python3 not found; cannot run build doctor" >&2
     exit 1
