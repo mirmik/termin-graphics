@@ -39,7 +39,7 @@ jobs:
         working-directory: termin-core
         run: task build
 
-      - name: Build and verify standalone Graphics
+      - name: Build layer and verify complete Graphics SDK
         run: |
           task test -- \
             --core-sdk "${{ github.workspace }}/termin-core/sdk"
