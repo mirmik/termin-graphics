@@ -44,6 +44,12 @@ if(TERMIN_SDK_PROFILE STREQUAL "graphics" OR TERMIN_SDK_PROFILE STREQUAL "core")
             "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
     else()
         set(TERMIN_RENDER_CORE_ONLY OFF CACHE BOOL "" FORCE)
+        set(TERMIN_ENABLE_OPENGL OFF CACHE BOOL
+            "OpenGL is outside the Core SDK product graph" FORCE)
+        set(TERMIN_ENABLE_VULKAN OFF CACHE BOOL
+            "Vulkan is outside the Core SDK product graph" FORCE)
+        set(TERMIN_ENABLE_SDL OFF CACHE BOOL
+            "SDL is outside the Core SDK product graph" FORCE)
         message(STATUS "Termin: Core SDK profile enabled")
     endif()
 else()

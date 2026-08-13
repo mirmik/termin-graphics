@@ -661,6 +661,12 @@
       "roots": ["termin-mcp/tests"]
     },
     {
+      "id": "termin-graphics-mcp-tests",
+      "module": "termin-graphics-mcp",
+      "executor": "pytest",
+      "roots": ["termin-graphics-mcp/tests"]
+    },
+    {
       "id": "termin-mesh-tests-python",
       "module": "termin-mesh",
       "executor": "pytest",

@@ -100,6 +100,13 @@ if ($Profile -notin @("full", "graphics", "core")) {
 }
 $env:TERMIN_SDK_PROFILE = $Profile
 
+if ($Profile -eq "core") {
+    # Graphics backend selection is not part of the Core product contract.
+    $VulkanMode = "off"
+    $SdlMode = "off"
+    $OpenGlMode = "off"
+}
+
 if ($NoParallel) {
     $BuildJobs = 1
 }
@@ -132,8 +139,14 @@ $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
 # C# stage packages the D3D11 shader set even when OpenGL and Vulkan are
 # explicitly disabled, so D3D11 artifacts are part of the base Windows SDK
 # contract rather than an OpenGL side effect.
-$TerminBuildBuiltinShaderArtifacts = "ON"
-$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") { "d3d11;opengl330" } else { "d3d11" }
+$TerminBuildBuiltinShaderArtifacts = if ($Profile -eq "core") { "OFF" } else { "ON" }
+$TerminBuiltinShaderArtifactTargets = if ($Profile -eq "core") {
+    ""
+} elseif ($TerminEnableOpenGl -eq "ON") {
+    "d3d11;opengl330"
+} else {
+    "d3d11"
+}
 $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnablePch = if ($PchMode -eq "on") { "ON" } else { "OFF" }

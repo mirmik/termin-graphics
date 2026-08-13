@@ -62,6 +62,10 @@
       ]
     },
     {
+      "path": "termin-graphics-mcp",
+      "distribution": "termin-graphics-mcp"
+    },
+    {
       "path": "termin-visual-scene",
       "distribution": "termin-visual-scene",
       "native_extensions": [

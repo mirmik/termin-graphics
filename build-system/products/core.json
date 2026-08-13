@@ -45,6 +45,13 @@
       "native_targets": ["termin_python_host"]
     },
     {
+      "path": "termin-mcp",
+      "role": "runtime",
+      "internal_dependencies": ["termin-base"],
+      "native_targets": [],
+      "python_distribution": "termin-mcp"
+    },
+    {
       "path": "termin-cli",
       "role": "runtime",
       "internal_dependencies": ["termin-base", "termin-python-host"],
@@ -83,6 +90,7 @@
     "termin-dispatch-tests-python",
     "termin-inspect-tests-native",
     "termin-inspect-tests",
+    "termin-mcp-tests",
     "termin-nanobind-tests"
   ],
   "smoke_fixtures": [],

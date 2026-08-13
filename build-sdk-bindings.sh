@@ -86,6 +86,13 @@ case "$SDK_PROFILE" in
 esac
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
+if [[ "$SDK_PROFILE" == "core" ]]; then
+    # Graphics backend selection is not part of the Core product contract.
+    VULKAN_MODE="off"
+    SDL_MODE="off"
+    OPENGL_MODE="off"
+fi
+
 if [[ $NO_PARALLEL -eq 1 ]]; then
     BUILD_JOBS=1
 fi

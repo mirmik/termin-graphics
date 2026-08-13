@@ -89,7 +89,7 @@ The intended first closure is:
 | Embeddable canonical Python host | `termin-python-host` |
 | Isolated SDK Python launcher | Python-only `termin-cli` target |
 | Generic SDK manifest, lock and composition primitives | the domain-neutral subset of `termin-build-tools` |
-| Shared process diagnostics | the domain-neutral part of `termin-mcp`, after decoupling |
+| Shared process diagnostics | `termin-mcp` transport, session and executor runtime |
 
 The machine-readable source of truth for the first closure is
 `build-system/products/core.json`. It explicitly owns module roles, internal
@@ -109,25 +109,22 @@ runtime installation and pack composition. Graphics, physics and engine own
 their product closures, build recipes, smoke tests and application payload
 rules.
 
-### `termin-mcp` admission gate
+### `termin-mcp` adapters
 
-`termin-mcp` is a desired Core facility, not currently a valid member of the
-Core closure. Its distribution still declares `termin-image` and `termin-scene`,
-its executor imports `GeneralTransform3`, and screenshot support belongs to a
-graphics adapter.
+`termin-mcp` is part of the Core closure. It owns process-neutral JSON-RPC/MCP
+transport, SDK-scoped session discovery and caller-driven Python execution.
+The base distribution depends only on `tcbase`; it does not import scene,
+graphics, assets, editor or player packages.
 
-Before admission:
+Domain facilities are contributed explicitly:
 
-- the executor receives all host/domain context explicitly;
-- scene values are provided by an engine adapter;
-- image capture/PNG helpers are provided by a graphics adapter;
-- the base MCP package depends only on Core packages and ordinary third-party
-  protocol/runtime dependencies;
-- tests prove that the generic server and Python executor run without graphics,
-  scene, assets, editor or engine installed.
-
-Core extraction is not blocked by this cleanup: `termin-mcp` may join after the
-first Core SDK is usable.
+- editor and player hosts provide scene/runtime values such as
+  `GeneralTransform3` through their executor adapters;
+- `termin-graphics-mcp` owns texture/surface readback, NumPy conversion and PNG
+  output under the `termin.graphics.mcp` namespace;
+- editor/player packages choose concrete surfaces and expose product-specific
+  tool schemas;
+- the editor stdio broker remains editor-owned rather than joining Core.
 
 ### Explicit Core exclusions
 
