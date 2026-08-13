@@ -48,6 +48,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $sdkPrefix = if ($env:SDK_PREFIX) {
     $env:SDK_PREFIX
+} elseif ($sdkProfile -eq "core") {
+    Join-Path $ScriptDir "sdk-core"
 } else {
     Join-Path $ScriptDir "sdk"
 }

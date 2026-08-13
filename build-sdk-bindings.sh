@@ -62,7 +62,7 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
             echo "  --opengl          Enable desktop OpenGL targets (default)"
-            echo "  --profile=NAME    SDK graph profile: full (default) or graphics"
+            echo "  --profile=NAME    SDK graph profile: full (default), graphics, or core"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -81,8 +81,8 @@ for arg in "$@"; do
 done
 
 case "$SDK_PROFILE" in
-    full|graphics) ;;
-    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full or graphics)"; exit 1 ;;
+    full|graphics|core) ;;
+    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full, graphics, or core)"; exit 1 ;;
 esac
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
@@ -91,7 +91,11 @@ if [[ $NO_PARALLEL -eq 1 ]]; then
 fi
 
 if [[ -z "$BUILD_DIR" ]]; then
-    BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
+    if [[ "$SDK_PROFILE" == "full" ]]; then
+        BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
+    else
+        BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE-$SDK_PROFILE"
+    fi
 fi
 
 case "$VULKAN_MODE" in
@@ -182,6 +186,8 @@ fi
 DOCTOR_PROFILE="sdk-bindings"
 if [[ "$SDK_PROFILE" == "graphics" ]]; then
     DOCTOR_PROFILE="sdk-bindings-graphics"
+elif [[ "$SDK_PROFILE" == "core" ]]; then
+    DOCTOR_PROFILE="sdk-bindings-core"
 fi
 PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \

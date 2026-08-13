@@ -45,7 +45,7 @@ function Show-Help {
     Write-Host "  --sdl             Enable SDL2 support (default)"
     Write-Host "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
     Write-Host "  --opengl          Enable desktop OpenGL targets (default)"
-    Write-Host "  --profile=NAME    SDK graph profile: full (default) or graphics"
+    Write-Host "  --profile=NAME    SDK graph profile: full (default), graphics, or core"
     Write-Host "  --help, -h        Show this help"
     Write-Host ""
     Write-Host "Environment:"
@@ -95,8 +95,8 @@ foreach ($arg in $args) {
     }
 }
 
-if ($Profile -notin @("full", "graphics")) {
-    throw "Unsupported SDK profile: $Profile. Expected 'full' or 'graphics'."
+if ($Profile -notin @("full", "graphics", "core")) {
+    throw "Unsupported SDK profile: $Profile. Expected 'full', 'graphics', or 'core'."
 }
 $env:TERMIN_SDK_PROFILE = $Profile
 
@@ -104,7 +104,8 @@ if ($NoParallel) {
     $BuildJobs = 1
 }
 
-$BuildDir = if ($BuildDirEnv) { $BuildDirEnv } else { Join-Path (Join-Path $ScriptDir "build") $BuildType }
+$DefaultBuildName = if ($Profile -eq "full") { $BuildType } else { "$BuildType-$Profile" }
+$BuildDir = if ($BuildDirEnv) { $BuildDirEnv } else { Join-Path (Join-Path $ScriptDir "build") $DefaultBuildName }
 
 switch ($VulkanMode) {
     "on" {
@@ -161,7 +162,11 @@ if ($oldPythonPath) {
     $env:PYTHONPATH = "$env:PYTHONPATH$([IO.Path]::PathSeparator)$oldPythonPath"
 }
 
-$DoctorProfile = if ($Profile -eq "graphics") { "sdk-bindings-graphics" } else { "sdk-bindings" }
+$DoctorProfile = switch ($Profile) {
+    "graphics" { "sdk-bindings-graphics" }
+    "core" { "sdk-bindings-core" }
+    default { "sdk-bindings" }
+}
 & $pythonExec -m termin_build.sdk --repo-root $ScriptDir doctor --profile $DoctorProfile --vulkan $TerminEnableVulkan --sdl $TerminEnableSdl --init-submodules
 if ($LASTEXITCODE -ne 0) { throw "SDK bindings preflight failed" }
 

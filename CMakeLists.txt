@@ -20,26 +20,32 @@ option(TERMIN_USE_CCACHE "Use ccache as C/C++ compiler launcher when available" 
 option(TERMIN_ENABLE_UNITY_BUILD "Enable CMake unity build for faster clean builds" OFF)
 option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" ON)
 set(TERMIN_SDK_PROFILE "full" CACHE STRING
-    "SDK target graph profile: full or graphics")
-set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics)
+    "SDK target graph profile: full, graphics or core")
+set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics core)
 
 if(NOT TERMIN_SDK_PROFILE STREQUAL "full"
-   AND NOT TERMIN_SDK_PROFILE STREQUAL "graphics")
+   AND NOT TERMIN_SDK_PROFILE STREQUAL "graphics"
+   AND NOT TERMIN_SDK_PROFILE STREQUAL "core")
     message(FATAL_ERROR
         "Unsupported TERMIN_SDK_PROFILE='${TERMIN_SDK_PROFILE}'. "
-        "Expected one of: full, graphics")
+        "Expected one of: full, graphics, core")
 endif()
 
-if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+if(TERMIN_SDK_PROFILE STREQUAL "graphics" OR TERMIN_SDK_PROFILE STREQUAL "core")
     if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
         message(FATAL_ERROR
-            "TERMIN_SDK_PROFILE=graphics is a desktop SDK profile")
+            "TERMIN_SDK_PROFILE=${TERMIN_SDK_PROFILE} is a desktop SDK profile")
     endif()
-    set(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(TERMIN_GUI_NATIVE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(TERMIN_RENDER_CORE_ONLY ON CACHE BOOL "" FORCE)
-    message(STATUS
-        "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
+    if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+        set(TERMIN_VISUAL_SCENE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(TERMIN_GUI_NATIVE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(TERMIN_RENDER_CORE_ONLY ON CACHE BOOL "" FORCE)
+        message(STATUS
+            "Termin: graphics SDK profile enabled (widgets, visual scene, 2D/3D charts)")
+    else()
+        set(TERMIN_RENDER_CORE_ONLY OFF CACHE BOOL "" FORCE)
+        message(STATUS "Termin: Core SDK profile enabled")
+    endif()
 else()
     set(TERMIN_RENDER_CORE_ONLY OFF CACHE BOOL "" FORCE)
 endif()
@@ -236,11 +242,11 @@ set(TERMIN_COMPONENTS_KINEMATIC_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" 
 set(TERMIN_PHYSICS_QOPT_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" FORCE)
 set(TC_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" FORCE)
 
-# The graphics SDK only needs the isolated Python launcher.  Keep this cache
-# entry deterministic because all SDK profiles may reuse the same build tree.
-# In particular, a graphics configure must not suppress the full CLI toolset
-# during a later full SDK configure.
-if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+# Library SDK profiles only need the isolated Python launcher. Keep this cache
+# entry deterministic because profiles may reuse an explicitly selected build
+# tree. In particular, a library configure must not suppress the full CLI
+# toolset during a later full SDK configure.
+if(NOT TERMIN_SDK_PROFILE STREQUAL "full")
     set(_termin_cli_python_only ON)
 else()
     set(_termin_cli_python_only OFF)
@@ -273,7 +279,11 @@ endif()
 
 add_subdirectory(termin-base)
 
-if(TERMIN_SDK_PROFILE STREQUAL "graphics")
+if(TERMIN_SDK_PROFILE STREQUAL "core")
+    add_subdirectory(termin-dispatch)
+    add_subdirectory(termin-inspect)
+    add_subdirectory(termin-cli)
+elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
     add_subdirectory(termin-dispatch)
     add_subdirectory(termin-image)
     add_subdirectory(termin-mesh)
