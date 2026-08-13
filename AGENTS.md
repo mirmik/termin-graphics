@@ -24,6 +24,7 @@ On Linux, use the public entry points:
 
 ```bash
 task build -- --core-sdk /absolute/path/to/termin-core/sdk
+task compose -- --core-sdk /absolute/path/to/termin-core/sdk
 TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
@@ -31,6 +32,10 @@ TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- --core-sdk /absolute/path/t
 implementation details under `scripts/`; do not add root-level command
 wrappers. There is no SDK profile switch: Graphics is the product. Backend
 flags select capabilities within the product.
+
+`task build` publishes the authoritative thin layer in `sdk/`; `task compose`
+materializes the disposable runnable composition in `sdk-complete/`. Never add
+Core-owned files to the layer merely to make it directly runnable.
 
 The installed-consumer smoke is the release boundary. It must relocate Core
 and the Graphics layer independently, compose them without file collisions,

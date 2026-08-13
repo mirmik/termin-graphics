@@ -27,6 +27,16 @@ contains no Core runtime, libraries, headers, or CMake packages. Its
 runnable SDK is formed by composing this layer over that immutable Core SDK;
 file collisions are rejected.
 
+To materialize a directly runnable complete SDK from an existing layer:
+
+```bash
+task compose -- --core-sdk /absolute/path/to/termin-core/sdk
+```
+
+The result is written to `sdk-complete/`. Composition is implemented by the
+domain-neutral build frontend shipped in Core; this repository only provides
+the Graphics-specific public command and defaults.
+
 ## Verify the installed boundary
 
 The smoke test relocates Core and Graphics independently, composes them in a

@@ -9,6 +9,7 @@ build-superbuild/
 **/install_win/
 **/sdk/
 /sdk-core/
+/sdk-complete/
 
 # ── CMake generated files ───────────────────────────────────────
 CMakeCache.txt

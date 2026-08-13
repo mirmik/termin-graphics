@@ -14,19 +14,27 @@ tasks:
     cmds:
       - ./scripts/build/sdk.sh {{.CLI_ARGS}}
 
+  compose:
+    desc: Compose the existing Graphics layer over Core into sdk-complete
+    platforms: [linux]
+    cmds:
+      - ./scripts/compose-sdk.sh {{.CLI_ARGS}}
+
   test:
     desc: Build the Graphics layer and verify the composed SDK
     platforms: [linux]
     cmds:
       - ./scripts/build/sdk.sh {{.CLI_ARGS}}
+      - ./scripts/compose-sdk.sh {{.CLI_ARGS}}
       - ./scripts/test/render-core.sh {{.CLI_ARGS}}
-      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk {{.CLI_ARGS}}
+      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk --complete-sdk sdk-complete {{.CLI_ARGS}}
 
   smoke:
     desc: Verify Core and the existing Graphics layer after relocation
     platforms: [linux]
     cmds:
-      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk {{.CLI_ARGS}}
+      - ./scripts/compose-sdk.sh {{.CLI_ARGS}}
+      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk --complete-sdk sdk-complete {{.CLI_ARGS}}
 
   toolchain:slang:
     desc: Install the pinned Slang compiler

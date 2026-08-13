@@ -14,6 +14,9 @@ TERMIN_SLANGC=/absolute/path/to/slangc task smoke -- \
   --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
+`task smoke` first regenerates `sdk-complete/` through the Core-owned generic
+composer, then relocates and verifies that complete prefix.
+
 The check relocates Core and the Graphics layer independently, composes them
 without file collisions in a temporary location, and removes ambient
 Core, Graphics, and Python source paths. It verifies:

@@ -67,7 +67,8 @@ prefix. Compose it over the recorded Core SDK before launching the windowed
 showcase:
 
 ```bash
-/absolute/path/to/composed-sdk/bin/termin_python -I \
+task compose -- --core-sdk /absolute/path/to/termin-core/sdk
+sdk-complete/bin/termin_python -I \
   examples/graphics-showcase/main.py --windowed
 ```
 

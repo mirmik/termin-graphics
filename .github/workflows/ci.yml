@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  CORE_REVISION: c53cf2c19ea806f830c8a3b17fb0da165a6124f9
+  CORE_REVISION: 2be9987872632a4c82bcd399424161561384f1a2
 
 jobs:
   linux:
@@ -47,7 +47,15 @@ jobs:
       - name: Publish verified Linux Graphics SDK
         uses: actions/upload-artifact@v4
         with:
-          name: termin-graphics-sdk-layer-linux-x86_64-py314t-core-c53cf2c
+          name: termin-graphics-sdk-layer-linux-x86_64-py314t-core-2be9987
           path: sdk/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish verified complete Linux Graphics SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: termin-graphics-sdk-complete-linux-x86_64-py314t-core-2be9987
+          path: sdk-complete/
           if-no-files-found: error
           retention-days: 14

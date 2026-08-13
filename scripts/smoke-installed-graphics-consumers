@@ -117,27 +117,34 @@ def _verify_thin_layer(sdk_root: Path) -> None:
         raise SmokeError("Graphics layer republishes Core artifacts: " + ", ".join(leaked))
 
 
-def _compose_bundle(core_root: Path, layer_root: Path, output: Path) -> None:
-    shutil.copytree(core_root, output, symlinks=True)
-    for top_name in ("bin", "include", "lib", "share"):
-        source = layer_root / top_name
-        if not source.is_dir():
-            continue
-        for path in source.rglob("*"):
-            relative = path.relative_to(source)
-            destination = output / top_name / relative
-            if path.is_dir():
-                destination.mkdir(parents=True, exist_ok=True)
-                continue
-            if destination.exists() or destination.is_symlink():
-                raise SmokeError(
-                    f"Core/Graphics bundle collision: {top_name}/{relative.as_posix()}"
-                )
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if path.is_symlink():
-                destination.symlink_to(os.readlink(path))
-            else:
-                shutil.copy2(path, destination)
+def _verify_complete_sdk(
+    complete_root: Path, core_root: Path, layer_root: Path
+) -> None:
+    try:
+        composition = json.loads(
+            (complete_root / "sdk-composition.json").read_text(encoding="utf-8")
+        )
+        core_manifest = json.loads(
+            (core_root / "termin-artifacts.json").read_text(encoding="utf-8")
+        )
+        layer_manifest = json.loads(
+            (layer_root / "termin-artifacts.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as error:
+        raise SmokeError(f"composed SDK metadata is invalid: {error}") from error
+    identities = {
+        item.get("product_id"): item.get("native_build_id")
+        for item in composition.get("components", [])
+        if isinstance(item, dict)
+    }
+    expected = {
+        "core": core_manifest.get("native_build_id"),
+        "graphics": layer_manifest.get("native_build_id"),
+    }
+    if identities != expected:
+        raise SmokeError(
+            f"composed SDK component identities differ: {identities!r} != {expected!r}"
+        )
 
 
 def _select_slangc(explicit: Path | None) -> Path:
@@ -154,6 +161,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk-root", type=Path, required=True)
     parser.add_argument("--core-sdk", type=Path, required=True)
+    parser.add_argument("--complete-sdk", type=Path, required=True)
     parser.add_argument("--work-root", type=Path)
     parser.add_argument("--slangc", type=Path)
     for backend in ("sdl", "vulkan", "opengl"):
@@ -163,11 +171,16 @@ def main() -> int:
 
     source_sdk = args.sdk_root.resolve()
     source_core = args.core_sdk.resolve()
+    source_complete = args.complete_sdk.resolve()
     launcher = "termin_python.exe" if os.name == "nt" else "termin_python"
     if not (source_core / "bin" / launcher).is_file():
         parser.error(f"Core SDK launcher is missing: {source_core / 'bin' / launcher}")
     if (source_sdk / "bin" / launcher).exists():
         parser.error(f"Graphics layer must not contain Core launcher: {source_sdk / 'bin' / launcher}")
+    if not (source_complete / "bin" / launcher).is_file():
+        parser.error(
+            f"composed SDK launcher is missing: {source_complete / 'bin' / launcher}"
+        )
 
     temporary = None
     if args.work_root is None:
@@ -191,7 +204,8 @@ def main() -> int:
         shutil.copytree(source_sdk, relocated_layer, symlinks=True)
         _verify_manifests(relocated_layer, relocated_core)
         _verify_thin_layer(relocated_layer)
-        _compose_bundle(relocated_core, relocated_layer, relocated_sdk)
+        shutil.copytree(source_complete, relocated_sdk, symlinks=True)
+        _verify_complete_sdk(relocated_sdk, relocated_core, relocated_layer)
         shutil.copytree(FIXTURE_ROOT, fixture)
         shutil.copytree(SHOWCASE_ROOT, source_hidden / "examples" / "graphics-showcase")
         (source_hidden / "scripts").mkdir(parents=True)
