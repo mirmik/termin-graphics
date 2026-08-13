@@ -121,7 +121,7 @@ def install(lock_path: Path, root: Path, *, require_installed: bool) -> tuple[Pa
         return executable.resolve(), version
     if require_installed:
         raise RuntimeError(
-            f"Slang {version} is not installed at {install_dir}; run setup-slang-toolchain.sh"
+            f"Slang {version} is not installed at {install_dir}; run 'task toolchain:slang'"
         )
     if install_dir.exists():
         raise RuntimeError(

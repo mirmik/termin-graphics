@@ -1,8 +1,11 @@
 {
   "schema": 1,
-  "description": "Repository test scheduling inventory. Every repository-owned Python test matching the declared patterns must have exactly one pytest suite owner.",
+  "description": "Termin Graphics repository test scheduling inventory.",
   "python_test_inventory": {
-    "patterns": ["test_*.py", "*_test.py"],
+    "patterns": [
+      "test_*.py",
+      "*_test.py"
+    ],
     "exclude_roots": [
       ".git",
       ".venv",
@@ -10,209 +13,359 @@
       "sdk",
       "termin-thirdparty"
     ],
-    "exclude_directory_names": ["__pycache__", "build", "dist"]
+    "exclude_directory_names": [
+      "__pycache__",
+      "build",
+      "dist"
+    ]
   },
   "native_test_inventory": {
-    "patterns": ["test_*", "tests_*", "*_test.*"],
-    "extensions": [".c", ".cc", ".cpp", ".cxx"],
+    "patterns": [
+      "test_*",
+      "tests_*",
+      "*_test.*"
+    ],
+    "extensions": [
+      ".c",
+      ".cc",
+      ".cpp",
+      ".cxx"
+    ],
     "exclude_roots": [
       ".git",
       "build",
       "sdk",
       "termin-thirdparty"
     ],
-    "exclude_directory_names": ["__pycache__", "build", "dist"],
+    "exclude_directory_names": [
+      "__pycache__",
+      "build",
+      "dist"
+    ],
     "source_classifications": [
       {
-        "path": "termin-app/cpp/tests/tests_binding.cpp",
-        "profiles": ["pr", "linux-full", "windows-d3d11"],
-        "capabilities": ["python-bindings"],
-        "reason": "Compiled by termin_tests only when the C++ Python bindings are enabled."
-      },
-      {
         "path": "termin-window/tests/test_backend_window_triangle.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window"
+        ],
         "reason": "Creates an SDL window and is deliberately outside the headless PR graph."
       },
       {
         "path": "termin-window/tests/test_backend_window_d3d11_present.cpp",
-        "profiles": ["windows-d3d11"],
-        "capabilities": ["window", "d3d11"],
+        "profiles": [
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window",
+          "d3d11"
+        ],
         "reason": "Requires the Windows D3D11 presentation path."
       },
       {
         "path": "termin-window/tests/test_multiwindow_event_routing.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window"
+        ],
         "reason": "Compiled only when SDL window integration is available."
       },
       {
         "path": "termin-window/tests/test_sdl_window_system_lifecycle.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window"
+        ],
         "reason": "Compiled only when SDL window integration is available."
       },
       {
         "path": "termin-window/tests/test_window_manager_live.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window", "opengl"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window",
+          "opengl"
+        ],
         "reason": "Requires SDL window integration and an OpenGL presentation path."
       },
       {
         "path": "termin-gui-native/tests/test_window_adapter.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window"
+        ],
         "reason": "Compiled only when the native GUI window adapter is enabled."
       },
       {
         "path": "termin-gui-native/tests/test_window_input.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window"
+        ],
         "reason": "Compiled only when the native GUI window input adapter is enabled."
       },
       {
         "path": "termin-graphics/tests/test_render_context2.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window", "glfw"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window",
+          "glfw"
+        ],
         "reason": "Creates a GLFW render context supplied by the build environment."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_smoke.cpp",
-        "profiles": ["linux-full", "windows-d3d11"],
-        "capabilities": ["window", "glfw"],
+        "profiles": [
+          "linux-full",
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window",
+          "glfw"
+        ],
         "reason": "Creates a GLFW window supplied by the build environment."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_opengl_bound_resource_set.cpp",
-        "profiles": ["linux-full"],
-        "capabilities": ["window", "opengl"],
+        "profiles": [
+          "linux-full"
+        ],
+        "capabilities": [
+          "window",
+          "opengl"
+        ],
         "reason": "Requires an SDL OpenGL window and is not a Windows D3D11 gate."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_opengl_navmesh_overlay.cpp",
-        "profiles": ["linux-full"],
-        "capabilities": ["window", "opengl"],
+        "profiles": [
+          "linux-full"
+        ],
+        "capabilities": [
+          "window",
+          "opengl"
+        ],
         "reason": "Requires an SDL OpenGL window for the navmesh depth-ordering pixel regression."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_window.cpp",
-        "profiles": ["linux-full"],
-        "capabilities": ["window", "vulkan"],
+        "profiles": [
+          "linux-full"
+        ],
+        "capabilities": [
+          "window",
+          "vulkan"
+        ],
         "reason": "Requires an SDL Vulkan window."
       },
       {
         "path": "termin-graphics/tests/test_draw_list2d_pixel_smoke.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_output_transform_pixel_smoke.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_per_pipeline_layout.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_text2d_coverage_pixel_smoke.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_dirty_range.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_gpu_timestamp_math.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_image_transition_sync.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_presentation_transform.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_smoke.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_vulkan_stats.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "Built only with the Vulkan backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_d3d11_smoke.cpp",
-        "profiles": ["windows-d3d11"],
-        "capabilities": ["d3d11"],
+        "profiles": [
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "d3d11"
+        ],
         "reason": "Exercises the Windows D3D11 backend."
       },
       {
         "path": "termin-graphics/tests/test_tgfx2_d3d11_window.cpp",
-        "profiles": ["windows-d3d11"],
-        "capabilities": ["window", "d3d11"],
+        "profiles": [
+          "windows-d3d11"
+        ],
+        "capabilities": [
+          "window",
+          "d3d11"
+        ],
         "reason": "Requires an SDL D3D11 window."
       },
       {
         "path": "tcplot/tests/test_plot_marker_offscreen.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "The offscreen rendering smoke is enabled only with the Vulkan shader test path."
       },
       {
         "path": "tcplot/tests/test_plot_series_performance.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "The rendering performance smoke is enabled only with the Vulkan shader test path."
       },
       {
         "path": "tcplot/tests/test_retained_chart3d.cpp",
-        "profiles": ["pr", "linux-full"],
-        "capabilities": ["vulkan"],
+        "profiles": [
+          "pr",
+          "linux-full"
+        ],
+        "capabilities": [
+          "vulkan"
+        ],
         "reason": "The retained Chart3D smoke is enabled only with the Vulkan shader test path."
       }
     ]
   },
   "suite_defaults": {
     "pytest": {
-      "profiles": ["pr", "linux-full", "windows-d3d11"],
-      "platforms": ["linux", "windows"]
+      "profiles": [
+        "pr",
+        "linux-full",
+        "windows-d3d11"
+      ],
+      "platforms": [
+        "linux",
+        "windows"
+      ]
     },
     "ctest": {
-      "profiles": ["pr", "linux-full", "windows-d3d11"],
-      "platforms": ["linux", "windows"]
-    },
-    "process-smoke": {
-      "profiles": ["editor-smoke"],
-      "platforms": ["linux", "windows"],
-      "required_capabilities": ["editor"]
-    },
-    "device": {
-      "platforms": ["android", "quest"]
-    },
-    "manual": {
-      "profiles": ["manual"],
-      "platforms": ["linux", "windows", "android", "quest"]
+      "profiles": [
+        "pr",
+        "linux-full",
+        "windows-d3d11"
+      ],
+      "platforms": [
+        "linux",
+        "windows"
+      ]
     }
   },
   "profiles": [
@@ -232,558 +385,248 @@
     {
       "id": "windows-d3d11",
       "description": "Windows and D3D11-specific suites."
-    },
-    {
-      "id": "windows-d3d11-bound",
-      "description": "Focused Windows D3D11 bound-resource smoke."
-    },
-    {
-      "id": "editor-smoke",
-      "description": "Isolated editor-process smoke suites."
-    },
-    {
-      "id": "sdk-installed",
-      "description": "Installed SDK and application-bundle acceptance suites."
-    },
-    {
-      "id": "device-android",
-      "description": "Android device build, deploy, and runtime gates."
-    },
-    {
-      "id": "device-quest",
-      "description": "Quest/OpenXR device build, deploy, and runtime gates."
-    },
-    {
-      "id": "manual",
-      "description": "Explicitly recorded human verification gates."
     }
   ],
   "suites": [
     {
-      "id": "editor-python-module-reload-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-python-module-hot-reload"],
-      "platforms": ["linux"],
-      "reason": "Runs a real editor process and verifies explicit Python module reload."
+      "id": "termin-window-tests-native",
+      "module": "termin-window",
+      "executor": "ctest",
+      "roots": [
+        "termin-window/tests"
+      ]
     },
     {
-      "id": "editor-cpp-module-cascade-reload-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-cpp-module-cascade-hot-reload"],
-      "platforms": ["linux"],
-      "reason": "Runs a real editor process and verifies C++ cascade module reload."
+      "id": "termin-window-tests-python",
+      "module": "termin-window",
+      "executor": "pytest",
+      "roots": [
+        "termin-window/python/tests"
+      ]
     },
     {
-      "id": "editor-sdk-shader-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-sdk-editor-shaders"],
-      "platforms": ["linux"],
-      "reason": "Runs the installed editor with an empty OpenGL shader cache and verifies built-in engine shader sources and artifacts."
+      "id": "termin-glb-tests-native",
+      "module": "termin-glb",
+      "executor": "ctest",
+      "roots": [
+        "termin-glb/tests"
+      ]
     },
     {
-      "id": "editor-virtual-display-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-editor-virtual-display"],
-      "platforms": ["linux"],
-      "required_capabilities": ["virtual-display"],
-      "reason": "Runs the installed editor through Xvfb and Mesa llvmpipe, verifies MCP project/scene access, and requests clean shutdown."
-    },
-    {
-      "id": "editor-mcp-offscreen-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-editor-mcp-offscreen"],
-      "platforms": ["linux"],
-      "reason": "Runs two isolated installed editors without a display server, verifies unique MCP sessions, commands and Vulkan offscreen PNG readback, then covers deterministic MCP-close and SIGINT shutdown paths."
-    },
-    {
-      "id": "relocated-sdk-acceptance",
-      "module": "termin-build-tools",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-relocated-sdk.py"],
-      "profiles": ["sdk-installed"],
-      "platforms": ["linux", "windows"],
-      "required_capabilities": ["installed-sdk", "sdk-relocation"],
-      "reason": "Copies the manifest-verified SDK and exercises bundled editor, launcher, player, and Python hosts under the same hostile-environment contract on Linux and Windows."
-    },
-    {
-      "id": "native-player-mcp-smoke",
-      "module": "termin-player",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-native-player-mcp.py"],
-      "profiles": ["sdk-installed"],
-      "platforms": ["linux"],
-      "required_capabilities": ["installed-sdk", "virtual-display"],
-      "reason": "Builds a starter desktop bundle, verifies native player MCP live context and PNG readback, then checks request_quit and owned-session cleanup."
-    },
-    {
-      "id": "tgfx2-d3d11-bound-smoke",
+      "id": "termin-graphics-tests-native",
       "module": "termin-graphics",
-      "executor": "process-smoke",
-      "roots": ["scripts/validate-tgfx2-d3d11-bound-path.ps1"],
-      "profiles": ["windows-d3d11-bound"],
-      "platforms": ["windows"],
-      "required_capabilities": ["d3d11"],
-      "reason": "Focused Windows build-and-run smoke for the D3D11 bound-resource and optional present paths."
+      "executor": "ctest",
+      "roots": [
+        "termin-graphics/tests"
+      ]
     },
     {
-      "id": "editor-d3d11-scene-smoke",
-      "module": "termin-app",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-windows-d3d11-editor.py"],
-      "profiles": ["windows-d3d11"],
-      "platforms": ["windows"],
-      "required_capabilities": ["d3d11"],
-      "reason": "Runs the installed editor against a repository-owned scene, verifies the D3D11 framegraph and PNG readback, and rejects debug-layer errors or backend fallback."
+      "id": "termin-visual-scene-tests-native",
+      "module": "termin-visual-scene",
+      "executor": "ctest",
+      "roots": [
+        "termin-visual-scene/tests"
+      ]
     },
-    {
-      "id": "player-d3d11-scene-smoke",
-      "module": "termin-player",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-windows-d3d11-player.py"],
-      "profiles": ["windows-d3d11"],
-      "platforms": ["windows"],
-      "required_capabilities": ["d3d11"],
-      "reason": "Builds a strict D3D11-only desktop bundle and runs its native player for 30 presented frames with the D3D11 debug layer enabled."
-    },
-    {
-      "id": "wpf-d3d11-scene-smoke",
-      "module": "termin-csharp",
-      "executor": "process-smoke",
-      "roots": ["scripts/smoke-windows-d3d11-wpf-scene.py"],
-      "profiles": ["windows-d3d11"],
-      "platforms": ["windows"],
-      "required_capabilities": ["d3d11"],
-      "reason": "Builds SceneApp without OpenGL and presents 30 frames from a display-owned D3D11 offscreen texture through WPF D3DImage with the debug layer enabled."
-    },
-    {
-      "id": "android-apk-build-gate",
-      "module": "termin-android",
-      "executor": "device",
-      "roots": ["build-android-apk.sh"],
-      "profiles": ["device-android"],
-      "platforms": ["android"],
-      "reason": "Build-only Android gate; deployment/runtime requires a separately attached device."
-    },
-    {
-      "id": "quest-openxr-apk-build-gate",
-      "module": "termin-openxr",
-      "executor": "device",
-      "roots": ["build-quest-openxr-apk.sh"],
-      "profiles": ["device-quest"],
-      "platforms": ["quest"],
-      "reason": "Quest/OpenXR package gate; a connected headset is required for runtime execution."
-    },
-    {
-      "id": "manual-smoke-check-catalog",
-      "module": "termin-app",
-      "executor": "manual",
-      "roots": ["docs/smoke-checks.md"],
-      "reason": "Human-facing desktop/backend smoke procedures are recorded here until each has an automated process or device executor."
-    },
-    {"id": "termin-app-cpp-tests", "module": "termin-app", "executor": "ctest", "roots": ["termin-app/cpp/tests"]},
-    {"id": "termin-audio-tests-native", "module": "termin-audio", "executor": "ctest", "roots": ["termin-audio/tests"]},
-    {"id": "termin-bootstrap-tests-native", "module": "termin-bootstrap", "executor": "ctest", "roots": ["termin-bootstrap/tests"]},
-    {"id": "termin-collision-tests-native", "module": "termin-collision", "executor": "ctest", "roots": ["termin-collision/tests"]},
-    {"id": "termin-components-collision-tests-native", "module": "termin-components-collision", "executor": "ctest", "roots": ["termin-components/termin-components-collision/tests"]},
-    {"id": "termin-components-foliage-tests-native", "module": "termin-components-foliage", "executor": "ctest", "roots": ["termin-components/termin-components-foliage/tests"]},
-    {"id": "termin-components-kinematic-tests-native", "module": "termin-components-kinematic", "executor": "ctest", "roots": ["termin-components/termin-components-kinematic/tests"]},
-    {"id": "termin-components-physics-tests-native", "module": "termin-components-physics", "executor": "ctest", "roots": ["termin-components/termin-components-physics/tests"]},
-    {"id": "termin-components-physics-fem-tests-native", "module": "termin-components-physics-fem", "executor": "ctest", "roots": ["termin-components/termin-components-physics-fem/tests"]},
-    {"id": "termin-components-render-tests-native", "module": "termin-components-render", "executor": "ctest", "roots": ["termin-components/termin-components-render/tests"]},
-    {"id": "termin-components-ui-tests-native", "module": "termin-components-ui", "executor": "ctest", "roots": ["termin-components/termin-components-ui/tests"]},
-    {"id": "termin-csg-tests-native", "module": "termin-csg", "executor": "ctest", "roots": ["termin-csg/tests"]},
-    {"id": "termin-display-tests-native", "module": "termin-display", "executor": "ctest", "roots": ["termin-display/tests"]},
-    {"id": "termin-window-tests-native", "module": "termin-window", "executor": "ctest", "roots": ["termin-window/tests"]},
-    {"id": "termin-window-tests-python", "module": "termin-window", "executor": "pytest", "roots": ["termin-window/python/tests"]},
-    {"id": "termin-engine-tests-native", "module": "termin-engine", "executor": "ctest", "roots": ["termin-engine/tests"]},
-    {"id": "termin-glb-tests-native", "module": "termin-glb", "executor": "ctest", "roots": ["termin-glb/tests"]},
-    {"id": "termin-graphics-tests-native", "module": "termin-graphics", "executor": "ctest", "roots": ["termin-graphics/tests"]},
-    {"id": "termin-visual-scene-tests-native", "module": "termin-visual-scene", "executor": "ctest", "roots": ["termin-visual-scene/tests"]},
     {
       "id": "termin-visual-scene-tests-python",
       "module": "termin-visual-scene",
       "executor": "pytest",
-      "roots": ["termin-visual-scene/python/tests"]
+      "roots": [
+        "termin-visual-scene/python/tests"
+      ]
     },
-    {"id": "tcplot-tests-native", "module": "tcplot", "executor": "ctest", "roots": ["tcplot/tests"]},
-    {"id": "tcplot-gui-native-tests", "module": "tcplot-gui-native", "executor": "ctest", "roots": ["tcplot-gui-native/tests"]},
-    {"id": "tcplot-gui-native-tests-python", "module": "tcplot-gui-native", "executor": "pytest", "roots": ["tcplot-gui-native/tests/python"]},
-    {"id": "termin-gui-native-tests", "module": "termin-gui-native", "executor": "ctest", "roots": ["termin-gui-native/tests"]},
-    {"id": "termin-image-tests-native", "module": "termin-image", "executor": "ctest", "roots": ["termin-image/tests"]},
-    {"id": "termin-framegraph-remote-tests-native", "module": "termin-framegraph-remote", "executor": "ctest", "roots": ["termin-framegraph-remote/tests"]},
-    {"id": "termin-framegraph-remote-target-tests-native", "module": "termin-framegraph-remote-target", "executor": "ctest", "roots": ["termin-framegraph-remote-target/tests"]},
-    {"id": "termin-profiler-remote-tests-native", "module": "termin-profiler-remote", "executor": "ctest", "roots": ["termin-profiler-remote/tests"]},
-    {"id": "termin-profiler-tests-native", "module": "termin-profiler", "executor": "ctest", "roots": ["termin-profiler/tests"]},
-    {"id": "termin-input-tests-native", "module": "termin-input", "executor": "ctest", "roots": ["termin-input/tests"]},
-    {"id": "termin-materials-tests-native", "module": "termin-materials", "executor": "ctest", "roots": ["termin-materials/tests"]},
-    {"id": "termin-modules-tests-native", "module": "termin-modules", "executor": "ctest", "roots": ["termin-modules/tests"]},
-    {"id": "termin-navmesh-tests-native", "module": "termin-navmesh", "executor": "ctest", "roots": ["termin-navmesh/tests"]},
-    {"id": "termin-nodegraph-tests-native", "module": "termin-nodegraph", "executor": "ctest", "roots": ["termin-nodegraph/tests"]},
-    {"id": "termin-prefab-tests-native", "module": "termin-prefab", "executor": "ctest", "roots": ["termin-prefab/tests"]},
-    {"id": "termin-physics-tests-native", "module": "termin-physics", "executor": "ctest", "roots": ["termin-physics/tests"]},
-    {"id": "termin-qopt-tests-native", "module": "termin-qopt", "executor": "ctest", "roots": ["termin-qopt/tests"]},
-    {"id": "termin-robotics-tests-native", "module": "termin-robotics", "executor": "ctest", "roots": ["termin-robotics/tests"]},
-    {"id": "termin-robotics-tests-python", "module": "termin-robotics", "executor": "pytest", "roots": ["termin-robotics/python/tests"]},
-    {"id": "termin-physics-qopt-tests-native", "module": "termin-physics-qopt", "executor": "ctest", "roots": ["termin-physics-qopt/tests"]},
-    {"id": "termin-render-passes-tests-native", "module": "termin-render-passes", "executor": "ctest", "roots": ["termin-render-passes/tests"]},
-    {"id": "termin-render-tests-native", "module": "termin-render", "executor": "ctest", "roots": ["termin-render/tests"]},
-    {"id": "termin-runtime-tests-native", "module": "termin-runtime", "executor": "ctest", "roots": ["termin-runtime/tests"]},
-    {"id": "termin-scene-tests-native", "module": "termin-scene", "executor": "ctest", "roots": ["termin-scene/tests"]},
-    {"id": "termin-skeleton-tests-native", "module": "termin-skeleton", "executor": "ctest", "roots": ["termin-skeleton/tests"]},
-    {"id": "termin-lighting-tests-native", "module": "termin-lighting", "executor": "ctest", "roots": ["termin-lighting/tests"]},
+    {
+      "id": "tcplot-tests-native",
+      "module": "tcplot",
+      "executor": "ctest",
+      "roots": [
+        "tcplot/tests"
+      ]
+    },
+    {
+      "id": "tcplot-gui-native-tests",
+      "module": "tcplot-gui-native",
+      "executor": "ctest",
+      "roots": [
+        "tcplot-gui-native/tests"
+      ]
+    },
+    {
+      "id": "tcplot-gui-native-tests-python",
+      "module": "tcplot-gui-native",
+      "executor": "pytest",
+      "roots": [
+        "tcplot-gui-native/tests/python"
+      ]
+    },
+    {
+      "id": "termin-gui-native-tests",
+      "module": "termin-gui-native",
+      "executor": "ctest",
+      "roots": [
+        "termin-gui-native/tests"
+      ]
+    },
+    {
+      "id": "termin-image-tests-native",
+      "module": "termin-image",
+      "executor": "ctest",
+      "roots": [
+        "termin-image/tests"
+      ]
+    },
+    {
+      "id": "termin-materials-tests-native",
+      "module": "termin-materials",
+      "executor": "ctest",
+      "roots": [
+        "termin-materials/tests"
+      ]
+    },
+    {
+      "id": "termin-nodegraph-tests-native",
+      "module": "termin-nodegraph",
+      "executor": "ctest",
+      "roots": [
+        "termin-nodegraph/tests"
+      ]
+    },
+    {
+      "id": "termin-render-tests-native",
+      "module": "termin-render",
+      "executor": "ctest",
+      "roots": [
+        "termin-render/tests"
+      ]
+    },
+    {
+      "id": "termin-skeleton-tests-native",
+      "module": "termin-skeleton",
+      "executor": "ctest",
+      "roots": [
+        "termin-skeleton/tests"
+      ]
+    },
     {
       "id": "tcplot-tests-python",
       "module": "tcplot",
       "executor": "pytest",
-      "roots": ["tcplot/tests/python"]
+      "roots": [
+        "tcplot/tests/python"
+      ]
     },
     {
       "id": "termin-animation-tests",
       "module": "termin-animation",
       "executor": "pytest",
-      "roots": ["termin-animation/tests"]
-    },
-    {
-      "id": "termin-components-animation-tests",
-      "module": "termin-components-animation",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-animation/tests"]
-    },
-    {
-      "id": "termin-audio-tests",
-      "module": "termin-audio",
-      "executor": "pytest",
-      "roots": ["termin-audio/tests"]
-    },
-    {
-      "id": "termin-app-tests",
-      "module": "termin-app",
-      "executor": "pytest",
-      "roots": ["termin-app/tests"],
-      "excluded_roots": [
-        "termin-app/tests/test_native_build_profiles_window.py",
-        "termin-app/tests/test_native_entity_inspector.py",
-        "termin-app/tests/test_native_inspector_fields.py",
-        "termin-app/tests/test_native_project_browser.py",
-        "termin-app/tests/test_native_registry_viewer.py",
-        "termin-app/tests/test_native_ui_host.py"
-      ]
-    },
-    {
-      "id": "termin-app-window-tests",
-      "module": "termin-app",
-      "executor": "pytest",
       "roots": [
-        "termin-app/tests/test_native_build_profiles_window.py",
-        "termin-app/tests/test_native_entity_inspector.py",
-        "termin-app/tests/test_native_inspector_fields.py",
-        "termin-app/tests/test_native_project_browser.py",
-        "termin-app/tests/test_native_registry_viewer.py",
-        "termin-app/tests/test_native_ui_host.py"
-      ],
-      "required_capabilities": ["window"]
-    },
-    {
-      "id": "termin-assets-tests",
-      "module": "termin-assets",
-      "executor": "pytest",
-      "roots": ["termin-assets/tests"]
-    },
-    {
-      "id": "termin-bootstrap-tests",
-      "module": "termin-bootstrap",
-      "executor": "pytest",
-      "roots": ["termin-bootstrap/tests"]
-    },
-    {
-      "id": "termin-build-tools-tests",
-      "module": "termin-build-tools",
-      "executor": "pytest",
-      "roots": ["termin-build-tools/tests", "scripts/tests"]
+        "termin-animation/tests"
+      ]
     },
     {
       "id": "graphics-showcase-tests",
       "module": "graphics-showcase",
       "executor": "pytest",
-      "roots": ["examples/graphics-showcase/tests"]
-    },
-    {
-      "id": "termin-cli-tests",
-      "module": "termin-cli",
-      "executor": "pytest",
-      "roots": ["termin-cli/tests"]
-    },
-    {
-      "id": "termin-collision-tests",
-      "module": "termin-collision",
-      "executor": "pytest",
-      "roots": ["termin-collision/tests"]
-    },
-    {
-      "id": "termin-display-tests-python",
-      "module": "termin-display",
-      "executor": "pytest",
-      "roots": ["termin-display/tests/python"],
-      "required_capabilities": ["window"]
-    },
-    {
-      "id": "termin-components-collision-tests",
-      "module": "termin-components-collision",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-collision/tests"]
-    },
-    {
-      "id": "termin-components-foliage-tests",
-      "module": "termin-components-foliage",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-foliage/tests"]
-    },
-    {
-      "id": "termin-components-kinematic-tests",
-      "module": "termin-components-kinematic",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-kinematic/tests"]
-    },
-    {
-      "id": "termin-components-mesh-tests",
-      "module": "termin-components-mesh",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-mesh/tests"]
-    },
-    {
-      "id": "termin-components-physics-tests",
-      "module": "termin-components-physics",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-physics/tests"]
-    },
-    {
-      "id": "termin-components-render-tests-python",
-      "module": "termin-components-render",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-render/tests/python"]
-    },
-    {
-      "id": "termin-components-voxels-tests",
-      "module": "termin-components-voxels",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-voxels/tests"]
-    },
-    {
-      "id": "termin-components-skeleton-tests",
-      "module": "termin-components-skeleton",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-skeleton/tests"]
-    },
-    {
-      "id": "termin-components-tween-tests",
-      "module": "termin-components-tween",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-tween/tests"]
-    },
-    {
-      "id": "termin-components-ui-tests",
-      "module": "termin-components-ui",
-      "executor": "pytest",
-      "roots": ["termin-components/termin-components-ui/tests"]
-    },
-    {
-      "id": "termin-csg-tests",
-      "module": "termin-csg",
-      "executor": "pytest",
-      "roots": ["termin-csg/tests"]
-    },
-    {
-      "id": "termin-default-assets-tests",
-      "module": "termin-default-assets",
-      "executor": "pytest",
-      "roots": ["termin-default-assets/tests"]
-    },
-    {
-      "id": "termin-engine-tests",
-      "module": "termin-engine",
-      "executor": "pytest",
-      "roots": ["termin-engine/tests"]
+      "roots": [
+        "examples/graphics-showcase/tests"
+      ]
     },
     {
       "id": "termin-glb-native-tests",
       "module": "termin-glb-native",
       "executor": "pytest",
-      "roots": ["termin-glb-native/tests"]
+      "roots": [
+        "termin-glb-native/tests"
+      ]
     },
     {
       "id": "termin-glb-tests",
       "module": "termin-glb",
       "executor": "pytest",
-      "roots": ["termin-glb/tests"]
-    },
-    {
-      "id": "termin-glb-adapters-tests",
-      "module": "termin-glb-adapters",
-      "executor": "pytest",
-      "roots": ["termin-glb-adapters/tests"]
+      "roots": [
+        "termin-glb/tests"
+      ]
     },
     {
       "id": "termin-graphics-tests-python",
       "module": "termin-graphics",
       "executor": "pytest",
-      "roots": ["termin-graphics/tests/python"]
+      "roots": [
+        "termin-graphics/tests/python"
+      ]
     },
     {
       "id": "termin-gui-native-python-tests",
       "module": "termin-gui-native",
       "executor": "pytest",
-      "roots": ["termin-gui-native/python/tests"]
+      "roots": [
+        "termin-gui-native/python/tests"
+      ]
     },
     {
       "id": "termin-materials-tests",
       "module": "termin-materials",
       "executor": "pytest",
-      "roots": ["termin-materials/tests"]
+      "roots": [
+        "termin-materials/tests"
+      ]
     },
     {
       "id": "termin-graphics-mcp-tests",
       "module": "termin-graphics-mcp",
       "executor": "pytest",
-      "roots": ["termin-graphics-mcp/tests"]
+      "roots": [
+        "termin-graphics-mcp/tests"
+      ]
     },
     {
       "id": "termin-mesh-tests-python",
       "module": "termin-mesh",
       "executor": "pytest",
-      "roots": ["termin-mesh/tests/python"]
-    },
-    {
-      "id": "termin-navmesh-tests",
-      "module": "termin-navmesh",
-      "executor": "pytest",
-      "roots": ["termin-navmesh/tests"]
+      "roots": [
+        "termin-mesh/tests/python"
+      ]
     },
     {
       "id": "termin-nodegraph-tests",
       "module": "termin-nodegraph",
       "executor": "pytest",
-      "roots": ["termin-nodegraph/tests"]
-    },
-    {
-      "id": "termin-pga-tests",
-      "module": "termin-pga",
-      "executor": "pytest",
-      "roots": ["termin-pga/tests"]
-    },
-    {
-      "id": "termin-physics-fem-tests",
-      "module": "termin-physics-fem",
-      "executor": "pytest",
-      "roots": ["termin-physics-fem/tests"]
-    },
-    {
-      "id": "termin-physics-tests",
-      "module": "termin-physics",
-      "executor": "pytest",
-      "roots": ["termin-physics/tests"]
-    },
-    {
-      "id": "termin-player-tests",
-      "module": "termin-player",
-      "executor": "pytest",
-      "roots": ["termin-player/tests"],
-      "excluded_roots": ["termin-player/tests/test_player_window.py"]
-    },
-    {
-      "id": "termin-player-window-tests",
-      "module": "termin-player",
-      "executor": "pytest",
-      "roots": ["termin-player/tests/test_player_window.py"],
-      "required_capabilities": ["window"]
-    },
-    {
-      "id": "termin-prefab-tests",
-      "module": "termin-prefab",
-      "executor": "pytest",
-      "roots": ["termin-prefab/tests"]
-    },
-    {
-      "id": "termin-project-build-tests",
-      "module": "termin-project-build",
-      "executor": "pytest",
-      "roots": ["termin-project-build/tests"]
-    },
-    {
-      "id": "termin-project-modules-tests",
-      "module": "termin-project-modules",
-      "executor": "pytest",
-      "roots": ["termin-project-modules/tests"]
-    },
-    {
-      "id": "termin-project-tests",
-      "module": "termin-project",
-      "executor": "pytest",
-      "roots": ["termin-project/tests"]
-    },
-    {
-      "id": "termin-qopt-tests",
-      "module": "termin-qopt",
-      "executor": "pytest",
-      "roots": ["termin-qopt/tests"]
-    },
-    {
-      "id": "termin-physics-qopt-tests-python",
-      "module": "termin-physics-qopt",
-      "executor": "pytest",
-      "roots": ["termin-physics-qopt/tests/multibody_oracle_test.py"]
-    },
-    {
-      "id": "termin-render-passes-tests",
-      "module": "termin-render-passes",
-      "executor": "pytest",
-      "roots": ["termin-render-passes/tests"]
+      "roots": [
+        "termin-nodegraph/tests"
+      ]
     },
     {
       "id": "termin-render-tests",
       "module": "termin-render",
       "executor": "pytest",
-      "roots": ["termin-render/tests"]
-    },
-    {
-      "id": "termin-scene-tests",
-      "module": "termin-scene",
-      "executor": "pytest",
-      "roots": ["termin-scene/tests"]
+      "roots": [
+        "termin-render/tests"
+      ]
     },
     {
       "id": "termin-shader-runtime-tests",
       "module": "termin-shader-runtime",
       "executor": "pytest",
-      "roots": ["termin-shader-runtime/tests"]
+      "roots": [
+        "termin-shader-runtime/tests"
+      ]
     },
     {
       "id": "termin-skeleton-tests",
       "module": "termin-skeleton",
       "executor": "pytest",
-      "roots": ["termin-skeleton/tests"]
-    },
-    {
-      "id": "termin-stdlib-tests",
-      "module": "termin-stdlib",
-      "executor": "pytest",
-      "roots": ["termin-stdlib/tests"]
+      "roots": [
+        "termin-skeleton/tests"
+      ]
     },
     {
       "id": "termin-tween-tests",
       "module": "termin-tween",
       "executor": "pytest",
-      "roots": ["termin-tween/tests"]
-    },
-    {
-      "id": "termin-voxels-tests",
-      "module": "termin-voxels",
-      "executor": "pytest",
-      "roots": ["termin-voxels/tests"]
+      "roots": [
+        "termin-tween/tests"
+      ]
     }
   ]
 }

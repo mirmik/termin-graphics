@@ -1,5 +1,7 @@
 # ── Build directories ────────────────────────────────────────────
 **/build/
+!/scripts/build/
+!/scripts/build/**
 **/build_*/
 **/build-py/
 build-superbuild/

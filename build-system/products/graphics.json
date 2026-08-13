@@ -87,7 +87,7 @@
       "role": "runtime",
       "internal_dependencies": ["termin-graphics", "termin-materials"],
       "external_dependencies": ["termin-base", "termin-inspect"],
-      "inactive_dependencies": ["termin-lighting", "termin-nanobind-sdk", "termin-scene"],
+      "inactive_dependencies": ["termin-nanobind-sdk"],
       "native_targets": ["termin_render_core"],
       "inactive_native_targets": [
         "termin_render",
@@ -253,7 +253,6 @@
     "termin-mesh-tests-python",
     "termin-graphics-tests-native",
     "termin-graphics-tests-python",
-    "tgfx2-d3d11-bound-smoke",
     "termin-graphics-mcp-tests",
     "termin-visual-scene-tests-native",
     "termin-visual-scene-tests-python",

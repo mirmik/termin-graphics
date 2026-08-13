@@ -26,9 +26,10 @@ task build -- --core-sdk /absolute/path/to/termin-core/sdk
 TERMIN_SLANGC=/absolute/path/to/slangc task smoke
 ```
 
-Without Task, use `./build-sdk.sh --core-sdk ...`. There is no SDK profile
-switch: Graphics is the product. Backend flags select capabilities within the
-product.
+`Taskfile.yml` is the only public command surface. Repository scripts are
+implementation details under `scripts/`; do not add root-level command
+wrappers. There is no SDK profile switch: Graphics is the product. Backend
+flags select capabilities within the product.
 
 The installed-consumer smoke is the release boundary. It must run against a
 relocated SDK with source paths and ambient Python overlays removed.

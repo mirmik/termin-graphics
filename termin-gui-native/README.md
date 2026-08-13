@@ -398,7 +398,7 @@ by the windowed application and its automated headless smoke.
 Build and run the installed example:
 
 ```bash
-./build-sdk.sh
+task build
 ./sdk/bin/termin_gui_native_visual_scene_example --headless-smoke
 ./sdk/bin/termin_gui_native_visual_scene_example
 ```

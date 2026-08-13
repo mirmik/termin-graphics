@@ -1,11 +1,11 @@
-# Graphics profile showcase
+# Graphics SDK showcase
 
-This is the cross-package acceptance example for the Termin `graphics` SDK
-profile. It deliberately uses the installed SDK as a product: run it with the
+This is the cross-package acceptance example for the Termin Graphics SDK.
+It deliberately uses the installed SDK as a product: run it with the
 bundled isolated Python and do not add the repository to `PYTHONPATH`.
 
 ```bash
-./build-sdk.sh --profile graphics --no-sdl
+task build -- --core-sdk /absolute/path/to/termin-core/sdk --no-sdl
 sdk/bin/termin_python -I examples/graphics-showcase/main.py \
   --headless \
   --output /tmp/termin-graphics-showcase.png \
@@ -60,7 +60,7 @@ imported by the mandatory headless gate. An SDL-enabled graphics SDK also has
 an interactive frontend for the integration section:
 
 ```bash
-./build-sdk.sh --profile graphics --sdl
+task build -- --core-sdk /absolute/path/to/termin-core/sdk --sdl
 sdk/bin/termin_python -I examples/graphics-showcase/main.py --windowed
 ```
 
@@ -69,11 +69,6 @@ it uses `termin.window`, while engine-level `termin.display` remains outside
 this profile. For automated checks, `--frames N` and `--seconds N` bound the
 window lifetime.
 
-On Windows, build the D3D11-only product and run the same Python entry point:
-
-```powershell
-.\build-sdk.ps1 --profile graphics --no-sdl --no-vulkan --no-opengl
-.\sdk\bin\termin_python.exe -I .\examples\graphics-showcase\main.py `
-  --headless --output $env:TEMP\termin-graphics-showcase.png `
-  --report $env:TEMP\termin-graphics-showcase.json
-```
+The repository currently exposes and verifies this product workflow on Linux.
+Windows will get a public Task entry only together with an independently
+verified installed-Core build path.

@@ -10,17 +10,37 @@ tasks:
 
   build:
     desc: Build the composed Graphics SDK from an installed Core SDK
+    platforms: [linux]
     cmds:
-      - '{{if eq OS "windows"}}powershell -NoProfile -ExecutionPolicy Bypass -File ./build-sdk.ps1 {{.CLI_ARGS}}{{else}}./build-sdk.sh {{.CLI_ARGS}}{{end}}'
+      - ./scripts/build/sdk.sh {{.CLI_ARGS}}
 
   test:
     desc: Build and verify standalone installed Graphics consumers
     platforms: [linux]
     cmds:
-      - ./build-sdk.sh {{.CLI_ARGS}}
+      - ./scripts/build/sdk.sh {{.CLI_ARGS}}
       - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk
 
   smoke:
     desc: Verify the existing installed Graphics SDK after relocation
+    platforms: [linux]
     cmds:
-      - '{{if eq OS "windows"}}./sdk/bin/termin_python.exe -I scripts/smoke-installed-graphics-consumers --sdk-root sdk{{else}}./sdk/bin/termin_python -I scripts/smoke-installed-graphics-consumers --sdk-root sdk{{end}}'
+      - ./sdk/bin/termin_python -I scripts/smoke-installed-graphics-consumers --sdk-root sdk
+
+  toolchain:slang:
+    desc: Install the pinned Slang compiler
+    platforms: [linux]
+    cmds:
+      - ./scripts/build/setup-slang-toolchain.sh {{.CLI_ARGS}}
+
+  toolchain:web-shaders:
+    desc: Install the pinned Slang and Naga shader toolchain
+    platforms: [linux]
+    cmds:
+      - ./scripts/build/setup-web-shader-toolchain.sh {{.CLI_ARGS}}
+
+  toolchain:web:
+    desc: Install the pinned Emscripten toolchain
+    platforms: [linux]
+    cmds:
+      - ./scripts/build/setup-web-toolchain.sh {{.CLI_ARGS}}

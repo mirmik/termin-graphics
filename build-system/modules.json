@@ -5,6 +5,11 @@
   "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
     {
+      "id": "termin-render",
+      "path": "termin-render",
+      "kinds": ["native-library", "documentation"]
+    },
+    {
       "id": "graphics-showcase",
       "path": "examples/graphics-showcase",
       "kinds": ["application", "documentation"]

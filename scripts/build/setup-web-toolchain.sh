@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EMSDK_VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/build-system/emscripten-version.txt")"
 EMSDK_DIR="${TERMIN_EMSDK_DIR:-$SCRIPT_DIR/build/toolchains/emsdk}"
 

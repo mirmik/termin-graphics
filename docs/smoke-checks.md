@@ -4,15 +4,13 @@ The release smoke operates only through the installed SDK boundary. First build
 against an absolute installed Core SDK:
 
 ```bash
-./build-sdk.sh --core-sdk /absolute/path/to/termin-core/sdk
+task build -- --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
-Then run:
+Then run the public smoke task:
 
 ```bash
-./scripts/smoke-installed-graphics-consumers \
-  --sdk-root sdk \
-  --slangc /absolute/path/to/slangc
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke
 ```
 
 The check copies the composed SDK to a temporary location and removes ambient

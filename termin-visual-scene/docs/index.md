@@ -253,7 +253,7 @@ or immutable data snapshot owns that representation above the visual scene.
 
 The supported example target is built with
 `TERMIN_VISUAL_SCENE_BUILD_EXAMPLES=ON` (the repository default) and installed
-in the SDK. Launch it after `./build-sdk.sh`:
+in the SDK. Launch it after `task build`:
 
 ```bash
 ./sdk/bin/termin_visual_scene_draggable_example

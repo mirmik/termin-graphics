@@ -19,12 +19,6 @@ git submodule update --init --recursive
 task build -- --core-sdk /absolute/path/to/termin-core/sdk
 ```
 
-Without Task:
-
-```bash
-./build-sdk.sh --core-sdk /absolute/path/to/termin-core/sdk
-```
-
 `termin-graphics` is one product, so there is no `--profile graphics` switch.
 Vulkan, OpenGL, and SDL remain optional backend features (`--no-vulkan`,
 `--no-opengl`, `--no-sdl`). The output is a composed SDK in `sdk/`; its

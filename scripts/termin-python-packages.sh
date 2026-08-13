@@ -17,8 +17,7 @@ if [[ -z "$_TERMIN_PACKAGE_PYTHON" ]]; then
 fi
 
 mapfile -t TERMIN_PYTHON_PACKAGES < <(
-    PYTHONPATH="$_TERMIN_PACKAGE_REPO_ROOT/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
-        "$_TERMIN_PACKAGE_PYTHON" -m termin_build.package_manifest \
+    "$_TERMIN_PACKAGE_PYTHON" -m termin_build.package_manifest \
         --repo-root "$_TERMIN_PACKAGE_REPO_ROOT" --list
 )
 
