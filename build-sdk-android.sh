@@ -108,7 +108,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --build-dir DIR       CMake build dir (default: ./build/android/<ABI>)"
             echo "  --prefix DIR          Install prefix (default: ./sdk/android/<ABI>)"
             echo "  --core-sdk DIR        Installed Android Core SDK for this ABI"
-            echo "  --core-build-id ID    Exact native_build_id of the Core SDK"
+            echo "  --core-build-id ID    Optional expected native_build_id check"
             echo "  --help, -h            Show this help"
             echo ""
             echo "Environment:"
@@ -163,8 +163,8 @@ if [[ ! -f "$ANDROID_TOOLCHAIN_FILE" ]]; then
     echo "ERROR: Android CMake toolchain not found: $ANDROID_TOOLCHAIN_FILE" >&2
     exit 1
 fi
-if [[ -z "$CORE_SDK_VALUE" || -z "$CORE_BUILD_ID_VALUE" ]]; then
-    echo "ERROR: --core-sdk and --core-build-id are required" >&2
+if [[ -z "$CORE_SDK_VALUE" ]]; then
+    echo "ERROR: --core-sdk is required" >&2
     exit 1
 fi
 CORE_SDK_VALUE="$(cd "$CORE_SDK_VALUE" && pwd)"
@@ -172,6 +172,9 @@ CORE_PLATFORM_MANIFEST="$CORE_SDK_VALUE/termin-core-platform.json"
 if [[ ! -f "$CORE_PLATFORM_MANIFEST" ]]; then
     echo "ERROR: Android Core platform manifest is missing: $CORE_PLATFORM_MANIFEST" >&2
     exit 1
+fi
+if [[ -z "$CORE_BUILD_ID_VALUE" ]]; then
+    CORE_BUILD_ID_VALUE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build_id"])' "$CORE_PLATFORM_MANIFEST")"
 fi
 CORE_TOOLCHAIN_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["toolchain_version"])' "$CORE_PLATFORM_MANIFEST")"
 

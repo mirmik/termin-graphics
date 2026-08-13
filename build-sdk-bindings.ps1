@@ -100,8 +100,8 @@ if ($Profile -notin @("full", "graphics")) {
 }
 $env:TERMIN_SDK_PROFILE = $Profile
 
-if (-not $env:TERMIN_CORE_SDK -or -not $env:TERMIN_CORE_BUILD_ID) {
-    throw "$Profile builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID"
+if (-not $env:TERMIN_CORE_SDK) {
+    throw "$Profile builds require TERMIN_CORE_SDK"
 }
 if (-not [System.IO.Path]::IsPathRooted($env:TERMIN_CORE_SDK)) {
     throw "TERMIN_CORE_SDK must be an absolute path: $($env:TERMIN_CORE_SDK)"
@@ -199,7 +199,7 @@ Write-Host "Unity build: $TerminEnableUnityBuild"
 Write-Host "PCH:         $TerminEnablePch"
 Write-Host "SDK profile: $Profile"
 Write-Host "Core SDK:    $($env:TERMIN_CORE_SDK)"
-Write-Host "Core ID:     $($env:TERMIN_CORE_BUILD_ID)"
+Write-Host "Core ID:     $(if ($env:TERMIN_CORE_BUILD_ID) { $env:TERMIN_CORE_BUILD_ID } else { 'from artifact manifest' })"
 Write-Host "Generator:   $(if ($CmakeGeneratorName) { $CmakeGeneratorName } else { 'existing/default' })"
 Write-Host "Jobs:        $BuildJobs"
 Write-Host ""

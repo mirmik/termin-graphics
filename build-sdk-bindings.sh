@@ -86,8 +86,8 @@ case "$SDK_PROFILE" in
 esac
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
-if [[ -z "${TERMIN_CORE_SDK:-}" || -z "${TERMIN_CORE_BUILD_ID:-}" ]]; then
-    echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK and TERMIN_CORE_BUILD_ID" >&2
+if [[ -z "${TERMIN_CORE_SDK:-}" ]]; then
+    echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK" >&2
     exit 1
 fi
 if [[ "$TERMIN_CORE_SDK" != /* ]]; then
@@ -184,7 +184,7 @@ echo "Unity build: $TERMIN_ENABLE_UNITY_BUILD"
 echo "PCH:         $TERMIN_ENABLE_PCH"
 echo "SDK profile: $SDK_PROFILE"
 echo "Core SDK:    $TERMIN_CORE_SDK"
-echo "Core ID:     $TERMIN_CORE_BUILD_ID"
+echo "Core ID:     ${TERMIN_CORE_BUILD_ID:-from artifact manifest}"
 echo "Generator:   ${CMAKE_GENERATOR_NAME:-existing/default}"
 echo "Jobs:        $BUILD_JOBS"
 echo ""

@@ -22,7 +22,7 @@ set(TERMIN_SDK_PROFILE "full" CACHE STRING
 set(TERMIN_CORE_SDK "" CACHE PATH
     "Explicit installed Core SDK for the active target platform")
 set(TERMIN_CORE_BUILD_ID "" CACHE STRING
-    "Required native_build_id of TERMIN_CORE_SDK")
+    "Optional expected native_build_id of TERMIN_CORE_SDK")
 set(TERMIN_CORE_TOOLCHAIN_VERSION "" CACHE STRING
     "Required toolchain version for a cross-compiled Core SDK")
 set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics)
@@ -262,11 +262,6 @@ if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
             "${TERMIN_SDK_PROFILE} builds require an absolute "
             "-DTERMIN_CORE_SDK path")
     endif()
-    if(NOT TERMIN_CORE_BUILD_ID)
-        message(FATAL_ERROR
-            "${TERMIN_SDK_PROFILE} builds require "
-            "-DTERMIN_CORE_BUILD_ID")
-    endif()
     if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
         set(_termin_core_artifact_manifest
             "${TERMIN_CORE_SDK}/termin-core-platform.json")
@@ -283,10 +278,17 @@ if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
     string(REGEX MATCH
         "\"native_build_id\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\""
         _termin_core_build_id_match "${_termin_core_artifact_json}")
-    if(NOT CMAKE_MATCH_1 STREQUAL TERMIN_CORE_BUILD_ID)
+    set(_termin_core_manifest_build_id "${CMAKE_MATCH_1}")
+    if(NOT _termin_core_manifest_build_id)
+        message(FATAL_ERROR
+            "Installed Core artifact manifest has no native_build_id: "
+            "${_termin_core_artifact_manifest}")
+    endif()
+    if(TERMIN_CORE_BUILD_ID
+       AND NOT _termin_core_manifest_build_id STREQUAL TERMIN_CORE_BUILD_ID)
         message(FATAL_ERROR
             "Installed Core build identity mismatch: expected "
-            "${TERMIN_CORE_BUILD_ID}, got ${CMAKE_MATCH_1}")
+            "${TERMIN_CORE_BUILD_ID}, got ${_termin_core_manifest_build_id}")
     endif()
     if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
         string(JSON _termin_core_system GET
@@ -358,7 +360,7 @@ if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
             NO_CMAKE_FIND_ROOT_PATH)
     endif()
 message(STATUS
-    "Termin: consuming installed Core ${TERMIN_CORE_BUILD_ID} from "
+    "Termin: consuming installed Core ${_termin_core_manifest_build_id} from "
     "${TERMIN_CORE_SDK}")
 
 if(TERMIN_SDK_PROFILE STREQUAL "graphics")

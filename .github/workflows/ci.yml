@@ -107,11 +107,9 @@ jobs:
           path: core-sdk/
       - name: Build graphics with Core sources absent
         run: |
-          core_build_id="$(python -c 'import json; print(json.load(open("core-sdk/termin-artifacts.json"))["native_build_id"])')"
           scripts/smoke-installed-core-source-hidden \
             --profile graphics \
-            --core-sdk "${{ github.workspace }}/core-sdk" \
-            --core-build-id "$core_build_id"
+            --core-sdk "${{ github.workspace }}/core-sdk"
 
   core-consumer-source-hidden-windows:
     needs: core-sdk-windows
@@ -130,7 +128,6 @@ jobs:
       - name: Build graphics with Core sources absent
         shell: pwsh
         run: |
-          $manifest = Get-Content core-sdk/termin-artifacts.json | ConvertFrom-Json
           $coreSdk = (Resolve-Path core-sdk).Path
           foreach ($directory in @(
             "termin-base", "termin-dispatch", "termin-inspect", "termin-mcp",
@@ -143,7 +140,6 @@ jobs:
           New-Item -ItemType Directory -Force sdk | Out-Null
           Copy-Item core-sdk\* sdk\ -Recurse -Force
           $env:TERMIN_CORE_SDK = $coreSdk
-          $env:TERMIN_CORE_BUILD_ID = $manifest.native_build_id
           .\build-sdk-bindings.ps1 --profile=graphics --no-vulkan --no-opengl --no-sdl
 
   core-consumer-source-hidden-android:
@@ -159,12 +155,10 @@ jobs:
           path: core-sdk-android/
       - name: Build Android with Core sources absent
         run: |
-          core_build_id="$(python -c 'import json; print(json.load(open("core-sdk-android/termin-core-platform.json"))["native_build_id"])')"
           scripts/smoke-installed-core-platform-source-hidden \
             --platform android \
             --ndk "$ANDROID_NDK_LATEST_HOME" \
-            --core-sdk "${{ github.workspace }}/core-sdk-android" \
-            --core-build-id "$core_build_id"
+            --core-sdk "${{ github.workspace }}/core-sdk-android"
 
   core-consumer-source-hidden-web:
     needs: [core-sdk-linux, core-sdk-web]
@@ -192,14 +186,10 @@ jobs:
           ./setup-web-shader-toolchain.sh
       - name: Build Web with Core sources absent
         run: |
-          host_build_id="$(python -c 'import json; print(json.load(open("core-sdk-host/termin-artifacts.json"))["native_build_id"])')"
-          web_build_id="$(python -c 'import json; print(json.load(open("core-sdk-web/termin-core-platform.json"))["native_build_id"])')"
           scripts/smoke-installed-core-platform-source-hidden \
             --platform web \
             --core-sdk "${{ github.workspace }}/core-sdk-web" \
-            --core-build-id "$web_build_id" \
-            --host-core-sdk "${{ github.workspace }}/core-sdk-host" \
-            --host-core-build-id "$host_build_id"
+            --host-core-sdk "${{ github.workspace }}/core-sdk-host"
 
   lint-python:
     runs-on: ubuntu-latest
