@@ -20,11 +20,19 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 CCACHE_MODE="on"
 UNITY_MODE="off"
 PCH_MODE="on"
-SDK_PROFILE="full"
+SDK_PROFILE="graphics"
 CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 
+EXPECT_CORE_SDK=0
 for arg in "$@"; do
+    if [[ $EXPECT_CORE_SDK -eq 1 ]]; then
+        export TERMIN_CORE_SDK="$arg"
+        EXPECT_CORE_SDK=0
+        continue
+    fi
     case "$arg" in
+        --core-sdk)    EXPECT_CORE_SDK=1 ;;
+        --core-sdk=*)  export TERMIN_CORE_SDK="${arg#--core-sdk=}" ;;
         --profile=*)   SDK_PROFILE="${arg#--profile=}" ;;
         --debug|-d)    BUILD_TYPE="Debug" ;;
         --clean|-c)    CLEAN=1 ;;
@@ -62,7 +70,6 @@ for arg in "$@"; do
             echo "  --sdl             Enable SDL2 support (default)"
             echo "  --no-opengl       Disable OpenGL backend; keep Vulkan render/editor targets"
             echo "  --opengl          Enable desktop OpenGL targets (default)"
-            echo "  --profile=NAME    SDK graph profile: full (default) or graphics"
             echo "  --help, -h        Show this help"
             echo ""
             echo "Environment:"
@@ -79,17 +86,27 @@ for arg in "$@"; do
             ;;
     esac
 done
+if [[ $EXPECT_CORE_SDK -eq 1 ]]; then
+    echo "ERROR: --core-sdk requires a path" >&2
+    exit 1
+fi
 
-case "$SDK_PROFILE" in
-    full|graphics) ;;
-    *) echo "Unsupported SDK profile: $SDK_PROFILE (expected full or graphics)"; exit 1 ;;
-esac
+if [[ "$SDK_PROFILE" != "graphics" ]]; then
+    echo "Unsupported internal SDK profile: $SDK_PROFILE (termin-graphics is one product)"
+    exit 1
+fi
 export TERMIN_SDK_PROFILE="$SDK_PROFILE"
 
 if [[ -z "${TERMIN_CORE_SDK:-}" ]]; then
     echo "ERROR: $SDK_PROFILE builds require TERMIN_CORE_SDK" >&2
     exit 1
 fi
+CORE_PYTHON_SITE="$TERMIN_CORE_SDK/lib/python3.14t/site-packages"
+if [[ ! -d "$CORE_PYTHON_SITE/termin_build" ]]; then
+    echo "ERROR: installed Core build frontend is missing: $CORE_PYTHON_SITE/termin_build" >&2
+    exit 1
+fi
+export PYTHONPATH="$CORE_PYTHON_SITE${PYTHONPATH:+:$PYTHONPATH}"
 if [[ "$TERMIN_CORE_SDK" != /* ]]; then
     echo "ERROR: TERMIN_CORE_SDK must be an absolute path: $TERMIN_CORE_SDK" >&2
     exit 1
@@ -100,11 +117,7 @@ if [[ $NO_PARALLEL -eq 1 ]]; then
 fi
 
 if [[ -z "$BUILD_DIR" ]]; then
-    if [[ "$SDK_PROFILE" == "full" ]]; then
-        BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE"
-    else
-        BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE-$SDK_PROFILE"
-    fi
+    BUILD_DIR="$SCRIPT_DIR/build/$BUILD_TYPE-graphics"
 fi
 
 case "$VULKAN_MODE" in
@@ -194,18 +207,16 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-DOCTOR_PROFILE="sdk-bindings"
-if [[ "$SDK_PROFILE" == "graphics" ]]; then
-    DOCTOR_PROFILE="sdk-bindings-graphics"
-fi
-PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
-    --profile "$DOCTOR_PROFILE" \
+PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" doctor \
+    --profile "sdk-bindings-graphics" \
     --vulkan "$TERMIN_ENABLE_VULKAN" \
     --init-submodules
 
-PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
+PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" "$SCRIPT_DIR/scripts/stage-installed-core-sdk.py" \
+    --core-sdk "$TERMIN_CORE_SDK" \
+    --output "$SDK_PREFIX"
+
+PYTHONPATH="$CORE_PYTHON_SITE" "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
     --sdk-prefix "$SDK_PREFIX"
 
 cmake_args=()
@@ -222,7 +233,6 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE" \
     -DTERMIN_ENABLE_UNITY_BUILD="$TERMIN_ENABLE_UNITY_BUILD" \
     -DTERMIN_ENABLE_PCH="$TERMIN_ENABLE_PCH" \
-    -DTERMIN_SDK_PROFILE="$SDK_PROFILE" \
     -DTERMIN_CORE_SDK="${TERMIN_CORE_SDK:-}" \
     -DTERMIN_CORE_BUILD_ID="${TERMIN_CORE_BUILD_ID:-}" \
     -DTERMIN_BUILD_PYTHON=ON \
@@ -232,8 +242,6 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DTERMIN_ENABLE_OPENGL="$TERMIN_ENABLE_OPENGL" \
     -DTERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS="$TERMIN_BUILD_BUILTIN_SHADER_ARTIFACTS" \
     -DTERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS="$TERMIN_BUILTIN_SHADER_ARTIFACT_TARGETS" \
-    -DTERMIN_BUILD_EDITOR_MINIMAL="$([[ "$SDK_PROFILE" == "full" ]] && echo ON || echo OFF)" \
-    -DTERMIN_BUILD_LAUNCHER="$([[ "$SDK_PROFILE" == "full" ]] && echo ON || echo OFF)" \
     -DPython_EXECUTABLE="$PY_EXEC"
 
 cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
@@ -282,16 +290,16 @@ sync_composed_staged_dir lib --exclude '/python*/'
 # The staged lib/ tree intentionally does not own the bundled CPython shared
 # library.  rsync --delete therefore removes it unless we restore the runtime
 # after synchronizing native SDK artifacts.
-PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+PYTHONPATH="$CORE_PYTHON_SITE" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" prepare-build-python-runtime \
     --sdk-prefix "$SDK_PREFIX"
 
-PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+PYTHONPATH="$CORE_PYTHON_SITE" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" publish-cmake-python \
     --install-dir "$INSTALL_STAGING_DIR" \
     --sdk-prefix "$SDK_PREFIX"
 
-PYTHONPATH="$SCRIPT_DIR/termin-build-tools${PYTHONPATH:+:$PYTHONPATH}" \
+PYTHONPATH="$CORE_PYTHON_SITE" \
     "$PY_EXEC" -m termin_build.sdk --repo-root "$SCRIPT_DIR" write-artifacts \
     --build-dir "$BUILD_DIR" \
     --sdk-prefix "$SDK_PREFIX" \

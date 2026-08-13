@@ -1,24 +1,12 @@
 [submodule "termin-thirdparty/recastnavigation"]
 	path = termin-thirdparty/recastnavigation
 	url = git@github.com:mirmik/recastnavigation.git
-[submodule "termin-thirdparty/manifold"]
-	path = termin-thirdparty/manifold
-	url = https://github.com/elalish/manifold.git
-[submodule "termin-thirdparty/clipper2"]
-	path = termin-thirdparty/clipper2
-	url = https://github.com/AngusJohnson/Clipper2.git
 [submodule "termin-thirdparty/guard"]
 	path = termin-thirdparty/guard
 	url = git@github.com:mirmik/guard.git
-[submodule "termin-thirdparty/openxr-sdk"]
-	path = termin-thirdparty/openxr-sdk
-	url = https://github.com/KhronosGroup/OpenXR-SDK.git
 [submodule "termin-thirdparty/vulkan-memory-allocator"]
 	path = termin-thirdparty/vulkan-memory-allocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "termin-thirdparty/eigen"]
-	path = termin-thirdparty/eigen
-	url = https://gitlab.com/libeigen/eigen.git
 [submodule "termin-thirdparty/sdl2"]
 	path = termin-thirdparty/sdl2
 	url = https://github.com/libsdl-org/SDL.git
@@ -35,12 +23,6 @@
 [submodule "termin-thirdparty/libwebp"]
 	path = termin-thirdparty/libwebp
 	url = https://github.com/webmproject/libwebp.git
-[submodule "termin-thirdparty/libogg"]
-	path = termin-thirdparty/libogg
-	url = https://github.com/xiph/ogg.git
-[submodule "termin-thirdparty/libvorbis"]
-	path = termin-thirdparty/libvorbis
-	url = https://github.com/xiph/vorbis.git
 [submodule "termin-thirdparty/cgltf"]
 	path = termin-thirdparty/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git

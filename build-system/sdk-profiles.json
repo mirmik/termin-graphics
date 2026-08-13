@@ -1,31 +1,7 @@
 {
   "schema": 1,
-  "default_profile": "full",
+  "default_profile": "graphics",
   "profiles": [
-    {
-      "id": "full",
-      "python_packages": null,
-      "product_manifest": null,
-      "application_payloads": null,
-      "runtime_lock": "build-system/python-runtime-lock.txt",
-      "sdk_prefix": "sdk",
-      "build_directory_suffix": "",
-      "csharp_profile": "full",
-      "wheel_subset": [
-        "tcbase-*.whl",
-        "tgfx-*.whl",
-        "termin_gui_native-*.whl",
-        "termin_display-*.whl"
-      ],
-      "embedded_python_hosts": ["termin_player"],
-      "launcher_import_roots": ["tcbase", "termin.engine", "termin.tween"],
-      "native_import_roots": [
-        "termin.engine",
-        "termin.player",
-        "termin.player.headless"
-      ],
-      "forbidden_artifacts_from_product": false
-    },
     {
       "id": "graphics",
       "python_packages": null,

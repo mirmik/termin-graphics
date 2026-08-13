@@ -27,6 +27,10 @@ Current status:
   checkout and verified through native CMake and isolated Python consumers,
   shader/material compilation, MCP readback and an animated skinned GLB
   showcase; removal of an installed GLB package is a mandatory negative test.
+- stage 4 is implemented in the physical `termin-graphics` repository: filtered
+  history, the one-product CMake graph, exact installed-Core composition, local
+  build/test entry points and Linux artifact publication are present. The CI run
+  on the extracted repository remains the final external gate.
 
 ## Goal
 

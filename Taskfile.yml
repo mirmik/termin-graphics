@@ -1,0 +1,26 @@
+version: '3'
+
+silent: true
+
+tasks:
+  default:
+    desc: Show the repository command menu
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the composed Graphics SDK from an installed Core SDK
+    cmds:
+      - '{{if eq OS "windows"}}powershell -NoProfile -ExecutionPolicy Bypass -File ./build-sdk.ps1 {{.CLI_ARGS}}{{else}}./build-sdk.sh {{.CLI_ARGS}}{{end}}'
+
+  test:
+    desc: Build and verify standalone installed Graphics consumers
+    platforms: [linux]
+    cmds:
+      - ./build-sdk.sh {{.CLI_ARGS}}
+      - ./scripts/smoke-installed-graphics-consumers --sdk-root sdk
+
+  smoke:
+    desc: Verify the existing installed Graphics SDK after relocation
+    cmds:
+      - '{{if eq OS "windows"}}./sdk/bin/termin_python.exe -I scripts/smoke-installed-graphics-consumers --sdk-root sdk{{else}}./sdk/bin/termin_python -I scripts/smoke-installed-graphics-consumers --sdk-root sdk{{end}}'

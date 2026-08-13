@@ -22,10 +22,16 @@ endfunction()
 # For native executables installed into bin/.
 function(termin_set_rpath_tool target)
     if(NOT WIN32)
-        set_target_properties(${target} PROPERTIES
-            INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
-            BUILD_WITH_INSTALL_RPATH TRUE
-        )
+        if(TERMIN_BUILD_INPUT_RPATH)
+            set_target_properties(${target} PROPERTIES
+                INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+                BUILD_RPATH "${TERMIN_BUILD_INPUT_RPATH}"
+                BUILD_WITH_INSTALL_RPATH FALSE)
+        else()
+            set_target_properties(${target} PROPERTIES
+                INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;${CMAKE_INSTALL_PREFIX}/lib"
+                BUILD_WITH_INSTALL_RPATH TRUE)
+        endif()
     endif()
 endfunction()
 

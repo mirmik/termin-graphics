@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Repository module identity catalog. Python-backed module identities are derived from the canonical package manifest; this file declares modules that are not Python distributions.",
+  "description": "Non-distribution module identities owned by Termin Graphics.",
   "python_package_manifest": "build-system/packages.json",
   "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
@@ -8,91 +8,6 @@
       "id": "graphics-showcase",
       "path": "examples/graphics-showcase",
       "kinds": ["application", "documentation"]
-    },
-    {
-      "id": "termin-android",
-      "path": "termin-android",
-      "kinds": ["cmake", "platform"]
-    },
-    {
-      "id": "termin-app",
-      "path": "termin-app",
-      "kinds": ["application", "cmake", "documentation"]
-    },
-    {
-      "id": "termin-cli",
-      "path": "termin-cli",
-      "kinds": ["cmake", "tooling"]
-    },
-    {
-      "id": "termin-components",
-      "path": "termin-components",
-      "kinds": ["documentation", "group"]
-    },
-    {
-      "id": "termin-components-collision",
-      "path": "termin-components/termin-components-collision",
-      "kinds": ["cmake"]
-    },
-    {
-      "id": "termin-components-physics-fem",
-      "path": "termin-components/termin-components-physics-fem",
-      "kinds": ["cmake"]
-    },
-    {
-      "id": "termin-components-physics-fem-ui",
-      "path": "termin-components/termin-components-physics-fem-ui",
-      "kinds": ["cmake"]
-    },
-    {
-      "id": "termin-csharp",
-      "path": "termin-csharp",
-      "kinds": ["cmake", "bindings"]
-    },
-    {
-      "id": "termin-openxr",
-      "path": "termin-openxr",
-      "kinds": ["cmake", "platform"]
-    },
-    {
-      "id": "termin-physics-qopt",
-      "path": "termin-physics-qopt",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
-      "id": "termin-framegraph-remote",
-      "path": "termin-framegraph-remote",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
-      "id": "termin-framegraph-remote-target",
-      "path": "termin-framegraph-remote-target",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
-      "id": "termin-framegraph-remote-client",
-      "path": "termin-framegraph-remote-client",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
-      "id": "termin-frame-profiler",
-      "path": "termin-frame-profiler",
-      "kinds": ["cmake"]
-    },
-    {
-      "id": "termin-profiler",
-      "path": "termin-profiler",
-      "kinds": ["application", "cmake", "documentation"]
-    },
-    {
-      "id": "termin-profiler-remote",
-      "path": "termin-profiler-remote",
-      "kinds": ["cmake", "documentation"]
-    },
-    {
-      "id": "termin-runtime",
-      "path": "termin-runtime",
-      "kinds": ["cmake", "runtime"]
     }
   ]
 }

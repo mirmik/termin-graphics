@@ -1,74 +1,44 @@
 # AGENTS.md
 
-## Область действия
-Эти инструкции действуют для всего репозитория.
+## Scope
 
-## Стиль работы
-Не обязательно спрашивать подтверждение на каждый шаг.
-Можно работать автономно на более длинных этапах, делая промежуточные отчёты по мере прогресса.
+These instructions apply to the whole `termin-graphics` repository. Nested
+`AGENTS.md` files add module-specific rules.
 
-## О выборе техник и методов решения задач
-Нас не интересуют быстрые фиксы и минималистичные решения. Лучше сразу целиться в грамотную, но при этом простую, архитектуру.
-Прочное гибкое решение завсегда лучше быстрого, плохо масштабируемого.
-Простое лучше сложного.
-Не следует также злоупотреблять фолбэками без необходимости. Иной раз лучше позволить старому коду и данным упасть, чтобы не затягивать миграцию во время активной разработки.
+## Product boundary
 
-## Сборка и тестирование
-Под Linux полная сборка SDK выполняется скриптом `./build-sdk.sh`. В SDK входит приложение редактора и bundled Python-библиотеки, используемые редактором.
-Во избежание проблем лучше собирать SDK штатным скриптом. Оно не так долго собирается, чтобы вручную копировать либы.
-Тесты собираются и исполняются через центральную точку `./run-tests.sh`. Python-тесты запускаются bundled Python из SDK через `sdk/bin/termin_python`; test-only зависимости и checkout source overlay создаются в `build/python-envs/test` скриптом `./setup-sdk-python-env.sh`. Старый root `.venv` workflow и `setup-test-venv.*` удалены.
-Под Windows используются соответствующие `.ps1`-версии этих скриптов.
+This repository is one independently distributable Graphics SDK. It consumes
+Core only through an absolute installed SDK path. Do not add sibling-checkout,
+`FetchContent`, source-overlay, or environment-guessing fallbacks for Core.
 
-При запуске долгих команд через Codex на Windows shell-инструмент может вернуть stdout/stderr только после завершения процесса, хотя в обычном PowerShell вывод идёт в реальном времени. Для сборок и длинных тестов, за прогрессом которых нужно следить, запускай процесс в фоне с выводом в лог-файлы и периодически читай их прирост вместе с проверкой состояния процесса и итогового exit code. Не следует диагностировать это как буферизацию build-скрипта без отдельного воспроизведения в интерактивном терминале.
+Graphics owns image, mesh, GPU/backends, shaders, materials, render core,
+windowing, visual scene, native GUI, nodegraph, plotting, graphics MCP,
+skeleton, animation, and scene-neutral GLB support. It does not own
+`termin-assets`, engine scene/ECS/components, physics, editor/player, project
+management, or application bootstrap.
 
-После пересборки Python/C++ биндингов native `.so`/`.pyd` берутся непосредственно из SDK. Копировать их в исходники и пересоздавать editable venv не требуется; `./setup-sdk-python-env.sh` нужно повторить только для обновления overlay fingerprint после изменения SDK.
+## Build and verification
 
-Python runtime SDK формируется из exact lock `build-system/python-runtime-lock.txt`. Build frontend живёт отдельно в `build/python-runtime/build-env`, а установка SDK выполняется offline из подготовленных wheelhouse. Для проверки без сетевого доступа после заполнения wheelhouse можно задать `TERMIN_PYTHON_RUNTIME_OFFLINE=1` при вызове `termin_build.sdk install-python`.
-
-## Запуск редактора
-`./run-termin.sh` запускает launcher и удобен для ручной работы. Для автоматизированной отладки Codex должен запускать редактор напрямую, чтобы не ждать выбора проекта в launcher:
+On Linux, use the public entry points:
 
 ```bash
-./sdk/bin/termin_editor /path/to/Project.terminproj
+task build -- --core-sdk /absolute/path/to/termin-core/sdk
+TERMIN_SLANGC=/absolute/path/to/slangc task smoke
 ```
 
-`termin_editor` также принимает путь к директории проекта, если в ней ровно один `.terminproj`. Launcher тоже умеет сразу открыть проект через `./run-termin.sh /path/to/Project.terminproj`, но для Codex предпочтителен прямой запуск `termin_editor`.
+Without Task, use `./build-sdk.sh --core-sdk ...`. There is no SDK profile
+switch: Graphics is the product. Backend flags select capabilities within the
+product.
 
-Если запустить `./sdk/bin/termin_editor` без параметров, редактор откроет последний запущенный проект. Это удобно для быстрой проверки текущего рабочего проекта, но при необходимости воспроизводимости лучше передавать путь к `.terminproj` явно.
+The installed-consumer smoke is the release boundary. It must run against a
+relocated SDK with source paths and ambient Python overlays removed.
 
-## Вложенные проекты
-Если задача находится внутри подпроекта со своим `AGENTS.md`, прочитай его перед началом работы.
-Вложенные `AGENTS.md` дополняют этот файл указаниями для конкретного подпроекта.
+## Engineering rules
 
-## Плохие практики
-Воздержись от использования в Python-коде `setattr`, `getattr`, `hasattr` во всех случаях, когда применение не предполагает рефлексию. Никогда не используй эти методы как fallback на случай, что поле в классе может отсутствовать.
-Также воздержись от использования `thread_local`-переменных в C/C++ коде.
+Prefer simple, durable architecture over compatibility fallbacks. Do not use
+`getattr`, `setattr`, or `hasattr` where ordinary typed access is intended, and
+do not introduce C/C++ `thread_local` state. Failures must be logged or reported
+explicitly.
 
-## Логирование и обработка ошибок
-Ошибки должны быть обложены логами. Если что-то упало, это нельзя замалчивать. В логе должно появиться сообщение.
-
-## Профилактика
-Докладывай о плохих запахах в коде, дублировании, неоконченных миграциях, потенциальных проблемах, торчащих заглушках и всём, что выглядит так, будто бы готово отвалиться...
-Если видишь какие-то регулярно возникающие проблемы, если работа каких-то систем не соответствует твоим ожиданиям, сообщи.
-
-## Доска
-Если доступна проектная доска задач, а она доступна на машинах Aurora и AionShad (скилл kanboard-taskboard), фиксируй найденные баги, регрессы, неоконченные миграции и крупные технические хвосты в тикеты.
-Перед началом нетривиальной работы полезно сверяться с доской, чтобы не плодить дубли и не терять уже зафиксированный контекст.
-Короткая памятка по ведению доски лежит в docs/taskboard-guidelines.md.
-Впрочем, не стоит фиксировать на доске всякую мелочёвку. Если проблема понятна, фикс очевиден, можно сразу применить по месту не захламляя документацию.
-Кроме того, стоит агрессивней закрывать или хотя бы переводить обмозгованные карточки во взятые в работу/тестирование. А то у нас вечная проблема, что задача по факту сделана, а карточка как висела в бэклоге, так и висит.
-
-## Документация
-По возможности следует поддерживать документацию в актуальном состоянии, не забывать обновлять её. О несовпадении документации и кода сообщай.
-
-## C#-биндинги
-Сборка C#-биндингов для WPF сейчас ориентирована на D3D11. Для C# рекомендуется собирать SDK с ключами `--no-sdl --no-vulkan --no-opengl`.
-
-## О коммитах
-Если пользователь велел коммиты, не добавляй в конце co-authored. 
-
-## О субагентах-воркерах
-С целью ускорения, экономии контекста и вычислительных ресурсов механическую масштабную работу можно поручать субагентам luna-worker. (если использование субагентов явно не запрещено)
-
-## И вообще о субагентах
-При необходимости не стесняйся вызывать подмогу.
+Preserve unrelated work in a dirty tree. Use `apply_patch` for edits. If asked
+to commit, do not add `Co-authored-by` trailers.
