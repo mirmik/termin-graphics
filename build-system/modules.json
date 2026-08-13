@@ -5,6 +5,11 @@
   "application_python_payload_manifest": "build-system/application-python-payloads.json",
   "modules": [
     {
+      "id": "graphics-showcase",
+      "path": "examples/graphics-showcase",
+      "kinds": ["application", "documentation"]
+    },
+    {
       "id": "termin-android",
       "path": "termin-android",
       "kinds": ["cmake", "platform"]

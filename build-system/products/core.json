@@ -42,7 +42,7 @@
       "path": "termin-python-host",
       "role": "runtime",
       "internal_dependencies": [],
-      "native_targets": ["termin_python_host"]
+      "native_targets": ["termin_python_host", "termin_python"]
     },
     {
       "path": "termin-mcp",
@@ -50,20 +50,6 @@
       "internal_dependencies": ["termin-base"],
       "native_targets": [],
       "python_distribution": "termin-mcp"
-    },
-    {
-      "path": "termin-cli",
-      "role": "runtime",
-      "internal_dependencies": ["termin-base", "termin-python-host"],
-      "native_targets": ["termin_cli_python_backend", "termin_python"],
-      "inactive_native_targets": [
-        "termin",
-        "termin_builder",
-        "termin_init",
-        "termin_modules_cli",
-        "termin_runner",
-        "termin_stdlib"
-      ]
     }
   ],
   "cmake_packages": [
@@ -78,7 +64,7 @@
     "abi": "cp314t",
     "owner": "core",
     "inputs": [
-      "build-system/python-runtime-lock.txt",
+      "build-system/python-runtime-core-lock.txt",
       "build-system/python-toolchain-lock.json",
       "build-system/python-sdk-build-requirements.txt"
     ]
@@ -93,7 +79,9 @@
     "termin-mcp-tests",
     "termin-nanobind-tests"
   ],
-  "smoke_fixtures": [],
+  "smoke_fixtures": [
+    "tests/installed-core-consumers"
+  ],
   "resources": [],
   "forbidden_dependency_roots": [
     "termin-app",

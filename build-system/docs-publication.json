@@ -2,7 +2,7 @@
   "schema": 1,
   "description": "Documentation publication inventory joined to repository module identities. Every repository-owned docs root is public or explicitly internal.",
   "inventory": {
-    "exclude_roots": ["build", "sdk", "termin-thirdparty"],
+    "exclude_roots": ["build", "sdk", "sdk-core", "termin-thirdparty"],
     "exclude_directory_names": [".git", ".venv", "__pycache__", "node_modules"]
   },
   "public_sites": [

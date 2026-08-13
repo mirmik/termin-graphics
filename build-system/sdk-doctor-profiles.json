@@ -1,0 +1,259 @@
+{
+  "schema": 1,
+  "submodules": {
+    "termin-thirdparty/eigen": [
+      "CMakeLists.txt"
+    ],
+    "termin-thirdparty/manifold": [
+      "CMakeLists.txt"
+    ],
+    "termin-thirdparty/clipper2": [
+      "CPP/CMakeLists.txt"
+    ],
+    "termin-thirdparty/guard": [
+      "guard_c.h",
+      "guard_main.h"
+    ],
+    "termin-thirdparty/zlib": [
+      "CMakeLists.txt",
+      "zlib.h"
+    ],
+    "termin-thirdparty/libpng": [
+      "CMakeLists.txt",
+      "png.h"
+    ],
+    "termin-thirdparty/libjpeg-turbo": [
+      "CMakeLists.txt",
+      "src/jpeglib.h"
+    ],
+    "termin-thirdparty/libwebp": [
+      "CMakeLists.txt",
+      "src/webp/decode.h"
+    ],
+    "termin-thirdparty/libogg": [
+      "CMakeLists.txt",
+      "include/ogg/ogg.h"
+    ],
+    "termin-thirdparty/libvorbis": [
+      "CMakeLists.txt",
+      "include/vorbis/vorbisfile.h"
+    ],
+    "termin-thirdparty/cgltf": [
+      "cgltf.h"
+    ],
+    "termin-thirdparty/spirv-cross": [
+      "CMakeLists.txt"
+    ],
+    "termin-thirdparty/sdl2": [
+      "CMakeLists.txt",
+      "include/SDL.h"
+    ],
+    "termin-thirdparty/vulkan-memory-allocator": [
+      "include/vk_mem_alloc.h"
+    ],
+    "termin-thirdparty/openxr-sdk": [
+      "include/openxr/openxr.h"
+    ],
+    "termin-thirdparty/recastnavigation": [
+      "Recast/CMakeLists.txt",
+      "Detour/CMakeLists.txt"
+    ]
+  },
+  "profiles": [
+    {
+      "id": "sdk",
+      "submodules": [
+        "termin-thirdparty/manifold",
+        "termin-thirdparty/clipper2",
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/libogg",
+        "termin-thirdparty/libvorbis",
+        "termin-thirdparty/cgltf",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": true,
+      "needs_pip": true,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-cpp",
+      "submodules": [
+        "termin-thirdparty/manifold",
+        "termin-thirdparty/clipper2",
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/libogg",
+        "termin-thirdparty/libvorbis",
+        "termin-thirdparty/cgltf",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": false,
+      "needs_pip": false,
+      "needs_copy_backend": false,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-bindings",
+      "submodules": [
+        "termin-thirdparty/manifold",
+        "termin-thirdparty/clipper2",
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/libogg",
+        "termin-thirdparty/libvorbis",
+        "termin-thirdparty/cgltf",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": true,
+      "needs_pip": false,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-graphics",
+      "submodules": [
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": true,
+      "needs_pip": true,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-cpp-graphics",
+      "submodules": [
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": false,
+      "needs_pip": false,
+      "needs_copy_backend": false,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-bindings-graphics",
+      "submodules": [
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/spirv-cross"
+      ],
+      "needs_nanobind": true,
+      "needs_pip": false,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    },
+    {
+      "id": "sdk-core",
+      "submodules": [],
+      "needs_nanobind": true,
+      "needs_pip": true,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [],
+      "sdl_submodules": []
+    },
+    {
+      "id": "sdk-bindings-core",
+      "submodules": [],
+      "needs_nanobind": true,
+      "needs_pip": false,
+      "needs_copy_backend": true,
+      "needs_sdk_writable": true,
+      "vulkan_submodules": [],
+      "sdl_submodules": []
+    },
+    {
+      "id": "cpp-tests",
+      "submodules": [
+        "termin-thirdparty/manifold",
+        "termin-thirdparty/clipper2",
+        "termin-thirdparty/recastnavigation",
+        "termin-thirdparty/eigen",
+        "termin-thirdparty/zlib",
+        "termin-thirdparty/libpng",
+        "termin-thirdparty/libjpeg-turbo",
+        "termin-thirdparty/libwebp",
+        "termin-thirdparty/libogg",
+        "termin-thirdparty/libvorbis",
+        "termin-thirdparty/cgltf",
+        "termin-thirdparty/spirv-cross",
+        "termin-thirdparty/guard"
+      ],
+      "needs_nanobind": false,
+      "needs_pip": false,
+      "needs_copy_backend": false,
+      "needs_sdk_writable": false,
+      "vulkan_submodules": [
+        "termin-thirdparty/vulkan-memory-allocator"
+      ],
+      "sdl_submodules": [
+        "termin-thirdparty/sdl2"
+      ]
+    }
+  ]
+}

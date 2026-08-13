@@ -1,0 +1,3 @@
+# Third-party distributions bundled into the standalone Core SDK runtime.
+# Build and test tools live in their own environments and must not leak here.
+packaging==26.2

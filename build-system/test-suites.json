@@ -8,6 +8,7 @@
       ".venv",
       "build",
       "sdk",
+      "sdk-core",
       "termin-thirdparty"
     ],
     "exclude_directory_names": ["__pycache__", "build", "dist"]
@@ -19,6 +20,7 @@
       ".git",
       "build",
       "sdk",
+      "sdk-core",
       "termin-thirdparty"
     ],
     "exclude_directory_names": ["__pycache__", "build", "dist"],
@@ -520,6 +522,12 @@
       "module": "termin-build-tools",
       "executor": "pytest",
       "roots": ["termin-build-tools/tests", "scripts/tests"]
+    },
+    {
+      "id": "graphics-showcase-tests",
+      "module": "graphics-showcase",
+      "executor": "pytest",
+      "roots": ["examples/graphics-showcase/tests"]
     },
     {
       "id": "termin-cli-tests",

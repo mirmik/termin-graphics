@@ -87,7 +87,7 @@ The intended first closure is:
 | Generic type and inspection contracts | `termin-inspect` |
 | Native Python binding ABI support | `termin-nanobind-sdk` |
 | Embeddable canonical Python host | `termin-python-host` |
-| Isolated SDK Python launcher | Python-only `termin-cli` target |
+| Isolated SDK Python launcher | `termin-python-host` |
 | Generic SDK manifest, lock and composition primitives | the domain-neutral subset of `termin-build-tools` |
 | Shared process diagnostics | `termin-mcp` transport, session and executor runtime |
 
@@ -97,6 +97,15 @@ dependencies, native targets, Python distributions, CMake packages, runtime
 inputs, test suites and forbidden domain dependency roots. Build profiles and
 the future extracted repository consume this product declaration rather than
 maintaining a second hand-written Core list.
+
+SDK orchestration policy is repository-owned as well. The typed mechanism in
+`termin-build-tools` loads `build-system/sdk-profiles.json` and
+`build-system/sdk-doctor-profiles.json`; it contains no built-in list of Core,
+Graphics or Full package roots. A built SDK records the resolved verification
+contract in `sdk-product.json`, and the Python runtime manifest hash-binds that
+file. Relocation and release verification therefore use installed evidence,
+not a source-repository profile switch. Core has its own minimal runtime lock;
+it does not inherit editor/test/graphics runtime dependencies from Full.
 
 Core owns the canonical bundled Python runtime and its ABI identity. Domain
 packs contribute wheels and native extensions, but do not ship competing Python

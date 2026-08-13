@@ -248,19 +248,6 @@ set(TERMIN_COMPONENTS_KINEMATIC_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" 
 set(TERMIN_PHYSICS_QOPT_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" FORCE)
 set(TC_BUILD_TESTS ${TERMIN_BUILD_TESTS} CACHE BOOL "" FORCE)
 
-# Library SDK profiles only need the isolated Python launcher. Keep this cache
-# entry deterministic because profiles may reuse an explicitly selected build
-# tree. In particular, a library configure must not suppress the full CLI
-# toolset during a later full SDK configure.
-if(NOT TERMIN_SDK_PROFILE STREQUAL "full")
-    set(_termin_cli_python_only ON)
-else()
-    set(_termin_cli_python_only OFF)
-endif()
-set(TERMIN_CLI_PYTHON_ONLY ${_termin_cli_python_only} CACHE BOOL
-    "Build only the isolated SDK Python launcher" FORCE)
-unset(_termin_cli_python_only)
-
 set(BUILD_EDITOR_MINIMAL ${TERMIN_BUILD_EDITOR_MINIMAL} CACHE BOOL "" FORCE)
 set(BUILD_LAUNCHER ${TERMIN_BUILD_LAUNCHER} CACHE BOOL "" FORCE)
 set(TGFX2_ENABLE_VULKAN ${TERMIN_ENABLE_VULKAN} CACHE BOOL "" FORCE)
@@ -288,7 +275,6 @@ add_subdirectory(termin-base)
 if(TERMIN_SDK_PROFILE STREQUAL "core")
     add_subdirectory(termin-dispatch)
     add_subdirectory(termin-inspect)
-    add_subdirectory(termin-cli)
 elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
     add_subdirectory(termin-dispatch)
     add_subdirectory(termin-image)
@@ -305,7 +291,6 @@ elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
     add_subdirectory(termin-nodegraph)
     add_subdirectory(tcplot)
     add_subdirectory(tcplot-gui-native)
-    add_subdirectory(termin-cli)
 elseif(TERMIN_PLATFORM_WEB)
     add_subdirectory(termin-inspect)
     add_subdirectory(termin-image)
