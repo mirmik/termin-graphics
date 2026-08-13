@@ -127,8 +127,12 @@ switch ($VulkanMode) {
 }
 $TerminEnableSdl = if ($SdlMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableOpenGl = if ($OpenGlMode -eq "on") { "ON" } else { "OFF" }
-$TerminBuildBuiltinShaderArtifacts = $TerminEnableOpenGl
-$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") { "d3d11;opengl330" } else { "" }
+# Windows SDK consumers always include the D3D11 backend.  In particular, the
+# C# stage packages the D3D11 shader set even when OpenGL and Vulkan are
+# explicitly disabled, so D3D11 artifacts are part of the base Windows SDK
+# contract rather than an OpenGL side effect.
+$TerminBuildBuiltinShaderArtifacts = "ON"
+$TerminBuiltinShaderArtifactTargets = if ($TerminEnableOpenGl -eq "ON") { "d3d11;opengl330" } else { "d3d11" }
 $TerminUseCcache = if ($CcacheMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnableUnityBuild = if ($UnityMode -eq "on") { "ON" } else { "OFF" }
 $TerminEnablePch = if ($PchMode -eq "on") { "ON" } else { "OFF" }
