@@ -265,6 +265,15 @@ namespace termin {
         out_spec.samples = nb::cast<int>(py_spec.attr("samples"));
         out_spec.array_layers = nb::cast<int>(py_spec.attr("array_layers"));
 
+        value = py_spec.attr("has_color");
+        if (!value.is_none()) {
+            out_spec.has_color = nb::cast<bool>(value);
+        }
+        value = py_spec.attr("has_depth");
+        if (!value.is_none()) {
+            out_spec.has_depth = nb::cast<bool>(value);
+        }
+
         value = py_spec.attr("clear_color");
         if (!value.is_none()) {
             out_spec.clear_color = nb::cast<termin::LinearColor>(value);
@@ -970,6 +979,12 @@ namespace termin {
                 }
                 if (spec.clear_depth) {
                     spec_dict["clear_depth"] = *spec.clear_depth;
+                }
+                if (spec.has_color) {
+                    spec_dict["has_color"] = *spec.has_color;
+                }
+                if (spec.has_depth) {
+                    spec_dict["has_depth"] = *spec.has_depth;
                 }
                 if (spec.format) {
                     spec_dict["format"] = nb::str(spec.format->c_str());

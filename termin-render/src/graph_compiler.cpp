@@ -873,6 +873,21 @@ namespace tc {
                     tc::Log::warn("compile_graph: resource '%s' has invalid array_layers value", resource_name.c_str());
                 }
             }
+
+            if (params.contains("has_color")) {
+                if (auto has_color = trent_bool_value(params["has_color"])) {
+                    spec.has_color = *has_color;
+                } else {
+                    tc::Log::warn("compile_graph: resource '%s' has invalid has_color value", resource_name.c_str());
+                }
+            }
+            if (params.contains("has_depth")) {
+                if (auto has_depth = trent_bool_value(params["has_depth"])) {
+                    spec.has_depth = *has_depth;
+                } else {
+                    tc::Log::warn("compile_graph: resource '%s' has invalid has_depth value", resource_name.c_str());
+                }
+            }
             // Filter
             if (params.contains("filter") && params["filter"].is_string()) {
                 std::string filter_mode = params["filter"].as_string();
@@ -1076,6 +1091,17 @@ namespace tc {
                     break;
                 }
             }
+            uint32_t flags = 0;
+            if (spec && spec->has_color) {
+                flags |= TC_PIPELINE_RESOURCE_COLOR_PRESENT;
+                if (*spec->has_color)
+                    flags |= TC_PIPELINE_RESOURCE_COLOR_ENABLED;
+            }
+            if (spec && spec->has_depth) {
+                flags |= TC_PIPELINE_RESOURCE_DEPTH_PRESENT;
+                if (*spec->has_depth)
+                    flags |= TC_PIPELINE_RESOURCE_DEPTH_ENABLED;
+            }
             resource_descs.push_back({
                 stored.name.c_str(),
                 stored.resource_type.c_str(),
@@ -1086,7 +1112,7 @@ namespace tc {
                 spec ? spec->scale : 1.0f,
                 spec ? static_cast<uint32_t>(spec->samples) : 1u,
                 spec ? static_cast<uint32_t>(spec->array_layers) : 1u,
-                0,
+                flags,
             });
         }
 

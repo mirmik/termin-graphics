@@ -128,7 +128,9 @@ namespace termin {
                    const std::string& viewport_name,
                    float scale,
                    TextureFilter filter,
-                   int array_layers) {
+                   int array_layers,
+                   nb::object has_color,
+                   nb::object has_depth) {
                     new (self) ResourceSpec();
                     self->resource = resource;
                     self->resource_type = resource_type;
@@ -137,6 +139,12 @@ namespace termin {
                     self->scale = scale;
                     self->filter = filter;
                     self->array_layers = array_layers;
+                    if (!has_color.is_none()) {
+                        self->has_color = nb::cast<bool>(has_color);
+                    }
+                    if (!has_depth.is_none()) {
+                        self->has_depth = nb::cast<bool>(has_depth);
+                    }
 
                     if (!size.is_none()) {
                         nb::tuple t = nb::cast<nb::tuple>(size);
@@ -162,7 +170,9 @@ namespace termin {
                 nb::arg("viewport_name") = "",
                 nb::arg("scale") = 1.0f,
                 nb::arg("filter") = TextureFilter::LINEAR,
-                nb::arg("array_layers") = 1)
+                nb::arg("array_layers") = 1,
+                nb::arg("has_color") = nb::none(),
+                nb::arg("has_depth") = nb::none())
             .def_rw("resource", &ResourceSpec::resource)
             .def_rw("resource_type", &ResourceSpec::resource_type)
             .def_rw("samples", &ResourceSpec::samples)
@@ -170,6 +180,22 @@ namespace termin {
             .def_rw("viewport_name", &ResourceSpec::viewport_name)
             .def_rw("scale", &ResourceSpec::scale)
             .def_rw("filter", &ResourceSpec::filter)
+            .def_prop_rw(
+                "has_color",
+                [](const ResourceSpec& self) -> nb::object {
+                    return self.has_color ? nb::cast(*self.has_color) : nb::none();
+                },
+                [](ResourceSpec& self, nb::object value) {
+                    self.has_color = value.is_none() ? std::nullopt : std::optional<bool>{nb::cast<bool>(value)};
+                })
+            .def_prop_rw(
+                "has_depth",
+                [](const ResourceSpec& self) -> nb::object {
+                    return self.has_depth ? nb::cast(*self.has_depth) : nb::none();
+                },
+                [](ResourceSpec& self, nb::object value) {
+                    self.has_depth = value.is_none() ? std::nullopt : std::optional<bool>{nb::cast<bool>(value)};
+                })
             .def_prop_rw(
                 "size",
                 [](const ResourceSpec& self) -> nb::object {

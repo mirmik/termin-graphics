@@ -16,7 +16,8 @@ namespace tgfx {
 
         bool render_target_desc_equal(const RenderTargetPoolDesc& a, const RenderTargetPoolDesc& b) {
             return a.width == b.width && a.height == b.height && a.samples == b.samples &&
-                   a.array_layers == b.array_layers && a.color_format == b.color_format && a.has_depth == b.has_depth &&
+                   a.array_layers == b.array_layers && a.has_color == b.has_color &&
+                   (!a.has_color || a.color_format == b.color_format) && a.has_depth == b.has_depth &&
                    (!a.has_depth || a.depth_format == b.depth_format);
         }
 
@@ -128,7 +129,14 @@ namespace tgfx {
                                   std::string_view key,
                                   const RenderTargetPoolDesc& desc,
                                   TextureHandle external_color) {
+        if (!desc.has_color && !desc.has_depth) {
+            tc_log(TC_LOG_ERROR, "RenderTargetPool: target '%.*s' has no attachments", (int)key.size(), key.data());
+            return false;
+        }
         auto allocate_color = [&](RenderTargetEntry& entry) {
+            if (!desc.has_color) {
+                return;
+            }
             if (external_color) {
                 entry.color_tgfx2 = external_color;
                 entry.owns_color = false;
@@ -175,7 +183,7 @@ namespace tgfx {
                 entry.desc = desc;
                 allocate_color(entry);
                 allocate_depth(entry);
-            } else if (external_color) {
+            } else if (desc.has_color && external_color) {
                 if (entry.owns_color && entry.color_tgfx2) {
                     device.destroy(entry.color_tgfx2);
                 }
@@ -193,8 +201,8 @@ namespace tgfx {
             if (desc.has_depth && !entry.depth_tgfx2) {
                 allocate_depth(entry);
             }
-            const bool ok =
-                static_cast<bool>(entry.color_tgfx2) && (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
+            const bool ok = (!desc.has_color || static_cast<bool>(entry.color_tgfx2)) &&
+                            (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
             if (!ok) {
                 tc_log(TC_LOG_ERROR,
                        "RenderTargetPool: failed to create target '%s'; request will be retried",
@@ -209,8 +217,8 @@ namespace tgfx {
         entry.desc = desc;
         allocate_color(entry);
         allocate_depth(entry);
-        const bool ok =
-            static_cast<bool>(entry.color_tgfx2) && (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
+        const bool ok = (!desc.has_color || static_cast<bool>(entry.color_tgfx2)) &&
+                        (!desc.has_depth || static_cast<bool>(entry.depth_tgfx2));
         if (!ok) {
             tc_log(TC_LOG_ERROR,
                    "RenderTargetPool: failed to create target '%s'; request will be retried",

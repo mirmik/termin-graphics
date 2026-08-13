@@ -57,6 +57,10 @@ namespace termin {
             }
             if (spec.clear_depth)
                 item["clear_depth"] = *spec.clear_depth;
+            if (spec.has_color)
+                item["has_color"] = *spec.has_color;
+            if (spec.has_depth)
+                item["has_depth"] = *spec.has_depth;
             if (spec.format)
                 item["format"] = *spec.format;
             item["samples"] = spec.samples;

@@ -103,6 +103,12 @@ namespace termin {
                 spec.scale = desc.scale;
                 spec.samples = static_cast<int>(desc.samples);
                 spec.array_layers = static_cast<int>(desc.array_layers);
+                if (desc.flags & TC_PIPELINE_RESOURCE_COLOR_PRESENT) {
+                    spec.has_color = (desc.flags & TC_PIPELINE_RESOURCE_COLOR_ENABLED) != 0;
+                }
+                if (desc.flags & TC_PIPELINE_RESOURCE_DEPTH_PRESENT) {
+                    spec.has_depth = (desc.flags & TC_PIPELINE_RESOURCE_DEPTH_ENABLED) != 0;
+                }
                 add_spec(spec);
             }
 

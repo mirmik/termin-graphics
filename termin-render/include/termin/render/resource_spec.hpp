@@ -17,6 +17,8 @@ namespace termin {
         std::optional<std::string> format;
         int samples = 1;
         int array_layers = 1;
+        std::optional<bool> has_color;
+        std::optional<bool> has_depth;
         std::string viewport_name;
         float scale = 1.0f;
         TextureFilter filter = TextureFilter::LINEAR;
@@ -32,7 +34,9 @@ namespace termin {
                      int samples_ = 1,
                      std::string viewport_name_ = "",
                      float scale_ = 1.0f,
-                     TextureFilter filter_ = TextureFilter::LINEAR)
+                     TextureFilter filter_ = TextureFilter::LINEAR,
+                     std::optional<bool> has_color_ = std::nullopt,
+                     std::optional<bool> has_depth_ = std::nullopt)
             : resource(std::move(resource_)),
               resource_type(std::move(resource_type_)),
               size(std::move(size_)),
@@ -40,6 +44,8 @@ namespace termin {
               clear_depth(std::move(clear_depth_)),
               format(std::move(format_)),
               samples(samples_),
+              has_color(has_color_),
+              has_depth(has_depth_),
               viewport_name(std::move(viewport_name_)),
               scale(scale_),
               filter(filter_) {}

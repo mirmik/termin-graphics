@@ -641,3 +641,34 @@ TEST_CASE("render target pool borrows an external color while owning depth") {
     REQUIRE(device.destroyed_textures.size() == 1u);
     CHECK(device.destroyed_textures[0] == owned_depth);
 }
+
+TEST_CASE("render target pool allocates only requested attachments") {
+    PipelineCacheStatsDevice device;
+    tgfx::RenderTargetPool targets;
+
+    tgfx::RenderTargetPoolDesc color_only;
+    color_only.width = 32;
+    color_only.height = 16;
+    color_only.has_depth = false;
+    REQUIRE(targets.ensure(device, "color-only", color_only));
+    CHECK(targets.color("color-only"));
+    CHECK_FALSE(targets.depth("color-only"));
+    CHECK(device.create_texture_count == 1u);
+
+    tgfx::RenderTargetPoolDesc depth_only;
+    depth_only.width = 32;
+    depth_only.height = 16;
+    depth_only.has_color = false;
+    REQUIRE(targets.ensure(device, "depth-only", depth_only));
+    CHECK_FALSE(targets.color("depth-only"));
+    CHECK(targets.depth("depth-only"));
+    CHECK(device.create_texture_count == 2u);
+
+    tgfx::RenderTargetPoolDesc empty;
+    empty.width = 32;
+    empty.height = 16;
+    empty.has_color = false;
+    empty.has_depth = false;
+    CHECK_FALSE(targets.ensure(device, "empty", empty));
+    CHECK(device.create_texture_count == 2u);
+}

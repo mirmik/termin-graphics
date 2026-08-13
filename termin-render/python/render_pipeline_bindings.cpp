@@ -143,6 +143,10 @@ namespace termin {
                             spec.samples = nb::cast<int>(item["samples"]);
                         if (item.contains("array_layers"))
                             spec.array_layers = nb::cast<int>(item["array_layers"]);
+                        if (item.contains("has_color"))
+                            spec.has_color = nb::cast<bool>(item["has_color"]);
+                        if (item.contains("has_depth"))
+                            spec.has_depth = nb::cast<bool>(item["has_depth"]);
                         if (item.contains("viewport_name"))
                             spec.viewport_name = nb::cast<std::string>(item["viewport_name"]);
                         if (item.contains("scale"))
@@ -273,6 +277,14 @@ namespace termin {
                                  item["scale"] = resource.scale;
                                  item["samples"] = resource.samples;
                                  item["array_layers"] = resource.array_layers;
+                                 item["has_color"] =
+                                     (resource.flags & TC_PIPELINE_RESOURCE_COLOR_PRESENT)
+                                         ? nb::cast((resource.flags & TC_PIPELINE_RESOURCE_COLOR_ENABLED) != 0)
+                                         : nb::none();
+                                 item["has_depth"] =
+                                     (resource.flags & TC_PIPELINE_RESOURCE_DEPTH_PRESENT)
+                                         ? nb::cast((resource.flags & TC_PIPELINE_RESOURCE_DEPTH_ENABLED) != 0)
+                                         : nb::none();
                                  result.append(std::move(item));
                              }
                              return result;
@@ -643,6 +655,10 @@ namespace termin {
                              spec_dict["samples"] = spec.samples;
                          if (spec.array_layers != 1)
                              spec_dict["array_layers"] = spec.array_layers;
+                         if (spec.has_color)
+                             spec_dict["has_color"] = *spec.has_color;
+                         if (spec.has_depth)
+                             spec_dict["has_depth"] = *spec.has_depth;
                          specs_list.append(spec_dict);
                      }
                      result["pipeline_specs"] = specs_list;
@@ -785,6 +801,10 @@ namespace termin {
                                 spec.samples = nb::cast<int>(spec_data["samples"]);
                             if (spec_data.contains("array_layers"))
                                 spec.array_layers = nb::cast<int>(spec_data["array_layers"]);
+                            if (spec_data.contains("has_color"))
+                                spec.has_color = nb::cast<bool>(spec_data["has_color"]);
+                            if (spec_data.contains("has_depth"))
+                                spec.has_depth = nb::cast<bool>(spec_data["has_depth"]);
                             pipeline->add_spec(spec);
                         }
                     }

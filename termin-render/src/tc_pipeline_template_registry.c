@@ -236,6 +236,10 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         }
     }
     for (uint32_t i = 0; i < desc->resource_count; ++i) {
+        const uint32_t attachment_flags = TC_PIPELINE_RESOURCE_COLOR_PRESENT |
+                                          TC_PIPELINE_RESOURCE_COLOR_ENABLED |
+                                          TC_PIPELINE_RESOURCE_DEPTH_PRESENT |
+                                          TC_PIPELINE_RESOURCE_DEPTH_ENABLED;
         if (!desc->resources[i].name || !desc->resources[i].name[0] || !desc->resources[i].resource_type ||
             !desc->resources[i].resource_type[0]) {
             tc_log_error("tc_pipeline_template_set_payload: resource %u lacks name or type", i);
@@ -247,6 +251,22 @@ static bool validate_payload(const tc_pipeline_template_payload_desc* desc) {
         }
         if (desc->resources[i].array_layers == 0) {
             tc_log_error("tc_pipeline_template_set_payload: resource %u has zero array layers", i);
+            return false;
+        }
+        if (desc->resources[i].flags & ~attachment_flags) {
+            tc_log_error("tc_pipeline_template_set_payload: resource %u has unknown flags 0x%x",
+                         i,
+                         desc->resources[i].flags);
+            return false;
+        }
+        if ((desc->resources[i].flags & TC_PIPELINE_RESOURCE_COLOR_ENABLED) &&
+            !(desc->resources[i].flags & TC_PIPELINE_RESOURCE_COLOR_PRESENT)) {
+            tc_log_error("tc_pipeline_template_set_payload: resource %u enables color without declaring it", i);
+            return false;
+        }
+        if ((desc->resources[i].flags & TC_PIPELINE_RESOURCE_DEPTH_ENABLED) &&
+            !(desc->resources[i].flags & TC_PIPELINE_RESOURCE_DEPTH_PRESENT)) {
+            tc_log_error("tc_pipeline_template_set_payload: resource %u enables depth without declaring it", i);
             return false;
         }
         for (uint32_t previous = 0; previous < i; ++previous) {

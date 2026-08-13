@@ -26,6 +26,8 @@ def test_missing_pass_roundtrip_preserves_original_envelope_and_graph_contract()
                             "resource": "output",
                             "resource_type": "color_texture",
                             "samples": 1,
+                            "has_color": True,
+                            "has_depth": False,
                             "viewport_name": "main",
                             "scale": 1.0,
                             "filter": 0,

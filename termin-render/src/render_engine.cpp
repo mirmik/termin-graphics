@@ -476,6 +476,12 @@ namespace termin {
                 if (spec.clear_depth && !existing.clear_depth) {
                     existing.clear_depth = spec.clear_depth;
                 }
+                if (spec.has_color && !existing.has_color) {
+                    existing.has_color = spec.has_color;
+                }
+                if (spec.has_depth && !existing.has_depth) {
+                    existing.has_depth = spec.has_depth;
+                }
             }
         }
 
@@ -775,7 +781,8 @@ namespace termin {
             target_desc.samples = samples;
             target_desc.array_layers = array_layers;
             target_desc.color_format = color_fmt;
-            target_desc.has_depth = true;
+            target_desc.has_color = spec ? spec->has_color.value_or(true) : true;
+            target_desc.has_depth = spec ? spec->has_depth.value_or(true) : true;
             target_desc.depth_format = tgfx::PixelFormat::D32F;
 
             tgfx::TextureHandle direct_color;

@@ -366,6 +366,44 @@ namespace {
         }
     };
 
+    class ColorOnlyRasterProbe final : public termin::CxxFramePass {
+    private:
+        std::string resource_;
+
+    public:
+        explicit ColorOnlyRasterProbe(std::string resource)
+            : resource_(std::move(resource)) {
+            pass_name_set("ColorOnlyRasterProbe");
+        }
+
+        std::set<const char*> compute_writes() const override {
+            return {resource_.c_str()};
+        }
+
+        std::vector<termin::ResourceSpec> get_resource_specs() const override {
+            termin::ResourceSpec spec{resource_, "fbo", std::pair<int, int>{16, 16}};
+            spec.has_color = true;
+            spec.has_depth = false;
+            return {spec};
+        }
+
+        bool get_raster_contract(termin::ExecuteContext&, tc_raster_pass_contract& contract) const override {
+            contract.target_resource = resource_.c_str();
+            contract.view_count = 1;
+            contract.color_load = TC_RASTER_LOAD;
+            contract.has_color = true;
+            contract.has_depth = false;
+            contract.fusion_eligible = true;
+            return true;
+        }
+
+        bool record_raster(termin::ExecuteContext&) override {
+            return true;
+        }
+
+        void execute(termin::ExecuteContext&) override {}
+    };
+
     class ComposedClearRasterProbe final : public termin::CxxFramePass {
     public:
         ComposedClearRasterProbe() {
@@ -848,6 +886,49 @@ TEST_CASE("compatible color export is bound directly to the physical target") {
     CHECK(recording_device->state.created_textures[0].first == output);
     CHECK(recording_device->state.created_textures[1].second.format == tgfx::PixelFormat::D32F);
     CHECK(recording_device->state.texture_copies.empty());
+    pipeline.destroy();
+}
+
+TEST_CASE("color-only FBO does not allocate or bind a depth attachment") {
+    termin::RenderPipeline pipeline("color-only-export-test");
+    REQUIRE(pipeline.is_valid());
+    pipeline.add_pass((new ColorOnlyRasterProbe("final_color"))->tc_pass_ptr());
+    pipeline.set_color_export("final_color", termin::ColorContent::DisplayLinear);
+
+    auto device = std::make_unique<ExecutionRecordingDevice>();
+    ExecutionRecordingDevice* recording_device = device.get();
+    tgfx::TextureDesc output_desc;
+    output_desc.width = 16;
+    output_desc.height = 16;
+    output_desc.format = tgfx::PixelFormat::RGBA8_UNorm;
+    output_desc.usage = tgfx::TextureUsage::ColorAttachment | tgfx::TextureUsage::CopyDst;
+    const tgfx::TextureHandle output = device->create_texture(output_desc);
+    auto host = tgfx::GraphicsHost::adopt_isolated_device(std::move(device));
+
+    termin::RenderItemSnapshot snapshot;
+    publish_empty_snapshot(snapshot);
+    termin::RenderTargetContext target;
+    target.name = "ColorOnlyTarget";
+    target.render_rect = {0, 0, 16, 16};
+    target.output_color.texture = output;
+    termin::RenderExecution execution;
+    execution.pipeline = &pipeline;
+    execution.default_render_target = target.name;
+    execution.targets.emplace(target.name,
+                              termin::RenderExecutionTarget{
+                                  .context = &target,
+                                  .render_items = &snapshot,
+                              });
+
+    termin::RenderEngine engine;
+    engine.set_graphics_host(*host);
+    engine.execute_pipeline(execution);
+
+    REQUIRE(recording_device->state.scopes.size() == 1u);
+    CHECK_FALSE(recording_device->state.scopes[0].pass.has_depth);
+    CHECK_FALSE(recording_device->state.scopes[0].pass.depth.texture);
+    REQUIRE(recording_device->state.created_textures.size() == 1u);
+    CHECK(recording_device->state.created_textures[0].first == output);
     pipeline.destroy();
 }
 

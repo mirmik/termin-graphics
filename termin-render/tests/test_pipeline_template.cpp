@@ -22,7 +22,17 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
         {"ForwardPass", "forward", "{\"phase\":\"opaque\"}", "main"},
     };
     const tc_pipeline_template_resource_desc resources[] = {
-        {"scene-depth", "depth_texture", "D32_FLOAT", "main", 1920, 1080, 1.0f, 4, 2, 7},
+        {"scene-depth",
+         "depth_texture",
+         "D32_FLOAT",
+         "main",
+         1920,
+         1080,
+         1.0f,
+         4,
+         2,
+         TC_PIPELINE_RESOURCE_COLOR_PRESENT | TC_PIPELINE_RESOURCE_DEPTH_PRESENT |
+             TC_PIPELINE_RESOURCE_DEPTH_ENABLED},
         {"scene-color", "color_texture", "RGBA16_FLOAT", "main", 0, 0, 0.5f, 1, 1, 0},
     };
     const tc_pipeline_template_dependency_desc dependencies[] = {
@@ -102,6 +112,8 @@ TEST_CASE("compiled pipeline template round-trips without execution state") {
     REQUIRE(decoded->resource_count == 2);
     CHECK(decoded->resources[0].samples == 4);
     CHECK(decoded->resources[0].array_layers == 2);
+    CHECK((decoded->resources[0].flags & TC_PIPELINE_RESOURCE_COLOR_ENABLED) == 0);
+    CHECK((decoded->resources[0].flags & TC_PIPELINE_RESOURCE_DEPTH_ENABLED) != 0);
     CHECK_EQ(decoded->resources[1].scale, 0.5f);
     REQUIRE(decoded->dependency_count == 3);
     CHECK(decoded->dependencies[1].access == TC_PIPELINE_RESOURCE_READ);

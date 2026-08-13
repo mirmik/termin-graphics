@@ -49,6 +49,13 @@ typedef struct tc_pipeline_template_resource_desc {
     uint32_t flags;
 } tc_pipeline_template_resource_desc;
 
+typedef enum tc_pipeline_template_resource_flags {
+    TC_PIPELINE_RESOURCE_COLOR_PRESENT = 1u << 0,
+    TC_PIPELINE_RESOURCE_COLOR_ENABLED = 1u << 1,
+    TC_PIPELINE_RESOURCE_DEPTH_PRESENT = 1u << 2,
+    TC_PIPELINE_RESOURCE_DEPTH_ENABLED = 1u << 3,
+} tc_pipeline_template_resource_flags;
+
 typedef struct tc_pipeline_template_dependency_desc {
     uint32_t pass_index;
     const char* resource;
