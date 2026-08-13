@@ -161,7 +161,7 @@ namespace {
             tc_ui_painter_pop_clip(painter);
             tc_ui_painter_pop_clip(painter);
             tc_ui_painter_fill_rounded_rect(
-                painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 20.0f}, 8.0f, tc_ui_srgb_color{0.05f, 0.15f, 0.9f, 1.0f});
+                painter, tc_ui_rect{8.0f, 40.0f, 24.0f, 8.0f}, 4.0f, tc_ui_srgb_color{0.05f, 0.15f, 0.9f, 1.0f});
             tc_ui_painter_fill_circle(
                 painter, tc_ui_point{48.0f, 50.0f}, 8.0f, tc_ui_srgb_color{0.9f, 0.85f, 0.05f, 1.0f}, 24);
             tc_ui_painter_draw_texture(painter,
@@ -340,8 +340,8 @@ namespace {
         const bool authored_gray_ok = read_ok && looks_linear_mid_gray(pixel_at(pixels, 104, 88));
         const bool nested_clip_inside_ok = read_ok && looks_red(pixel_at(pixels, 52, 16));
         const bool nested_clip_outside_ok = read_ok && looks_black(pixel_at(pixels, 44, 16));
-        const bool rounded_center_ok = read_ok && looks_blue(pixel_at(pixels, 20, 50));
-        const bool rounded_corner_ok = read_ok && looks_black(pixel_at(pixels, 9, 41));
+        const bool rounded_center_ok = read_ok && looks_blue(pixel_at(pixels, 20, 44));
+        const bool rounded_corner_ok = read_ok && looks_black(pixel_at(pixels, 8, 40));
         const bool circle_ok = read_ok && looks_yellow(pixel_at(pixels, 48, 50));
         const bool nearest_left_ok = read_ok && looks_red(pixel_at(pixels, 15, 80));
         const bool nearest_right_ok = read_ok && looks_blue(pixel_at(pixels, 16, 80));

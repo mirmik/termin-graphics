@@ -130,6 +130,8 @@ namespace {
         assert(builder.pop_clip());
         assert(builder.pop_clip());
         assert(builder.pop_transform());
+        assert(builder.rounded_rect({48, 4, 8, 24}, 4, tgfx::FillPaint{{0, 1, 0, 1}}));
+        assert(builder.rounded_rect({36, 52, 24, 8}, 4, tgfx::FillPaint{{0, 1, 0, 1}}));
         auto retained_probe = std::make_shared<RetainedProbe>();
         assert(builder.push_opacity(0.4f));
         assert(builder.push_clip_rect({2, 3, 20, 21}));
@@ -158,14 +160,22 @@ namespace {
         float inside_tip[4]{};
         float outside_corner[4]{};
         float immediate_control[4]{};
+        float vertical_capsule[4]{};
+        float horizontal_capsule[4]{};
         const bool read = device->read_pixel_rgba8(target, 32, 32, center) &&
                           device->read_pixel_rgba8(target, 32, 16, inside_tip) &&
                           device->read_pixel_rgba8(target, 10, 10, outside_corner) &&
-                          device->read_pixel_rgba8(target, 1, 1, immediate_control);
+                          device->read_pixel_rgba8(target, 1, 1, immediate_control) &&
+                          device->read_pixel_rgba8(target, 52, 16, vertical_capsule) &&
+                          device->read_pixel_rgba8(target, 48, 56, horizontal_capsule);
         const bool blue_control = immediate_control[0] < 0.1f && immediate_control[1] < 0.1f &&
                                   immediate_control[2] > 0.8f && immediate_control[3] > 0.9f;
+        const auto green = [](const float pixel[4]) {
+            return pixel[0] < 0.1f && pixel[1] > 0.8f && pixel[2] < 0.1f && pixel[3] > 0.9f;
+        };
         const bool result = executed && read && clear(center) && red(inside_tip) && clear(outside_corner) &&
-                            blue_control && retained_probe->called && retained_probe->state.has_clip_rect &&
+                            blue_control && green(vertical_capsule) && green(horizontal_capsule) &&
+                            retained_probe->called && retained_probe->state.has_clip_rect &&
                             !retained_probe->state.unsupported_clip &&
                             std::fabs(retained_probe->state.opacity - 0.4f) < 1.0e-6f;
         if (!result) {

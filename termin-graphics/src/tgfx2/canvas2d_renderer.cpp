@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
-#include <numeric>
 #include <type_traits>
 
 #include "internal/utf8_decode.hpp"
@@ -143,82 +142,6 @@ namespace tgfx {
 
         float cross(termin::Vec2f a, termin::Vec2f b, termin::Vec2f c) {
             return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-        }
-
-        float signed_area(std::span<const termin::Vec2f> points) {
-            float result = 0.0f;
-            for (std::size_t i = 0; i < points.size(); ++i) {
-                const auto a = points[i];
-                const auto b = points[(i + 1) % points.size()];
-                result += a.x * b.y - b.x * a.y;
-            }
-            return result * 0.5f;
-        }
-
-        bool
-        point_in_triangle(termin::Vec2f point, termin::Vec2f a, termin::Vec2f b, termin::Vec2f c, float orientation) {
-            constexpr float epsilon = 1.0e-5f;
-            return orientation * cross(a, b, point) >= -epsilon && orientation * cross(b, c, point) >= -epsilon &&
-                   orientation * cross(c, a, point) >= -epsilon;
-        }
-
-        bool triangulate_contour(std::span<const termin::Vec2f> input, std::vector<DrawTriangle2D>& output) {
-            std::vector<termin::Vec2f> points(input.begin(), input.end());
-            if (points.size() > 1 && points.front().x == points.back().x && points.front().y == points.back().y) {
-                points.pop_back();
-            }
-            if (points.size() < 3)
-                return false;
-
-            const float area = signed_area(points);
-            if (!std::isfinite(area) || std::fabs(area) <= 1.0e-6f) {
-                tc::Log::error("[Canvas2DRenderer] degenerate contour rejected");
-                return false;
-            }
-            const float orientation = area > 0.0f ? 1.0f : -1.0f;
-            std::vector<std::size_t> indices(points.size());
-            std::iota(indices.begin(), indices.end(), 0);
-
-            std::size_t guard = points.size() * points.size();
-            while (indices.size() > 3 && guard-- > 0) {
-                bool removed = false;
-                for (std::size_t i = 0; i < indices.size(); ++i) {
-                    const std::size_t ia = indices[(i + indices.size() - 1) % indices.size()];
-                    const std::size_t ib = indices[i];
-                    const std::size_t ic = indices[(i + 1) % indices.size()];
-                    const auto a = points[ia];
-                    const auto b = points[ib];
-                    const auto c = points[ic];
-                    if (orientation * cross(a, b, c) <= 1.0e-6f)
-                        continue;
-
-                    bool contains = false;
-                    for (const auto index : indices) {
-                        if (index == ia || index == ib || index == ic)
-                            continue;
-                        if (point_in_triangle(points[index], a, b, c, orientation)) {
-                            contains = true;
-                            break;
-                        }
-                    }
-                    if (contains)
-                        continue;
-
-                    output.push_back(DrawTriangle2D{{{a, {}}, {b, {}}, {c, {}}}});
-                    indices.erase(indices.begin() + static_cast<std::ptrdiff_t>(i));
-                    removed = true;
-                    break;
-                }
-                if (!removed) {
-                    tc::Log::error("[Canvas2DRenderer] non-simple contour cannot be tessellated");
-                    return false;
-                }
-            }
-            if (indices.size() != 3)
-                return false;
-            output.push_back(
-                DrawTriangle2D{{{points[indices[0]], {}}, {points[indices[1]], {}}, {points[indices[2]], {}}}});
-            return true;
         }
 
         float edge_x_at(termin::Vec2f a, termin::Vec2f b, float y) {
@@ -408,15 +331,38 @@ namespace tgfx {
             return result;
         }
 
-        bool fill_contour(std::span<const termin::Vec2f> local_points,
-                          const termin::Affine2f& transform,
-                          ClipMesh2D& triangles) {
-            std::vector<termin::Vec2f> transformed;
-            transformed.reserve(local_points.size());
-            for (const auto point : local_points) {
-                transformed.push_back(transform.transform_point(point));
+        bool fill_convex_primitive(std::span<const termin::Vec2f> local_points,
+                                   termin::Vec2f local_center,
+                                   const termin::Affine2f& transform,
+                                   ClipMesh2D& triangles) {
+            constexpr float minimum_triangle_area_twice = 1.0e-6f;
+            const auto center = transform.transform_point(local_center);
+            for (std::size_t i = 0; i < local_points.size(); ++i) {
+                const auto a = transform.transform_point(local_points[i]);
+                const auto b = transform.transform_point(local_points[(i + 1) % local_points.size()]);
+                if (std::fabs(cross(center, a, b)) <= minimum_triangle_area_twice)
+                    continue;
+                triangles.push_back(DrawTriangle2D{{{center, {}}, {a, {}}, {b, {}}}});
             }
-            return triangulate_contour(transformed, triangles);
+            if (!triangles.empty())
+                return true;
+            tc::Log::error("[Canvas2DRenderer] degenerate convex primitive rejected");
+            return false;
+        }
+
+        bool fill_rect(termin::Rect2f rect, const termin::Affine2f& transform, ClipMesh2D& triangles) {
+            const auto contour = rect_contour(rect);
+            const DrawVertex2D a{transform.transform_point(contour[0]), {}};
+            const DrawVertex2D b{transform.transform_point(contour[1]), {}};
+            const DrawVertex2D c{transform.transform_point(contour[2]), {}};
+            const DrawVertex2D d{transform.transform_point(contour[3]), {}};
+            if (std::fabs(cross(a.position, b.position, c.position)) <= 1.0e-6f) {
+                tc::Log::error("[Canvas2DRenderer] degenerate rectangle rejected");
+                return false;
+            }
+            triangles.push_back(DrawTriangle2D{{a, b, c}});
+            triangles.push_back(DrawTriangle2D{{a, c, d}});
+            return true;
         }
 
         ClipMesh2D stroke_contour(std::span<const termin::Vec2f> points,
@@ -574,7 +520,7 @@ namespace tgfx {
                         return true;
                     } else if constexpr (std::is_same_v<T, DrawRect2D>) {
                         ClipMesh2D triangles;
-                        if (!fill_contour(rect_contour(value.rect), transforms.back(), triangles)) {
+                        if (!fill_rect(value.rect, transforms.back(), triangles)) {
                             return false;
                         }
                         emit(triangles, with_opacity(value.paint.color, opacities.back()));
@@ -582,7 +528,9 @@ namespace tgfx {
                     } else if constexpr (std::is_same_v<T, DrawRoundedRect2D>) {
                         const auto contour = rounded_rect_contour(value.rect, value.radius);
                         ClipMesh2D triangles;
-                        if (!fill_contour(contour, transforms.back(), triangles)) {
+                        const termin::Vec2f center{value.rect.x + value.rect.width * 0.5f,
+                                                   value.rect.y + value.rect.height * 0.5f};
+                        if (!fill_convex_primitive(contour, center, transforms.back(), triangles)) {
                             return false;
                         }
                         emit(triangles, with_opacity(value.paint.color, opacities.back()));
@@ -594,7 +542,9 @@ namespace tgfx {
                     } else if constexpr (std::is_same_v<T, DrawEllipse2D>) {
                         const auto contour = ellipse_contour(value.bounds);
                         ClipMesh2D triangles;
-                        if (!fill_contour(contour, transforms.back(), triangles)) {
+                        const termin::Vec2f center{value.bounds.x + value.bounds.width * 0.5f,
+                                                   value.bounds.y + value.bounds.height * 0.5f};
+                        if (!fill_convex_primitive(contour, center, transforms.back(), triangles)) {
                             return false;
                         }
                         emit(triangles, with_opacity(value.paint.color, opacities.back()));
