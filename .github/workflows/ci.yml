@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: 7bfe1fe4c7467fab645141f22dbb9d964fe7d5cb
+          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
           submodules: recursive
       - uses: actions/setup-python@v6
         with:
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: mirmik/termin-core
-          ref: 7bfe1fe4c7467fab645141f22dbb9d964fe7d5cb
+          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
           submodules: recursive
       - uses: actions/setup-python@v6
         with:
@@ -51,6 +51,41 @@ jobs:
         with:
           name: core-sdk-windows
           path: sdk/
+          retention-days: 1
+
+  core-sdk-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: mirmik/termin-core
+          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+      - name: Build installed Android Core SDK input
+        run: ./build-sdk-android.sh --ndk "$ANDROID_NDK_LATEST_HOME"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: core-sdk-android-arm64-v8a
+          path: sdk-platform/android/arm64-v8a/
+          retention-days: 1
+
+  core-sdk-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: mirmik/termin-core
+          ref: aca907c6f766d54ab4722af6b14db40792e4b2d3
+      - name: Cache pinned Emscripten toolchain
+        uses: actions/cache@v5
+        with:
+          path: build/toolchains/emsdk
+          key: core-emsdk-${{ runner.os }}-${{ hashFiles('build-system/emscripten-version.txt') }}
+      - name: Build installed Web Core SDK input
+        run: ./build-sdk-web.sh --setup
+      - uses: actions/upload-artifact@v5
+        with:
+          name: core-sdk-web-wasm32
+          path: sdk-platform/web/wasm32/
           retention-days: 1
 
   # ── 0. Python lint ─────────────────────────────────────────────
@@ -108,6 +143,61 @@ jobs:
           $env:TERMIN_CORE_SDK = $coreSdk
           $env:TERMIN_CORE_BUILD_ID = $manifest.native_build_id
           .\build-sdk-bindings.ps1 --profile=graphics --no-vulkan --no-opengl --no-sdl
+
+  core-consumer-source-hidden-android:
+    needs: core-sdk-android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-android-arm64-v8a
+          path: core-sdk-android/
+      - name: Build Android with Core sources absent
+        run: |
+          core_build_id="$(python -c 'import json; print(json.load(open("core-sdk-android/termin-core-platform.json"))["native_build_id"])')"
+          scripts/smoke-installed-core-platform-source-hidden \
+            --platform android \
+            --ndk "$ANDROID_NDK_LATEST_HOME" \
+            --core-sdk "${{ github.workspace }}/core-sdk-android" \
+            --core-build-id "$core_build_id"
+
+  core-consumer-source-hidden-web:
+    needs: [core-sdk-linux, core-sdk-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk-host/
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-web-wasm32
+          path: core-sdk-web/
+      - name: Cache pinned Emscripten toolchain
+        uses: actions/cache@v5
+        with:
+          path: build/toolchains/emsdk
+          key: emsdk-${{ runner.os }}-${{ hashFiles('build-system/emscripten-version.txt') }}
+      - name: Setup Web toolchains
+        run: |
+          ./setup-web-toolchain.sh
+          ./setup-web-shader-toolchain.sh
+      - name: Build Web with Core sources absent
+        run: |
+          host_build_id="$(python -c 'import json; print(json.load(open("core-sdk-host/termin-artifacts.json"))["native_build_id"])')"
+          web_build_id="$(python -c 'import json; print(json.load(open("core-sdk-web/termin-core-platform.json"))["native_build_id"])')"
+          scripts/smoke-installed-core-platform-source-hidden \
+            --platform web \
+            --core-sdk "${{ github.workspace }}/core-sdk-web" \
+            --core-build-id "$web_build_id" \
+            --host-core-sdk "${{ github.workspace }}/core-sdk-host" \
+            --host-core-build-id "$host_build_id"
 
   lint-python:
     runs-on: ubuntu-latest
@@ -209,6 +299,7 @@ jobs:
 
   # ── 0e. Chromium Web Runtime gate ──────────────────────────────
   web-runtime-chromium:
+    needs: [core-sdk-linux, core-sdk-web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -222,7 +313,19 @@ jobs:
           key: emsdk-${{ runner.os }}-${{ hashFiles('build-system/emscripten-version.txt') }}
 
       - name: Setup pinned Emscripten toolchain
-        run: ./setup-web-toolchain.sh
+        run: |
+          ./setup-web-toolchain.sh
+          ./setup-web-shader-toolchain.sh
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-linux
+          path: core-sdk-host/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: core-sdk-web-wasm32
+          path: core-sdk-web/
 
       - name: Resolve Chromium executable
         run: |
@@ -234,7 +337,14 @@ jobs:
           echo "TERMIN_WEB_BROWSER=$browser" >> "$GITHUB_ENV"
 
       - name: Build and run Chromium Web Runtime gate
-        run: ./build-web-core.sh --browser-smoke
+        run: |
+          host_build_id="$(python -c 'import json; print(json.load(open("core-sdk-host/termin-artifacts.json"))["native_build_id"])')"
+          web_build_id="$(python -c 'import json; print(json.load(open("core-sdk-web/termin-core-platform.json"))["native_build_id"])')"
+          ./build-web-core.sh --browser-smoke \
+            --core-sdk "${{ github.workspace }}/core-sdk-web" \
+            --core-build-id "$web_build_id" \
+            --host-core-sdk "${{ github.workspace }}/core-sdk-host" \
+            --host-core-build-id "$host_build_id"
 
       - name: Upload Web Runtime gate report
         uses: actions/upload-artifact@v5

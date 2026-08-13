@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.19)
 project(termin_monorepo VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CMakePackageConfigHelpers)
@@ -22,9 +22,11 @@ option(TERMIN_ENABLE_PCH "Enable precompiled headers for selected C++ targets" O
 set(TERMIN_SDK_PROFILE "full" CACHE STRING
     "SDK target graph profile: full, graphics or core")
 set(TERMIN_CORE_SDK "" CACHE PATH
-    "Explicit installed Core SDK used by desktop graphics/full profiles")
+    "Explicit installed Core SDK for the active target platform")
 set(TERMIN_CORE_BUILD_ID "" CACHE STRING
     "Required native_build_id of TERMIN_CORE_SDK")
+set(TERMIN_CORE_TOOLCHAIN_VERSION "" CACHE STRING
+    "Required toolchain version for a cross-compiled Core SDK")
 set_property(CACHE TERMIN_SDK_PROFILE PROPERTY STRINGS full graphics core)
 
 if(NOT TERMIN_SDK_PROFILE STREQUAL "full"
@@ -270,22 +272,25 @@ set(TERMIN_ENGINE_CORE_RENDER_PIPELINE ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORC
 set(TERMIN_COMPONENTS_RENDER_CORE_ONLY ${TERMIN_PLATFORM_WEB} CACHE BOOL "" FORCE)
 
 set(TERMIN_USE_INSTALLED_CORE OFF)
-if(NOT TERMIN_SDK_PROFILE STREQUAL "core"
-   AND NOT TERMIN_PLATFORM_ANDROID
-   AND NOT TERMIN_PLATFORM_WEB)
+if(NOT TERMIN_SDK_PROFILE STREQUAL "core")
     set(TERMIN_USE_INSTALLED_CORE ON)
     if(NOT IS_ABSOLUTE "${TERMIN_CORE_SDK}")
         message(FATAL_ERROR
-            "Desktop ${TERMIN_SDK_PROFILE} builds require an absolute "
+            "${TERMIN_SDK_PROFILE} builds require an absolute "
             "-DTERMIN_CORE_SDK path")
     endif()
     if(NOT TERMIN_CORE_BUILD_ID)
         message(FATAL_ERROR
-            "Desktop ${TERMIN_SDK_PROFILE} builds require "
+            "${TERMIN_SDK_PROFILE} builds require "
             "-DTERMIN_CORE_BUILD_ID")
     endif()
-    set(_termin_core_artifact_manifest
-        "${TERMIN_CORE_SDK}/termin-artifacts.json")
+    if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
+        set(_termin_core_artifact_manifest
+            "${TERMIN_CORE_SDK}/termin-core-platform.json")
+    else()
+        set(_termin_core_artifact_manifest
+            "${TERMIN_CORE_SDK}/termin-artifacts.json")
+    endif()
     if(NOT EXISTS "${_termin_core_artifact_manifest}")
         message(FATAL_ERROR
             "Installed Core artifact manifest is missing: "
@@ -300,21 +305,74 @@ if(NOT TERMIN_SDK_PROFILE STREQUAL "core"
             "Installed Core build identity mismatch: expected "
             "${TERMIN_CORE_BUILD_ID}, got ${CMAKE_MATCH_1}")
     endif()
+    if(TERMIN_PLATFORM_ANDROID OR TERMIN_PLATFORM_WEB)
+        string(JSON _termin_core_system GET
+            "${_termin_core_artifact_json}" target system)
+        string(JSON _termin_core_arch GET
+            "${_termin_core_artifact_json}" target architecture)
+        string(JSON _termin_core_toolchain_version GET
+            "${_termin_core_artifact_json}" target toolchain_version)
+        if(TERMIN_PLATFORM_ANDROID)
+            set(_termin_expected_core_system android)
+            set(_termin_expected_core_arch "${ANDROID_ABI}")
+        else()
+            set(_termin_expected_core_system web)
+            set(_termin_expected_core_arch wasm32)
+        endif()
+        if(NOT _termin_core_system STREQUAL _termin_expected_core_system)
+            message(FATAL_ERROR
+                "Installed Core platform mismatch: expected "
+                "${_termin_expected_core_system}, got ${_termin_core_system}")
+        endif()
+        if(NOT _termin_core_arch STREQUAL _termin_expected_core_arch)
+            message(FATAL_ERROR
+                "Installed Core architecture mismatch: expected "
+                "${_termin_expected_core_arch}, got ${_termin_core_arch}")
+        endif()
+        if(TERMIN_PLATFORM_ANDROID)
+            string(JSON _termin_core_api GET
+                "${_termin_core_artifact_json}" target api)
+            if(NOT _termin_core_api STREQUAL ANDROID_PLATFORM)
+                message(FATAL_ERROR
+                    "Installed Core Android API mismatch: expected "
+                    "${ANDROID_PLATFORM}, got ${_termin_core_api}")
+            endif()
+        endif()
+        if(NOT TERMIN_CORE_TOOLCHAIN_VERSION)
+            message(FATAL_ERROR
+                "Cross-compiled builds require -DTERMIN_CORE_TOOLCHAIN_VERSION")
+        endif()
+        if(NOT _termin_core_toolchain_version STREQUAL TERMIN_CORE_TOOLCHAIN_VERSION)
+            message(FATAL_ERROR
+                "Installed Core toolchain mismatch: expected "
+                "${TERMIN_CORE_TOOLCHAIN_VERSION}, got "
+                "${_termin_core_toolchain_version}")
+        endif()
+    endif()
     list(PREPEND CMAKE_PREFIX_PATH "${TERMIN_CORE_SDK}")
     if(TERMIN_BUILD_PYTHON)
         set(nanobind_DIR "${TERMIN_CORE_SDK}/lib/cmake/nanobind"
             CACHE PATH "Installed Core nanobind package" FORCE)
         find_package(nanobind CONFIG REQUIRED NO_DEFAULT_PATH)
     endif()
-    find_package(termin_base CONFIG REQUIRED
-        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
-    find_package(termin_dispatch CONFIG REQUIRED
-        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
-    find_package(termin_inspect CONFIG REQUIRED
-        PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+    set(termin_base_DIR "${TERMIN_CORE_SDK}/lib/cmake/termin_base"
+        CACHE PATH "Installed Core termin_base package" FORCE)
+    set(termin_dispatch_DIR "${TERMIN_CORE_SDK}/lib/cmake/termin_dispatch"
+        CACHE PATH "Installed Core termin_dispatch package" FORCE)
+    set(termin_inspect_DIR "${TERMIN_CORE_SDK}/lib/cmake/termin_inspect"
+        CACHE PATH "Installed Core termin_inspect package" FORCE)
+    find_package(termin_base CONFIG REQUIRED NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH)
+    find_package(termin_dispatch CONFIG REQUIRED NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH)
+    find_package(termin_inspect CONFIG REQUIRED NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH)
     if(TERMIN_BUILD_PYTHON)
-        find_package(termin_python_host CONFIG REQUIRED
-            PATHS "${TERMIN_CORE_SDK}" NO_DEFAULT_PATH)
+        set(termin_python_host_DIR
+            "${TERMIN_CORE_SDK}/lib/cmake/termin_python_host"
+            CACHE PATH "Installed Core Python host package" FORCE)
+        find_package(termin_python_host CONFIG REQUIRED NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH)
     endif()
     message(STATUS
         "Termin: consuming installed Core ${TERMIN_CORE_BUILD_ID} from "
@@ -350,7 +408,6 @@ elseif(TERMIN_SDK_PROFILE STREQUAL "graphics")
     add_subdirectory(tcplot)
     add_subdirectory(tcplot-gui-native)
 elseif(TERMIN_PLATFORM_WEB)
-    add_subdirectory(termin-inspect)
     add_subdirectory(termin-image)
     add_subdirectory(termin-modules)
     add_subdirectory(termin-mesh)

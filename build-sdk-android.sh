@@ -26,6 +26,8 @@ INSTALL=1
 NO_PARALLEL=0
 CMAKE_GENERATOR_NAME="${CMAKE_GENERATOR_NAME:-${TERMIN_CMAKE_GENERATOR:-}}"
 CCACHE_MODE="on"
+CORE_SDK_VALUE="${TERMIN_CORE_SDK:-}"
+CORE_BUILD_ID_VALUE="${TERMIN_CORE_BUILD_ID:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,6 +75,20 @@ while [[ $# -gt 0 ]]; do
         --prefix=*)
             SDK_PREFIX="${1#--prefix=}"
             ;;
+        --core-sdk)
+            CORE_SDK_VALUE="$2"
+            shift
+            ;;
+        --core-sdk=*)
+            CORE_SDK_VALUE="${1#--core-sdk=}"
+            ;;
+        --core-build-id)
+            CORE_BUILD_ID_VALUE="$2"
+            shift
+            ;;
+        --core-build-id=*)
+            CORE_BUILD_ID_VALUE="${1#--core-build-id=}"
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -91,6 +107,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --ndk PATH            Android NDK root"
             echo "  --build-dir DIR       CMake build dir (default: ./build/android/<ABI>)"
             echo "  --prefix DIR          Install prefix (default: ./sdk/android/<ABI>)"
+            echo "  --core-sdk DIR        Installed Android Core SDK for this ABI"
+            echo "  --core-build-id ID    Exact native_build_id of the Core SDK"
             echo "  --help, -h            Show this help"
             echo ""
             echo "Environment:"
@@ -145,6 +163,40 @@ if [[ ! -f "$ANDROID_TOOLCHAIN_FILE" ]]; then
     echo "ERROR: Android CMake toolchain not found: $ANDROID_TOOLCHAIN_FILE" >&2
     exit 1
 fi
+if [[ -z "$CORE_SDK_VALUE" || -z "$CORE_BUILD_ID_VALUE" ]]; then
+    echo "ERROR: --core-sdk and --core-build-id are required" >&2
+    exit 1
+fi
+CORE_SDK_VALUE="$(cd "$CORE_SDK_VALUE" && pwd)"
+CORE_PLATFORM_MANIFEST="$CORE_SDK_VALUE/termin-core-platform.json"
+if [[ ! -f "$CORE_PLATFORM_MANIFEST" ]]; then
+    echo "ERROR: Android Core platform manifest is missing: $CORE_PLATFORM_MANIFEST" >&2
+    exit 1
+fi
+CORE_TOOLCHAIN_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["target"]["toolchain_version"])' "$CORE_PLATFORM_MANIFEST")"
+
+verify_core_owned_artifacts() {
+    python3 - "$1" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+sdk = pathlib.Path(sys.argv[1])
+manifest = json.loads((sdk / "termin-core-platform.json").read_text())
+for entry in manifest["artifacts"]:
+    artifact = sdk / entry["path"]
+    if not artifact.is_file():
+        raise SystemExit(f"ERROR: Core-owned artifact is missing: {artifact}")
+    actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if actual != entry["sha256"]:
+        raise SystemExit(
+            f"ERROR: Core-owned artifact was modified: {artifact}: "
+            f"expected {entry['sha256']}, got {actual}"
+        )
+PY
+}
+verify_core_owned_artifacts "$CORE_SDK_VALUE"
 
 if [[ -z "$BUILD_DIR" ]]; then
     BUILD_DIR="$SCRIPT_DIR/build/android/$ANDROID_ABI_VALUE"
@@ -166,6 +218,7 @@ echo ""
 echo "Source dir:       $SCRIPT_DIR"
 echo "Build dir:        $BUILD_DIR"
 echo "Install prefix:   $SDK_PREFIX"
+echo "Core SDK:         $CORE_SDK_VALUE ($CORE_BUILD_ID_VALUE)"
 echo "NDK:              $ANDROID_NDK_VALUE"
 echo "Toolchain:        $ANDROID_TOOLCHAIN_FILE"
 echo "ABI:              $ANDROID_ABI_VALUE"
@@ -193,13 +246,20 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" "${cmake_args[@]}" \
     -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$SDK_PREFIX" \
+    -DCMAKE_PREFIX_PATH="$CORE_SDK_VALUE" \
     -DTERMIN_PLATFORM_ANDROID=ON \
+    -DTERMIN_CORE_SDK="$CORE_SDK_VALUE" \
+    -DTERMIN_CORE_BUILD_ID="$CORE_BUILD_ID_VALUE" \
+    -DTERMIN_CORE_TOOLCHAIN_VERSION="$CORE_TOOLCHAIN_VERSION" \
     -DTERMIN_USE_CCACHE="$TERMIN_USE_CCACHE"
 
 cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
 
 if [[ $INSTALL -eq 1 ]]; then
+    mkdir -p "$SDK_PREFIX"
+    cp -a "$CORE_SDK_VALUE/." "$SDK_PREFIX/"
     cmake --install "$BUILD_DIR"
+    verify_core_owned_artifacts "$SDK_PREFIX"
 
     PY_EXEC="${PYTHON_BIN:-${PYTHON_EXECUTABLE:-}}"
     if [[ -z "$PY_EXEC" ]]; then
