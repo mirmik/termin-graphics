@@ -28,9 +28,8 @@ if [[ -z "$CORE_SDK" || "$CORE_SDK" != /* ]]; then
     exit 1
 fi
 export TERMIN_CORE_SDK="$CORE_SDK"
-PY_EXEC="$CORE_SDK/bin/termin_python"
-if [[ ! -x "$PY_EXEC" ]]; then
-    echo "ERROR: installed Core Python launcher is missing: $PY_EXEC" >&2
+if [[ ! -x "$CORE_SDK/bin/termin_python" ]]; then
+    echo "ERROR: installed Core Python launcher is missing: $CORE_SDK/bin/termin_python" >&2
     exit 1
 fi
 CORE_PYTHON_SITE="$CORE_SDK/lib/python3.14t/site-packages"
@@ -39,5 +38,16 @@ if [[ ! -d "$CORE_PYTHON_SITE/termin_build" ]]; then
     exit 1
 fi
 export PYTHONPATH="$CORE_PYTHON_SITE${PYTHONPATH:+:$PYTHONPATH}"
+export TERMIN_CORE_BUILD_FRONTEND="$CORE_PYTHON_SITE"
 
-exec "$PY_EXEC" -I -m termin_build.sdk --repo-root "$SCRIPT_DIR" build "$@"
+HOST_PYTHON="${TERMIN_BUILD_HOST_PYTHON:-}"
+if [[ -z "$HOST_PYTHON" ]]; then
+    HOST_PYTHON="$(command -v python3 || command -v python || true)"
+fi
+if [[ -z "$HOST_PYTHON" ]]; then
+    echo "ERROR: host Python is required to prepare the pinned SDK toolchain" >&2
+    exit 1
+fi
+
+exec "$HOST_PYTHON" -I "$SCRIPT_DIR/scripts/run-core-build-frontend.py" \
+    --repo-root "$SCRIPT_DIR" build "$@"
