@@ -6,7 +6,7 @@
 #include <termin/camera/orbit_camera.hpp>
 #include <tgfx2/canvas2d_renderer.hpp>
 #include <tgfx2/render_context.hpp>
-#include <tgfx2/text3d_renderer.hpp>
+#include <tgfx2/text2d_renderer.hpp>
 
 #include "tcplot/axes.hpp"
 #include "tcplot/styles.hpp"
@@ -30,8 +30,7 @@ namespace tcplot {
     } // namespace
 
     PlotScene3DChartChromeRenderer::PlotScene3DChartChromeRenderer()
-        : text_(std::make_unique<tgfx::Text3DRenderer>()),
-          canvas_(std::make_unique<tgfx::Canvas2DRenderer>()) {}
+        : canvas_(std::make_unique<tgfx::Canvas2DRenderer>()) {}
 
     PlotScene3DChartChromeRenderer::~PlotScene3DChartChromeRenderer() = default;
 
@@ -48,17 +47,6 @@ namespace tcplot {
         const termin::OrbitCamera camera = make_camera(frame.camera);
         const float aspect = static_cast<float>(viewport_width) / static_cast<float>(viewport_height);
         const termin::Mat44f mvp = camera.projection_matrix(aspect) * camera.view_matrix();
-        const termin::Mat44f view = camera.view_matrix();
-        const termin::Vec3f camera_right{
-            view.data[0 * 4 + 0],
-            view.data[1 * 4 + 0],
-            view.data[2 * 4 + 0],
-        };
-        const termin::Vec3f camera_up{
-            view.data[0 * 4 + 1],
-            view.data[1 * 4 + 1],
-            view.data[2 * 4 + 1],
-        };
 
         const double dx = (frame.bounds_max[0] - frame.bounds_min[0]) * frame.axis_scale[0];
         const double dy = (frame.bounds_max[1] - frame.bounds_min[1]) * frame.axis_scale[1];
@@ -67,13 +55,20 @@ namespace tcplot {
         const double offset = data_size * 0.03;
         constexpr float kTickTextSizePx = 14.0f;
         constexpr float kAxisLabelSizePx = 16.0f;
-        const termin::LinearColor label_color =
-            termin::srgb_to_linear(termin::SrgbColor{0.8f, 0.8f, 0.8f, 1.0f});
+        const termin::SrgbColor label_color{0.8f, 0.8f, 0.8f, 1.0f};
+        const auto project = [&](const termin::Vec3f& world) {
+            const termin::Vec3 clip = mvp.transform_point({world.x, world.y, world.z});
+            return tgfx::CanvasVec2{
+                static_cast<float>((clip.x * 0.5 + 0.5) * viewport_width),
+                static_cast<float>((1.0 - (clip.y * 0.5 + 0.5)) * viewport_height),
+            };
+        };
 
-        text_->set_expansion_mode(tgfx::Text3DRenderer::ExpansionMode::ScreenAligned);
         context.set_depth_test(false);
+        context.set_depth_write(false);
         context.set_blend(true);
-        text_->begin(&context, mvp.data, camera_right, camera_up, &font);
+        canvas_->set_default_font(&font);
+        canvas_->begin(context, viewport_width, viewport_height);
 
         for (size_t axis = 0; axis < 3; ++axis) {
             for (double tick : axes::nice_ticks(frame.bounds_min[axis], frame.bounds_max[axis], 6)) {
@@ -88,13 +83,14 @@ namespace tcplot {
                 } else {
                     position[0] -= static_cast<float>(offset);
                 }
-                text_->draw(axes::format_tick(tick),
-                            tgfx::Text3DRenderer::DrawOptions{
-                                position,
-                                label_color,
-                                kTickTextSizePx,
-                                tgfx::Text3DRenderer::Anchor::Center,
-                            });
+                const tgfx::CanvasVec2 screen = project(position);
+                canvas_->draw_text(axes::format_tick(tick),
+                                   screen.x,
+                                   screen.y - kTickTextSizePx * 0.5f,
+                                   kTickTextSizePx,
+                                   label_color,
+                                   &font,
+                                   tgfx::Text2DRenderer::Anchor::Center);
             }
         }
 
@@ -118,16 +114,18 @@ namespace tcplot {
             } else {
                 position[0] -= static_cast<float>(offset * 1.9);
             }
-            text_->draw(*labels[axis],
-                        tgfx::Text3DRenderer::DrawOptions{
-                            position,
-                            label_color,
-                            kAxisLabelSizePx,
-                            tgfx::Text3DRenderer::Anchor::Center,
-                        });
+            const tgfx::CanvasVec2 screen = project(position);
+            canvas_->draw_text(*labels[axis],
+                               screen.x,
+                               screen.y - kAxisLabelSizePx * 0.5f,
+                               kAxisLabelSizePx,
+                               label_color,
+                               &font,
+                               tgfx::Text2DRenderer::Anchor::Center);
         }
-        text_->end();
+        canvas_->end();
         context.set_depth_test(true);
+        context.set_depth_write(true);
     }
 
     void PlotScene3DChartChromeRenderer::draw_colorbar(tgfx::RenderContext2& context,
@@ -169,6 +167,7 @@ namespace tcplot {
         context.set_depth_test(false);
         context.set_depth_write(false);
         context.set_blend(true);
+        canvas_->set_default_font(&font);
         canvas_->begin(context, viewport_width, viewport_height);
 
         constexpr int kGradientSteps = 128;
@@ -219,7 +218,6 @@ namespace tcplot {
     }
 
     void PlotScene3DChartChromeRenderer::release_gpu() {
-        text_->release_gpu();
         canvas_->release_gpu();
     }
 

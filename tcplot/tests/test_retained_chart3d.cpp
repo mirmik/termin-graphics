@@ -60,12 +60,17 @@ namespace {
                left.style_revision == right.style_revision && left.gpu_revision == right.gpu_revision;
     }
 
-    std::size_t count_non_clear_pixels(tcplot::GpuHost& host, uint32_t texture_id, uint32_t width, uint32_t height) {
+    std::vector<float> read_pixels(tcplot::GpuHost& host, uint32_t texture_id, uint32_t width, uint32_t height) {
         tgfx::TextureHandle texture{};
         texture.id = texture_id;
         std::vector<float> pixels(static_cast<std::size_t>(width) * height * 4u, 0.0f);
         require(host.device().read_texture_rgba_float(texture, pixels.data()),
                 "failed to read retained Chart3D encoder output");
+        return pixels;
+    }
+
+    std::size_t count_non_clear_pixels(tcplot::GpuHost& host, uint32_t texture_id, uint32_t width, uint32_t height) {
+        const std::vector<float> pixels = read_pixels(host, texture_id, width, height);
         const termin::LinearColor clear =
             termin::srgb_to_linear(termin::SrgbColor{0.08f, 0.09f, 0.11f, 1.0f});
         std::size_t count = 0;
@@ -73,6 +78,19 @@ namespace {
             if (std::abs(pixels[index + 0] - clear.r) > 0.03f ||
                 std::abs(pixels[index + 1] - clear.g) > 0.03f ||
                 std::abs(pixels[index + 2] - clear.b) > 0.03f) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    std::size_t count_changed_pixels(const std::vector<float>& left, const std::vector<float>& right) {
+        require(left.size() == right.size(), "cannot compare retained Chart3D images with different sizes");
+        std::size_t count = 0;
+        for (std::size_t index = 0; index + 3 < left.size(); index += 4) {
+            if (std::abs(left[index + 0] - right[index + 0]) > 0.01f ||
+                std::abs(left[index + 1] - right[index + 1]) > 0.01f ||
+                std::abs(left[index + 2] - right[index + 2]) > 0.01f) {
                 ++count;
             }
         }
@@ -634,6 +652,8 @@ int main() {
         two_sample_render_handle.id = two_sample_render_texture;
         const std::size_t two_sample_labeled_pixel_count =
             count_non_clear_pixels(host, two_sample_render_texture, 320, 240);
+        const std::vector<float> visible_labels_pixels =
+            read_pixels(host, two_sample_render_texture, 320, 240);
         require(two_sample_render_texture != 0 &&
                     host.device().texture_desc(two_sample_render_handle).sample_count == 1 &&
                     two_sample_labeled_pixel_count > 100,
@@ -656,8 +676,9 @@ int main() {
                     first_grid_payload->item->grid_style.labels_visible != 0,
                 "grid style mutation altered an older snapshot payload");
         const uint32_t hidden_labels_texture = tc_retained_chart3d_render(chart, 320, 240);
+        const std::vector<float> hidden_labels_pixels = read_pixels(host, hidden_labels_texture, 320, 240);
         require(hidden_labels_texture != 0 &&
-                    two_sample_labeled_pixel_count > count_non_clear_pixels(host, hidden_labels_texture, 320, 240),
+                    count_changed_pixels(visible_labels_pixels, hidden_labels_pixels) > 10,
                 "chart-owned grid labels produced no visible annotation pixels");
         grid_style.labels_visible = 1;
         require(tc_retained_chart3d_grid_set_style(chart, grid, &grid_style) != 0 &&

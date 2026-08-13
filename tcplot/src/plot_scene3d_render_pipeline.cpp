@@ -28,6 +28,7 @@ namespace tcplot {
     namespace {
 
         constexpr const char* kGeometryResource = "PlotScene3DGeometry";
+        constexpr const char* kResolvedResource = "PlotScene3DResolved";
         constexpr const char* kCompositedResource = "PlotScene3DComposited";
         constexpr const char* kOutputResource = "OUTPUT";
         constexpr const char* kGeometryPassName = "RetainedChart3D/Geometry";
@@ -126,34 +127,37 @@ namespace tcplot {
                 return internal_symbols_;
             }
 
+            bool get_raster_contract(termin::ExecuteContext&,
+                                     tc_raster_pass_contract& contract) const override {
+                contract = {};
+                contract.struct_size = sizeof(contract);
+                contract.target_resource = kGeometryResource;
+                contract.view_count = 1;
+                contract.color_load = TC_RASTER_CLEAR;
+                contract.depth_load = TC_RASTER_CLEAR;
+                contract.has_color = true;
+                contract.has_depth = true;
+                contract.fusion_eligible = true;
+                return true;
+            }
+
+            bool record_raster(termin::ExecuteContext& context) override {
+                return record(context);
+            }
+
             void execute(termin::ExecuteContext& context) override {
-                const PlotScene3DRenderServices* services = require_plot_services(context, kGeometryPassName);
-                if (!services) {
-                    return;
-                }
-                PlotScene3DExecutionReport& report = *services->report;
-                report.geometry_executed = true;
-
                 if (!context.ctx2) {
-                    tc::Log::error("[%s] render context is missing", kGeometryPassName);
-                    report.success = false;
                     return;
                 }
-                if (!context.render_item_snapshot) {
-                    tc::Log::error("[%s] render item snapshot is missing", kGeometryPassName);
-                    report.success = false;
-                    return;
-                }
-
                 const termin::FrameGraphColorAttachment color_attachment{
                     kGeometryResource,
-                    tgfx::LoadOp::Load,
+                    tgfx::LoadOp::Clear,
                     tgfx::StoreOp::Store,
-                    {0.0f, 0.0f, 0.0f, 0.0f},
+                    termin::srgb_to_linear(termin::SrgbColor{0.08f, 0.09f, 0.11f, 1.0f}),
                 };
                 const termin::FrameGraphDepthAttachment depth_attachment{
                     kGeometryResource,
-                    tgfx::LoadOp::Load,
+                    tgfx::LoadOp::Clear,
                     tgfx::StoreOp::Store,
                     1.0f,
                     0,
@@ -164,8 +168,33 @@ namespace tcplot {
                                                render_pass) ||
                     !context.ctx2->begin_pass(render_pass)) {
                     tc::Log::error("[%s] failed to begin framegraph render pass", kGeometryPassName);
-                    report.success = false;
+                    if (const auto* services = require_plot_services(context, kGeometryPassName)) {
+                        services->report->success = false;
+                    }
                     return;
+                }
+                record(context);
+                context.ctx2->end_pass();
+            }
+
+        private:
+            bool record(termin::ExecuteContext& context) {
+                const PlotScene3DRenderServices* services = require_plot_services(context, kGeometryPassName);
+                if (!services) {
+                    return false;
+                }
+                PlotScene3DExecutionReport& report = *services->report;
+                report.geometry_executed = true;
+
+                if (!context.ctx2) {
+                    tc::Log::error("[%s] render context is missing", kGeometryPassName);
+                    report.success = false;
+                    return false;
+                }
+                if (!context.render_item_snapshot) {
+                    tc::Log::error("[%s] render item snapshot is missing", kGeometryPassName);
+                    report.success = false;
+                    return false;
                 }
 
                 context.ctx2->set_viewport(0, 0, context.render_rect.width, context.render_rect.height);
@@ -247,18 +276,57 @@ namespace tcplot {
                             task.item->source.generation,
                         });
                         context.capture_internal(task.debug_name.c_str(),
-                                                 render_pass.colors[0].texture,
+                                                 context.tex2_writes.at(kGeometryResource),
                                                  context.render_rect.width,
                                                  context.render_rect.height);
                     }
                 }
-
-                context.ctx2->end_pass();
+                return report.success;
             }
 
-        private:
             int sample_count_ = 1;
             std::vector<std::string> internal_symbols_;
+        };
+
+        class PlotScene3DResolvePass final : public termin::CxxFramePass {
+        public:
+            PlotScene3DResolvePass() {
+                pass_name_set("RetainedChart3D/Resolve");
+            }
+
+            std::set<const char*> compute_reads() const override {
+                return {kGeometryResource};
+            }
+
+            std::set<const char*> compute_writes() const override {
+                return {kResolvedResource};
+            }
+
+            std::vector<termin::ResourceSpec> get_resource_specs() const override {
+                return {termin::ResourceSpec{kResolvedResource, "fbo"}};
+            }
+
+            void execute(termin::ExecuteContext& context) override {
+                const PlotScene3DRenderServices* services =
+                    require_plot_services(context, "RetainedChart3D/Resolve");
+                if (!services) {
+                    return;
+                }
+                if (!context.ctx2) {
+                    tc::Log::error("[RetainedChart3D/Resolve] render context is missing");
+                    services->report->success = false;
+                    return;
+                }
+                const auto source = context.tex2_reads.find(kGeometryResource);
+                const auto target = context.tex2_writes.find(kResolvedResource);
+                if (source == context.tex2_reads.end() || !source->second || target == context.tex2_writes.end() ||
+                    !target->second) {
+                    tc::Log::error("[RetainedChart3D/Resolve] source or output texture is missing");
+                    services->report->success = false;
+                    return;
+                }
+                context.ctx2->blit(source->second, target->second);
+            }
         };
 
         class PlotScene3DChromePass final : public termin::CxxFramePass {
@@ -268,15 +336,15 @@ namespace tcplot {
             }
 
             std::set<const char*> compute_reads() const override {
-                return {kGeometryResource};
+                return {kResolvedResource};
             }
 
             std::set<const char*> compute_writes() const override {
                 return {kCompositedResource};
             }
 
-            std::vector<std::pair<std::string, std::string>> get_inplace_aliases() const override {
-                return {{kGeometryResource, kCompositedResource}};
+            std::vector<termin::ResourceSpec> get_resource_specs() const override {
+                return {termin::ResourceSpec{kCompositedResource, "fbo"}};
             }
 
             std::vector<std::string> get_internal_symbols() const override {
@@ -290,7 +358,6 @@ namespace tcplot {
                 }
                 PlotScene3DExecutionReport& report = *services->report;
                 report.chrome_executed = true;
-
                 if (!context.ctx2 || !context.render_item_snapshot || !services->font) {
                     tc::Log::error("[%s] render context, snapshot or font is missing", kChromePassName);
                     report.success = false;
@@ -314,32 +381,21 @@ namespace tcplot {
                 const bool draw_colorbar = colorbar_surface_payload && colorbar_surface_payload->item &&
                                            colorbar_surface_payload->item->surface_style.colormap !=
                                                TC_PLOT_COLORMAP3D_SOLID;
-                if (!draw_grid_labels && !draw_colorbar) {
-                    return;
-                }
-
-                const termin::FrameGraphColorAttachment color_attachment{
-                    kCompositedResource,
-                    tgfx::LoadOp::Load,
-                    tgfx::StoreOp::Store,
-                    {0.0f, 0.0f, 0.0f, 0.0f},
-                };
-                const termin::FrameGraphDepthAttachment depth_attachment{
-                    kCompositedResource,
-                    tgfx::LoadOp::Load,
-                    tgfx::StoreOp::Store,
-                    1.0f,
-                    0,
-                };
-                tgfx::RenderPassDesc render_pass;
-                if (!context.build_render_pass(std::span<const termin::FrameGraphColorAttachment>(&color_attachment, 1),
-                                               &depth_attachment,
-                                               render_pass) ||
-                    !context.ctx2->begin_pass(render_pass)) {
-                    tc::Log::error("[%s] failed to begin framegraph render pass", kChromePassName);
+                const auto input = context.tex2_reads.find(kResolvedResource);
+                const auto output = context.tex2_writes.find(kCompositedResource);
+                if (input == context.tex2_reads.end() || !input->second || output == context.tex2_writes.end() ||
+                    !output->second) {
+                    tc::Log::error("[%s] input or output texture is missing", kChromePassName);
                     report.success = false;
                     return;
                 }
+                if (input->second != output->second) {
+                    context.ctx2->blit(input->second, output->second);
+                }
+                if (!draw_grid_labels && !draw_colorbar) {
+                    return;
+                }
+                context.ctx2->begin_pass(output->second, {}, nullptr, 1.0f, false);
 
                 context.ctx2->set_viewport(0, 0, context.render_rect.width, context.render_rect.height);
                 if (draw_grid_labels) {
@@ -361,7 +417,7 @@ namespace tcplot {
                                                    context.render_rect.height);
                 }
                 context.capture_internal("PlotScene3D grid labels",
-                                         render_pass.colors[0].texture,
+                                         output->second,
                                          context.render_rect.width,
                                          context.render_rect.height);
                 context.ctx2->end_pass();
@@ -375,10 +431,10 @@ namespace tcplot {
             PlotScene3DChartChromeRenderer chrome_renderer_;
         };
 
-        class PlotScene3DResolvePass final : public termin::CxxFramePass {
+        class PlotScene3DPublishPass final : public termin::CxxFramePass {
         public:
-            PlotScene3DResolvePass() {
-                pass_name_set("RetainedChart3D/Resolve");
+            PlotScene3DPublishPass() {
+                pass_name_set("RetainedChart3D/Publish");
             }
 
             std::set<const char*> compute_reads() const override {
@@ -391,12 +447,12 @@ namespace tcplot {
 
             void execute(termin::ExecuteContext& context) override {
                 const PlotScene3DRenderServices* services =
-                    require_plot_services(context, "RetainedChart3D/Resolve");
+                    require_plot_services(context, "RetainedChart3D/Publish");
                 if (!services) {
                     return;
                 }
                 if (!context.ctx2) {
-                    tc::Log::error("[RetainedChart3D/Resolve] render context is missing");
+                    tc::Log::error("[RetainedChart3D/Publish] render context is missing");
                     services->report->success = false;
                     return;
                 }
@@ -404,7 +460,7 @@ namespace tcplot {
                 const auto target = context.tex2_writes.find(kOutputResource);
                 if (source == context.tex2_reads.end() || !source->second || target == context.tex2_writes.end() ||
                     !target->second) {
-                    tc::Log::error("[RetainedChart3D/Resolve] source or output texture is missing");
+                    tc::Log::error("[RetainedChart3D/Publish] source or output texture is missing");
                     services->report->success = false;
                     return;
                 }
@@ -426,10 +482,12 @@ namespace tcplot {
             engine_.set_graphics_host(host.graphics());
             auto* geometry_pass = new PlotScene3DGeometryPass(sample_count);
             pipeline_.add_pass(geometry_pass->tc_pass_ptr());
-            chrome_pass_ = new PlotScene3DChromePass();
-            pipeline_.add_pass(chrome_pass_->tc_pass_ptr());
             auto* resolve_pass = new PlotScene3DResolvePass();
             pipeline_.add_pass(resolve_pass->tc_pass_ptr());
+            chrome_pass_ = new PlotScene3DChromePass();
+            pipeline_.add_pass(chrome_pass_->tc_pass_ptr());
+            auto* publish_pass = new PlotScene3DPublishPass();
+            pipeline_.add_pass(publish_pass->tc_pass_ptr());
         }
 
         ~Impl() {

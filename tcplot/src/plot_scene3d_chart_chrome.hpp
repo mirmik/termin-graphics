@@ -9,7 +9,6 @@ namespace tgfx {
     class Canvas2DRenderer;
     class FontAtlas;
     class RenderContext2;
-    class Text3DRenderer;
 } // namespace tgfx
 
 namespace tcplot {
@@ -41,7 +40,6 @@ namespace tcplot {
         void release_gpu();
 
     private:
-        std::unique_ptr<tgfx::Text3DRenderer> text_;
         std::unique_ptr<tgfx::Canvas2DRenderer> canvas_;
     };
 
