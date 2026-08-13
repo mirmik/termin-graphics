@@ -3,6 +3,7 @@ name: Graphics SDK
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 env:
   CORE_REVISION: 4f973b0b81f5857944225ccc4ae3fe1106598689
